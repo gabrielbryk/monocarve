@@ -12,6 +12,8 @@ const refreshElement = element("refresh");
 let graph;
 let network;
 let scopeInitialized = false;
+let renderVersion = 0;
+let renderedContainers = [];
 
 const options = {
   interaction: { hover: true, hoverConnectedEdges: true, navigationButtons: true },
@@ -33,11 +35,12 @@ async function loadGraph(rescan = false) {
   graph = await response.json();
   fillScopes();
   fillKinds();
-  render();
+  await render();
   refreshElement.disabled = false;
 }
 
-function render() {
+async function render() {
+  const version = ++renderVersion;
   const highContrast = contrastElement.value === "high";
   document.body.dataset.contrast = highContrast ? "high" : "dark";
   const query = searchElement.value.trim().toLowerCase();
@@ -48,19 +51,23 @@ function render() {
   const visibleIds = new Set(visibleNodes.map((node) => node.id));
   const scopedEdges = displayed.edges.filter((edge) => visibleIds.has(edge.from) && visibleIds.has(edge.to) && (!kind || edge.kinds.includes(kind)));
   const overview = viewElement.value === "domains";
-  const hierarchy = overview ? dependencyForest(visibleNodes, scopedEdges) : undefined;
-  const visibleEdges = hierarchy && densityElement.value === "hierarchy" ? hierarchy.edges
-    : overview && densityElement.value === "backbone" ? backboneEdges(visibleNodes, scopedEdges) : scopedEdges;
-  const positions = hierarchy?.positions ?? componentPositions(visibleNodes);
-  const colorKeys = visibleNodes.map((node) => hierarchy?.clusterByNode.get(node.id) ?? groupFor(node));
+  const hierarchyEdges = overview && densityElement.value === "hierarchy" ? dependencyForest(visibleNodes, scopedEdges).edges : undefined;
+  const visibleEdges = hierarchyEdges
+    ?? (overview && densityElement.value === "backbone" ? backboneEdges(visibleNodes, scopedEdges) : scopedEdges);
+  const compound = overview ? await globalThis.monocarveLayout.layoutCompound(visibleNodes, visibleEdges) : undefined;
+  if (version !== renderVersion) return;
+  const positions = compound?.positions ?? componentPositions(visibleNodes);
+  renderedContainers = compound?.containers ?? [];
+  const colorKeys = visibleNodes.map((node) => groupFor(node));
   const colors = colorsFor(colorKeys);
   const nodes = new DataSet(visibleNodes.map((node) => {
-    const colorKey = hierarchy?.clusterByNode.get(node.id) ?? groupFor(node);
+    const colorKey = groupFor(node);
     return renderNode(node, positions.get(node.id), colors.get(colorKey), highContrast);
   }));
   const edges = new DataSet(visibleEdges.map((edge) => renderEdge(edge, overview, highContrast)));
   if (network) network.destroy();
   network = new Network(networkElement, { nodes, edges }, options);
+  network.on("beforeDrawing", (context) => drawContainers(context, renderedContainers, colors, highContrast));
   network.on("selectNode", ({ nodes: selected }) => {
     const id = selected[0];
     if (id) network.selectEdges(network.getConnectedEdges(id));
@@ -68,13 +75,31 @@ function render() {
   });
   network.on("doubleClick", ({ nodes: selected }) => drillInto(visibleNodes.find((node) => node.id === selected[0])));
   setTimeout(() => {
-    const primaryRoot = hierarchy?.roots[0]?.id;
-    const primaryCluster = primaryRoot ? visibleNodes.filter((node) => hierarchy.clusterByNode.get(node.id) === primaryRoot).map((node) => node.id) : [];
-    network.fit(primaryCluster.length > 1 ? { nodes: primaryCluster, animation: false } : { animation: false });
+    network.fit({ animation: false });
   }, 50);
   const noun = viewElement.value === "domains" ? "domains" : "components";
-  const clusters = hierarchy ? ` · ${hierarchy.roots.length} hierarchy clusters · largest focused` : "";
+  const clusters = compound ? ` · ${compound.containers.length} nested groups · ELK layered` : "";
   statusElement.textContent = `${visibleNodes.length}/${displayed.nodes.length} ${noun} · ${visibleEdges.length} connections${clusters} · ${short(graph.commit)}`;
+}
+
+function drawContainers(context, containers, colors, highContrast) {
+  context.save();
+  for (const box of containers) {
+    const color = colors.get(box.label) ?? colors.get(box.label.split(":")[0]) ?? "#64748b";
+    context.fillStyle = highContrast ? (box.depth === 0 ? "rgba(226,232,240,.48)" : "rgba(248,250,252,.74)") : "rgba(21,25,34,.58)";
+    context.strokeStyle = highContrast ? color : `${color}aa`;
+    context.lineWidth = highContrast ? Math.max(3, 6 - box.depth) : Math.max(1.5, 4 - box.depth);
+    context.setLineDash(box.depth > 1 ? [10, 7] : []);
+    context.beginPath();
+    context.roundRect(box.x, box.y, box.width, box.height, 16);
+    context.fill();
+    context.stroke();
+    context.setLineDash([]);
+    context.fillStyle = highContrast ? "#111827" : "#e7eaf0";
+    context.font = `${box.depth === 0 ? "700 24px" : "650 18px"} system-ui`;
+    context.fillText(box.label, box.x + 18, box.y + 32);
+  }
+  context.restore();
 }
 
 function renderNode(node, position, color, highContrast) {
@@ -205,7 +230,7 @@ function drillInto(node) {
   scopeInitialized = true;
   fillScopes();
   scopeElement.value = `domain:${node.domains[0]}`;
-  render();
+  void render().catch(showError);
 }
 
 function counts(values) {
@@ -302,7 +327,7 @@ function layoutTree(root, children, sizes) {
   return { positions, width: maxDepth * 340, height: Math.max(120, nextLeaf * 120) };
 }
 
-function groupFor(node) { return node.applications[0] ?? node.zones[0] ?? "unclassified"; }
+function groupFor(node) { return node.applications[0] ?? node.owners[0] ?? node.zones[0] ?? "unclassified"; }
 
 function inScope(node, scope) {
   if (!scope) return true;
@@ -320,12 +345,12 @@ function colorsFor(keys) {
 function short(value) { return value?.slice(0, 10) ?? "working tree"; }
 function element(id) { const found = document.getElementById(id); if (!found) throw new Error(`missing #${id}`); return found; }
 
-searchElement.addEventListener("input", render);
-viewElement.addEventListener("change", () => { scopeInitialized = false; fillScopes(); render(); });
-scopeElement.addEventListener("change", render);
-densityElement.addEventListener("change", render);
-contrastElement.addEventListener("change", render);
-kindElement.addEventListener("change", render);
+searchElement.addEventListener("input", () => void render().catch(showError));
+viewElement.addEventListener("change", () => { scopeInitialized = false; fillScopes(); void render().catch(showError); });
+scopeElement.addEventListener("change", () => void render().catch(showError));
+densityElement.addEventListener("change", () => void render().catch(showError));
+contrastElement.addEventListener("change", () => void render().catch(showError));
+kindElement.addEventListener("change", () => void render().catch(showError));
 refreshElement.addEventListener("click", () => void loadGraph(true).catch(showError));
 void loadGraph().catch(showError);
 function showError(error) { statusElement.textContent = error instanceof Error ? error.message : String(error); refreshElement.disabled = false; }

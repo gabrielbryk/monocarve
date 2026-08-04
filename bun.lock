@@ -6,6 +6,7 @@
       "name": "monocarve",
       "dependencies": {
         "dependency-cruiser": "^16.10.0",
+        "elkjs": "^0.11.0",
         "open": "^10.2.0",
         "typescript": "^5.9.0",
         "vis-network": "^10.1.0",
@@ -113,6 +114,8 @@
     "define-lazy-prop": ["define-lazy-prop@3.0.0", "", {}, "sha512-N+MeXYoqr3pOgn8xfyRPREN7gHakLYjhsHhWGT3fWAiL4IkAt0iDw14QiiEm2bE30c5XX5q0FtAA3CK5f9/BUg=="],
 
     "dependency-cruiser": ["dependency-cruiser@16.10.4", "", { "dependencies": { "acorn": "^8.15.0", "acorn-jsx": "^5.3.2", "acorn-jsx-walk": "^2.0.0", "acorn-loose": "^8.5.2", "acorn-walk": "^8.3.4", "ajv": "^8.17.1", "commander": "^13.1.0", "enhanced-resolve": "^5.18.2", "ignore": "^7.0.5", "interpret": "^3.1.1", "is-installed-globally": "^1.0.0", "json5": "^2.2.3", "memoize": "^10.1.0", "picocolors": "^1.1.1", "picomatch": "^4.0.2", "prompts": "^2.4.2", "rechoir": "^0.8.0", "safe-regex": "^2.1.1", "semver": "^7.7.2", "teamcity-service-messages": "^0.1.14", "tsconfig-paths-webpack-plugin": "^4.2.0", "watskeburt": "^4.2.3" }, "bin": { "depcruise": "bin/dependency-cruise.mjs", "depcruise-fmt": "bin/depcruise-fmt.mjs", "dependency-cruise": "bin/dependency-cruise.mjs", "depcruise-baseline": "bin/depcruise-baseline.mjs", "dependency-cruiser": "bin/dependency-cruise.mjs", "depcruise-wrap-stream-in-html": "bin/wrap-stream-in-html.mjs" } }, "sha512-hrxVOjIm8idZ9ZVDGSyyG3SHiNcEUPhL6RTEmO/3wfQWLepH5pA3nuDMMrcJ1DkZztFA7xg3tk8OVO+MmwwH9w=="],
+
+    "elkjs": ["elkjs@0.11.1", "", {}, "sha512-zxxR9k+rx5ktMwT/FwyLdPCrq7xN6e4VGGHH8hA01vVYKjTFik7nHOxBnAYtrgYUB1RpAiLvA1/U2YraWxyKKg=="],
 
     "enhanced-resolve": ["enhanced-resolve@5.24.5", "", { "dependencies": { "graceful-fs": "^4.2.4", "tapable": "^2.3.3" } }, "sha512-L1l8TNvomm6UVW5B253AGxQagSQr+vGwhMlrrfRS2qmhx46AMpMVJKQYLvWYbysTMY8VoicOvzHzoHMbyzB+4A=="],
 

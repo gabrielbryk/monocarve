@@ -6,6 +6,9 @@ import open from "open";
 import visSource from "../../node_modules/vis-network/standalone/umd/vis-network.min.js" with { type: "text" };
 // @ts-expect-error Bun text asset
 import visStyles from "../../node_modules/vis-network/styles/vis-network.css" with { type: "text" };
+import elkSource from "../../node_modules/elkjs/lib/elk.bundled.js" with { type: "text" };
+// @ts-expect-error Bun text asset
+import layoutSource from "./layout.js" with { type: "text" };
 // @ts-expect-error Bun text asset
 import clientSource from "./client.js" with { type: "text" };
 // @ts-expect-error Bun text asset
@@ -40,6 +43,8 @@ export async function startVisualizationServer(options: VisualizationServerOptio
     routes: {
       "/": () => new Response(PAGE, { headers: { "content-type": "text/html; charset=utf-8" } }),
       "/assets/vis.js": () => new Response(visSource, { headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "public, max-age=31536000, immutable" } }),
+      "/assets/elk.js": () => new Response(elkSource as unknown as string, { headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "public, max-age=31536000, immutable" } }),
+      "/assets/layout.js": () => new Response(layoutSource, { headers: { "content-type": "text/javascript; charset=utf-8" } }),
       "/assets/client.js": () => new Response(clientSource, { headers: { "content-type": "text/javascript; charset=utf-8" } }),
       "/assets/styles.css": () => new Response(`${visStyles}\n${clientStyles}`, { headers: { "content-type": "text/css; charset=utf-8" } }),
       "/api/graph": () => Response.json(current),
@@ -72,4 +77,4 @@ const PAGE = `<!doctype html>
 <select id="kind" aria-label="Filter edge kind"><option value="">All edge kinds</option></select>
 <button id="refresh" type="button">Rescan</button><span id="status">Loading…</span></header>
 <main><div id="network" aria-label="Interactive dependency graph"></div><aside id="details"><p>Select a component to inspect its files and dependencies.</p></aside></main>
-<script src="/assets/vis.js"></script><script src="/assets/client.js"></script></body></html>`;
+<script src="/assets/vis.js"></script><script src="/assets/elk.js"></script><script src="/assets/layout.js"></script><script src="/assets/client.js"></script></body></html>`;

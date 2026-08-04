@@ -21,6 +21,11 @@ describe("dependency graph visualization server", () => {
     const client = await (await fetch(`${running.url}/assets/client.js`)).text();
     expect(client).toContain("dependencyForest");
     expect(client).toContain("domainGraph");
+    expect(() => new Function(client)).not.toThrow();
+    const layout = await (await fetch(`${running.url}/assets/layout.js`)).text();
+    expect(layout).toContain("layoutCompound");
+    expect(() => new Function(layout)).not.toThrow();
+    expect((await fetch(`${running.url}/assets/elk.js`)).status).toBe(200);
     expect(await (await fetch(`${running.url}/api/graph`)).json()).toEqual(sample("a"));
     expect((await fetch(`${running.url}/../../package.json`)).status).toBe(404);
     expect((await fetch(`${running.url}/api/rescan`)).status).toBe(404);
