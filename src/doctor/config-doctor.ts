@@ -48,7 +48,7 @@ export interface ConfigDoctorReport {
 }
 
 const EFFECTIVE_KEYS = [
-  "root", "packageRoots", "packageScope", "firstPartyRoots", "packageNamePattern",
+  "root", "packageRoots", "packageScope", "firstPartyRoots", "firstPartyPackages", "packageNamePattern",
   "packageManager", "taskRunner", "testPathPatterns", "moduleSpecifierCalls",
   "assetExtensions", "cssImportExtensions", "assetEmissionProofs", "postJournalPreparers",
   "guardedBranches", "gates", "graph", "pathReferences", "transaction", "extractionProfiles", "planDir", "campaignDir",

@@ -136,6 +136,29 @@ describe("config loading", () => {
     expect(scaffoldFor(config, config.applications[1]!).packageJson).toEqual({ contents: '{"name":"root"}' });
   });
 
+  test("rejects firstPartyPackages roots that overlap another root, ancestor or descendant", () => {
+    const base = {
+      applications: [{ name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json" }],
+      packageRoots: ["libs"],
+      scaffoldTemplates: { packageJson: { contents: '{"name":"root"}' } },
+    };
+    // Equal to a packageRoots entry.
+    expect(() => parseConfig({ ...base, firstPartyPackages: [{ root: "libs", name: "@acme/libs" }] }, "<test>")).toThrow(/overlap/);
+    // Descendant of a packageRoots entry.
+    expect(() => parseConfig({ ...base, firstPartyPackages: [{ root: "libs/nested", name: "@acme/nested" }] }, "<test>")).toThrow(/overlap/);
+    // Ancestor of another firstPartyPackages entry.
+    expect(() =>
+      parseConfig({ ...base, firstPartyPackages: [{ root: "shared", name: "@acme/shared" }, { root: "shared/inner", name: "@acme/inner" }] }, "<test>"),
+    ).toThrow(/overlap/);
+    // Two firstPartyPackages entries at the same root.
+    expect(() =>
+      parseConfig({ ...base, firstPartyPackages: [{ root: "shared", name: "@acme/shared" }, { root: "shared", name: "@acme/dup" }] }, "<test>"),
+    ).toThrow(/overlap/);
+    // A disjoint root is accepted.
+    const ok = parseConfig({ ...base, firstPartyPackages: [{ root: "shared", name: "@acme/shared" }] }, "<test>");
+    expect(ok.firstPartyPackages).toEqual([{ root: "shared", name: "@acme/shared" }]);
+  });
+
   test("rejects invalid configs with path-precise messages", () => {
     expect(() => parseConfig({}, "<test>")).toThrow(ConfigError);
     expect(() =>

@@ -11,6 +11,9 @@ import { exportTarget } from "./package-exports.ts";
 export function workspacePaths(config: MonocarveConfig, rootDir: string): Record<string, string[]> {
   const paths: Record<string, string[]> = {};
   for (const root of config.packageRoots) addRootPackages(paths, resolve(rootDir, root), rootDir);
+  // The root itself is the package here, not a container to read subdirectories
+  // of, so it is added directly rather than through `addRootPackages`.
+  for (const pkg of config.firstPartyPackages) addPackagePaths(paths, resolve(rootDir, pkg.root), rootDir);
   return paths;
 }
 

@@ -387,6 +387,7 @@ specific workspace is hardcoded anywhere in `src/`.
 | `scaffoldTemplates` | required workspace-owned `package.json` template plus optional `tsconfig` / task-file / `extraFiles`, `entrypoint`, baseline `devDependencies`, `barrelExport`, `barrelSpecifier`, and opt-in module-preserving `publicSurface` subpaths |
 | `portfolio` | `domains`, `nestedDomainRoots`, `frameworkPackages`, `compositionRootPatterns`, `minFiles`, `maxFiles`, scoring `weights`, `extracted` ids to skip |
 | `firstPartyRoots` | roots that are first-party but neither application nor package (generated, shared) |
+| `firstPartyPackages` | `root` + `name` pairs for an exact-root first-party package (the root itself is the package, unlike `packageRoots`); the declared `name` drives dependency inference |
 | `packageNamePattern` | what a generated package name must look like; defaults from `packageScope` |
 | `generatedArtifacts` | provenance-header patterns, plus artifacts a move invalidates (`path`, `source`, `regenerate`, `triggers`, `exemptReason`) and the per-command `timeoutMs` their regeneration gets — its own budget, because a codegen command is not a gate tier |
 | `postJournalPreparers` | declared-output commands run after moves and before audit/gates, for ratchets that require destination files to exist |

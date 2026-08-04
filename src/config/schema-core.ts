@@ -2,6 +2,20 @@ import { z } from "zod";
 
 import { publicSurface, relativePath, scaffoldTemplateOverrides, templateSource } from "./primitives.ts";
 
+/**
+ * A first-party package that lives at an exact workspace root — the root
+ * itself *is* the package, not a directory holding one package per
+ * subdirectory the way `packageRoots` entries are. `name` is declared rather
+ * than read from disk so dependency inference can attribute a bare-specifier
+ * import to this package before, or without, a `package.json` scan.
+ */
+export const firstPartyPackage = z.strictObject({
+  /** Workspace-relative directory that is the package, e.g. `"shared"`. */
+  root: relativePath,
+  /** Declared package name, e.g. `"@acme/shared"`. */
+  name: z.string().min(1),
+});
+
 export const application = z.strictObject({
   /** Stable identifier used on the CLI (`--app web`) and in plan manifests. */
   name: z.string().min(1),
@@ -59,6 +73,7 @@ export const application = z.strictObject({
 });
 
 export type ApplicationConfig = z.output<typeof application>;
+export type FirstPartyPackageConfig = z.output<typeof firstPartyPackage>;
 
 /* -------------------------------------------------------------------------- */
 /* Gates                                                                      */

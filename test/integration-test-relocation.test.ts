@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 
 import { parseConfig } from "../src/config.ts";
 import { buildDependencyGraph } from "../src/graph/build.ts";
@@ -100,6 +100,30 @@ describe("integration-test relocation", () => {
       ok: false,
       issues: expect.arrayContaining([expect.objectContaining({ rule: "integration-test-suite", message: expect.stringContaining("complete closure") })]),
     });
+  });
+
+  test("keeps a packageReferences entry for an exact-root firstPartyPackages dependency", () => {
+    const { root, configured, graph } = workspace(
+      'import { helper } from "../../apps/api/src/testing.ts"; import "@acme/shared"; expect(helper).toBe(1);\n',
+    );
+    const withSharedPackage = parseConfig({ ...configured, firstPartyPackages: [{ root: "shared", name: "@acme/shared" }] });
+    mkdirSync(`${root}/shared`, { recursive: true });
+    writeFileSync(`${root}/shared/package.json`, '{"name":"@acme/shared"}\n');
+    const rebuiltGraph = buildDependencyGraph({
+      config: withSharedPackage,
+      rootDir: root,
+      commit: graph.commit!,
+      reports: { api: { modules: [
+        { source: donorPath, dependencies: [] },
+        { source: testPath, dependencies: [
+          { module: "../../apps/api/src/testing.ts", resolved: donorPath },
+          { module: "@acme/shared", couldNotResolve: true },
+        ] },
+      ] } },
+    });
+    const manifest = buildIntegrationTestPlanSync({ config: withSharedPackage, rootDir: root, graph: rebuiltGraph, suite: "api", baselineCommit: rebuiltGraph.commit! });
+    expect(manifest.dependencies.dev["@acme/shared"]).toBe("workspace:*");
+    expect(manifest.dependencies.packageReferences).toContain("shared");
   });
 
   test("refuses an undeclared relative application target", () => {

@@ -8,7 +8,7 @@
 
 import { resolve } from "node:path";
 
-import { isPackageOwner, packageNameMatcher, testKindOf } from "../config.ts";
+import { isFirstPartyPackageOwner, isPackageOwner, packageNameMatcher, testKindOf } from "../config.ts";
 import { PlanValidationError } from "../errors.ts";
 import { isSourceModulePath } from "../util/files.ts";
 import { isSha256, stableStringify } from "../util/hash.ts";
@@ -175,7 +175,7 @@ function validateDependencies(manifest: ExtractionManifest, options: ValidatePla
   const references = manifest.dependencies?.packageReferences ?? [];
   if (new Set(references).size !== references.length) issues.add("package-references", "packageReferences must be unique");
   for (const reference of references) {
-    if (!isPackageOwner(options.config, reference)) {
+    if (!isPackageOwner(options.config, reference) && !isFirstPartyPackageOwner(options.config, reference)) {
       issues.add("package-references", `package reference must be a workspace package directory: ${reference}`);
       continue;
     }

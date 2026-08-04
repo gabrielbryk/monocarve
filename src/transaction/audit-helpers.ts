@@ -28,7 +28,12 @@ export function firstExportTarget(value: unknown): string | undefined {
 }
 
 export function repositorySources(config: MonocarveConfig, root: string): string[] {
-  return [...config.applications.map((app) => app.sourceRoot), ...config.packageRoots, ...config.firstPartyRoots]
+  return [
+    ...config.applications.map((app) => app.sourceRoot),
+    ...config.packageRoots,
+    ...config.firstPartyRoots,
+    ...config.firstPartyPackages.map((pkg) => pkg.root),
+  ]
     .flatMap((directory) => sourceFiles(resolve(root, directory), undefined, [...config.sourceExtensions, ...config.assetExtensions]))
     .map((file) => relativePosix(root, file)).sort();
 }

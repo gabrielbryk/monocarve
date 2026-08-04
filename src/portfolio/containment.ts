@@ -18,7 +18,7 @@
  * and fails to compile.
  */
 
-import { isPackageOwner, type MonocarveConfig } from "../config.ts";
+import { isFirstPartyPackageOwner, isPackageOwner, type MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import { isSourceModulePath } from "../util/files.ts";
 import { byCodeUnit } from "../util/hash.ts";
@@ -137,7 +137,7 @@ export function exportingPackageFor(
   const target = escape.resolved;
   if (target === undefined) return undefined;
   const owner = context.ownerOf(target);
-  if (!isPackageOwner(config, owner)) return undefined;
+  if (!isPackageOwner(config, owner) && !isFirstPartyPackageOwner(config, owner)) return undefined;
 
   const packageEntry = [...graph.workspace.packageNames.entries()].find(([, value]) => value === owner);
   if (!packageEntry) return undefined;

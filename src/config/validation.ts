@@ -42,6 +42,38 @@ export function validateIntegrationTestSuites(config: MonocarveConfig, ctx: z.Re
   }
 }
 
+/** Equal, or one a directory ancestor of the other. */
+function rootsOverlap(left: string, right: string): boolean {
+  return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
+}
+
+/**
+ * `firstPartyPackages` roots must not overlap each other or a `packageRoots` /
+ * `firstPartyRoots` entry — including ancestor/descendant overlap, not just
+ * equality, since a path under two roots would leave `ownerFor` unable to say
+ * which model owns it — and every declared package name must be unique so
+ * dependency inference has exactly one owner to resolve to.
+ */
+export function validateFirstPartyPackages(config: MonocarveConfig, ctx: z.RefinementCtx): void {
+  const otherRoots = [...config.packageRoots, ...config.firstPartyRoots];
+  const seenNames = new Set<string>();
+  config.firstPartyPackages.forEach((pkg, index) => {
+    const path = ["firstPartyPackages", index] as const;
+    const overlappingOther = otherRoots.find((root) => rootsOverlap(pkg.root, root));
+    if (overlappingOther !== undefined) {
+      ctx.addIssue({ code: "custom", path: [...path, "root"], message: `must not overlap packageRoots/firstPartyRoots entry ${overlappingOther}` });
+    }
+    const overlappingSibling = config.firstPartyPackages.find((other, otherIndex) => otherIndex !== index && rootsOverlap(pkg.root, other.root));
+    if (overlappingSibling !== undefined) {
+      ctx.addIssue({ code: "custom", path: [...path, "root"], message: `must not overlap another firstPartyPackages entry: ${overlappingSibling.root}` });
+    }
+    if (seenNames.has(pkg.name)) {
+      ctx.addIssue({ code: "custom", path: [...path, "name"], message: "must be unique among firstPartyPackages" });
+    }
+    seenNames.add(pkg.name);
+  });
+}
+
 export function validateTestKinds(config: MonocarveConfig, ctx: z.RefinementCtx): void {
   if (config.testKinds === undefined) return;
   if (config.testPathPatterns.length > 0) {

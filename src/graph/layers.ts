@@ -11,7 +11,7 @@
 
 import { basename } from "node:path";
 
-import { isPackageOwner, type MonocarveConfig } from "../config.ts";
+import { isFirstPartyPackageOwner, isPackageOwner, type MonocarveConfig } from "../config.ts";
 import { generatedProvenance } from "./workspace.ts";
 import { buildApplicationGraph, stronglyConnectedComponents, transitive, type ApplicationGraph } from "./components.ts";
 import type { DependencyGraph, ModuleEdge } from "./model.ts";
@@ -90,7 +90,7 @@ function workspaceDependencies(
 ): string[] {
   return [
     ...new Set([
-      ...edges.map((edge) => graph.nodes.get(edge.to)?.owner ?? "").filter((owner) => owner !== "" && isPackageOwner(config, owner)),
+      ...edges.map((edge) => graph.nodes.get(edge.to)?.owner ?? "").filter((owner) => owner !== "" && (isPackageOwner(config, owner) || isFirstPartyPackageOwner(config, owner))),
       ...component.flatMap((node) => [...(graph.workspaceDependenciesBySource.get(node) ?? [])]),
     ]),
   ].sort();

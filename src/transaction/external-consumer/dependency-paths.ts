@@ -17,7 +17,8 @@ export function externalDependencyPaths(config: MonocarveConfig, installedRoot: 
 function dependencyOwners(config: MonocarveConfig, installedRoot: string): string[] {
   const packageOwners = config.packageRoots.flatMap((root) => packageDirectories(installedRoot, root));
   const applicationOwners = config.applications.map((app) => ownerOfSourceRoot(app.sourceRoot));
-  return [...new Set([...packageOwners, ...applicationOwners, ""])];
+  const firstPartyPackageOwners = config.firstPartyPackages.map((pkg) => pkg.root);
+  return [...new Set([...packageOwners, ...applicationOwners, ...firstPartyPackageOwners, ""])];
 }
 
 function packageDirectories(installedRoot: string, root: string): string[] {

@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 
 import { createPackageManagerAdapter } from "../adapters/registry.ts";
 import { inventoryModuleReferences, resetCodemodCaches } from "../codemod/imports.ts";
-import { isPackageOwner } from "../config.ts";
+import { isFirstPartyPackagePath, isPackageOwner } from "../config.ts";
 import { showBaseline } from "../util/git.ts";
 import { hashText, MISSING } from "../util/hash.ts";
 import { relativePosix } from "../util/paths.ts";
@@ -125,7 +125,7 @@ export function auditPlanSync(options: AuditOptions): AuditReport {
     const current = readFileSync(absolute, "utf8");
     const references = inventoryModuleReferences(current, absolute, true, rootDir, config.moduleSpecifierCalls);
 
-    if (isPackageOwner(config, file)) {
+    if (isPackageOwner(config, file) || isFirstPartyPackagePath(config, file)) {
       for (const reference of references) {
         if (!reference.resolved) continue;
         const inApplication = config.applications.some((app) =>

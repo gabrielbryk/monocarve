@@ -55,6 +55,7 @@ export function firstPartyRoots(config: MonocarveConfig): string[] {
     ...config.applications.map((app) => withSlash(app.sourceRoot)),
     ...config.packageRoots.map(withSlash),
     ...config.firstPartyRoots.map(withSlash),
+    ...config.firstPartyPackages.map((pkg) => withSlash(pkg.root)),
   ].sort((left, right) => right.length - left.length);
 }
 
@@ -88,6 +89,9 @@ export function applicationFor(config: MonocarveConfig, path: string): Applicati
 export function ownerFor(config: MonocarveConfig, path: string): string {
   const app = applicationFor(config, path);
   if (app) return applicationOwner(app);
+  for (const pkg of config.firstPartyPackages) {
+    if (path.startsWith(withSlash(pkg.root))) return pkg.root;
+  }
   for (const root of config.packageRoots) {
     const prefix = withSlash(root);
     if (!path.startsWith(prefix)) continue;
@@ -114,6 +118,21 @@ export function isApplicationOwner(config: MonocarveConfig, owner: string): bool
 /** True when the owner string is a directory under a configured package root. */
 export function isPackageOwner(config: MonocarveConfig, owner: string): boolean {
   return config.packageRoots.some((root) => owner.startsWith(withSlash(root)));
+}
+
+/**
+ * True when the owner string names a configured exact-root first-party
+ * package. Deliberately not folded into {@link isPackageOwner}: that check
+ * gates where a *new* extraction target may land, and a `firstPartyPackages`
+ * root is an existing package, not a container a plan may create one under.
+ */
+export function isFirstPartyPackageOwner(config: MonocarveConfig, owner: string): boolean {
+  return config.firstPartyPackages.some((pkg) => pkg.root === owner);
+}
+
+/** True when `path` lives inside a configured exact-root first-party package. */
+export function isFirstPartyPackagePath(config: MonocarveConfig, path: string): boolean {
+  return config.firstPartyPackages.some((pkg) => path.startsWith(withSlash(pkg.root)));
 }
 
 /**

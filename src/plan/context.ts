@@ -312,6 +312,7 @@ export class WorkspaceContext {
       ...this.config.applications.map((app) => app.sourceRoot),
       ...this.config.packageRoots,
       ...this.config.firstPartyRoots,
+      ...this.config.firstPartyPackages.map((pkg) => pkg.root),
     ]
       .flatMap((directory) => sourceFiles(resolve(this.rootDir, directory), undefined, [...this.config.sourceExtensions, ...this.config.assetExtensions]))
       .map((file) => this.relative(file))

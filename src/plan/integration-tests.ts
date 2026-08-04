@@ -6,7 +6,7 @@
  */
 
 import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapters/registry.ts";
-import { applicationOwner, getApplication, isPackageOwner, renderExtractionProfile, resolveExtractionProfile, type MonocarveConfig } from "../config.ts";
+import { applicationOwner, getApplication, isFirstPartyPackageOwner, isPackageOwner, renderExtractionProfile, resolveExtractionProfile, type MonocarveConfig } from "../config.ts";
 import { GENERATOR } from "../branding.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import { resolveCommit } from "../util/git.ts";
@@ -68,7 +68,7 @@ export function buildIntegrationTestPlanSync(options: BuildIntegrationTestPlanOp
   const dependencies = {
     runtime: {} as Record<string, string>,
     dev: { ...inferred.dev, ...inferred.runtime, [application.packageName]: "workspace:*" },
-    packageReferences: inferred.packageReferences.filter((owner) => isPackageOwner(config, owner)),
+    packageReferences: inferred.packageReferences.filter((owner) => isPackageOwner(config, owner) || isFirstPartyPackageOwner(config, owner)),
   };
   const scaffoldInput = {
     context,

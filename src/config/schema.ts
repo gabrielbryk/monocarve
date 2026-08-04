@@ -2,11 +2,11 @@ import { z } from "zod";
 
 import { SCRATCH_DIRNAME } from "../branding.ts";
 import { assetEmissionProofs, generatedArtifacts, pathMigrations, postJournalPreparers, transaction } from "./schema-artifacts.ts";
-import { application, commitTemplates, extractionProfiles, gates, preparationPolicy, preparers, scaffoldTemplates } from "./schema-core.ts";
+import { application, commitTemplates, extractionProfiles, firstPartyPackage, gates, preparationPolicy, preparers, scaffoldTemplates } from "./schema-core.ts";
 import { graph, integrationTestSuites, pathReferences, portfolio, testKinds, testRelocation } from "./schema-policy.ts";
 import { regexSource, relativePath } from "./primitives.ts";
 import { validateExtractionProfiles } from "./profiles.ts";
-import { validateIntegrationTestSuites, validateTestKinds } from "./validation.ts";
+import { validateFirstPartyPackages, validateIntegrationTestSuites, validateTestKinds } from "./validation.ts";
 import { DEFAULT_SOURCE_EXTENSIONS } from "./source-policy.ts";
 
 export const monocarveConfigSchema = z.strictObject({
@@ -36,6 +36,15 @@ export const monocarveConfigSchema = z.strictObject({
    * see. Imports into these are first-party edges, not external dependencies.
    */
   firstPartyRoots: z.array(relativePath).default([]),
+
+  /**
+   * First-party packages that live at an exact root — the root itself is one
+   * package, not a `packageRoots`-style container of many. Distinct from
+   * `firstPartyRoots`: entries here carry a declared package `name`, so a
+   * bare-specifier import of that name resolves to this root for dependency
+   * inference even before, or without, an on-disk `package.json` scan.
+   */
+  firstPartyPackages: z.array(firstPartyPackage).default([]),
 
   /** Source module extensions understood by this workspace's compiler policy. */
   sourceExtensions: z.array(z.string().regex(/^\./, "extension must start with a dot")).min(1).default([...DEFAULT_SOURCE_EXTENSIONS]),
@@ -119,6 +128,7 @@ export const monocarveConfigSchema = z.strictObject({
   validateExtractionProfiles(config, ctx);
   validateIntegrationTestSuites(config, ctx);
   validateTestKinds(config, ctx);
+  validateFirstPartyPackages(config, ctx);
   config.cssImportExtensions.forEach((extension, index) => {
     if (!config.assetExtensions.includes(extension)) ctx.addIssue({ code: "custom", path: ["cssImportExtensions", index], message: "CSS import extension must also be an asset extension" });
   });
