@@ -201,7 +201,18 @@ function taskFileContents(input: ScaffoldInput, templates: ReturnType<typeof tem
   // future tests; the override is generated only for a brand-new Moon package
   // and must be removed when its first test travels in a later extraction.
   if (input.taskRunner.id !== "moon" || input.tests === undefined || input.tests.length > 0) return taskFile;
-  return `${taskFile.trimEnd()}\n\n# Generated for a package with no travelling test files; remove when it gains one.\ntasks:\n  test:\n    args: [--passWithNoTests]\n`;
+  return `${taskFile.trimEnd()}\n\n# Generated for a package with no travelling test files; remove when it gains one.\ntasks:\n  test:\n    args: [${emptySuiteArgument(input, templates)}]\n`;
+}
+
+/** The empty-suite flag is runner syntax, not Moon syntax. Infer it from the
+ * configured scaffold so a backend Bun library and frontend Vitest library
+ * both retain their inherited test task and its dependency graph. */
+function emptySuiteArgument(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>): string {
+  const manifest = parseJsonFile(render(input, templates.packageJson), `${input.packageRoot}/package.json`);
+  const candidate = (manifest.scripts as Record<string, unknown> | undefined)?.test;
+  const script = typeof candidate === "string" ? candidate : "";
+  if (/\bbun\s+test\b/.test(script)) return "--pass-with-no-tests";
+  return "--passWithNoTests";
 }
 
 function extraFileOperations(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>): PlanOperation[] {

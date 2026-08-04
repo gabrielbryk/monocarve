@@ -8,11 +8,11 @@ import { cleanupFixtures, fixtureConfig, fixtureRepo } from "./support/fixture-r
 
 afterAll(cleanupFixtures);
 
-function newPackage(root: string, taskRunner = noneTaskRunner, tests: readonly string[] | undefined = undefined) {
+function newPackage(root: string, taskRunner = noneTaskRunner, tests: readonly string[] | undefined = undefined, packageJson = '{"name":"{package}"}\n') {
   const config = fixtureConfig(root, taskRunner === moonAdapter ? {
     taskRunner: "moon",
     scaffoldTemplates: {
-      packageJson: { contents: '{"name":"{package}"}\n' },
+      packageJson: { contents: packageJson },
       taskFile: { contents: "id: {project}\ntags: [frontend-library]\n" },
     },
   } : {});
@@ -32,6 +32,17 @@ test("generates a Moon empty-suite override only for an explicitly test-less mov
   });
   const task = newPackage(root, moonAdapter, []).find((operation) => operation.kind === "write-file" && operation.path === "libs/new-package/moon.yml");
   expect(task).toMatchObject({ kind: "write-file", contents: expect.stringContaining("args: [--passWithNoTests]") });
+});
+
+test("uses Bun's empty-suite flag for a Bun test scaffold", () => {
+  const root = fixtureRepo({
+    ".moon/workspace.yml": "projects:\n  globs:\n    - 'libs/*'\n",
+    "pnpm-workspace.yaml": "packages:\n  - libs/*\n",
+    "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\n",
+  });
+  const task = newPackage(root, moonAdapter, [], '{"name":"{package}","scripts":{"test":"bun test"}}\n')
+    .find((operation) => operation.kind === "write-file" && operation.path === "libs/new-package/moon.yml");
+  expect(task).toMatchObject({ kind: "write-file", contents: expect.stringContaining("args: [--pass-with-no-tests]") });
 });
 
 test("registers a newly scaffolded package in an explicit Knip workspace map", () => {
