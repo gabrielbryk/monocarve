@@ -74,12 +74,14 @@ export function assessCandidate(
     });
   }
 
-  // A computed reference blocks only a file this candidate would move. An
-  // unrelated test/build helper cannot name a known donor through the graph,
-  // so rejecting every candidate for its existence turns one local uncertainty
-  // into a workspace-wide refusal. Actual retained consumers are checked again
-  // by findConsumers once their resolved edges identify them.
-  const unsupported = [...closure, ...tests].filter((path) => context.hasUnsupportedReference(path));
+  // A computed reference blocks only production this candidate would move.
+  // Configured tests commonly load built or deployed artifacts through paths
+  // that cannot be resolved until runtime, so that test-only uncertainty is not
+  // an extraction refusal. Production stays fail-closed, and resolved test
+  // donor edges are still inventoried and rewritten by findConsumers.
+  const unsupported = [...closure, ...tests].filter(
+    (path) => !context.isTest(path) && context.hasUnsupportedReference(path),
+  );
   if (unsupported.length > 0) {
     rejections.push({
       code: "unsupported-module-reference",

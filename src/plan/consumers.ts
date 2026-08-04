@@ -53,9 +53,11 @@ export interface TestRelocationPartition {
 /**
  * Every file outside `donors` that imports one of them.
  *
- * Throws when a consumer contains a computed specifier: such a file cannot be
- * rewritten deterministically, and a plan that silently skipped it would leave a
- * dangling import behind.
+ * Throws when a production consumer contains a computed specifier: such a file
+ * cannot be rewritten deterministically, and a plan that silently skipped it
+ * would leave a dangling import behind. Computed references in configured test
+ * files are allowed because they commonly target built or deployed artifacts;
+ * their resolved donor references are still inventoried and rewritten below.
  */
 export function findConsumers(
   context: WorkspaceContext,
@@ -76,7 +78,7 @@ export function findConsumers(
         .moduleReferences(file)
         .filter((reference) => reference.specifier && reference.resolved && absoluteDonors.includes(reference.resolved));
       if (references.length === 0) return [];
-      if (context.hasUnsupportedReference(file)) {
+      if (!context.isTest(file) && context.hasUnsupportedReference(file)) {
         throw new PlanningError(`unsupported module reference in consumer ${file}`);
       }
       // Insertion-ordered, so `expectedImporter` stays the first specifier the

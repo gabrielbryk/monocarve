@@ -25,6 +25,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = resolve(here, "../fixtures/basic-monorepo");
 const CHART = "apps/web/src/widgets/chart.ts";
 const LAZY = "apps/web/src/lazy-chart.ts";
+const COMPUTED_CONSUMER_SOURCE = [
+  'import { renderChart } from "./widgets/chart.ts";',
+  'const artifact = "../../../dist/chart.js";',
+  "export const loadBuiltChart = () => import(artifact);",
+  "void renderChart;",
+  "",
+].join("\n");
 
 function workspace(
   lazySource = 'export const loadChart = () => import("./widgets/chart.ts");\n',
@@ -177,4 +184,45 @@ test("does not guess that an unindexed computed dynamic import consumes this can
   expect(candidate?.eligible).toBe(true);
   expect(candidate?.rejectionReasons.some((reason) => reason.code === "unsupported-module-reference")).toBe(false);
   expect(findConsumers(context, [CHART], "@acme/chart").some((consumer) => consumer.file === LAZY)).toBe(false);
+});
+
+test("allows computed artifact imports only in configured test consumers across planning and portfolio", async () => {
+  const testConsumer = "apps/web/src/lazy-chart.test.ts";
+  const testRoot = workspace();
+  write(testRoot, testConsumer, COMPUTED_CONSUMER_SOURCE);
+  const { config: testConfig } = await loadConfig({ cwd: testRoot });
+  const testContext = new WorkspaceContext(testConfig, testRoot);
+  const testGraph = await scanDependencyGraph({ config: testConfig, rootDir: testRoot, noCache: true });
+  const testCandidate = buildPortfolio({ config: testConfig, graph: testGraph }).candidates.find(
+    (entry) => entry.files.includes(CHART),
+  );
+
+  expect(testContext.isTest(testConsumer)).toBe(true);
+  expect(testContext.hasUnsupportedReference(testConsumer)).toBe(true);
+  expect(findConsumers(testContext, [CHART], "@acme/chart").map((consumer) => consumer.file)).toContain(testConsumer);
+  expect(testCandidate?.rejectionReasons.some((reason) => reason.code === "unsupported-module-reference")).toBe(false);
+  expect(testCandidate?.rejectionReasons.some((reason) => reason.detail.includes("consumer inventory"))).toBe(false);
+  expect(testCandidate?.eligible).toBe(true);
+
+  const productionRoot = workspace();
+  write(productionRoot, LAZY, COMPUTED_CONSUMER_SOURCE);
+  const { config: productionConfig } = await loadConfig({ cwd: productionRoot });
+  const productionContext = new WorkspaceContext(productionConfig, productionRoot);
+  const productionGraph = await scanDependencyGraph({ config: productionConfig, rootDir: productionRoot, noCache: true });
+  const productionCandidate = buildPortfolio({ config: productionConfig, graph: productionGraph }).candidates.find(
+    (entry) => entry.files.includes(CHART),
+  );
+
+  expect(productionContext.isTest(LAZY)).toBe(false);
+  expect(productionContext.hasUnsupportedReference(LAZY)).toBe(true);
+  expect(() => findConsumers(productionContext, [CHART], "@acme/chart")).toThrow(
+    `unsupported module reference in consumer ${LAZY}`,
+  );
+  expect(productionCandidate?.rejectionReasons).toContainEqual(
+    expect.objectContaining({
+      code: "unplannable",
+      detail: expect.stringContaining(`unsupported module reference in consumer ${LAZY}`),
+    }),
+  );
+  expect(productionCandidate?.eligible).toBe(false);
 });
