@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { getApplication, isPackageOwner, packageNameOf, triggeredPathMigrations } from "../../config.ts";
+import { applicationOwner } from "../../config/helpers.ts";
 import { createPackageManagerAdapter } from "../../adapters/registry.ts";
 import { fileState } from "../../util/files.ts";
 import { hashText, isFileState, isSha256 } from "../../util/hash.ts";
@@ -380,7 +381,7 @@ function validateLockfileImporter(
   const mode = operation.mode ?? "insert";
   if (operation.lockfile !== adapter.lockfileName) issues.add("lockfile-name", `lockfile importer must target ${adapter.lockfileName}`, at);
   const isPackage = isPackageOwner(options.config, operation.packageRoot);
-  const isApplicationOwner = options.config.applications.some((app) => app.sourceRoot.startsWith(`${operation.packageRoot}/`));
+  const isApplicationOwner = options.config.applications.some((app) => applicationOwner(app) === operation.packageRoot);
   if (!(isPackage || (mode === "replace" && isApplicationOwner)) || operation.packageRoot.includes("..")) {
     issues.add("lockfile-target", "lockfile importer must target a workspace package", at);
   }
