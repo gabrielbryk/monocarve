@@ -189,6 +189,17 @@ function literalTextOf(node: ts.Node): string | null {
   return ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) ? node.text : null;
 }
 
+/** String literals in `for (const name of ["…"])`, when `name` is the helper argument. */
+function forOfLiteralBinding(node: ts.Expression): readonly ts.Expression[] | undefined {
+  if (!ts.isIdentifier(node)) return undefined;
+  let parent: ts.Node | undefined = node.parent;
+  while (parent && !ts.isForOfStatement(parent)) parent = parent.parent;
+  if (!parent || !ts.isForOfStatement(parent) || !ts.isVariableDeclarationList(parent.initializer)) return undefined;
+  const declaration = parent.initializer.declarations.length === 1 ? parent.initializer.declarations[0] : undefined;
+  if (!declaration || !ts.isIdentifier(declaration.name) || declaration.name.text !== node.text || !ts.isArrayLiteralExpression(parent.expression)) return undefined;
+  return parent.expression.elements.filter((element): element is ts.Expression => ts.isStringLiteral(element) || ts.isNoSubstitutionTemplateLiteral(element));
+}
+
 /**
  * Local `const NAME = (param) => …` declarations whose body calls
  * `resolve(import.meta.dir, param)` with that same parameter — the
@@ -265,7 +276,12 @@ export function findStaticFsReferences(source: string, filePath: string): Static
         if (first && second && isImportMetaDir(first)) record(second);
       } else if (ts.isIdentifier(node.expression) && node.arguments.length === 1) {
         const declaration = resolveLexicalDeclaration(node.expression, node.expression.text);
-        if (declaration && ts.isVariableDeclaration(declaration) && helpers.has(declaration)) record(node.arguments[0]!);
+        if (declaration && ts.isVariableDeclaration(declaration) && helpers.has(declaration)) {
+          const argument = node.arguments[0]!;
+          const literals = forOfLiteralBinding(argument);
+          if (literals) literals.forEach(record);
+          else record(argument);
+        }
       }
     }
     ts.forEachChild(node, visit);

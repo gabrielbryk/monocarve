@@ -17,6 +17,7 @@ import { loadConfig } from "../src/config.ts";
 import { scanDependencyGraph } from "../src/graph/cruiser.ts";
 import { buildPortfolio } from "../src/portfolio/rank.ts";
 import { buildPlanSync, serializeManifest } from "../src/plan/build.ts";
+import { findStaticFsReferences } from "../src/plan/static-fs-references.ts";
 import { applyPlan } from "../src/transaction/apply.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
 import { cleanupFixtures, fixtureGit, scratchDirectory, write } from "./support/fixture-repo.ts";
@@ -39,6 +40,18 @@ function readerSource(): string {
     `export const chartSource = read("${DONOR_LITERAL}");`,
     `export const serverSource = read("${UNRELATED_LITERAL}");`,
     "",
+  ].join("\n");
+}
+
+function loopReaderSource(): string {
+  return [
+    'import { readFileSync } from "node:fs";',
+    'import { resolve } from "node:path";',
+    '',
+    'const read = (path: string) => readFileSync(resolve(import.meta.dir, path), "utf8");',
+    '',
+    `for (const path of ["${DONOR_LITERAL}"]) read(path);`,
+    '',
   ].join("\n");
 }
 
@@ -114,4 +127,9 @@ describe("static filesystem reference consumers", () => {
     expect(report.failures).toEqual([]);
     expect(report.passed).toBe(true);
   }, 300_000);
+
+  test("rewrites literals forwarded through a for-of binding", () => {
+    const source = loopReaderSource();
+    expect(findStaticFsReferences(source, "/workspace/apps/api/src/reader.ts").map((match) => match.literal)).toEqual([DONOR_LITERAL]);
+  });
 });
