@@ -33,6 +33,38 @@ test("repository postconditions include the root package importer", async () => 
   expect(report.failures.join("\n")).toContain(".: cannot project importer");
 });
 
+test("repository postconditions accept a catalog dependency whose pnpm importer carries its concrete selected range", async () => {
+  const root = fixtureRepo({
+    "package.json": JSON.stringify({
+      name: "@acme/root",
+      devDependencies: { "left-pad": "catalog:" },
+      workspaces: { catalog: { "left-pad": "1.3.0" } },
+    }),
+    "pnpm-workspace.yaml": "packages: []\n",
+    "pnpm-lock.yaml": [
+      "lockfileVersion: '9.0'",
+      "",
+      "importers:",
+      "",
+      "  .:",
+      "    devDependencies:",
+      "      left-pad:",
+      "        specifier: 1.3.0",
+      "        version: 1.3.0",
+      "",
+      "packages:",
+      "",
+      "  left-pad@1.3.0: {}",
+      "",
+    ].join("\n"),
+  });
+
+  const report = await auditRepositoryPostconditions({ rootDir: root, adapter: pnpmAdapter });
+
+  expect(report.passed).toBeTrue();
+  expect(report.importerVerification.differences).toEqual([]);
+});
+
 test("scoped postconditions do not project unrelated workspace importers", async () => {
   const base = "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\n  libs/target: {}\n\n";
   const root = fixtureRepo({

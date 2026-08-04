@@ -123,6 +123,35 @@ describe("adapters", () => {
     expect(() => pnpmAdapter.replaceImporter(lockfile, "libs/nope", wired)).toThrow("no importer block to replace");
   });
 
+  test("refuses a catalog dependency whose concrete lockfile resolutions disagree", () => {
+    const divergent = [
+      "lockfileVersion: '9.0'",
+      "",
+      "importers:",
+      "",
+      "  apps/api:",
+      "    dependencies:",
+      "      left-pad:",
+      "        specifier: 1.2.0",
+      "        version: 1.2.0",
+      "",
+      "  apps/web:",
+      "    dependencies:",
+      "      left-pad:",
+      "        specifier: 1.3.0",
+      "        version: 1.3.0",
+      "",
+    ].join("\n");
+
+    expect(() => pnpmAdapter.renderImporterBlock({
+      packageRoot: "libs/chart",
+      dependencies: { "left-pad": "catalog:" },
+      devDependencies: {},
+      lockfileText: divergent,
+      workspaceRoots: {},
+    })).toThrow("lockfile resolves left-pad@catalog: to more than one version");
+  });
+
   test("removes exactly one dependency and collapses an emptied importer", () => {
     const block = pnpmAdapter.addBlockDependency(pnpmAdapter.importerBlock(lockfile, "apps/web")!, "typescript", "^5.0.0", "5.0.0", "dev");
     const pruned = pnpmAdapter.removeBlockDependency(block, "@acme/logger");

@@ -32,9 +32,25 @@ export function missingResolutions(lockfileText: string): readonly string[] {
 }
 
 function existingDependencyVersion(text: string, name: string, specifier: string): string | undefined {
+  const dependencies = importerDependencies(text);
+  const exact = uniqueImporterVersion(dependencies, name, specifier, (dependency) => dependency.specifier === specifier);
+  if (exact !== undefined || specifier !== "catalog:") return exact;
+  // pnpm may materialize a catalog request in an importer as the selected
+  // concrete range (not `catalog:`), notably when an override supplies that
+  // selection. The lock still attests the resolution, but only a single
+  // version across every importer is safe to project back into catalog syntax.
+  return uniqueImporterVersion(dependencies, name, specifier, () => true);
+}
+
+function uniqueImporterVersion(
+  dependencies: readonly ImporterDependency[],
+  name: string,
+  specifier: string,
+  includes: (dependency: ImporterDependency) => boolean,
+): string | undefined {
   const resolved = new Map<string, string>();
-  for (const dependency of importerDependencies(text)) {
-    if (dependency.name === name && dependency.specifier === specifier && !resolved.has(dependency.version)) {
+  for (const dependency of dependencies) {
+    if (dependency.name === name && includes(dependency) && !resolved.has(dependency.version)) {
       resolved.set(dependency.version, dependency.root);
     }
   }

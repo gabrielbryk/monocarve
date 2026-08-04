@@ -6,9 +6,11 @@ import {
   DEPENDENCY_SECTIONS,
   EMPTY_MAP,
   IMPORTER_KEY,
+  importerBlock,
   pnpmSection,
   type PnpmDependencySection,
   yamlKey,
+  yamlScalar,
   yamlValue,
 } from "./pnpm-importers.ts";
 import { dependencyVersion } from "./pnpm-resolutions.ts";
@@ -50,7 +52,25 @@ function renderDependency(
   linkVersion: (from: string, to: string) => string,
 ): string[] {
   const version = specifier.startsWith("workspace:") ? workspaceVersion(name, input, linkVersion) : dependencyVersion(input.lockfileText, name, specifier);
-  return [`      ${yamlKey(name)}:`, `        specifier: ${yamlValue(specifier)}`, `        version: ${version}`];
+  // pnpm can persist a catalog request as its selected concrete range in an
+  // existing importer (notably when an override supplies that selection).
+  // Preserve that byte-level spelling when projecting the same importer; new
+  // importers still render the package.json specifier verbatim.
+  const persistedSpecifier = specifier === "catalog:" ? existingSpecifier(input, name) ?? specifier : specifier;
+  return [`      ${yamlKey(name)}:`, `        specifier: ${yamlValue(persistedSpecifier)}`, `        version: ${version}`];
+}
+
+function existingSpecifier(input: RenderImporterInput, name: string): string | undefined {
+  const block = importerBlock(input.lockfileText, input.packageRoot);
+  if (block === undefined) return undefined;
+  const lines = block.replace(/\n$/u, "").split("\n");
+  const dependency = blockDependencies(lines).find((entry) => entry.name === name);
+  if (dependency === undefined) return undefined;
+  for (const line of lines.slice(dependency.start + 1, dependency.end)) {
+    const match = line.match(/^ {8}specifier:\s*(.+)$/u);
+    if (match) return yamlScalar(match[1]!);
+  }
+  return undefined;
 }
 
 function workspaceVersion(name: string, input: RenderImporterInput, linkVersion: (from: string, to: string) => string): string {
