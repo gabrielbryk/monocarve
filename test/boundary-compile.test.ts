@@ -17,7 +17,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { buildDependencyGraph, type ScanReport } from "../src/graph/build.ts";
 import type { DependencyGraph } from "../src/graph/model.ts";
 import { compileBoundaryPreparationManifest, type CompileBoundaryPreparationManifestInput } from "../src/prepare/build.ts";
-import { assertPreparationManifestValid } from "../src/prepare/manifest.ts";
+import { assertPreparationManifestValid, createPreparationManifest } from "../src/prepare/manifest.ts";
 import { resolveCommit } from "../src/util/git.ts";
 import { byCodeUnit, hashText, stableStringify } from "../src/util/hash.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, write } from "./support/fixture-repo.ts";
@@ -182,6 +182,56 @@ describe("compileBoundaryPreparationManifest — existing-package strategy", () 
 
     expect(second.planId).toBe(first.planId);
     expect(stableStringify(second)).toBe(stableStringify(first));
+  });
+
+  test("orders a rewrite before a later-path shim deletion and rejects the inverse", () => {
+    const earlyImporter = "apps/api/src/admin/consumer.ts";
+    const root = fixtureRepo({
+      "apps/api/tsconfig.json": TSCONFIG,
+      [RETAINED]: RETAINED_SOURCE,
+      [earlyImporter]: 'import { env } from "../config/env.ts";\nexport const value = env;\n',
+    });
+    const config = fixtureConfig(root, {
+      compositionBoundaries: [{
+        id: "env-shim",
+        retained: RETAINED,
+        strategy: "existing-package",
+        replacement: { specifier: "@acme/env", symbols: ["env"] },
+        retire: true,
+      }],
+      preparation: {
+        gates: { package: [], project: [], workspace: ["true"] },
+        commit: { subject: "refactor: prepare env boundary" },
+      },
+    });
+    const baseline = resolveCommit(root, "HEAD");
+    const graph = buildDependencyGraph({
+      config,
+      rootDir: root,
+      reports: { api: { modules: [
+        { source: RETAINED, dependencies: [] },
+        { source: earlyImporter, dependencies: [{ module: "../config/env.ts", resolved: RETAINED }] },
+      ] } },
+      commit: baseline.commit,
+    });
+    const manifest = compileBoundaryPreparationManifest({
+      rootDir: root,
+      config,
+      baselineCommit: "HEAD",
+      graphDigest: hashText("fixture-workspace-graph"),
+      boundaryId: "env-shim",
+      graph,
+      rendering: {
+        gates: { package: [], project: [], workspace: ["true"] },
+        commit: { subject: "refactor: prepare env boundary" },
+      },
+    });
+
+    expect(manifest.operations.map((operation) => operation.kind)).toEqual(["rewrite-module-specifier", "delete-module"]);
+    expect(() => assertPreparationManifestValid(manifest)).not.toThrow();
+    const { planId: _planId, ...draft } = manifest;
+    const inverse = createPreparationManifest({ ...draft, operations: [...manifest.operations].reverse() });
+    expect(() => assertPreparationManifestValid(inverse)).toThrow(/\[operation-order\] operations must be deterministically ordered/);
   });
 
   test("RETIREMENT SAFETY: a remaining live importer the graph reports refuses retirement, naming the offending module and symbol", () => {

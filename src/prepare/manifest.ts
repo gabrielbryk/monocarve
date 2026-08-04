@@ -415,9 +415,8 @@ function validateCurrentExtractionRegion(contents: string, declaration: Preparat
 }
 
 function operationKey(operation: PreparationReplayOperation): string {
-  return operation.kind === "extract-type-declarations"
-    ? `${operation.kind}\u0000${operation.donor.path}\u0000${operation.target.path}`
-    : `${operation.kind}\u0000${operation.file.path}`;
+  const path = operation.kind === "extract-type-declarations" ? operation.donor.path : operation.file.path;
+  return `${path}\u0000${operation.kind}`;
 }
 
 function compatibilityKey(intent: CompatibilityReexportIntent): string {
