@@ -243,7 +243,7 @@ export async function simulatePlan(options: SimulateOptions): Promise<Simulation
       // declared generator actually changed an output; every other simulation
       // keeps ordinary cache behaviour.
       const wrapCommand = regeneration.artifacts.some((artifact) => artifact.changed) && taskRunner.id === "moon"
-        ? (command: string) => taskRunner.wrapGateCommand(`MOON_FORCE=1 ${command}`)
+        ? (command: string) => taskRunner.wrapGateCommand(`MOON_FORCE=true ${command}`)
         : taskRunner.wrapGateCommand;
       const gateRun = await runGateTiers({
         gates: manifest.gates,
