@@ -81,6 +81,94 @@ checkout with a non-actionable `stale-head` phase, and names the precise review
 or application phase. The pair bound maps to two children per pair: one
 preparation and one extraction.
 
+## Rewriting path references in documents
+
+When extracted code is referenced by path in configuration, documentation, or
+other non-code files, those path tokens must be updated when the code moves.
+The `pathReferenceRewrites` configuration enables automatic detection and
+rewriting of exact path matches in declared document roots.
+
+Unlike the path-reference warning scanner (which reports all found literals for
+human review), this rewriter mutates file contents under journal during planning
+and simulation. It therefore uses stricter matching rules:
+
+- `matchExtensionless` defaults to `false` (not `true`): a bare stem like
+  `configs/db` does not indicate which extension the moved file carries, so
+  rewriting one is a guess. The warning scanner can afford to guess; the
+  rewriter may not. When enabled, only stems whose source file has no extension
+  are matched.
+- One token must map to exactly one moved source. If the workspace has two
+  moved files that normalize to the same token (e.g. `src/index.ts` and
+  `src/index.js` both as `src/index`), the plan refuses rather than guessing
+  which one the reference names.
+- If `onAmbiguousMatch: "skip"` is set, ambiguous references are logged by
+  location and reason in the plan review, never silently dropped.
+
+Configure the rewriter by declaring document roots and their content types:
+
+```ts
+pathReferenceRewrites: {
+  enabled: true,
+  roots: [
+    {
+      root: "docs",
+      extensions: [".md"],
+      mode: "exact-path-token",
+    },
+    {
+      root: "config",
+      extensions: [".json", ".yml"],
+      mode: "exact-path-token",
+    },
+  ],
+  onAmbiguousMatch: "refuse",        // or "skip"
+  matchExtensionless: false,         // or true
+  maxBytes: 512 * 1024,              // skip files above this size
+}
+```
+
+Each root declares a workspace-relative directory, the file extensions to scan,
+and a matching mode. `exact-path-token` is currently the only mode. Tokens are
+normalized path segments and do not match inside quoted strings, comments, or
+variable names; they match only the exact substring normalized from the source
+path.
+
+Rewrite operations are included in the plan manifest with precondition and
+result file hashes, journaled during apply, and audited before gates. A failed
+apply restores both the moved source and the rewritten document.
+
+If a configured post-journal preparer (such as a path-keyed baseline regenerator)
+has a `triggers` pattern matching a rewritten document path, that preparer runs
+after the rewrites are applied. Declare both in configuration when a prepared
+artifact depends on the rewritten paths:
+
+```ts
+postJournalPreparers: [{
+  id: "quality-ratchet",
+  phase: "after-journal-before-gates",
+  command: "node tools/promote-ratchet.mjs {targetPath}",
+  outputs: ["quality/baselines/{targetPath}.json"],
+  triggers: ["docs/"],              // matches rewritten doc paths
+}]
+```
+
+`pathReferenceRewrites` is distinct from both `rewrite-fs-reference` and
+`pathMigrations.artifacts`:
+
+- `rewrite-fs-reference` handles statically resolvable references in TypeScript/
+  JavaScript code: specifically `resolve(import.meta.dir, "literal")` patterns
+  that the type checker can prove. It rewrites only source code, never documents.
+- `pathMigrations.artifacts` run external commands to rewrite structured artifacts
+  whose keys are source paths (e.g. a test-coverage baseline). They require a
+  workspace-owned command and support complex transformations.
+- `pathReferenceRewrites` scan declared document roots for exact path-shaped
+  tokens and rewrite them by byte span. They require no external command and
+  apply strict matching rules to avoid guessing.
+
+A workspace often uses all three: path-reference warnings identify all found
+literals; rewrite-fs-reference handles code; path migrations handle structured
+artifacts; path-reference rewrites handle documentation and configuration.
+
 ## Normal extraction loop
 
 Start with a clean feature branch and inspect the candidate selection:

@@ -92,6 +92,7 @@ import ts from "typescript";
 import type { PathReferencesConfig } from "../config.ts";
 import { byCodeUnit } from "../util/hash.ts";
 import type { WorkspaceContext } from "./context.ts";
+import { keysFor, normalizeToken, PATH_TOKEN, segmentCount, stripExtension } from "./path-tokens.ts";
 
 /** How a literal named the path: with its extension, or without. */
 export type PathReferenceForm = "path" | "stem";
@@ -233,13 +234,6 @@ type RecordToken = (raw: string, occurrence: Occurrence) => void;
 /* Scanning                                                                   */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Maximal runs of characters a path may be spelled with. Deliberately excludes
- * `:`, `*`, whitespace and quotes, so `"chart.ts:12"` yields the path and the
- * line number separately, and a sentence containing a path yields the path.
- */
-const PATH_TOKEN = /[A-Za-z0-9_@.\-\\/]+/g;
-
 /** The specifier position of a node, which the scan must not treat as a path. */
 function moduleSpecifierOf(node: ts.Node): ts.Node | undefined {
   if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return node.moduleSpecifier;
@@ -319,46 +313,3 @@ function textFiles(directory: string, extensions: readonly string[]): string[] {
     .sort();
 }
 
-/* -------------------------------------------------------------------------- */
-/* Tokens                                                                     */
-/* -------------------------------------------------------------------------- */
-
-/**
- * A token reduced to the form a workspace-relative path is written in, or null
- * when it cannot be one.
- *
- * `..` rejects the token outright rather than resolving it: a relative literal
- * has a base this scanner does not know (the file's directory is a guess — the
- * process's cwd is just as likely), and resolving it against the wrong base
- * would manufacture a path that appears nowhere in the repository.
- */
-function normalizeToken(raw: string): { readonly path: string; readonly absolute: boolean } | null {
-  let value = raw.replaceAll("\\", "/");
-  const absolute = value.startsWith("/");
-  while (value.startsWith("./")) value = value.slice(2);
-  while (value.startsWith("/")) value = value.slice(1);
-  while (value.endsWith("/")) value = value.slice(0, -1);
-  if (!value.includes("/")) return null;
-  if (value.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) return null;
-  return { path: value, absolute };
-}
-
-/**
- * Index keys for a token: the token itself, plus — for an absolute token only —
- * every segment-aligned suffix long enough to clear `minSegments`.
- */
-function keysFor(segments: readonly string[], absolute: boolean, minSegments: number): string[] {
-  const last = absolute ? segments.length - minSegments : 0;
-  const keys: string[] = [];
-  for (let start = 0; start <= last; start += 1) keys.push(segments.slice(start).join("/"));
-  return keys.filter((key) => segmentCount(key) >= minSegments);
-}
-
-function segmentCount(path: string): number {
-  return path.split("/").length;
-}
-
-function stripExtension(path: string): string {
-  const extension = extname(path);
-  return extension === "" ? path : path.slice(0, path.length - extension.length);
-}

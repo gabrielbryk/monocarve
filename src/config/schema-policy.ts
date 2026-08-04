@@ -172,6 +172,49 @@ export const pathReferences = z.strictObject({
 
 export type PathReferencesConfig = z.output<typeof pathReferences>;
 
+/**
+ * Configuration root for path-reference rewriting. Each root declares a directory
+ * that monocarve scans as raw text, detecting moved paths written as string
+ * literals (e.g. "apps/web/src/widgets/chart.ts"), and rewrites them when
+ * their sources move.
+ *
+ * This is a separate block from `pathReferences` because the warning scanner
+ * is heuristic-only and reports what it finds, whereas this rewriter mutates
+ * files under journal. Its matching rule is therefore strictly narrower:
+ * `matchExtensionless` defaults to FALSE (not true like the scanner). A stem
+ * token does not tell us which extension the replacement should carry, so
+ * rewriting one is a guess—the warning scanner can afford to guess; the
+ * rewriter may not.
+ *
+ * `onAmbiguousMatch: "refuse"` is the default because one token matching two
+ * moved sources is a plan error, not a recovery case. When a workspace knows
+ * its ambiguities should be skipped instead, it can declare that, and the
+ * review will name every skipped reference by (file, line, column, reason).
+ */
+export const pathRewriteRoot = z.strictObject({
+  root: relativePath,
+  extensions: z.array(z.string().regex(/^\./, "extension must start with a dot")).min(1),
+  mode: z.literal("exact-path-token"),
+});
+
+export const pathReferenceRewrites = z.strictObject({
+  enabled: z.boolean().default(false),
+  roots: z.array(pathRewriteRoot).default([]),
+  onAmbiguousMatch: z.enum(["refuse", "skip"]).default("refuse"),
+  matchExtensionless: z.boolean().default(false),
+  /**
+   * Same false-positive floor as `pathReferences.minSegments`, applied to the
+   * moved SOURCE rather than the scanned literal. Must not be looser (lower)
+   * than `pathReferences.minSegments` — the scanner refuses to even warn about
+   * a short path, so letting the rewriter mutate one it never warned about
+   * would silently rewrite a reference nobody was told monocarve was watching.
+   */
+  minSegments: z.number().int().min(2).default(3),
+  maxBytes: z.number().int().positive().default(512 * 1024),
+});
+
+export type PathReferenceRewritesConfig = z.output<typeof pathReferenceRewrites>;
+
 export const graph = z.strictObject({
   /**
    * Resolve type-only imports too. Required: a type-only edge is still a

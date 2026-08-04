@@ -60,6 +60,7 @@ describe("plan review summary", () => {
       "move-with-rewrite": 0,
       "rewrite-import": 1,
       "rewrite-fs-reference": 0,
+      "rewrite-path-reference": 0,
       "write-file": 1,
       "lockfile-importer": 1,
       "migrate-path-keys": 1,
@@ -119,5 +120,60 @@ describe("plan review summary", () => {
     }, { baselinePaths: [], manifestPath: "plans/review.json" });
     expect(summary.warnings).toContainEqual(expect.objectContaining({ code: "donor-dependency-review" }));
     expect(formatPlanReview(summary)).toContain("verify scripts, config, generators, and other non-source consumers");
+  });
+
+  test("sorts rewritten documents by path with code-unit order for determinism", () => {
+    const base = manifest();
+    const zero = "0".repeat(64);
+    const withPathReferences: ExtractionManifest = {
+      ...base,
+      operations: [
+        ...base.operations,
+        {
+          kind: "rewrite-path-reference",
+          file: "config/Chart.json",
+          documentKind: "json",
+          rewrites: [{ from: "src/chart/chart.ts", to: "libs/analytics/src/chart/chart.ts", donor: "src/chart/chart.ts", line: 1, column: 1 }],
+          preconditionHash: zero,
+          resultHash: zero,
+        },
+        {
+          kind: "rewrite-path-reference",
+          file: "config/chart.json",
+          documentKind: "json",
+          rewrites: [{ from: "src/chart/Chart.tsx", to: "libs/analytics/src/chart/Chart.tsx", donor: "src/chart/Chart.tsx", line: 2, column: 5 }],
+          preconditionHash: zero,
+          resultHash: zero,
+        },
+        {
+          kind: "rewrite-path-reference",
+          file: "docs/Api.md",
+          documentKind: "markdown",
+          rewrites: [{ from: "apps/api/src/main.ts", to: "libs/api/src/main.ts", donor: "apps/api/src/main.ts", line: 3, column: 10 }],
+          preconditionHash: zero,
+          resultHash: zero,
+        },
+        {
+          kind: "rewrite-path-reference",
+          file: "docs/api.md",
+          documentKind: "markdown",
+          rewrites: [{ from: "apps/api/src/handler.ts", to: "libs/api/src/handler.ts", donor: "apps/api/src/handler.ts", line: 4, column: 15 }],
+          preconditionHash: zero,
+          resultHash: zero,
+        },
+      ],
+    };
+
+    const summary = summarizePlanReview(withPathReferences);
+    const paths = summary.rewrittenDocuments.map((doc) => doc.path);
+
+    // Should order by code unit: "Api.md" < "api.md" < "Chart.json" < "chart.json"
+    // Code unit order: uppercase letters (65-90) come before lowercase letters (97-122)
+    expect(paths).toEqual(["config/Chart.json", "config/chart.json", "docs/Api.md", "docs/api.md"]);
+
+    // Verify determinism: the JSON should be stable across multiple calls
+    const json1 = planReviewJson(summary);
+    const json2 = planReviewJson(summary);
+    expect(json1).toBe(json2);
   });
 });

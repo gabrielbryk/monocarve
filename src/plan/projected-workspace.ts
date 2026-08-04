@@ -84,6 +84,9 @@ export function projectedArtifactEvidence(operations: readonly PlanOperation[]):
       artifacts.set(operation.lockfile, { path: operation.lockfile, kind: "lockfile", resultHash: operation.resultHash });
     } else if (operation.kind === "migrate-path-keys") {
       artifacts.set(operation.path, { path: operation.path, kind: "structured", resultHash: operation.resultHash });
+    } else if (operation.kind === "rewrite-path-reference") {
+      const kind = operation.documentKind === "json" ? "json" : "structured";
+      artifacts.set(operation.file, { path: operation.file, kind, resultHash: operation.resultHash });
     }
   }
   return [...artifacts.values()].sort((left, right) => byCodeUnit(left.path, right.path));
@@ -94,6 +97,7 @@ function operationKey(operation: PlanOperation): string {
     case "move": case "move-with-rewrite": return `move:${operation.source}`;
     case "rewrite-import": return `path:${operation.file}`;
     case "rewrite-fs-reference": return `fsref:${operation.file}`;
+    case "rewrite-path-reference": return `file:${operation.file}`;
     case "write-file": case "migrate-path-keys": return `path:${operation.path}`;
     case "lockfile-importer": return `importer:${operation.packageRoot}`;
   }

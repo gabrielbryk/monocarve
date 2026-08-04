@@ -12,7 +12,7 @@ import type { MonocarveConfig } from "../config.ts";
 import { FAIL_OPERATION_ENV } from "../branding.ts";
 import { git } from "../util/git.ts";
 import { MISSING, type FileState } from "../util/hash.ts";
-import { isAnyMove, manifestPaths, operationPaths, type ExtractionManifest, type PlanOperation } from "../plan/manifest.ts";
+import { isAnyMove, manifestPaths, operationPaths, type ExtractionManifest, type PathMove, type PlanOperation } from "../plan/manifest.ts";
 import { JournalError } from "./journal-error.ts";
 import { applyOperation } from "./journal-operation.ts";
 import { restoreSnapshot, snapshotPaths, type RestoreReport } from "./journal-snapshot.ts";
@@ -47,6 +47,12 @@ export interface ExecuteJournalOptions {
 export async function executeJournal(options: ExecuteJournalOptions): Promise<JournalResult> {
   const adapter = createPackageManagerAdapter(options.config);
   const snapshots = snapshotPaths(options.treeRoot, manifestPaths(options.manifest));
+  // The manifest's own move/move-with-rewrite operations are ground truth for
+  // where every donor lands. Passing this list — not anything reconstructed
+  // from a rewrite-path-reference operation's own records — into apply is
+  // what makes its rescan an independent check rather than a self-consistency
+  // check; see journal-operation.ts's applyPathReferenceRewrite.
+  const moves: PathMove[] = options.manifest.operations.filter(isAnyMove).map((move) => ({ source: move.source, target: move.target }));
   const result: { entries: JournalEntry[]; filesWritten: string[]; filesRemoved: string[]; skipped: number } = {
     entries: [],
     filesWritten: [],
@@ -55,7 +61,7 @@ export async function executeJournal(options: ExecuteJournalOptions): Promise<Jo
   };
   try {
     for (const [index, operation] of options.manifest.operations.entries()) {
-      applyJournalEntry({ options, adapter, index, operation, result });
+      applyJournalEntry({ options, adapter, index, operation, result, moves });
     }
   } catch (error) {
     resetGitMoves(options);
@@ -70,9 +76,10 @@ interface EntryContext {
   readonly index: number;
   readonly operation: PlanOperation;
   readonly result: { entries: JournalEntry[]; filesWritten: string[]; filesRemoved: string[]; skipped: number };
+  readonly moves: readonly PathMove[];
 }
 
-function applyJournalEntry({ options, adapter, index, operation, result }: EntryContext): void {
+function applyJournalEntry({ options, adapter, index, operation, result, moves }: EntryContext): void {
   if (process.env[FAIL_OPERATION_ENV] === String(index)) throw new JournalError(`injected operation failure ${index}`);
   if (isCompleted(adapter, operation, options.treeRoot)) {
     result.skipped += 1;
@@ -84,7 +91,7 @@ function applyJournalEntry({ options, adapter, index, operation, result }: Entry
   if (options.dryRun) return;
   const started = Date.now();
   const before = Object.fromEntries(operationPaths(operation).map((path) => [path, stateAt(options.treeRoot, path)]));
-  applyOperation(options.config, adapter, operation, options.treeRoot, options.useGitMv === true);
+  applyOperation(options.config, adapter, operation, options.treeRoot, options.useGitMv === true, moves);
   result.entries.push({ index, operation, before, durationMs: Date.now() - started });
   recordEffect(result, operation);
 }
@@ -98,7 +105,7 @@ function recordEffect(result: EntryContext["result"], operation: PlanOperation):
   result.filesWritten.push(
     operation.kind === "lockfile-importer"
       ? operation.lockfile
-      : operation.kind === "rewrite-import" || operation.kind === "rewrite-fs-reference"
+      : operation.kind === "rewrite-import" || operation.kind === "rewrite-fs-reference" || operation.kind === "rewrite-path-reference"
         ? operation.file
         : operation.path,
   );

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { SCRATCH_DIRNAME } from "../branding.ts";
 import { assetEmissionProofs, generatedArtifacts, pathMigrations, postJournalPreparers, transaction } from "./schema-artifacts.ts";
 import { application, commitTemplates, extractionProfiles, firstPartyPackage, gates, preparationPolicy, preparers, scaffoldTemplates } from "./schema-core.ts";
-import { graph, integrationTestSuites, pathReferences, portfolio, testKinds, testRelocation } from "./schema-policy.ts";
+import { graph, integrationTestSuites, pathReferences, pathReferenceRewrites, portfolio, testKinds, testRelocation } from "./schema-policy.ts";
 import { regexSource, relativePath } from "./primitives.ts";
 import { validateExtractionProfiles } from "./profiles.ts";
 import { validateFirstPartyPackages, validateIntegrationTestSuites, validateTestKinds } from "./validation.ts";
@@ -107,6 +107,7 @@ export const monocarveConfigSchema = z.strictObject({
   portfolio: portfolio.prefault({}),
   graph: graph.prefault({}),
   pathReferences: pathReferences.prefault({}),
+  pathReferenceRewrites: pathReferenceRewrites.prefault({}),
   transaction: transaction.prefault({}),
   generatedArtifacts: generatedArtifacts.prefault({}),
   pathMigrations: pathMigrations.prefault({}),

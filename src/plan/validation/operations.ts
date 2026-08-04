@@ -10,6 +10,7 @@ import { relativeWorkspacePath } from "../../util/paths.ts";
 import { readManifest } from "../../graph/workspace.ts";
 import { isAnyMove, regeneratedArtifactPaths, type ExtractionManifest, type ImportRewrite, type PlanOperation } from "../manifest.ts";
 import { relativeFsLiteral } from "../static-fs-references.ts";
+import { validatePathReferenceRewrite } from "./path-reference.ts";
 import type { ValidatePlanOptions, ValidationIssue } from "./shared.ts";
 import { Issues } from "./shared.ts";
 
@@ -125,6 +126,12 @@ function validateOperation(
     case "migrate-path-keys":
       validatePathMigration(operation, index, options, issues, moves, mutated);
       return;
+    case "rewrite-path-reference":
+      if (movePaths.has(operation.file)) {
+        issues.add("multiple-mutations", `multiple operations mutate ${operation.file}`, { operationIndex: index });
+      }
+      validatePathReferenceRewrite(operation, index, issues, moves, mutated);
+      return;
     default:
       issues.add("unknown-operation", `unsupported operation kind ${(operation as { kind: string }).kind}`, {
         operationIndex: index,
@@ -193,6 +200,7 @@ function operationKey(operation: PlanOperation): string {
   if (isAnyMove(operation)) return `${operation.kind}:${operation.source}:${operation.target}`;
   if (operation.kind === "lockfile-importer") return `${operation.kind}:${operation.packageRoot}`;
   if (operation.kind === "write-file" || operation.kind === "migrate-path-keys") return `${operation.kind}:${operation.path}`;
+  if (operation.kind === "rewrite-path-reference") return `rewrite-path-reference:${operation.file}`;
   return `${operation.kind}:${operation.file}`;
 }
 
