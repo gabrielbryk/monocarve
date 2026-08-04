@@ -70,7 +70,10 @@ function rootDependencyEntry(
   manifest: ReturnType<typeof readManifest>,
   resolved: string,
 ): string {
-  const ownTypes = declaredTypings(manifest) ?? typesCondition(subpathExports(manifest)["."]);
+  // Conditional exports are the source of truth for an ESM synthetic
+  // consumer. A legacy top-level `types` field can name a CJS declaration tree
+  // (TypeBox does), which makes nominal symbols split across CJS and ESM.
+  const ownTypes = typesCondition(subpathExports(manifest)["."]) ?? declaredTypings(manifest);
   if (ownTypes !== undefined && existsSync(resolve(packageRoot, ownTypes))) return resolve(packageRoot, ownTypes);
   // TypeScript's package fallback predates the `types` field. Some still ship
   // a root index.d.ts beside `main`; mapping them straight to JavaScript would

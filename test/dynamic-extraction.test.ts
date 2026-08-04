@@ -102,6 +102,7 @@ test("applies and audits a literal dynamic consumer without collapsing its lazy 
       exportTarget: "./src/widgets/chart.ts",
     }),
   );
+  expect(manifest.target.requiredExports).toEqual([]);
 
   const manifestPath = "plans/dynamic-chart.json";
   write(root, manifestPath, serializeManifest(manifest));
