@@ -132,4 +132,9 @@ describe("static filesystem reference consumers", () => {
     const source = loopReaderSource();
     expect(findStaticFsReferences(source, "/workspace/apps/api/src/reader.ts").map((match) => match.literal)).toEqual([DONOR_LITERAL]);
   });
+
+  test("finds direct resolve literals forwarded through a for-of binding", () => {
+    const source = ['import { resolve } from "node:path";', `for (const path of ["${DONOR_LITERAL}"]) resolve(import.meta.dir, path);`].join("\n");
+    expect(findStaticFsReferences(source, "/workspace/apps/api/src/reader.ts").map((match) => match.literal)).toEqual([DONOR_LITERAL]);
+  });
 });

@@ -273,7 +273,11 @@ export function findStaticFsReferences(source: string, filePath: string): Static
     if (ts.isCallExpression(node)) {
       if (isResolveCallee(node.expression) && node.arguments.length >= 2) {
         const [first, second] = node.arguments;
-        if (first && second && isImportMetaDir(first)) record(second);
+        if (first && second && isImportMetaDir(first)) {
+          const literals = forOfLiteralBinding(second);
+          if (literals) literals.forEach(record);
+          else record(second);
+        }
       } else if (ts.isIdentifier(node.expression) && node.arguments.length === 1) {
         const declaration = resolveLexicalDeclaration(node.expression, node.expression.text);
         if (declaration && ts.isVariableDeclaration(declaration) && helpers.has(declaration)) {
