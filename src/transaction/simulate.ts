@@ -236,13 +236,22 @@ export async function simulatePlan(options: SimulateOptions): Promise<Simulation
 
     if (!options.skipGates && (options.runGates ?? config.transaction.simulateGates)) {
       commitSimulatedExtraction(worktree.workspacePath, manifest);
+      // A post-journal preparer may repair a ratchet whose file is not listed
+      // in Moon's task inputs. Reusing a cache entry computed before that
+      // output existed would make the gate judge a stale tree (and can turn a
+      // now-clean extraction into a false failure). Force Moon only when a
+      // declared generator actually changed an output; every other simulation
+      // keeps ordinary cache behaviour.
+      const wrapCommand = regeneration.artifacts.some((artifact) => artifact.changed) && taskRunner.id === "moon"
+        ? (command: string) => taskRunner.wrapGateCommand(`MOON_FORCE=1 ${command}`)
+        : taskRunner.wrapGateCommand;
       const gateRun = await runGateTiers({
         gates: manifest.gates,
         maxConcurrency: config.gates.maxConcurrency,
         cwd: worktree.workspacePath,
         timeoutMs: config.gates.timeoutMs,
         retries: config.transaction.gateRetries,
-        wrapCommand: taskRunner.wrapGateCommand,
+        wrapCommand,
         diagnosticsDirectory: `${worktree.path}.diagnostics`,
       });
       gates.push(...gateRun.results);
