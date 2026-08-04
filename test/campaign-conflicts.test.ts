@@ -88,6 +88,17 @@ function move(source: string, target: string): PlanOperation {
   return { kind: "move", source, target, preconditionHash: HASH, resultHash: HASH };
 }
 
+function rewritePathReference(donor: string, file: string = "docs/architecture.md"): PlanOperation {
+  return {
+    kind: "rewrite-path-reference",
+    file,
+    documentKind: "markdown",
+    rewrites: [{ from: donor, to: `libs/${donor}`, donor, line: 5, column: 1 }],
+    preconditionHash: HASH,
+    resultHash: HASH,
+  };
+}
+
 function category(
   analysis: ReturnType<typeof analyzePlanConflicts>,
   name: ConflictCategory,
@@ -271,6 +282,20 @@ describe("same-baseline operation conflict analysis", () => {
     });
 
     expect(analyzePlanConflicts([alpha, bravo]).conflicts).toEqual([]);
+  });
+
+  test("treats disjoint rewrite-path-reference operations as mergeable", () => {
+    const alpha = plan("alpha", [
+      move("apps/api/src/alpha.ts", "libs/alpha/src/alpha.ts"),
+      rewritePathReference("apps/api/src/alpha.ts", "docs/alpha.md"),
+    ]);
+    const bravo = plan("bravo", [
+      move("apps/api/src/bravo.ts", "libs/bravo/src/bravo.ts"),
+      rewritePathReference("apps/api/src/bravo.ts", "docs/bravo.md"),
+    ]);
+
+    const analysis = analyzePlanConflicts([alpha, bravo]);
+    expect(analysis.conflicts).toEqual([]);
   });
 
   test("refuses mixed baselines, mixed graph inputs, and duplicate identities", () => {

@@ -71,7 +71,7 @@ export function auditPlanSync(options: AuditOptions): AuditReport {
     if (baseline !== expected) byteFailures.push(`baseline blob does not match sourceBlobs: ${path}`);
   }
   for (const operation of manifest.operations) {
-    if (operation.kind !== "rewrite-import" && operation.kind !== "rewrite-fs-reference") continue;
+    if (operation.kind !== "rewrite-import" && operation.kind !== "rewrite-fs-reference" && operation.kind !== "rewrite-path-reference") continue;
     if (stateAt(rootDir, operation.file) !== operation.resultHash) {
       byteFailures.push(`rewritten consumer does not match its declared result: ${operation.file}`);
     }

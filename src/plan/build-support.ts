@@ -1,3 +1,6 @@
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { extname, resolve } from "node:path";
+
 import { applyEscapeRewrites } from "../codemod/imports.ts";
 import { applicationOwner, getApplication, triggeredArtifacts, triggeredPathMigrations, type MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
@@ -6,9 +9,10 @@ import { resolveCommit, type ResolvedCommit } from "../util/git.ts";
 import { byCodeUnit, hashJson, hashText, type Sha256 } from "../util/hash.ts";
 import { renderTemplate } from "../util/template.ts";
 import { readUtf8Artifact, runPathMigrationCommand } from "../transaction/path-migrations.ts";
+import { documentKindFor, rewritePathReferenceText, scanPathReferenceRewrites } from "./path-reference-rewrites.ts";
 import { PlanningError, WorkspaceContext } from "./context.ts";
 import type { BuildPlanOptions } from "./build.ts";
-import type { EscapeRewrite, ExtractionManifest, GeneratedFileRecord, MigratePathKeysOperation, PathMove, PlanOperation } from "./manifest.ts";
+import type { EscapeRewrite, ExtractionManifest, GeneratedFileRecord, MigratePathKeysOperation, PathMove, PlanOperation, RewritePathReferenceOperation } from "./manifest.ts";
 
 export function baselineOf(options: BuildPlanOptions): ResolvedCommit {
   try { return resolveCommit(options.rootDir, options.baselineCommit); }
@@ -29,7 +33,13 @@ export function moveOperation(context: WorkspaceContext, source: string, target:
   return { kind: "move-with-rewrite", source, target, rewrites: [...rewrites], preconditionHash, resultHash: hashText(rewritten) };
 }
 
-export function generatedFilesFor(config: MonocarveConfig, context: WorkspaceContext, production: readonly string[], targets: readonly string[]): GeneratedFileRecord[] {
+export function generatedFilesFor(
+  config: MonocarveConfig,
+  context: WorkspaceContext,
+  production: readonly string[],
+  targets: readonly string[],
+  documents: readonly string[] = [],
+): GeneratedFileRecord[] {
   const declared = production.flatMap((source, index): GeneratedFileRecord[] => {
     const provenance = generatedProvenance(config, context.rootDir, source);
     if (provenance === null) return [];
@@ -41,8 +51,15 @@ export function generatedFilesFor(config: MonocarveConfig, context: WorkspaceCon
     path: artifact.path, source: artifact.source, regenerate: artifact.regenerate, regenerateOnApply: true,
     exemptReason: artifact.exemptReason ?? "declared generated artifact: this extraction changes its inputs, so its post-move content is not knowable at plan time",
   }));
+  // A preparer's trigger is a regex over "what changed", and a rewritten
+  // document is a change just as much as a moved production file is — a
+  // skills catalogue preparer that only watches source paths would never
+  // notice that the doc citing those skills was itself edited. `documents`
+  // defaults to empty so every existing config (which never passes it) keeps
+  // testing triggers against `production` alone, byte-for-byte the old result.
+  const triggerPaths = [...production, ...documents];
   const postJournal = config.postJournalPreparers.filter((preparer) =>
-    preparer.triggers.length === 0 || production.some((path) => preparer.triggers.some((pattern) => new RegExp(pattern).test(path))),
+    preparer.triggers.length === 0 || triggerPaths.some((path) => preparer.triggers.some((pattern) => new RegExp(pattern).test(path))),
   ).flatMap((preparer) => preparer.outputs.map((path): GeneratedFileRecord => ({
     path, source: targets[0] ?? path, regenerate: preparer.command, regenerateOnApply: true,
     exemptReason: "declared post-journal preparer output: result is proven by simulation and immediate audit",
@@ -64,6 +81,62 @@ export function pathMigrationOperations(config: MonocarveConfig, context: Worksp
     if (resultHash === preconditionHash) throw new PlanningError(`path migration for ${artifact.path} did not change the artifact`);
     return { kind: "migrate-path-keys", ...shape, preconditionHash, resultHash };
   }).sort((left, right) => byCodeUnit(left.path, right.path));
+}
+
+/**
+ * Its own walker, not `sourceFiles()` or `path-references.ts`'s private
+ * `textFiles`: this one must skip symlinked directories (`Dirent.isDirectory()`
+ * is false for a symlink, so simply not recursing into it keeps the walk
+ * inside the workspace) and must not import a sibling module's unexported
+ * helper across a file boundary. Same shape, deliberately duplicated.
+ */
+function pathReferenceRewriteFiles(directory: string, extensions: readonly string[]): string[] {
+  if (!existsSync(directory)) return [];
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    if (entry.name === "node_modules" || entry.name === ".git") return [];
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) return pathReferenceRewriteFiles(path, extensions);
+    return extensions.includes(extname(entry.name)) ? [path] : [];
+  });
+}
+
+export function pathReferenceRewriteOperations(
+  config: MonocarveConfig,
+  context: WorkspaceContext,
+  operations: readonly PlanOperation[],
+): RewritePathReferenceOperation[] {
+  const settings = config.pathReferenceRewrites;
+  if (!settings.enabled || settings.roots.length === 0) return [];
+
+  const moves: PathMove[] = operations.filter((operation) => operation.kind === "move" || operation.kind === "move-with-rewrite")
+    .map((operation) => ({ source: operation.source, target: operation.target }))
+    .sort((left, right) => byCodeUnit(left.source, right.source) || byCodeUnit(left.target, right.target));
+  if (moves.length === 0) return [];
+
+  const scanSettings = { onAmbiguousMatch: settings.onAmbiguousMatch, matchExtensionless: settings.matchExtensionless, minSegments: settings.minSegments };
+  const results: RewritePathReferenceOperation[] = [];
+  for (const scanRoot of settings.roots) {
+    for (const absolute of pathReferenceRewriteFiles(resolve(context.rootDir, scanRoot.root), scanRoot.extensions).sort()) {
+      if ((statSync(absolute, { throwIfNoEntry: false })?.size ?? 0) > settings.maxBytes) continue;
+      const file = context.relative(absolute);
+      const preconditionHash = context.state(file);
+      if (preconditionHash === "missing") throw new PlanningError(`path-reference document does not exist: ${file}`);
+      const text = context.text(file);
+      const scan = scanPathReferenceRewrites(text, file, moves, scanSettings);
+      if (scan.rewrites.length === 0) continue;
+      const resultHash = hashText(rewritePathReferenceText(text, scan.rewrites));
+      if (resultHash === preconditionHash) throw new PlanningError(`path reference rewrite for ${file} did not change the document`);
+      results.push({
+        kind: "rewrite-path-reference",
+        file,
+        documentKind: documentKindFor(file),
+        rewrites: scan.rewrites.map((match) => ({ from: match.from, to: match.to, donor: match.donor, line: match.line, column: match.column })),
+        preconditionHash,
+        resultHash,
+      });
+    }
+  }
+  return results.sort((left, right) => byCodeUnit(left.file, right.file));
 }
 
 export function graphDigest(graph: DependencyGraph): Sha256 {

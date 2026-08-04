@@ -106,4 +106,72 @@ describe("config doctor", () => {
     expect(report.effective.find((item) => item.key === "packageManager")?.source).toBe("default");
     expect(fixtureGit(root, "status", "--short")).toBe(before);
   });
+
+  test("detects pathReferenceRewrites.matchExtensionless true while pathReferences.matchExtensionless is false", async () => {
+    const root = scratchDirectory();
+    mkdirSync(join(root, "apps/consumer/src"), { recursive: true });
+    mkdirSync(join(root, "config"), { recursive: true });
+    writeFileSync(join(root, "apps/consumer/tsconfig.json"), "{}\n");
+    writeFileSync(join(root, "config/scripts"), "");
+    fixtureGit(root, "init", "-q");
+    const config = parseConfig({
+      applications: [{ name: "consumer", sourceRoot: "apps/consumer/src", tsconfig: "apps/consumer/tsconfig.json" }],
+      packageRoots: ["packages"],
+      pathReferences: { matchExtensionless: false },
+      pathReferenceRewrites: { enabled: true, matchExtensionless: true, roots: [{ root: "config", extensions: [".sh"], mode: "exact-path-token" }] },
+      scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
+    });
+    const report = await inspectConfig({ config, configPath: join(root, "config.ts"), rootDir: root });
+
+    expect(report.semanticIssues).toContainEqual({
+      severity: "error", context: "pathReferenceRewrites",
+      detail: "matchExtensionless is true but pathReferences.matchExtensionless is false; the rewriter would mutate extensionless references the warning scanner never warned about",
+    });
+  });
+
+  test("detects pathReferences.enabled false while pathReferenceRewrites.enabled is true", async () => {
+    const root = scratchDirectory();
+    mkdirSync(join(root, "apps/consumer/src"), { recursive: true });
+    mkdirSync(join(root, "config"), { recursive: true });
+    writeFileSync(join(root, "apps/consumer/tsconfig.json"), "{}\n");
+    writeFileSync(join(root, "config/scripts"), "");
+    fixtureGit(root, "init", "-q");
+    const config = parseConfig({
+      applications: [{ name: "consumer", sourceRoot: "apps/consumer/src", tsconfig: "apps/consumer/tsconfig.json" }],
+      packageRoots: ["packages"],
+      pathReferences: { enabled: false },
+      pathReferenceRewrites: { enabled: true, roots: [{ root: "config", extensions: [".sh"], mode: "exact-path-token" }] },
+      scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
+    });
+    const report = await inspectConfig({ config, configPath: join(root, "config.ts"), rootDir: root });
+
+    expect(report.semanticIssues).toContainEqual({
+      severity: "error", context: "pathReferenceRewrites",
+      detail: "pathReferences.enabled is false while pathReferenceRewrites.enabled is true; the rewriter would mutate references the warning scanner never warned about",
+    });
+  });
+
+  test("detects pathReferenceRewrites.roots entry not covered by pathReferences.textRoots", async () => {
+    const root = scratchDirectory();
+    mkdirSync(join(root, "apps/consumer/src"), { recursive: true });
+    mkdirSync(join(root, "config"), { recursive: true });
+    mkdirSync(join(root, "scripts"), { recursive: true });
+    writeFileSync(join(root, "apps/consumer/tsconfig.json"), "{}\n");
+    writeFileSync(join(root, "config/scripts"), "");
+    writeFileSync(join(root, "scripts/test.sh"), "");
+    fixtureGit(root, "init", "-q");
+    const config = parseConfig({
+      applications: [{ name: "consumer", sourceRoot: "apps/consumer/src", tsconfig: "apps/consumer/tsconfig.json" }],
+      packageRoots: ["packages"],
+      pathReferences: { textRoots: [{ root: "config", extensions: [".sh"] }] },
+      pathReferenceRewrites: { enabled: true, roots: [{ root: "scripts", extensions: [".sh"], mode: "exact-path-token" }] },
+      scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
+    });
+    const report = await inspectConfig({ config, configPath: join(root, "config.ts"), rootDir: root });
+
+    expect(report.semanticIssues).toContainEqual({
+      severity: "error", context: "pathReferenceRewrites",
+      detail: "root \"scripts\" is not covered by pathReferences.textRoots; the rewriter would mutate a tree the warning scanner never looked at",
+    });
+  });
 });

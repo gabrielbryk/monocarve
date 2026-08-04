@@ -48,3 +48,46 @@ code and an intentionally absolute write can escape the disposable directory.
 
 An empty `triggers` list means every extraction. Duplicate artifact paths are
 invalid because one path may have only one declared producer.
+
+## Path-reference rewrites vs. path migrations
+
+Path migrations and path-reference rewrites are complementary features that
+handle different kinds of path updates during extraction.
+
+**Path migrations** (`pathMigrations.artifacts`) handle *structured artifacts*:
+files where source paths appear as object keys or values in JSON, YAML, or other
+formats. A workspace supplies a command that reads the artifact, receives the
+list of moved files, and produces a corrected version with updated keys or
+references. Examples: test-coverage baselines, linting rule exclusions, or
+complexity baselines organized by source path.
+
+The command is external and deterministic. It runs after the extraction is
+journaled but before gates. If its output differs from the recorded hash,
+simulation and apply both fail. A committing apply regenerates the artifact
+and includes it in the wiring commit.
+
+**Path-reference rewrites** (`pathReferenceRewrites`) handle *path tokens found
+in documents*: exact path-shaped substrings in Markdown, JSON, plain text, or
+configuration files that reference moved code. Monocarve detects and rewrites
+them by byte-level span matching, with no external command. Strict matching
+rules prevent ambiguity: only one moved source may normalize to each token,
+and `matchExtensionless` defaults to `false` so bare stems are not guessed.
+
+Use path migrations when:
+- The artifact is structured (JSON, YAML) and the tool owns the update logic
+- Path transformation requires domain knowledge (e.g. excluding test paths, or
+  aggregating by directory)
+- Nondeterministic output is acceptable (as long as it matches the recorded
+  hash on replay)
+
+Use path-reference rewrites when:
+- The document is unstructured or loosely structured (Markdown, configuration,
+  plain text)
+- Every occurrence of the path token should be rewritten identically
+- The workspace wants no external command or simple span-based updates
+- Configuration and documentation must stay in sync with moved code
+
+A workspace often uses both: configure path migrations for structured metrics,
+and path-reference rewrites for documentation and configuration. Both are
+included in plan review and audit, and a failed apply restores all modified
+files.

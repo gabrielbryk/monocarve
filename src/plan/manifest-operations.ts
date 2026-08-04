@@ -38,6 +38,37 @@ export interface RewriteFsReferenceOperation {
   readonly resultHash: Sha256;
 }
 
+/**
+ * Path reference rewrites fix inline documentation and configuration references
+ * when files move. Unlike fs-reference rewrites (which target string literals in code),
+ * these target path tokens embedded in prose and structured data. Line and column track
+ * the exact location within the document for audit and manual verification.
+ */
+export interface PathReferenceRewrite {
+  readonly from: string;
+  readonly to: string;
+  /** Moved source this rewrite targets, workspace-relative at its pre-move path. */
+  readonly donor: string;
+  /** 1-based line number in the document. */
+  readonly line: number;
+  /** 1-based column number in the document. */
+  readonly column: number;
+}
+
+export interface RewritePathReferenceOperation {
+  readonly kind: "rewrite-path-reference";
+  readonly file: string;
+  /**
+   * Document format: markdown, JSON, or plain-text. Determines token extraction
+   * and normalization rules. Recorded here so audit and review tooling can
+   * reason about mutations without re-reading the file.
+   */
+  readonly documentKind: "markdown" | "json" | "plain-text";
+  readonly rewrites: readonly PathReferenceRewrite[];
+  readonly preconditionHash: FileState;
+  readonly resultHash: Sha256;
+}
+
 export interface WriteFileOperation {
   readonly kind: "write-file";
   readonly path: string;
@@ -91,6 +122,7 @@ export type PlanOperation =
   | MoveOperation
   | RewriteImportOperation
   | RewriteFsReferenceOperation
+  | RewritePathReferenceOperation
   | WriteFileOperation
   | LockfileImporterOperation
   | MoveWithRewriteOperation

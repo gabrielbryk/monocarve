@@ -16,7 +16,7 @@ import { PLAN_SCHEMA_VERSION, type EscapeRewrite, type ExtractionManifest, type 
 import { sourceExportsFromFile, type ExportSurface } from "./public-surface.ts";
 import { appendConsumerOperations, appendStaticFsReferenceOperations, consumerApplications, escapeRewritesFor, evaluationEffectsFor, selectExtractionSources } from "./build-phases.ts";
 import { assertCompiledOperationInvariants, projectedArtifactEvidence } from "./projected-workspace.ts";
-import { baselineOf, derivePackageRoot, generatedFilesFor, graphDigest, moveOperation, pathMigrationOperations, renderGates } from "./build-support.ts";
+import { baselineOf, derivePackageRoot, generatedFilesFor, graphDigest, moveOperation, pathMigrationOperations, pathReferenceRewriteOperations, renderGates } from "./build-support.ts";
 
 export interface BuildPlanOptions {
   readonly config: MonocarveConfig; readonly rootDir: string; readonly graph: DependencyGraph; readonly candidate: PortfolioCandidate;
@@ -61,6 +61,16 @@ function buildJournal(state: BuildState, selection: ReturnType<typeof selectExtr
   operations.push(...selection.assets.map((asset, index) => moveOperation(state.context, asset, selection.assetTargets[index]!, [])));
   const { consumers } = appendConsumerOperations({ context: state.context, sources: [...selection.sources, ...selection.assets], packageName: state.packageName, publicSpecifierFor: selection.publicSpecifierFor, operations });
   appendStaticFsReferenceOperations({ context: state.context, donorTargets: donorTargetsOf(selection), operations });
+  // Documents must be rewritten before any preparer or artifact regeneration
+  // runs, because a post-journal preparer may itself read the rewritten
+  // document (its trigger can match on the document path — `buildManifest`
+  // reads the `rewrite-path-reference` operations landed here back off this
+  // same `operations` array and feeds their `.file`s to `generatedFilesFor`'s
+  // `documents` parameter). Emitting here, ahead of `write-file`/
+  // `lockfile-importer` (from `packageOperations` below) and
+  // `migrate-path-keys` (emitted last), guarantees the doc's on-disk bytes
+  // are already correct by the time anything downstream depends on them.
+  operations.push(...pathReferenceRewriteOperations(state.config, state.context, operations));
   const dependencies = dependenciesFor(state, selection.sources, rewrites);
   const input = { context: state.context, config: state.config, application: state.application, packageManager: state.packageManager, taskRunner: state.taskRunner, packageName: state.packageName, packageRoot: state.packageRoot, projectId: state.projectId, templates: state.templates, production: selection.production, tests: selection.tests, assets: selection.assets, dependencies, publicModules: selection.publicModules };
   const packageWiring = packageOperations(input);
@@ -128,7 +138,15 @@ function buildManifest(state: BuildState, selection: ReturnType<typeof selectExt
   const dependencyDecisions = dependencyDecisionsFor(state, selection.sources, dependencies, pruningCandidates);
   const packageWiringStart = operations.findIndex((operation) => operation.kind === "write-file");
   const packageWiring = packageWiringStart < 0 ? [] : operations.slice(packageWiringStart);
-  const generatedFiles = generatedFilesFor(state.config, state.context, selection.production, selection.targets);
+  // Read the rewritten document paths back off the already-compiled journal
+  // (populated by `pathReferenceRewriteOperations` in `buildJournal`) rather
+  // than recomputing them: `operations` is the single source of truth for
+  // what actually landed in the manifest, so this can never drift from it or
+  // duplicate the file-system scan.
+  const rewrittenDocuments = operations
+    .filter((operation): operation is Extract<PlanOperation, { kind: "rewrite-path-reference" }> => operation.kind === "rewrite-path-reference")
+    .map((operation) => operation.file);
+  const generatedFiles = generatedFilesFor(state.config, state.context, selection.production, selection.targets, rewrittenDocuments);
   const sourceBlobs = sourceBlobsFor(state.context, [...selection.sources, ...selection.assets]);
   const consumerOwners = consumerApplications(state.context, consumers);
   const sections = new Map(consumerDependencyOwners(consumers).map((entry) => [entry.owner, entry.dependencySection]));
@@ -158,7 +176,7 @@ function dependencyDecisionsFor(state: BuildState, sources: readonly string[], d
     .sort((left, right) => byCodeUnit(left.name, right.name) || byCodeUnit(left.decision, right.decision));
 }
 function sourceBlobsFor(context: WorkspaceContext, paths: readonly string[]): Record<string, Sha256> { const blobs: Record<string, Sha256> = {}; for (const path of paths) { const state = context.state(path); if (state === "missing") throw new PlanningError(`selected source does not exist: ${path}`); blobs[path] = state; } return blobs; }
-function operationPathsOf(operation: PlanOperation): string[] { switch (operation.kind) { case "move": case "move-with-rewrite": return [operation.source, operation.target]; case "rewrite-import": case "rewrite-fs-reference": return [operation.file]; case "write-file": return [operation.path]; case "lockfile-importer": return [operation.lockfile]; case "migrate-path-keys": return [operation.path]; } }
+function operationPathsOf(operation: PlanOperation): string[] { switch (operation.kind) { case "move": case "move-with-rewrite": return [operation.source, operation.target]; case "rewrite-import": case "rewrite-fs-reference": case "rewrite-path-reference": return [operation.file]; case "write-file": return [operation.path]; case "lockfile-importer": return [operation.lockfile]; case "migrate-path-keys": return [operation.path]; } }
 function donorTargetsOf(selection: ReturnType<typeof selectExtractionSources>): Map<string, string> {
   const map = new Map<string, string>();
   selection.sources.forEach((source, index) => map.set(source, selection.targets[index]!));

@@ -34,6 +34,7 @@ export interface ConfigDoctorReport {
   readonly adapters: { packageManager: AdapterStatus; taskRunner: AdapterStatus };
   readonly generatedArtifacts: MonocarveConfig["generatedArtifacts"];
   readonly pathMigrations: MonocarveConfig["pathMigrations"];
+  readonly pathReferenceRewrites: MonocarveConfig["pathReferenceRewrites"];
   readonly moduleSpecifierCalls: readonly string[];
   readonly protectedPaths: readonly string[];
   readonly dirtyPaths: readonly string[];
@@ -96,6 +97,7 @@ export async function inspectConfig(input: ConfigDoctorInput): Promise<ConfigDoc
     adapters: { packageManager, taskRunner },
     generatedArtifacts: input.config.generatedArtifacts,
     pathMigrations: input.config.pathMigrations,
+    pathReferenceRewrites: input.config.pathReferenceRewrites,
     moduleSpecifierCalls: [...input.config.moduleSpecifierCalls].sort(),
     protectedPaths: [...input.config.portfolio.protectedPaths].sort(),
     dirtyPaths: [...new Set(statusEntries(input.rootDir).flatMap((entry) => entry.paths))].sort(),
@@ -116,6 +118,56 @@ function scaffoldSemanticIssues(config: MonocarveConfig, rootDir: string): Confi
     inspectScaffold(scaffoldFor(config, application), `application ${application.name}`, rootDir, issues);
     for (const name of Object.keys(config.extractionProfiles.profiles).sort()) {
       inspectScaffold(resolveExtractionProfile(config, application, name).scaffoldTemplates, `application ${application.name}, profile ${name}`, rootDir, issues);
+    }
+  }
+  if (config.pathReferenceRewrites.enabled) {
+    if (config.pathReferenceRewrites.roots.length === 0) {
+      issues.push({
+        severity: "error", context: "pathReferenceRewrites",
+        detail: "enabled: true but roots is empty; this configuration scans nothing",
+      });
+    }
+    if (config.pathReferenceRewrites.minSegments < config.pathReferences.minSegments) {
+      issues.push({
+        severity: "error", context: "pathReferenceRewrites",
+        detail: `minSegments (${config.pathReferenceRewrites.minSegments}) is looser than pathReferences.minSegments (${config.pathReferences.minSegments}); the rewriter would mutate references the warning scanner never warned about`,
+      });
+    }
+    if (config.pathReferenceRewrites.matchExtensionless && !config.pathReferences.matchExtensionless) {
+      issues.push({
+        severity: "error", context: "pathReferenceRewrites",
+        detail: "matchExtensionless is true but pathReferences.matchExtensionless is false; the rewriter would mutate extensionless references the warning scanner never warned about",
+      });
+    }
+    if (!config.pathReferences.enabled && config.pathReferenceRewrites.enabled) {
+      issues.push({
+        severity: "error", context: "pathReferenceRewrites",
+        detail: "pathReferences.enabled is false while pathReferenceRewrites.enabled is true; the rewriter would mutate references the warning scanner never warned about",
+      });
+    }
+    for (const root of config.pathReferenceRewrites.roots) {
+      const fullPath = join(rootDir, root.root);
+      if (!existsSync(fullPath)) {
+        issues.push({
+          severity: "error", context: "pathReferenceRewrites",
+          detail: `root "${root.root}" does not exist`,
+        });
+      }
+      for (const application of config.applications) {
+        if (root.root === application.sourceRoot || root.root.startsWith(application.sourceRoot + "/") || application.sourceRoot.startsWith(root.root + "/")) {
+          issues.push({
+            severity: "error", context: "pathReferenceRewrites",
+            detail: `root "${root.root}" overlaps with application "${application.name}" sourceRoot "${application.sourceRoot}"; the source scan already covers application source trees`,
+          });
+        }
+      }
+      const covered = config.pathReferences.textRoots.some((textRoot) => root.root === textRoot.root || root.root.startsWith(textRoot.root + "/") || textRoot.root.startsWith(root.root + "/"));
+      if (!covered) {
+        issues.push({
+          severity: "error", context: "pathReferenceRewrites",
+          detail: `root "${root.root}" is not covered by pathReferences.textRoots; the rewriter would mutate a tree the warning scanner never looked at`,
+        });
+      }
     }
   }
   return issues.filter((issue, index) => issues.findIndex((entry) => entry.context === issue.context && entry.detail === issue.detail) === index);

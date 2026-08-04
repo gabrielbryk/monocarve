@@ -8,7 +8,13 @@ import type { MonocarveConfig } from "../config.ts";
 import { HashMismatchError } from "../errors.ts";
 import { git } from "../util/git.ts";
 import { hashText } from "../util/hash.ts";
-import { isAnyMove, type PlanOperation } from "../plan/manifest.ts";
+import { isAnyMove, type PathMove, type PlanOperation } from "../plan/manifest.ts";
+import {
+  rewritePathReferenceText,
+  scanPathReferenceRewrites,
+  type PathReferenceRewriteMatch,
+} from "../plan/path-reference-rewrites.ts";
+import { normalizeToken } from "../plan/path-tokens.ts";
 import { rewriteStaticFsReference } from "../plan/static-fs-references.ts";
 import { JournalError } from "./journal-error.ts";
 import { readUtf8Artifact, runPathMigrationCommand } from "./path-migrations.ts";
@@ -19,10 +25,12 @@ export function applyOperation(
   operation: PlanOperation,
   root: string,
   useGitMv: boolean,
+  moves: readonly PathMove[],
 ): void {
   if (isAnyMove(operation)) return applyMove(config, operation, root, useGitMv);
   if (operation.kind === "rewrite-import") return applyImportRewrite(config, operation, root);
   if (operation.kind === "rewrite-fs-reference") return applyFsReferenceRewrite(operation, root);
+  if (operation.kind === "rewrite-path-reference") return applyPathReferenceRewrite(operation, root, moves);
   if (operation.kind === "lockfile-importer") return applyLockfileImporter(adapter, operation, root);
   if (operation.kind === "migrate-path-keys") return applyPathMigration(config, operation, root);
   return applyWrite(operation, root);
@@ -81,6 +89,83 @@ function applyFsReferenceRewrite(operation: Extract<PlanOperation, { kind: "rewr
     readFileSync(file, "utf8"),
   );
   writeChecked(file, operation.file, next, operation.resultHash);
+}
+
+/**
+ * Apply a `rewrite-path-reference` operation by re-running the planner's own
+ * scan against the manifest's real move operations, not by trusting the
+ * bytes — or even the `to` — the plan recorded. The operation stores
+ * `from`/`to`/`donor`/position per rewrite but not the final text: writing
+ * stored contents would let a corrupted or hand-edited plan slip a byte
+ * change past `preconditionHash` (which only proves the *input* text hasn't
+ * moved) straight into the working tree. Re-deriving the edit from
+ * `scanPathReferenceRewrites` — the exact function `pathReferenceRewriteOperations`
+ * called to produce this operation — fed with `moves`, the manifest's own
+ * `move`/`move-with-rewrite` operations (ground truth for where every donor
+ * actually lands, independent of anything this operation claims), means
+ * apply can only write what a fresh scan of the live, precondition-checked
+ * text independently agrees the plan claimed. Every recorded rewrite must
+ * reproduce byte-for-byte at its recorded position against that independent
+ * move list; anything else fails closed rather than guessing. A `to` forged
+ * to point anywhere the real move does not land cannot reproduce here, so
+ * this — unlike deriving the move from the recorded `to`, which validated
+ * only that the operation agreed with itself — is actually load-bearing.
+ */
+function applyPathReferenceRewrite(
+  operation: Extract<PlanOperation, { kind: "rewrite-path-reference" }>,
+  root: string,
+  moves: readonly PathMove[],
+): void {
+  const file = resolve(root, operation.file);
+  const text = readFileSync(file, "utf8");
+  const liveHash = hashText(text);
+  if (liveHash !== operation.preconditionHash) throw new HashMismatchError(operation.file, operation.preconditionHash, liveHash);
+  const matches = rederivePathReferenceMatches(operation, text, moves);
+  const next = rewritePathReferenceText(text, matches);
+  writeChecked(file, operation.file, next, operation.resultHash);
+}
+
+/**
+ * Rescan the live text against `moves` — the manifest's complete, independent
+ * move list, not anything reconstructed from this operation's own records —
+ * then intersect the result with the recorded rewrites. Using the full move
+ * list (not just the donors this operation happened to produce rewrites for)
+ * matters both for security and correctness: a forged `to` cannot be
+ * replayed because the rescan computes `to` itself from the real move
+ * target, and a plan-time-ambiguous position that only resolves uniquely
+ * once every move is present will not spuriously fail to replay just because
+ * some sibling donor's rewrite landed in a different operation. A recorded
+ * rewrite that the live rescan cannot reproduce at the same line/column with
+ * the same `from`/`to`/`donor` is refused rather than replayed from memory.
+ */
+function rederivePathReferenceMatches(
+  operation: Extract<PlanOperation, { kind: "rewrite-path-reference" }>,
+  text: string,
+  moves: readonly PathMove[],
+): PathReferenceRewriteMatch[] {
+  const matchExtensionless = operation.rewrites.some((rewrite) => !lastSegmentHasExtension(rewrite.from));
+  // minSegments: 2 (the schema's own floor) rather than the configured value —
+  // this rederive only needs to reproduce a rewrite the plan already recorded,
+  // and that rewrite's donor necessarily cleared whatever floor was configured
+  // at plan time. Using the loosest possible floor here means replay can never
+  // spuriously reject a legitimately recorded rewrite just because apply time
+  // has no access to the planning-time config.
+  const scan = scanPathReferenceRewrites(text, operation.file, moves, { onAmbiguousMatch: "skip", matchExtensionless, minSegments: 2 });
+  const live = new Map(scan.rewrites.map((match) => [`${match.line}:${match.column}`, match] as const));
+  return operation.rewrites.map((recorded) => {
+    const found = live.get(`${recorded.line}:${recorded.column}`);
+    if (!found || found.from !== recorded.from || found.to !== recorded.to || found.donor !== recorded.donor) {
+      throw new JournalError(
+        `rewrite-path-reference replay mismatch in ${operation.file} at ${recorded.line}:${recorded.column}: live rescan does not reproduce the recorded rewrite`,
+      );
+    }
+    return found;
+  });
+}
+
+function lastSegmentHasExtension(rawToken: string): boolean {
+  const normalized = normalizeToken(rawToken);
+  return normalized === null ? false : (normalized.path.split("/").at(-1) ?? "").includes(".");
 }
 
 function applyLockfileImporter(

@@ -1,4 +1,4 @@
-import { stableStringify } from "../util/hash.ts";
+import { byCodeUnit, stableStringify } from "../util/hash.ts";
 import type { ExportSurface } from "./public-surface.ts";
 import type { ExtractionManifest, PlanOperationKind, WriteFileOperation } from "./manifest.ts";
 
@@ -17,6 +17,11 @@ export interface PlanReviewMove {
   readonly nestedIndex?: number;
 }
 
+export interface RewrittenDocument {
+  readonly path: string;
+  readonly rewrites: readonly { readonly from: string; readonly to: string }[];
+}
+
 export interface PlanReviewSummary {
   readonly schemaVersion: 1;
   readonly planId: string;
@@ -29,6 +34,7 @@ export interface PlanReviewSummary {
     readonly projectId?: string;
   };
   readonly moves: readonly PlanReviewMove[];
+  readonly rewrittenDocuments: readonly RewrittenDocument[];
   readonly operationCounts: Readonly<Record<PlanOperationKind, number>>;
   readonly dependencyAdditions: {
     readonly runtime: readonly { readonly name: string; readonly version: string }[];
@@ -52,6 +58,7 @@ const OPERATION_KINDS: readonly PlanOperationKind[] = [
   "move-with-rewrite",
   "rewrite-import",
   "rewrite-fs-reference",
+  "rewrite-path-reference",
   "write-file",
   "lockfile-importer",
   "migrate-path-keys",
@@ -83,6 +90,30 @@ function collectMoves(manifest: ExtractionManifest): PlanReviewMove[] {
       nestedIndex,
     }));
   });
+}
+
+function collectRewrittenDocuments(manifest: ExtractionManifest): RewrittenDocument[] {
+  const byPath = new Map<string, Set<string>>();
+  for (const operation of manifest.operations) {
+    if (operation.kind !== "rewrite-path-reference") continue;
+    const key = operation.file;
+    if (!byPath.has(key)) byPath.set(key, new Set());
+    const rewrites = byPath.get(key)!;
+    for (const rewrite of operation.rewrites) {
+      rewrites.add(`${rewrite.from}\x00${rewrite.to}`);
+    }
+  }
+  return Array.from(byPath.entries())
+    .sort(([pathA], [pathB]) => byCodeUnit(pathA, pathB))
+    .map(([path, rewriteSet]) => ({
+      path,
+      rewrites: Array.from(rewriteSet)
+        .sort()
+        .map((pair) => {
+          const separator = pair.indexOf("\x00");
+          return { from: pair.slice(0, separator), to: pair.slice(separator + 1) };
+        }),
+    }));
 }
 
 function warnings(manifest: ExtractionManifest, context: PlanReviewContext): PlanReviewSummary["warnings"] {
@@ -124,6 +155,7 @@ export function summarizePlanReview(manifest: ExtractionManifest, context: PlanR
       ...(manifest.target.projectId ? { projectId: manifest.target.projectId } : {}),
     },
     moves: collectMoves(manifest),
+    rewrittenDocuments: collectRewrittenDocuments(manifest),
     operationCounts: counts,
     dependencyAdditions: {
       runtime: sortedEntries(manifest.dependencies.runtime),
@@ -167,6 +199,15 @@ export function formatPlanReview(summary: PlanReviewSummary): string {
     `Target: ${summary.target.name} (${summary.target.mode}) at ${summary.target.root}`,
     `Moves: ${summary.moves.length}`,
     ...summary.moves.map((move) => `  ${move.source} -> ${move.target}`),
+    ...(summary.rewrittenDocuments.length > 0
+      ? [
+          `RewrittenDocuments: ${summary.rewrittenDocuments.length}`,
+          ...summary.rewrittenDocuments.flatMap((doc) => [
+            `  ${doc.path}`,
+            ...doc.rewrites.map((rewrite) => `    ${rewrite.from} -> ${rewrite.to}`),
+          ]),
+        ]
+      : []),
     `Operations: ${OPERATION_KINDS.map((kind) => `${kind}=${summary.operationCounts[kind]}`).join(", ")}`,
     `Dependencies: runtime=${summary.dependencyAdditions.runtime.length}, dev=${summary.dependencyAdditions.dev.length}, references=${summary.dependencyAdditions.packageReferences.length}`,
     ...dependencies.map((entry) => `  ${entry}`),
