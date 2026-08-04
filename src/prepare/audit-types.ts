@@ -1,0 +1,51 @@
+import type { PreparationManifest } from "./manifest-types.ts";
+import type { Sha256 } from "../util/hash.ts";
+import type { MonocarveConfig } from "../config.ts";
+
+/** One independently meaningful preparation-audit claim. */
+export interface PreparationProofResult {
+  readonly passed: boolean;
+  readonly checked: number;
+  readonly failures: readonly string[];
+}
+
+/** Fresh rescan evidence required before a preparation may be audited/applied. */
+export interface PreparationFreshGraphEvidence {
+  readonly commit: string;
+  readonly digest: Sha256;
+}
+
+/** Results are intentionally separated: a passing proof only establishes its own claim. */
+export interface PreparationAuditReport {
+  readonly planId: string;
+  readonly baselineCommit: string;
+  readonly auditedRoot: string;
+  readonly passed: boolean;
+  readonly byteReplay: PreparationProofResult;
+  /** Filesystem permission bits match the rendered preparation outputs. */
+  readonly fileModes: PreparationProofResult;
+  readonly renderedReplay: PreparationProofResult;
+  readonly selectorIntegrity: PreparationProofResult;
+  readonly declarationOwnership: PreparationProofResult;
+  readonly compatibilitySurface: PreparationProofResult;
+  readonly targetImportResolution: PreparationProofResult;
+  readonly changedPathScope: PreparationProofResult;
+  readonly typeValueClaims: PreparationProofResult;
+  /** The plan selection was based on this exact fresh workspace graph. */
+  readonly graphDigest: PreparationProofResult;
+  readonly failures: readonly string[];
+}
+
+export interface PreparationAuditOptions {
+  readonly rootDir: string;
+  readonly config: MonocarveConfig;
+  readonly manifest: PreparationManifest;
+  /** A committed plan record is provenance, not a preparation mutation. */
+  readonly approvedManifestPath?: string;
+  /** A caller must rescan the baseline; stale graph evidence is a refusal. */
+  readonly freshGraph: PreparationFreshGraphEvidence;
+}
+
+export function preparationProof(failures: readonly string[], checked: number): PreparationProofResult {
+  return { passed: failures.length === 0, checked, failures };
+}

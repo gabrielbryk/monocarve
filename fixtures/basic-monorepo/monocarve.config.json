@@ -1,0 +1,111 @@
+{
+  "applications": [
+    {
+      "name": "web",
+      "sourceRoot": "apps/web/src",
+      "tsconfig": "apps/web/tsconfig.json",
+      "packageName": "@acme/web",
+      "project": "web",
+      "compositionRoots": [
+        "apps/web/src/main.ts"
+      ],
+      "description": "Browser application. Owns the chart widget the tests carve out."
+    },
+    {
+      "name": "api",
+      "sourceRoot": "apps/api/src",
+      "tsconfig": "apps/api/tsconfig.json",
+      "packageName": "@acme/api",
+      "project": "api",
+      "compositionRoots": [
+        "apps/api/src/server.ts"
+      ]
+    }
+  ],
+  "packageRoots": [
+    "libs"
+  ],
+  "packageScope": "@acme/",
+  "packageManager": "pnpm",
+  "taskRunner": "moon",
+  "guardedBranches": [
+    "main"
+  ],
+  "testPathPatterns": [
+    "\\.(test|spec)\\.[cm]?tsx?$",
+    "(^|/)__tests__/"
+  ],
+  "assetExtensions": [
+    ".css",
+    ".scss",
+    ".json",
+    ".svg",
+    ".png",
+    ".graphql",
+    ".sql"
+  ],
+  "gates": {
+    "package": [
+      "test -d {packageRoot}",
+      "test -n '{project}'"
+    ],
+    "project": [
+      "test -d {owner}",
+      "test {app} = web"
+    ],
+    "workspace": [
+      "test -f pnpm-workspace.yaml",
+      "sh scripts/check-module-ledger.sh"
+    ]
+  },
+  "generatedArtifacts": {
+    "artifacts": [
+      {
+        "path": "generated/module-ledger.json",
+        "source": "apps/web/src",
+        "regenerate": "sh scripts/module-ledger.sh",
+        "triggers": [
+          "^apps/web/src/widgets/"
+        ]
+      }
+    ]
+  },
+  "commitTemplates": {
+    "move": "refactor({package}): move {fileCount} files into {packageRoot}",
+    "wiring": "refactor({package}): wire {package} into the workspace"
+  },
+  "portfolio": {
+    "domains": [
+      {
+        "name": "browser",
+        "patterns": [
+          "^apps/web/"
+        ]
+      },
+      {
+        "name": "node",
+        "patterns": [
+          "^apps/api/"
+        ]
+      }
+    ],
+    "minFiles": 1
+  },
+  "scaffoldTemplates": {
+    "entrypoint": "src/index.ts",
+    "packageJson": {
+      "contents": "{\n  \"name\": \"{package}\",\n  \"version\": \"0.0.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"main\": \"./{entrypoint}\",\n  \"types\": \"./{entrypoint}\"\n}\n"
+    },
+    "tsconfig": {
+      "contents": "{\n  \"extends\": \"{relativeRoot}/tsconfig.base.json\",\n  \"include\": [\"src/**/*\"]\n}\n"
+    },
+    "taskFile": {
+      "contents": "$schema: 'https://moonrepo.dev/schemas/project.json'\ntype: 'library'\nlanguage: 'typescript'\nid: '{project}'\n"
+    }
+  },
+  "transaction": {
+    "nodeModules": "none",
+    "cleanup": true,
+    "simulateGates": true
+  }
+}

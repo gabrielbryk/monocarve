@@ -1,0 +1,252 @@
+/** Target package scaffold operations, decomposed by the file they may change. */
+
+import { resolve } from "node:path";
+
+import type { AdapterEditResult } from "../adapters/types.ts";
+import { hashText } from "../util/hash.ts";
+import { relativePosix } from "../util/paths.ts";
+import { renderTemplate } from "../util/template.ts";
+import { PlanningError } from "./context.ts";
+import type { PlanOperation } from "./manifest.ts";
+import { barrelSpecifier, type ScaffoldInput } from "./scaffold.ts";
+import { parseJsonFile, render, stringifyJson, templateVars, templatesFor, writeOperation } from "./scaffold-shared.ts";
+
+/** Operations creating (or extending) the target package. */
+export function packageOperations(input: ScaffoldInput): PlanOperation[] {
+  const templates = templatesFor(input);
+  const scaffolding = !input.context.exists(`${input.packageRoot}/package.json`);
+  const packageManifest = packageManifestOperation(input, scaffolding);
+  const operations = [
+    packageManifest,
+    entrypointOperation(input, templates, scaffolding),
+    tsconfigOperation(input, templates),
+    taskFileOperation(input, templates, scaffolding),
+    knipWorkspaceOperation(input, scaffolding),
+    ...extraFileOperations(input, templates),
+  ].filter((operation): operation is PlanOperation => operation !== undefined);
+  const projected = packageManifest?.kind === "write-file"
+    ? parseJsonFile(packageManifest.contents, packageManifest.path)
+    : parseJsonFile(input.context.text(`${input.packageRoot}/package.json`), `${input.packageRoot}/package.json`);
+  const importer = lockfileImporterOperation(input, record(projected.dependencies), record(projected.devDependencies), scaffolding);
+  if (!scaffolding) return [...operations, ...(importer ? [importer] : [])];
+  return [...operations, ...registrationOperations(input), importer].filter(
+    (operation): operation is PlanOperation => operation !== undefined,
+  );
+}
+
+/** Register a newly scaffolded package with Knip when the repository uses its
+ * explicit workspace-map form. Without this, Knip attributes every declared
+ * dependency in the new package to no project and the dead-code ratchet fails
+ * despite a correct extraction. Repositories without a root knip map remain
+ * untouched.
+ */
+function knipWorkspaceOperation(input: ScaffoldInput, scaffolding: boolean): PlanOperation | undefined {
+  if (!scaffolding || !input.context.exists("knip.jsonc")) return undefined;
+  const path = "knip.jsonc";
+  const current = input.context.text(path);
+  const key = `"${input.packageRoot}"`;
+  if (current.includes(`${key}:`)) return undefined;
+  const marker = '"workspaces": {';
+  const offset = current.indexOf(marker);
+  if (offset < 0) return undefined;
+  const entry = [
+    `    ${key}: {`,
+    '      "entry": ["src/**/*.{ts,tsx}"],',
+    '      "project": ["src/**/*.{ts,tsx}"],',
+    '      "ignore": ["dist/**", "coverage/**"],',
+    '      "ignoreExportsUsedInFile": true,',
+    '      "includeEntryExports": false',
+    "    },",
+  ].join("\n");
+  const insert = offset + marker.length;
+  const next = `${current.slice(0, insert)}\n${entry}${current.slice(insert)}`;
+  return writeOperation(input.context, path, next, "scaffold:knip-workspace");
+}
+
+function packageManifestOperation(input: ScaffoldInput, scaffolding: boolean): PlanOperation | undefined {
+  const packageFile = `${input.packageRoot}/package.json`;
+  const templates = templatesFor(input);
+  const current = scaffolding ? render(input, templates.packageJson) : input.context.text(packageFile);
+  const manifest = parseJsonFile(current, packageFile);
+  const sideEffects = assetSideEffects(input, manifest.sideEffects);
+  const dependencies = { ...record(manifest.dependencies), ...input.dependencies.runtime };
+  const devDependencies = Object.fromEntries(Object.entries({
+    ...record(manifest.devDependencies), ...templateDevDependencies(input, templates, scaffolding),
+  }).filter(([name]) => dependencies[name] === undefined));
+  const nextManifest = stringifyJson({
+    ...manifest,
+    ...(sideEffects === undefined ? {} : { sideEffects }),
+    ...publicExports(input, manifest.exports, packageFile),
+    dependencies,
+    devDependencies,
+  });
+  return scaffolding || nextManifest !== input.context.text(packageFile)
+    ? writeOperation(input.context, packageFile, nextManifest, "scaffold:package-json")
+    : undefined;
+}
+
+function assetSideEffects(input: ScaffoldInput, declared: unknown): unknown {
+  if (declared !== false || !input.assets?.length) return declared;
+  const extensions = [...new Set(input.assets.flatMap((path) =>
+    input.config.assetExtensions.filter((extension) => path.endsWith(extension)),
+  ))].sort();
+  return extensions.length === 0 ? declared : extensions.map((extension) => `**/*${extension}`);
+}
+
+function publicExports(input: ScaffoldInput, exports: unknown, packageFile: string): Record<string, unknown> {
+  if (!input.publicModules?.length) return {};
+  const next = { ...packageExportsMap(exports, packageFile) };
+  for (const module of input.publicModules) {
+    const existing = next[module.exportKey];
+    if (existing !== undefined && existing !== module.exportTarget) {
+      throw new PlanningError(`${packageFile} export ${module.exportKey} already targets ${JSON.stringify(existing)}, not ${JSON.stringify(module.exportTarget)}`);
+    }
+    next[module.exportKey] = module.exportTarget;
+  }
+  return { exports: next };
+}
+
+function packageExportsMap(value: unknown, packageFile: string): Record<string, unknown> {
+  if (value === undefined) return {};
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return { ".": value };
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record);
+  const subpaths = keys.filter((key) => key.startsWith("."));
+  if (subpaths.length === 0) return keys.length === 0 ? {} : { ".": record };
+  if (subpaths.length === keys.length) return record;
+  throw new PlanningError(`${packageFile} exports cannot mix package subpaths and root conditions`);
+}
+
+function record(value: unknown): Record<string, string> {
+  return (value ?? {}) as Record<string, string>;
+}
+
+function templateDevDependencies(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>, scaffolding = true): Record<string, string> {
+  return scaffolding ? { ...templates.devDependencies, ...input.dependencies.dev } : input.dependencies.dev;
+}
+
+function entrypointOperation(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>, scaffolding: boolean): PlanOperation | undefined {
+  const path = `${input.packageRoot}/${templates.entrypoint}`;
+  const barrel = input.context.exists(path) ? input.context.text(path) : "";
+  const missing = input.production.map((source) => renderTemplate(templates.barrelExport, {
+    ...templateVars(input, templates), specifier: barrelSpecifier(templates, input.context.targetRelativePath(source)),
+  })).filter((line) => !barrel.includes(line));
+  if (missing.length === 0 && (!scaffolding || input.context.exists(path))) return undefined;
+  const separator = barrel && !barrel.endsWith("\n") ? "\n" : "";
+  const contents = missing.length > 0 ? `${barrel}${separator}${missing.join("\n")}\n` : "";
+  return writeOperation(input.context, path, contents, "scaffold:entrypoint");
+}
+
+function tsconfigOperation(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>): PlanOperation | undefined {
+  const path = `${input.packageRoot}/tsconfig.json`;
+  const references = input.dependencies.packageReferences.map((reference) => ({ path: relativePosix(resolve("/", input.packageRoot), resolve("/", reference)) }));
+  if (!input.context.exists(path)) return templates.tsconfig ? initialTsconfigOperation(input, templates, path, references) : undefined;
+  const tsconfig = parseJsonFile(input.context.text(path), path);
+  const existing = (tsconfig.references ?? []) as { path?: string }[];
+  const missing = references.filter((entry) => !new Set(existing.map((item) => item.path)).has(entry.path));
+  return missing.length > 0 ? writeOperation(input.context, path, stringifyJson({ ...tsconfig, references: [...existing, ...missing] }), "scaffold:project-references") : undefined;
+}
+
+function initialTsconfigOperation(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>, path: string, references: readonly { path: string }[]): PlanOperation {
+  const rendered = parseJsonFile(render(input, templates.tsconfig!), path);
+  assertCompilerProfileRepresented(input, rendered, path);
+  return writeOperation(input.context, path, stringifyJson(references.length ? { ...rendered, references } : rendered), "scaffold:tsconfig");
+}
+
+function assertCompilerProfileRepresented(input: ScaffoldInput, rendered: Record<string, unknown>, path: string): void {
+  if (!input.application.compilerProfile.jsx) return;
+  const compilerOptions = rendered.compilerOptions;
+  const jsx = compilerOptions && typeof compilerOptions === "object" && !Array.isArray(compilerOptions)
+    ? (compilerOptions as Record<string, unknown>).jsx
+    : undefined;
+  // An extends chain is repository-owned and may provide the setting; the
+  // package gate remains the proof in that case. With neither, failure is
+  // certain and should be reported while the plan is compiled.
+  if (jsx === undefined && rendered.extends === undefined) {
+    throw new PlanningError(
+      `${path} is scaffolded for application ${input.application.name}, whose compilerProfile requires JSX, ` +
+      "but its configured tsconfig template has neither compilerOptions.jsx nor extends",
+    );
+  }
+}
+
+function taskFileOperation(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>, scaffolding: boolean): PlanOperation | undefined {
+  const name = input.taskRunner.projectFileName;
+  const path = name ? `${input.packageRoot}/${name}` : undefined;
+  return scaffolding && path && templates.taskFile && !input.context.exists(path)
+    ? writeOperation(input.context, path, taskFileContents(input, templates), "scaffold:task-file") : undefined;
+}
+
+function taskFileContents(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>): string {
+  const taskFile = render(input, templates.taskFile!);
+  // Moon appends task args to the inherited command. An empty unit-test
+  // partition is a known property of this extraction, not permission to hide
+  // future tests; the override is generated only for a brand-new Moon package
+  // and must be removed when its first test travels in a later extraction.
+  if (input.taskRunner.id !== "moon" || input.tests === undefined || input.tests.length > 0) return taskFile;
+  return `${taskFile.trimEnd()}\n\n# Generated for a package with no travelling test files; remove when it gains one.\ntasks:\n  test:\n    args: [--passWithNoTests]\n`;
+}
+
+function extraFileOperations(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>): PlanOperation[] {
+  return Object.entries(templates.extraFiles).flatMap(([name, source]) => {
+    const path = `${input.packageRoot}/${name}`;
+    return input.context.exists(path) ? [] : [writeOperation(input.context, path, render(input, source), `scaffold:extra:${name}`)];
+  });
+}
+
+function registrationOperations(input: ScaffoldInput): (PlanOperation | undefined)[] {
+  return [workspaceMembershipOperation(input), projectRegistrationOperation(input)];
+}
+
+function workspaceMembershipOperation(input: ScaffoldInput): PlanOperation | undefined {
+  const path = input.packageManager.workspaceManifestName;
+  if (!path) return undefined;
+  if (!input.context.exists(path)) throw new PlanningError(`${path} is required to register ${input.packageRoot} as a workspace package`);
+  return requiredEditOperation(input, path, input.packageManager.workspaceManifestEdit(input.context.text(path), input.packageRoot), "scaffold:workspace-membership");
+}
+
+function projectRegistrationOperation(input: ScaffoldInput): PlanOperation | undefined {
+  const path = input.taskRunner.projectRegistryFileName;
+  if (!path) return undefined;
+  if (!input.context.exists(path)) throw new PlanningError(`${path} is required to register project ${input.projectId}`);
+  return requiredEditOperation(input, path, input.taskRunner.registerProject(input.context.text(path), input.packageRoot, input.projectId), "scaffold:project-registration");
+}
+
+function requiredEditOperation(input: ScaffoldInput, path: string, outcome: AdapterEditResult, generator: string): PlanOperation | undefined {
+  if (outcome.kind === "already-satisfied") return undefined;
+  if (outcome.kind === "unmet-precondition") throw new PlanningError(`${generator} cannot update ${path}: ${outcome.reason}`);
+  if (outcome.contents === input.context.text(path)) throw new PlanningError(`${generator} reported a change to ${path} without changing its contents`);
+  return writeOperation(input.context, path, outcome.contents, generator);
+}
+
+function lockfileImporterOperation(input: ScaffoldInput, dependencies: Readonly<Record<string, string>>, devDependencies: Readonly<Record<string, string>>, scaffolding: boolean): PlanOperation | undefined {
+  if (!scaffolding && Object.keys(input.dependencies.runtime).length === 0 && Object.keys(input.dependencies.dev).length === 0) return undefined;
+  const lockfile = input.packageManager.lockfileName;
+  if (!input.context.exists(lockfile)) throw new PlanningError(`${lockfile} is required to add an importer for ${input.packageRoot}`);
+  const current = input.context.text(lockfile);
+  const existing = input.packageManager.importerBlock(current, input.packageRoot);
+  if (!scaffolding) {
+    if (existing === undefined) throw new PlanningError(`${lockfile} has no importer entry for existing package ${input.packageRoot}; the lockfile is out of date with the workspace`);
+    const block = input.packageManager.addBlockDependencies(existing, {
+      packageRoot: input.packageRoot,
+      dependencies,
+      devDependencies,
+      lockfileText: current,
+      workspaceRoots: workspaceRootsFor(input),
+    });
+    if (block === existing) return undefined;
+    return { kind: "lockfile-importer", lockfile, packageRoot: input.packageRoot, block, mode: "replace", preconditionHash: hashText(current), resultHash: hashText(input.packageManager.replaceImporter(current, input.packageRoot, block)) };
+  }
+  if (existing !== undefined) throw new PlanningError(`${lockfile} already has an importer for ${input.packageRoot}, but ${input.packageRoot}/package.json is absent`);
+  const workspaceRoots = workspaceRootsFor(input);
+  const block = `${input.packageManager.renderImporterBlock({ packageRoot: input.packageRoot, dependencies, devDependencies, lockfileText: current, workspaceRoots })}\n\n`;
+  return { kind: "lockfile-importer", lockfile, packageRoot: input.packageRoot, block, mode: "insert", preconditionHash: hashText(current), resultHash: hashText(input.packageManager.insertImporter(current, input.packageRoot, block)) };
+}
+
+function workspaceRootsFor(input: ScaffoldInput): Record<string, string> {
+  const roots = Object.fromEntries(input.dependencies.packageReferences.flatMap((owner) => {
+    const name = input.context.manifest(owner).name;
+    return name ? [[name, owner]] : [];
+  }));
+  return { ...roots, ...input.workspaceDependencyRoots };
+}

@@ -1,0 +1,310 @@
+/** Replay a preparation plan in a disposable worktree before it is applied. */
+import { readFileSync } from "node:fs";
+
+import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapters/registry.ts";
+import { renderPreparationPolicy, type MonocarveConfig } from "../config.ts";
+import { MonocarveError } from "../errors.ts";
+import { scanDependencyGraph } from "../graph/cruiser.ts";
+import { graphDigest } from "../plan/build.ts";
+import { assertExactScope } from "../transaction/apply-commit.ts";
+import { type GateResult, runGateTiers } from "../transaction/simulate.ts";
+import { git, headCommit } from "../util/git.ts";
+import { fileState } from "../util/files.ts";
+import { hashJson, type FileState } from "../util/hash.ts";
+import { workspacePath } from "../util/paths.ts";
+import { auditPreparationSync, type PreparationAuditReport } from "./audit.ts";
+import type { PreparationFreshGraphEvidence } from "./audit-types.ts";
+import {
+  executePreparationJournal,
+  finalizeCompletedPreparationJournal,
+  verifyPreparationOperations,
+  type PreparationFilesystemOperation,
+} from "./journal.ts";
+import { assertPreparationManifestValid } from "./manifest.ts";
+import type { PreparationManifest } from "./manifest-types.ts";
+import { createWorktree } from "../transaction/worktree.ts";
+
+export class PreparationSimulationError extends MonocarveError {
+  override readonly name = "PreparationSimulationError";
+}
+
+export interface PreparationSimulationResult {
+  readonly ok: boolean;
+  readonly planId: string;
+  readonly operationsApplied: number;
+  readonly gates: readonly GateResult[];
+  /** Structured evidence for the authoritative failed gate. */
+  readonly failedGate?: GateResult;
+  /** Fresh graph evidence scanned from the immutable preparation baseline. */
+  readonly baselineGraph: PreparationFreshGraphEvidence;
+  readonly audit?: PreparationAuditReport;
+  readonly worktreePath?: string;
+  readonly failure?: string;
+}
+
+export interface SimulatePreparationOptions {
+  readonly config: MonocarveConfig;
+  readonly rootDir: string;
+  readonly manifest: PreparationManifest;
+  /** For fast diagnosis only; never accepted by committed application. */
+  readonly skipGates?: boolean;
+  /** Run declared gates even if normal simulation gates are disabled. */
+  readonly runGates?: boolean;
+  /**
+   * Optional test/host boundary for a baseline graph scan. Its result is bound
+   * to the worktree HEAD before it is trusted, so an old or post-apply graph
+   * cannot authorize a preparation manifest.
+   */
+  readonly baselineGraphScanner?: PreparationBaselineGraphScanner;
+}
+
+export interface PreparationBaselineGraphScanInput {
+  readonly config: MonocarveConfig;
+  readonly rootDir: string;
+  readonly baselineCommit: string;
+}
+
+export type PreparationBaselineGraphScanner = (
+  input: PreparationBaselineGraphScanInput,
+) => Promise<PreparationFreshGraphEvidence>;
+
+/** Native scanner: no cached or caller-supplied graph can authorize an apply. */
+export async function scanPreparationBaselineGraph(
+  input: PreparationBaselineGraphScanInput,
+): Promise<PreparationFreshGraphEvidence> {
+  const before = headCommit(input.rootDir);
+  if (before !== input.baselineCommit) {
+    throw new PreparationSimulationError(`baseline graph scan expected ${input.baselineCommit}, found ${before}`);
+  }
+  const graph = await scanDependencyGraph({ config: input.config, rootDir: input.rootDir, noCache: true });
+  const after = headCommit(input.rootDir);
+  if (after !== before || graph.commit !== before) {
+    throw new PreparationSimulationError("checkout changed while scanning the preparation baseline graph");
+  }
+  return { commit: before, digest: graphDigest(graph) };
+}
+
+/**
+ * Reconstruct the manifest's immutable graph evidence without replaying it.
+ * This is the audit/CLI path: it scans a disposable baseline worktree, never
+ * the post-preparation checkout whose graph is intentionally different.
+ */
+export async function scanPreparationManifestBaseline(options: {
+  readonly config: MonocarveConfig;
+  readonly rootDir: string;
+  readonly manifest: PreparationManifest;
+}): Promise<PreparationFreshGraphEvidence> {
+  const packageManager = createPackageManagerAdapter(options.config);
+  const worktree = await createWorktree({
+    rootDir: options.rootDir,
+    commit: options.manifest.baseline.commit,
+    worktreeRoot: options.config.transaction.worktreeRoot,
+    nodeModules: options.config.transaction.nodeModules,
+    installCommand: packageManager.installCommand(),
+    label: options.manifest.planId,
+  });
+  try {
+    const evidence = await scanPreparationBaselineGraph({
+      config: options.config,
+      rootDir: worktree.workspacePath,
+      baselineCommit: options.manifest.baseline.commit,
+    });
+    if (evidence.digest !== options.manifest.graphDigest) {
+      throw new PreparationSimulationError("preparation manifest graph digest does not match the fresh baseline graph");
+    }
+    return evidence;
+  } finally {
+    await worktree.dispose();
+  }
+}
+
+/** Convert rendered manifest operations into the deliberately tiny journal language. */
+export function preparationFilesystemOperations(manifest: PreparationManifest): readonly PreparationFilesystemOperation[] {
+  return manifest.operations.flatMap((operation) => {
+    if (operation.kind === "write-file") {
+      return [{
+        kind: "write" as const,
+        path: operation.file.path,
+        contents: operation.contents,
+        preconditionHash: operation.file.preconditionHash,
+        preconditionMode: operation.file.preconditionMode,
+        resultHash: operation.file.resultHash,
+        resultMode: operation.file.resultMode,
+      }];
+    }
+    return [
+      {
+        kind: "write" as const,
+        path: operation.donor.path,
+        contents: operation.donorContents,
+        preconditionHash: operation.donor.preconditionHash,
+        preconditionMode: operation.donor.preconditionMode,
+        resultHash: operation.donor.resultHash,
+        resultMode: operation.donor.resultMode,
+      },
+      {
+        kind: "write" as const,
+        path: operation.target.path,
+        contents: operation.targetContents,
+        preconditionHash: operation.target.preconditionHash,
+        preconditionMode: operation.target.preconditionMode,
+        resultHash: operation.target.resultHash,
+        resultMode: operation.target.resultMode,
+      },
+    ];
+  });
+}
+
+/** Refuse a hand-edited manifest that omits or changes repository-owned gates. */
+export function assertPreparationPolicy(config: MonocarveConfig, manifest: PreparationManifest): void {
+  const extractions = manifest.operations.filter((operation) => operation.kind === "extract-type-declarations");
+  if (extractions.length === 0) throw new PreparationSimulationError("a preparation policy requires at least one type-declaration extraction");
+  const policies = extractions.map((extraction) => renderPreparationPolicy(config, {
+      sourcePath: extraction.donor.path,
+      targetPath: extraction.target.path,
+      targetModuleSpecifier: extraction.moduleSpecifier,
+  }));
+  const commit = policies[0]!.commit;
+  if (policies.some((policy) => hashJson(policy.commit) !== hashJson(commit))) throw new PreparationSimulationError("multi-file preparation members render different commit metadata");
+  const union = (tier: "package" | "project" | "workspace") => [...new Set(policies.flatMap((policy) => policy.gates[tier]))].sort();
+  const expected = { commit, gates: { package: union("package"), project: union("project"), workspace: union("workspace") } };
+  if (hashJson(expected) !== hashJson({ commit: manifest.commits.prepare, gates: manifest.gates })) throw new PreparationSimulationError("preparation manifest policy differs from the exact gates or commit metadata rendered by the resolved configuration");
+}
+
+export async function simulatePreparation(options: SimulatePreparationOptions): Promise<PreparationSimulationResult> {
+  const { config, manifest, rootDir } = options;
+  assertPreparationManifestValid(manifest);
+  assertPreparationPolicy(config, manifest);
+  if (manifest.baseline.configDigest !== hashJson(config)) {
+    throw new PreparationSimulationError("preparation manifest was compiled with a different resolved configuration");
+  }
+  const packageManager = createPackageManagerAdapter(config);
+  const worktree = await createWorktree({
+    rootDir,
+    commit: manifest.baseline.commit,
+    worktreeRoot: config.transaction.worktreeRoot,
+    nodeModules: config.transaction.nodeModules,
+    installCommand: packageManager.installCommand(),
+    label: manifest.planId,
+  });
+  const gates: GateResult[] = [];
+  let keep = false;
+  try {
+    assertPreparationManifestValid(manifest, livePreparationEvidence(worktree.workspacePath, manifest));
+    const baselineGraph = await scanFreshBaselineGraph(options, worktree.workspacePath);
+    const operations = preparationFilesystemOperations(manifest);
+    verifyPreparationOperations(worktree.workspacePath, operations);
+    const journal = executePreparationJournal({ rootDir: worktree.workspacePath, operations });
+    const audit = auditPreparationSync({ config, rootDir: worktree.workspacePath, manifest, freshGraph: baselineGraph });
+    if (!audit.passed) {
+      finalizeCompletedPreparationJournal(journal.recovery);
+      keep = !config.transaction.cleanup;
+      return failed(manifest, journal.applied.length, gates, baselineGraph, `audit failed in simulation: ${audit.failures.join("; ")}`, audit, keep ? worktree.path : undefined);
+    }
+    if (!options.skipGates && (options.runGates ?? config.transaction.simulateGates)) {
+      commitPreparationScope(worktree.workspacePath, manifest, true);
+      const taskRunner = createTaskRunnerAdapter(config);
+      const gateRun = await runGateTiers({
+        gates: manifest.gates,
+        maxConcurrency: config.gates.maxConcurrency,
+        cwd: worktree.workspacePath,
+        timeoutMs: config.gates.timeoutMs,
+        retries: config.transaction.gateRetries,
+        wrapCommand: taskRunner.wrapGateCommand,
+        diagnosticsDirectory: `${worktree.path}.diagnostics`,
+      });
+      gates.push(...gateRun.results);
+      if (gateRun.failure) {
+        finalizeCompletedPreparationJournal(journal.recovery);
+        keep = !config.transaction.cleanup;
+        return failed(manifest, journal.applied.length, gates, baselineGraph, `gate failed (${gateRun.failure.tier}): ${gateRun.failure.command}`, audit, keep ? worktree.path : undefined, gateRun.failure);
+      }
+    }
+    finalizeCompletedPreparationJournal(journal.recovery);
+    return {
+      ok: true,
+      planId: manifest.planId,
+      operationsApplied: journal.applied.length,
+      gates,
+      baselineGraph,
+      audit,
+      ...(config.transaction.cleanup ? {} : { worktreePath: worktree.path }),
+    };
+  } catch (error) {
+    keep = !config.transaction.cleanup;
+    throw new PreparationSimulationError(`preparation simulation failed: ${(error as Error).message}`);
+  } finally {
+    if (config.transaction.cleanup && !keep) await worktree.dispose();
+  }
+}
+
+async function scanFreshBaselineGraph(options: SimulatePreparationOptions, rootDir: string): Promise<PreparationFreshGraphEvidence> {
+  const before = headCommit(rootDir);
+  if (before !== options.manifest.baseline.commit) {
+    throw new PreparationSimulationError(`baseline graph scan expected ${options.manifest.baseline.commit}, found ${before}`);
+  }
+  const scan = options.baselineGraphScanner ?? scanPreparationBaselineGraph;
+  const evidence = await scan({ config: options.config, rootDir, baselineCommit: before });
+  if (headCommit(rootDir) !== before) throw new PreparationSimulationError("checkout changed while scanning the preparation baseline graph");
+  if (evidence.commit !== before) throw new PreparationSimulationError("baseline graph scanner returned evidence for a different commit");
+  if (evidence.digest !== options.manifest.graphDigest) {
+    throw new PreparationSimulationError("preparation manifest graph digest does not match the fresh baseline graph");
+  }
+  return evidence;
+}
+
+function livePreparationEvidence(rootDir: string, manifest: PreparationManifest): {
+  readonly currentFiles: Readonly<Record<string, FileState>>;
+  readonly currentContents: Readonly<Record<string, string>>;
+} {
+  return {
+    currentFiles: Object.fromEntries(manifest.changedFiles.map((path) => [path, fileState(workspacePath(rootDir, path))])),
+    currentContents: Object.fromEntries(
+      [...new Set(manifest.declarations.map((group) => group.sourcePath))]
+        .map((path) => [path, readFileSync(workspacePath(rootDir, path), "utf8")]),
+    ),
+  };
+}
+
+/**
+ * Stage and commit exactly the files declared by the preparation manifest.
+ *
+ * A failure here means a staging bug or an outside write is present; it must
+ * not become a plausible, broad source commit.
+ */
+export function commitPreparationScope(
+  rootDir: string,
+  manifest: PreparationManifest,
+  inertHooks: boolean,
+  afterStage?: () => void,
+): void {
+  git({ cwd: rootDir, quiet: true }, "add", "-A", "--", ...manifest.changedFiles);
+  const staged = git({ cwd: rootDir }, "diff", "--cached", "--name-only", "--").split("\n").filter(Boolean);
+  assertExactScope(staged, manifest.changedFiles);
+  afterStage?.();
+  const args = inertHooks ? ["-c", "core.hooksPath=/dev/null"] : [];
+  git({ cwd: rootDir, quiet: true }, ...args, "commit", "--no-verify", "-m", manifest.commits.prepare.subject, ...(manifest.commits.prepare.body ? ["-m", manifest.commits.prepare.body] : []));
+}
+
+function failed(
+  manifest: PreparationManifest,
+  operationsApplied: number,
+  gates: readonly GateResult[],
+  baselineGraph: PreparationFreshGraphEvidence,
+  failure: string,
+  audit: PreparationAuditReport,
+  worktreePath: string | undefined,
+  failedGate?: GateResult,
+): PreparationSimulationResult {
+  return {
+    ok: false,
+    planId: manifest.planId,
+    operationsApplied,
+    gates,
+    baselineGraph,
+    audit,
+    failure,
+    ...(failedGate === undefined ? {} : { failedGate }),
+    ...(worktreePath === undefined ? {} : { worktreePath }),
+  };
+}

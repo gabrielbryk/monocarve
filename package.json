@@ -1,0 +1,73 @@
+{
+  "name": "monocarve",
+  "version": "1.0.0",
+  "private": false,
+  "license": "CC0-1.0",
+  "description": "Deterministic extraction compiler: decompose large TypeScript monorepo applications into workspace packages via compiled, replayable, hash-verified plans.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gabrielbryk/monocarve.git"
+  },
+  "homepage": "https://github.com/gabrielbryk/monocarve#readme",
+  "bugs": {
+    "url": "https://github.com/gabrielbryk/monocarve/issues"
+  },
+  "keywords": [
+    "monorepo",
+    "refactoring",
+    "typescript",
+    "codemod",
+    "dependency-graph",
+    "bun"
+  ],
+  "type": "module",
+  "bin": {
+    "monocarve": "./dist/monocarve.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./config": {
+      "types": "./dist/types/config.d.ts",
+      "import": "./dist/config.js",
+      "default": "./dist/config.js"
+    }
+  },
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "packageManager": "bun@1.3.14",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "CHANGELOG.md",
+    "dist",
+    "docs"
+  ],
+  "scripts": {
+    "cli": "bun run ./src/cli.ts",
+    "build": "bun run ./scripts/build.ts",
+    "build:bundle": "bun run ./scripts/build.ts --bundle-only",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "max-file-lines": "bun run scripts/quality/max-file-lines.ts",
+    "complexity": "bun run scripts/quality/complexity-check.ts",
+    "quality": "bun run max-file-lines && bun run complexity",
+    "check": "bun run typecheck && bun run test && bun run quality",
+    "verify-package": "bun run ./scripts/verify-package.ts",
+    "prepublishOnly": "bun run build:bundle && bun run verify-package"
+  },
+  "dependencies": {
+    "dependency-cruiser": "^16.10.0",
+    "typescript": "^5.9.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "oxc-parser": "^0.139.0"
+  }
+}
