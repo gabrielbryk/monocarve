@@ -3,6 +3,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parseArgs } from "../src/cli.ts";
+import { parseConfig } from "../src/config.ts";
+import { applicationOwner } from "../src/config/helpers.ts";
 import { hashText, isFileState, MISSING } from "../src/util/hash.ts";
 import { renderTemplate, templatePlaceholders } from "../src/util/template.ts";
 import { relativeWorkspacePath, workspacePath } from "../src/util/paths.ts";
@@ -63,5 +65,19 @@ describe("utilities", () => {
     expect(args.flags.get("json")).toBe(true);
     expect(args.repeated.get("graph")).toEqual(["web=a.json", "api=b.json"]);
     expect(args.positionals).toEqual(["extra"]);
+  });
+
+  test("uses an explicit exact-root application owner when configured", () => {
+    const config = parseConfig({
+      applications: [{
+        name: "worker",
+        sourceRoot: "apps/worker",
+        ownerRoot: "apps/worker",
+        tsconfig: "apps/worker/tsconfig.json",
+      }],
+      packageRoots: ["libs"],
+      scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
+    });
+    expect(applicationOwner(config.applications[0]!)).toBe("apps/worker");
   });
 });

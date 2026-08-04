@@ -15,6 +15,7 @@ import ts from "typescript";
 
 import { TOOL_NAME } from "../branding.ts";
 import { getApplication, type MonocarveConfig } from "../config.ts";
+import { applicationOwner } from "../config/helpers.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
 import { relativePosix } from "../util/paths.ts";
 
@@ -96,18 +97,13 @@ function moduleOptions(moduleResolution: "nodenext" | "bundler"): Pick<ts.Compil
 
 function typeRootsFor(config: MonocarveConfig, manifest: ExtractionManifest, installedRoot: string): string[] {
   const owners = [
-    ...config.applications.map((app) => ownerOfSourceRoot(app.sourceRoot)),
+    ...config.applications.map(applicationOwner),
     manifest.target.packageRoot,
     "",
   ];
   return owners
     .map((owner) => resolve(installedRoot, owner, "node_modules/@types"))
     .filter((directory) => existsSync(directory));
-}
-
-function ownerOfSourceRoot(sourceRoot: string): string {
-  const parts = sourceRoot.split("/").filter(Boolean);
-  return parts.length > 1 ? parts.slice(0, -1).join("/") : sourceRoot;
 }
 
 /** Read a file relative to a tree without throwing when it is absent. */

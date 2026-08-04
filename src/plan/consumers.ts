@@ -8,6 +8,7 @@
  */
 
 import { byCodeUnit } from "../util/hash.ts";
+import { applicationOwner } from "../config/helpers.ts";
 import type { ConsumerDependencySection } from "../adapters/types.ts";
 import type { WorkspaceContext } from "./context.ts";
 import { PlanningError } from "./context.ts";
@@ -147,10 +148,7 @@ export function consumerApplications(
   consumers: readonly { readonly package: string }[],
 ): string[] {
   const applications = new Set(
-    context.config.applications.map((app) => {
-      const parts = app.sourceRoot.split("/").filter(Boolean);
-      return parts.length > 1 ? parts.slice(0, -1).join("/") : app.sourceRoot;
-    }),
+    context.config.applications.map(applicationOwner),
   );
   return [...new Set(consumers.map((consumer) => consumer.package).filter((owner) => applications.has(owner)))].sort();
 }

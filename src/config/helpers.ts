@@ -106,6 +106,7 @@ export function ownerFor(config: MonocarveConfig, path: string): string {
  * `sourceRoot` when the source root is nested (`apps/web/src` -> `apps/web`).
  */
 export function applicationOwner(app: ApplicationConfig): string {
+  if (app.ownerRoot) return app.ownerRoot;
   const parts = app.sourceRoot.split("/").filter(Boolean);
   return parts.length > 1 ? parts.slice(0, -1).join("/") : app.sourceRoot;
 }

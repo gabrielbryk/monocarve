@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 
 import { type MonocarveConfig } from "../../config.ts";
+import { applicationOwner } from "../../config/helpers.ts";
 import { readManifest } from "../../graph/workspace.ts";
 
 import { declaredTypings, exportTarget, resolveTarget, subpathExports, typesCondition } from "./package-exports.ts";
@@ -16,7 +17,7 @@ export function externalDependencyPaths(config: MonocarveConfig, installedRoot: 
 
 function dependencyOwners(config: MonocarveConfig, installedRoot: string): string[] {
   const packageOwners = config.packageRoots.flatMap((root) => packageDirectories(installedRoot, root));
-  const applicationOwners = config.applications.map((app) => ownerOfSourceRoot(app.sourceRoot));
+  const applicationOwners = config.applications.map(applicationOwner);
   const firstPartyPackageOwners = config.firstPartyPackages.map((pkg) => pkg.root);
   return [...new Set([...packageOwners, ...applicationOwners, ...firstPartyPackageOwners, ""])];
 }
@@ -27,11 +28,6 @@ function packageDirectories(installedRoot: string, root: string): string[] {
   return readdirSync(absolute, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => join(root, entry.name));
-}
-
-function ownerOfSourceRoot(sourceRoot: string): string {
-  const parts = sourceRoot.split("/").filter(Boolean);
-  return parts.length > 1 ? parts.slice(0, -1).join("/") : sourceRoot;
 }
 
 function addOwnerDependencies(paths: Record<string, string[]>, installedRoot: string, owner: string): void {
