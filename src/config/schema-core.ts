@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { publicSurface, relativePath, scaffoldTemplateOverrides, templateSource } from "./primitives.ts";
+import { projectReferences, publicSurface, relativePath, scaffoldTemplateOverrides, templateSource } from "./primitives.ts";
 
 /**
  * A first-party package that lives at an exact workspace root — the root
@@ -254,6 +254,7 @@ export const scaffoldTemplates = z.strictObject({
   /** Task-runner project file: `moon.yml`, `project.json`, `turbo.json`. */
   taskFile: templateSource.optional(),
   extraFiles: z.record(z.string().min(1), templateSource).prefault({}),
+  projectReferences,
   /** Entry file within the new package, relative to its root. */
   entrypoint: relativePath.default("src/index.ts"),
   /**

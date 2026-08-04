@@ -19,7 +19,7 @@ export function packageOperations(input: ScaffoldInput): PlanOperation[] {
   const operations = [
     packageManifest,
     entrypointOperation(input, templates, scaffolding),
-    tsconfigOperation(input, templates),
+    ...tsconfigOperations(input, templates),
     taskFileOperation(input, templates, scaffolding),
     knipWorkspaceOperation(input, scaffolding),
     ...extraFileOperations(input, templates),
@@ -154,18 +154,61 @@ function entrypointOperation(input: ScaffoldInput, templates: ReturnType<typeof 
   return writeOperation(input.context, path, contents, "scaffold:entrypoint");
 }
 
-function tsconfigOperation(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>): PlanOperation | undefined {
+function tsconfigOperations(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>): PlanOperation[] {
+  const target = templates.projectReferences.target;
+  const root = target === "tsconfig.json" ? undefined : rootTsconfigOperation(input, templates);
+  const references = projectReferences(input, templates);
+  const referenced = projectReferenceOperation(input, templates, target, references);
+  return [root, referenced].filter((operation): operation is PlanOperation => operation !== undefined);
+}
+
+function rootTsconfigOperation(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>): PlanOperation | undefined {
   const path = `${input.packageRoot}/tsconfig.json`;
-  const references = input.dependencies.packageReferences.map((reference) => ({ path: relativePosix(resolve("/", input.packageRoot), resolve("/", reference)) }));
-  if (!input.context.exists(path)) return templates.tsconfig ? initialTsconfigOperation(input, templates, path, references) : undefined;
+  if (input.context.exists(path) || !templates.tsconfig) return undefined;
+  return writeOperation(input.context, path, stringifyJson(parseJsonFile(render(input, templates.tsconfig), path)), "scaffold:tsconfig");
+}
+
+function projectReferences(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>): { path: string }[] {
+  return input.dependencies.packageReferences.map((reference) => ({
+    path: relativePosix(
+      resolve("/", input.packageRoot),
+      resolve(
+        "/",
+        templates.projectReferences.dependencyTarget === "tsconfig.json"
+          ? reference
+          : `${reference}/${templates.projectReferences.dependencyTarget}`,
+      ),
+    ),
+  }));
+}
+
+function projectReferenceOperation(
+  input: ScaffoldInput,
+  templates: ReturnType<typeof templatesFor>,
+  target: string,
+  references: readonly { path: string }[],
+): PlanOperation | undefined {
+  const path = `${input.packageRoot}/${target}`;
+  if (!input.context.exists(path)) {
+    const template = referenceTemplate(templates, target);
+    if (!template) return undefined;
+    return initialTsconfigOperation(input, template, path, references);
+  }
   const tsconfig = parseJsonFile(input.context.text(path), path);
   const existing = (tsconfig.references ?? []) as { path?: string }[];
   const missing = references.filter((entry) => !new Set(existing.map((item) => item.path)).has(entry.path));
   return missing.length > 0 ? writeOperation(input.context, path, stringifyJson({ ...tsconfig, references: [...existing, ...missing] }), "scaffold:project-references") : undefined;
 }
 
-function initialTsconfigOperation(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>, path: string, references: readonly { path: string }[]): PlanOperation {
-  const rendered = parseJsonFile(render(input, templates.tsconfig!), path);
+function referenceTemplate(templates: ReturnType<typeof templatesFor>, target: string) {
+  if (target === "tsconfig.json") return templates.tsconfig;
+  const template = templates.extraFiles[target];
+  if (!template) throw new PlanningError(`projectReferences.target ${JSON.stringify(target)} must name a configured scaffold extraFile`);
+  return template;
+}
+
+function initialTsconfigOperation(input: ScaffoldInput, template: ReturnType<typeof referenceTemplate>, path: string, references: readonly { path: string }[]): PlanOperation {
+  const rendered = parseJsonFile(render(input, template!), path);
   assertCompilerProfileRepresented(input, rendered, path);
   return writeOperation(input.context, path, stringifyJson(references.length ? { ...rendered, references } : rendered), "scaffold:tsconfig");
 }
@@ -217,6 +260,7 @@ function emptySuiteArgument(input: ScaffoldInput, templates: ReturnType<typeof t
 
 function extraFileOperations(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>): PlanOperation[] {
   return Object.entries(templates.extraFiles).flatMap(([name, source]) => {
+    if (name === templates.projectReferences.target) return [];
     const path = `${input.packageRoot}/${name}`;
     return input.context.exists(path) ? [] : [writeOperation(input.context, path, render(input, source), `scaffold:extra:${name}`)];
   });

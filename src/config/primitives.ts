@@ -76,6 +76,23 @@ export const publicSurface = publicSurfaceSchema.default({ mode: "barrel" });
 export type PublicSurfaceConfig = z.output<typeof publicSurface>;
 
 /**
+ * The project config which owns inferred workspace dependency references.
+ *
+ * A simple package can keep its entire program in `tsconfig.json`. A solution
+ * package can keep that root config as an aggregator and put its production
+ * program in `tsconfig.lib.json`; in that shape both sides of an inferred
+ * reference must name the library project rather than the solution root.
+ */
+export const projectReferences = z.strictObject({
+  /** Package-local tsconfig file that receives inferred workspace references. */
+  target: relativePath.default("tsconfig.json"),
+  /** tsconfig file to reference in each inferred workspace dependency. */
+  dependencyTarget: relativePath.default("tsconfig.json"),
+}).prefault({});
+
+export type ProjectReferencesConfig = z.output<typeof projectReferences>;
+
+/**
  * The scaffold fields a profile or application may replace. Keeping this as a
  * partial schema is deliberate: profiles select a package kind, while the
  * root scaffold remains the generic baseline every profile inherits.
@@ -85,6 +102,7 @@ export const scaffoldTemplateOverrides = z.strictObject({
   tsconfig: templateSource.optional(),
   taskFile: templateSource.optional(),
   extraFiles: z.record(z.string().min(1), templateSource).optional(),
+  projectReferences: projectReferences.optional(),
   devDependencies: z.record(z.string().min(1), z.string().min(1)).optional(),
   publicSurface: publicSurfaceSchema.optional(),
 });

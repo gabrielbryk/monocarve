@@ -16,6 +16,7 @@ export function scaffoldFor(config: MonocarveConfig, app: ApplicationConfig): Sc
     ...(override.tsconfig ? { tsconfig: override.tsconfig } : {}),
     ...(override.taskFile ? { taskFile: override.taskFile } : {}),
     ...(override.extraFiles ? { extraFiles: override.extraFiles } : {}),
+    ...(override.projectReferences ? { projectReferences: override.projectReferences } : {}),
     ...(override.devDependencies ? { devDependencies: override.devDependencies } : {}),
     ...(override.publicSurface ? { publicSurface: override.publicSurface } : {}),
   };
@@ -116,6 +117,7 @@ function mergeScaffoldTemplates(
     ...(override.tsconfig === undefined ? {} : { tsconfig: override.tsconfig }),
     ...(override.taskFile === undefined ? {} : { taskFile: override.taskFile }),
     ...(override.extraFiles === undefined ? {} : { extraFiles: override.extraFiles }),
+    ...(override.projectReferences === undefined ? {} : { projectReferences: override.projectReferences }),
     ...(override.devDependencies === undefined ? {} : { devDependencies: override.devDependencies }),
     ...(override.publicSurface === undefined ? {} : { publicSurface: override.publicSurface }),
   };
