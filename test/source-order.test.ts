@@ -125,6 +125,7 @@ describe("source enumeration order", () => {
     const root = tree({
       "apps/web/src/main.ts": "export const main = 1;\n",
       "apps/web/src/widgets/chart.ts": "export const chart = 1;\n",
+      "apps/web/scripts/fixture.ts": "export const fixture = 1;\n",
       "libs/format/src/index.ts": "export const format = 1;\n",
       "core/telemetry.ts": "export const telemetry = 1;\n",
     });
@@ -134,6 +135,7 @@ describe("source enumeration order", () => {
           {
             name: "web",
             sourceRoot: "apps/web/src",
+            consumerRoots: ["apps/web/scripts"],
             tsconfig: "apps/web/tsconfig.json",
             packageName: "@acme/web",
             compositionRoots: [],
@@ -150,6 +152,7 @@ describe("source enumeration order", () => {
       "<source-order fixture>",
     );
     const expected = [
+      "apps/web/scripts/fixture.ts",
       "apps/web/src/main.ts",
       "apps/web/src/widgets/chart.ts",
       "core/telemetry.ts",

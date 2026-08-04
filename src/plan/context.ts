@@ -309,7 +309,7 @@ export class WorkspaceContext {
    */
   repositorySources(): string[] {
     this.sourceListCache ??= [
-      ...this.config.applications.map((app) => app.sourceRoot),
+      ...this.config.applications.flatMap((app) => [app.sourceRoot, ...app.consumerRoots]),
       ...this.config.packageRoots,
       ...this.config.firstPartyRoots,
       ...this.config.firstPartyPackages.map((pkg) => pkg.root),

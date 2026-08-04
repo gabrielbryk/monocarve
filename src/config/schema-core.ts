@@ -24,6 +24,13 @@ export const application = z.strictObject({
   /** tsconfig that resolves this application's imports; handed to the graph scanner. */
   tsconfig: relativePath,
   /**
+   * First-party source directories that may consume this application's code
+   * but are not extraction donors themselves (for example fixture or build
+   * scripts adjacent to `src`). They participate in consumer discovery and
+   * audit only.
+   */
+  consumerRoots: z.array(relativePath).default([]),
+  /**
    * Workspace package directory that owns this application. Defaults to the
    * conventional parent of `sourceRoot` (`apps/web/src` -> `apps/web`). Set it
    * when the scan root is the package itself, so consumer dependency updates

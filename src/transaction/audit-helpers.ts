@@ -29,7 +29,7 @@ export function firstExportTarget(value: unknown): string | undefined {
 
 export function repositorySources(config: MonocarveConfig, root: string): string[] {
   return [
-    ...config.applications.map((app) => app.sourceRoot),
+    ...config.applications.flatMap((app) => [app.sourceRoot, ...app.consumerRoots]),
     ...config.packageRoots,
     ...config.firstPartyRoots,
     ...config.firstPartyPackages.map((pkg) => pkg.root),
