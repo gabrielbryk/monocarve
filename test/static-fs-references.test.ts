@@ -31,7 +31,12 @@ describe("findStaticFsReferences", () => {
   });
 
   test("finds a direct resolve(import.meta.dir, literal) call with no helper indirection", () => {
-    const source = 'readFileSync(resolve(import.meta.dir, "../leaderboard/facts-routing.ts"), "utf8");\n';
+    const source = [
+      'import { resolve } from "node:path";',
+      "",
+      'readFileSync(resolve(import.meta.dir, "../leaderboard/facts-routing.ts"), "utf8");',
+      "",
+    ].join("\n");
     const matches = findStaticFsReferences(source, FILE);
     expect(matches).toHaveLength(1);
     expect(matches[0]?.literal).toBe("../leaderboard/facts-routing.ts");
@@ -39,11 +44,18 @@ describe("findStaticFsReferences", () => {
 
   test("ignores a computed argument to the helper", () => {
     const source = [
+      'import { resolve } from "node:path";',
+      "",
       "const read = (path: string) => readFileSync(resolve(import.meta.dir, path), \"utf8\");",
       "const name = suffix();",
       "const routingSource = read(`../leaderboard/${name}.ts`);",
       "",
     ].join("\n");
+    expect(findStaticFsReferences(source, FILE)).toHaveLength(0);
+  });
+
+  test("ignores resolve(import.meta.dir, literal) when resolve is undeclared anywhere in scope", () => {
+    const source = 'readFileSync(resolve(import.meta.dir, "../leaderboard/facts-routing.ts"), "utf8");\n';
     expect(findStaticFsReferences(source, FILE)).toHaveLength(0);
   });
 
@@ -60,11 +72,36 @@ describe("findStaticFsReferences", () => {
     ].join("\n");
     expect(findStaticFsReferences(source, FILE)).toHaveLength(0);
   });
+
+  test("ignores a call through a parameter that shadows the real helper's name", () => {
+    const source = [
+      'import { readFileSync } from "node:fs";',
+      'import { resolve } from "node:path";',
+      "",
+      'const read = (path: string) => readFileSync(resolve(import.meta.dir, path), "utf8");',
+      'function nested(read: (path: string) => string) { return read("../unrelated.ts"); }',
+      "",
+    ].join("\n");
+    expect(findStaticFsReferences(source, FILE)).toHaveLength(0);
+  });
+
+  test("ignores a local resolve() that isn't node:path's, even shaped like the real call", () => {
+    const source = [
+      'import { readFileSync } from "node:fs";',
+      "",
+      'function resolve(base: string, target: string) { return target; }',
+      'readFileSync(resolve(import.meta.dir, "../leaderboard/facts-routing.ts"), "utf8");',
+      "",
+    ].join("\n");
+    expect(findStaticFsReferences(source, FILE)).toHaveLength(0);
+  });
 });
 
 describe("rewriteStaticFsReference", () => {
   test("splices only the literal, preserving quote style and every other byte", () => {
     const source = [
+      'import { resolve } from "node:path";',
+      "",
       'const read = (path: string) => readFileSync(resolve(import.meta.dir, path), "utf8");',
       "const routingSource = read('../leaderboard/facts-routing.ts');",
       'const other = read("./unrelated.txt");',

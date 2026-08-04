@@ -53,10 +53,136 @@ function isImportMetaDir(node: ts.Node): boolean {
   );
 }
 
-/** `resolve(…)` or `path.resolve(…)` — the callee name alone, deliberately unqualified. */
+function isNodePathModuleSpecifier(text: string): boolean {
+  return text === "node:path" || text === "path";
+}
+
+/** Node whose direct child statements/parameters can declare a lexical binding. */
+function isFunctionLikeScope(
+  node: ts.Node,
+): node is
+  | ts.FunctionDeclaration
+  | ts.FunctionExpression
+  | ts.ArrowFunction
+  | ts.MethodDeclaration
+  | ts.ConstructorDeclaration
+  | ts.GetAccessorDeclaration
+  | ts.SetAccessorDeclaration {
+  return (
+    ts.isFunctionDeclaration(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isArrowFunction(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isConstructorDeclaration(node) ||
+    ts.isGetAccessor(node) ||
+    ts.isSetAccessor(node)
+  );
+}
+
+function isScopeNode(node: ts.Node): boolean {
+  return ts.isSourceFile(node) || ts.isBlock(node) || ts.isCatchClause(node) || isFunctionLikeScope(node);
+}
+
+/** The declaration a `name` binding resolves to if introduced directly by `scope` (not a nested scope). */
+function declarationInScope(scope: ts.Node, name: string): ts.Node | undefined {
+  if (ts.isCatchClause(scope)) {
+    const decl = scope.variableDeclaration;
+    return decl && ts.isIdentifier(decl.name) && decl.name.text === name ? decl : undefined;
+  }
+  if (isFunctionLikeScope(scope)) {
+    if ((ts.isFunctionDeclaration(scope) || ts.isFunctionExpression(scope)) && scope.name?.text === name) return scope;
+    for (const parameter of scope.parameters) {
+      if (ts.isIdentifier(parameter.name) && parameter.name.text === name) return parameter;
+    }
+    return undefined;
+  }
+  if (!ts.isBlock(scope) && !ts.isSourceFile(scope)) return undefined;
+  for (const statement of scope.statements) {
+    if (ts.isVariableStatement(statement)) {
+      for (const decl of statement.declarationList.declarations) {
+        if (ts.isIdentifier(decl.name) && decl.name.text === name) return decl;
+      }
+    } else if (ts.isFunctionDeclaration(statement) && statement.name?.text === name) {
+      return statement;
+    } else if (ts.isClassDeclaration(statement) && statement.name?.text === name) {
+      return statement;
+    } else if (ts.isImportDeclaration(statement) && statement.importClause) {
+      const clause = statement.importClause;
+      if (clause.name?.text === name) return clause;
+      const bindings = clause.namedBindings;
+      if (bindings && ts.isNamespaceImport(bindings) && bindings.name.text === name) return bindings;
+      if (bindings && ts.isNamedImports(bindings)) {
+        for (const specifier of bindings.elements) {
+          if (specifier.name.text === name) return specifier;
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The nearest lexical declaration of `name` reachable from `useNode`, walking
+ * enclosing blocks, function parameter lists, and the source file itself —
+ * innermost first, so a shadowing declaration always wins over an outer one.
+ * Not full dataflow (var hoisting and TDZ ordering are not modelled), but
+ * enough to tell a same-named local from the binding a helper or `resolve`
+ * call actually closes over.
+ */
+function resolveLexicalDeclaration(useNode: ts.Node, name: string): ts.Node | undefined {
+  let node: ts.Node | undefined = useNode.parent;
+  while (node) {
+    if (isScopeNode(node)) {
+      const decl = declarationInScope(node, name);
+      if (decl) return decl;
+    }
+    node = node.parent;
+  }
+  return undefined;
+}
+
+function importDeclarationOf(node: ts.Node): ts.ImportDeclaration | undefined {
+  let current: ts.Node | undefined = node;
+  while (current && !ts.isImportDeclaration(current)) current = current.parent;
+  return current;
+}
+
+/**
+ * Whether the identifier `resolve` at this use site is demonstrably Node's
+ * `path.resolve` — a named `resolve` import from `node:path`/`path` — rather
+ * than some unrelated local of the same name, or nothing this module can
+ * verify at all. An identifier with no declaration reachable in scope is not
+ * demonstrably `node:path`'s resolve, so it is refused, the same as a
+ * provable shadow: a local variable, parameter, or function literally named
+ * `resolve`.
+ */
+function identifierIsNodePathResolve(expression: ts.Identifier): boolean {
+  const decl = resolveLexicalDeclaration(expression, expression.text);
+  if (!decl) return false;
+  if (!ts.isImportSpecifier(decl)) return false;
+  const importedName = decl.propertyName ?? decl.name;
+  if (importedName.text !== "resolve") return false;
+  const importDecl = importDeclarationOf(decl);
+  return importDecl !== undefined && ts.isStringLiteral(importDecl.moduleSpecifier) && isNodePathModuleSpecifier(importDecl.moduleSpecifier.text);
+}
+
+/** Whether `expression` is a namespace import identifier bound to `node:path`/`path`, for `path.resolve(…)`. */
+function identifierIsNodePathNamespace(expression: ts.Expression): boolean {
+  if (!ts.isIdentifier(expression)) return false;
+  const decl = resolveLexicalDeclaration(expression, expression.text);
+  if (!decl || !ts.isNamespaceImport(decl)) return false;
+  const importDecl = importDeclarationOf(decl);
+  return importDecl !== undefined && ts.isStringLiteral(importDecl.moduleSpecifier) && isNodePathModuleSpecifier(importDecl.moduleSpecifier.text);
+}
+
+/** `resolve(…)` or `path.resolve(…)`, demonstrably Node's `path.resolve` at this use site. */
 function isResolveCallee(expression: ts.Expression): boolean {
-  if (ts.isIdentifier(expression)) return expression.text === "resolve";
-  return ts.isPropertyAccessExpression(expression) && expression.name.text === "resolve";
+  if (ts.isIdentifier(expression)) return expression.text === "resolve" && identifierIsNodePathResolve(expression);
+  return (
+    ts.isPropertyAccessExpression(expression) &&
+    expression.name.text === "resolve" &&
+    identifierIsNodePathNamespace(expression.expression)
+  );
 }
 
 function literalTextOf(node: ts.Node): string | null {
@@ -64,15 +190,16 @@ function literalTextOf(node: ts.Node): string | null {
 }
 
 /**
- * Names of local `const NAME = (param) => …` helpers whose body calls
+ * Local `const NAME = (param) => …` declarations whose body calls
  * `resolve(import.meta.dir, param)` with that same parameter — the
  * `const read = (path) => readFileSync(resolve(import.meta.dir, path), "utf8")`
- * idiom. Single-parameter only, and matched by parameter name alone: this is a
- * lexical pattern match, not dataflow, so a shadowing inner function with an
- * unrelated parameter of the same name is not disambiguated.
+ * idiom. Single-parameter only. Returned as the declaration nodes themselves
+ * (not names) so a call site must resolve, lexically, to this exact
+ * declaration to count as a helper call — a same-named but shadowed or
+ * unrelated binding does not.
  */
-function resolveHelperNames(root: ts.Node): ReadonlySet<string> {
-  const helpers = new Set<string>();
+function resolveHelperDeclarations(root: ts.Node): ReadonlySet<ts.VariableDeclaration> {
+  const helpers = new Set<ts.VariableDeclaration>();
   const visit = (node: ts.Node): void => {
     if (
       ts.isVariableDeclaration(node) &&
@@ -83,7 +210,7 @@ function resolveHelperNames(root: ts.Node): ReadonlySet<string> {
       const fn = node.initializer;
       const parameter = fn.parameters.length === 1 ? fn.parameters[0] : undefined;
       if (parameter && ts.isIdentifier(parameter.name) && callsResolveWithParameter(fn.body, parameter.name.text)) {
-        helpers.add(node.name.text);
+        helpers.add(node);
       }
     }
     ts.forEachChild(node, visit);
@@ -117,7 +244,7 @@ function callsResolveWithParameter(body: ts.Node, parameterName: string): boolea
  */
 export function findStaticFsReferences(source: string, filePath: string): StaticFsReferenceMatch[] {
   const file = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true, scriptKindFor(filePath));
-  const helpers = resolveHelperNames(file);
+  const helpers = resolveHelperDeclarations(file);
   const directory = dirname(filePath);
   const matches: StaticFsReferenceMatch[] = [];
 
@@ -136,8 +263,9 @@ export function findStaticFsReferences(source: string, filePath: string): Static
       if (isResolveCallee(node.expression) && node.arguments.length >= 2) {
         const [first, second] = node.arguments;
         if (first && second && isImportMetaDir(first)) record(second);
-      } else if (ts.isIdentifier(node.expression) && node.arguments.length === 1 && helpers.has(node.expression.text)) {
-        record(node.arguments[0]!);
+      } else if (ts.isIdentifier(node.expression) && node.arguments.length === 1) {
+        const declaration = resolveLexicalDeclaration(node.expression, node.expression.text);
+        if (declaration && ts.isVariableDeclaration(declaration) && helpers.has(declaration)) record(node.arguments[0]!);
       }
     }
     ts.forEachChild(node, visit);
