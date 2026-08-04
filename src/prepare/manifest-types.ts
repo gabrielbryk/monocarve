@@ -143,13 +143,61 @@ export interface ExtractTypeDeclarationsOperation {
 export interface PreparationWriteFileOperation {
   readonly kind: "write-file";
   readonly file: PreparationFileMutation;
-  readonly purpose: "compatibility-reexport" | "wiring";
+  /**
+   * `"port-contract"`/`"app-adapter"` are the boundary-preparation ("port"
+   * strategy) writes: a contract module promoted out of a retained module,
+   * and the app-owned adapter that satisfies it. Both are ordinary,
+   * fully-reviewable write-file operations — see `src/prepare/boundary-port.ts`.
+   */
+  readonly purpose: "compatibility-reexport" | "wiring" | "port-contract" | "app-adapter";
   readonly contents: string;
+}
+
+/**
+ * A boundary-preparation ("existing-package" strategy) consumer rewrite: one
+ * importer of a retained shim, repointed to the real package the config
+ * declares as its replacement. `rewrites` records every exact specifier
+ * substitution this file's `contents` performs, each carrying the exact
+ * symbol names it was proven safe to move — see `src/prepare/boundary-imports.ts`.
+ */
+export interface RewriteModuleSpecifierOperation {
+  readonly kind: "rewrite-module-specifier";
+  readonly file: PreparationFileMutation;
+  readonly rewrites: readonly { readonly from: string; readonly to: string; readonly symbols: readonly string[] }[];
+  /** Full replayable text, exactly as extract-type-declarations carries it. */
+  readonly contents: string;
+}
+
+/**
+ * A retained shim deleted once `src/prepare/boundary-imports.ts` proved every
+ * baseline importer was rewritten away from it in this same manifest.
+ *
+ * `file.resultHash`/`file.resultMode` are structurally present because this
+ * operation shares `PreparationFileMutation` with every other file effect in
+ * the manifest, but neither describes a real result state for a deletion —
+ * there is no post-state to hash. Replay/audit (a later stage) must treat
+ * `kind: "delete-module"` as "assert the precondition, then remove the path",
+ * never read the result fields as a target to write.
+ */
+export interface DeleteModuleOperation {
+  readonly kind: "delete-module";
+  readonly file: PreparationFileMutation;
+  /**
+   * The exact importer paths this manifest's own rewrite-module-specifier
+   * operations rewrote away from the deleted module — i.e. the exhaustive
+   * baseline importer set, proven empty *after* those rewrites are applied.
+   * A later validation stage is expected to assert this list exactly equals
+   * the rewritten paths, and that a fresh post-replay graph query finds none
+   * of them still importing the deleted path.
+   */
+  readonly importerProof: readonly string[];
 }
 
 export type PreparationReplayOperation =
   | ExtractTypeDeclarationsOperation
-  | PreparationWriteFileOperation;
+  | PreparationWriteFileOperation
+  | RewriteModuleSpecifierOperation
+  | DeleteModuleOperation;
 
 /** A type-only surface retained at the old module path after preparation. */
 export interface CompatibilityReexportIntent {

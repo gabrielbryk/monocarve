@@ -3,7 +3,7 @@ import { z } from "zod";
 import { SCRATCH_DIRNAME } from "../branding.ts";
 import { assetEmissionProofs, generatedArtifacts, pathMigrations, postJournalPreparers, transaction } from "./schema-artifacts.ts";
 import { application, commitTemplates, extractionProfiles, firstPartyPackage, gates, preparationPolicy, preparers, scaffoldTemplates } from "./schema-core.ts";
-import { graph, integrationTestSuites, pathReferences, pathReferenceRewrites, portfolio, testKinds, testRelocation } from "./schema-policy.ts";
+import { compositionBoundaries, graph, integrationTestSuites, pathReferences, pathReferenceRewrites, portfolio, portPromotions, testKinds, testRelocation } from "./schema-policy.ts";
 import { regexSource, relativePath } from "./primitives.ts";
 import { validateExtractionProfiles } from "./profiles.ts";
 import { validateFirstPartyPackages, validateIntegrationTestSuites, validateTestKinds } from "./validation.ts";
@@ -108,6 +108,15 @@ export const monocarveConfigSchema = z.strictObject({
   graph: graph.prefault({}),
   pathReferences: pathReferences.prefault({}),
   pathReferenceRewrites: pathReferenceRewrites.prefault({}),
+  /**
+   * Frontend vocabulary for boundary preparation: replace an app shim with a
+   * real package, or split a retained module into a portable contract plus an
+   * app-owned adapter. See `src/config/schema-policy.ts` for why this and
+   * `portPromotions` are one mechanism with two config surfaces.
+   */
+  compositionBoundaries,
+  /** Backend vocabulary for the same boundary-preparation mechanism. */
+  portPromotions,
   transaction: transaction.prefault({}),
   generatedArtifacts: generatedArtifacts.prefault({}),
   pathMigrations: pathMigrations.prefault({}),

@@ -259,7 +259,7 @@ export function compilePreparationManifest(input: CompilePreparationManifestInpu
 }
 
 /** Git tree modes carry type bits; preparation journals own only POSIX permissions. */
-function baselineFileMode(rootDir: string, commit: string, path: string): number {
+export function baselineFileMode(rootDir: string, commit: string, path: string): number {
   const output = git({ cwd: rootDir }, "ls-tree", commit, "--", `${repositoryPrefix(rootDir)}${path}`);
   const match = /^(\d{6})\s+\w+\s+[0-9a-f]+\t/.exec(output);
   if (!match?.[1]) throw new PlanningError(`could not read baseline file mode for ${path}`);
@@ -269,3 +269,8 @@ function baselineFileMode(rootDir: string, commit: string, path: string): number
   }
   return treeMode & 0o777;
 }
+
+// `compileBoundaryPreparationManifest` and its private helpers live in their
+// own module purely to keep this file under the line-count gate; re-exported
+// here so every existing importer keeps working unchanged.
+export { compileBoundaryPreparationManifest, type CompileBoundaryPreparationManifestInput } from "./build-boundary.ts";

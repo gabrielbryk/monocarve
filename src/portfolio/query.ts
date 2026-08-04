@@ -5,7 +5,7 @@ import { MonocarveError } from "../errors.ts";
 import type { Scc } from "../graph/model.ts";
 import { byCodeUnit, stableStringify } from "../util/hash.ts";
 import { normalizePath, relativeWorkspacePath } from "../util/paths.ts";
-import type { Portfolio, PortfolioCandidate, RejectionCode } from "./types.ts";
+import type { Portfolio, PortfolioCandidate, RecipeStep, RejectionCode, RetainedBlocker } from "./types.ts";
 
 export type CandidateEligibility = "all" | "eligible" | "blocked";
 
@@ -44,6 +44,12 @@ export interface CandidateDetail {
   readonly blockers: readonly CandidateBlockerDetail[];
   readonly warnings: readonly string[];
   readonly targetSuggestion: CandidateTargetSuggestion;
+  /** `"extraction" | "preparation"`, absent for a candidate built before ranking wired classification. */
+  readonly classification?: "extraction" | "preparation";
+  /** Retained-root edges this closure crosses, sorted by target. */
+  readonly retainedBlockers: readonly RetainedBlocker[];
+  /** What would unblock each retained blocker, one step per blocker. */
+  readonly recipe: readonly RecipeStep[];
 }
 
 export class CandidateLookupError extends MonocarveError {
@@ -79,12 +85,13 @@ export function formatCandidateTable(details: readonly CandidateDetail[]): strin
   const rows = [...details].sort(compareDetails).map((candidate) => [
     candidate.id,
     candidate.eligible ? "eligible" : "blocked",
+    candidate.classification ?? "-",
     String(candidate.score),
     String(candidate.lineCount),
     String(candidate.closure.length),
     candidate.targetSuggestion.packageName,
   ]);
-  const table = [["ID", "STATE", "SCORE", "LOC", "PATHS", "TARGET"], ...rows];
+  const table = [["ID", "STATE", "CLASS", "SCORE", "LOC", "PATHS", "TARGET"], ...rows];
   const widths = table[0]!.map((_, column) => Math.max(...table.map((row) => row[column]!.length)));
   return `${table.map((row) => row.map((cell, column) => cell.padEnd(widths[column]!)).join("  ").trimEnd()).join("\n")}\n`;
 }
@@ -108,6 +115,9 @@ function candidateDetail(candidate: PortfolioCandidate, config: MonocarveConfig)
       .sort((left, right) => byCodeUnit(left.code, right.code) || byCodeUnit(left.detail, right.detail)),
     warnings: sorted(candidate.warnings),
     targetSuggestion: targetSuggestion(candidate.suggestedPackageName, config),
+    ...(candidate.classification === undefined ? {} : { classification: candidate.classification }),
+    retainedBlockers: [...(candidate.retainedBlockers ?? [])].sort((left, right) => byCodeUnit(left.target, right.target)),
+    recipe: [...(candidate.recipe ?? [])].sort((left, right) => byCodeUnit(left.blocker.target, right.blocker.target)),
   };
 }
 

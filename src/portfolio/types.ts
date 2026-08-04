@@ -82,6 +82,39 @@ export interface ConsumerRef {
   readonly external: boolean;
 }
 
+/**
+ * One retained edge a candidate's closure crosses: an import that reaches a
+ * `portfolio.retainedRoots` module. Distinguishing `"value"` from `"type"` at
+ * this granularity matters because a type-only edge can sometimes be resolved
+ * by promoting a declaration (`portPromotions`) without touching runtime
+ * code, while a value edge always needs a real replacement provider.
+ */
+export interface RetainedBlocker {
+  /** Closure file containing the import into the retained root. */
+  readonly file: string;
+  /** The specifier as written. */
+  readonly specifier: string;
+  /** The retained-root module the specifier resolves to. */
+  readonly target: string;
+  readonly kind: "value" | "type";
+}
+
+/**
+ * One step of the preparation recipe generated for a `RetainedBlocker`: the
+ * configured `compositionBoundaries` / `portPromotions` entry that already
+ * covers it, or an explicit report that no configured substitution exists.
+ * The recipe never invents a remedy — `remedy.kind === "unconfigured"` is a
+ * first-class, honest outcome, not an error.
+ */
+export interface RecipeStep {
+  readonly blocker: RetainedBlocker;
+  readonly remedy:
+    | { readonly kind: "composition-boundary"; readonly id: string }
+    | { readonly kind: "port-promotion"; readonly id: string }
+    | { readonly kind: "unconfigured" };
+  readonly detail: string;
+}
+
 export interface PortfolioCandidate {
   /** Stable, content-derived id (`c-<hash>`), safe to reference across runs. */
   readonly id: string;
@@ -129,6 +162,22 @@ export interface PortfolioCandidate {
    */
   readonly warnings: readonly string[];
   readonly rewriteEscapes: readonly RewriteEscape[];
+
+  /**
+   * `"extraction"` is an ordinary candidate. `"preparation"` is a candidate
+   * whose closure crosses a `portfolio.retainedRoots` boundary (see
+   * `retainedBlockers`) or whose only viable target is the root package under
+   * `portfolio.forbidTargetSuggestion: ["root"]` — real, ranked work, but work
+   * that unblocks a future extraction rather than performing one now.
+   * Optional because this field is populated by the ranking stage
+   * (`src/portfolio/rank-assessment.ts`); a candidate constructed before that
+   * wiring lands omits it rather than guessing a classification.
+   */
+  readonly classification?: "extraction" | "preparation";
+  /** Retained edges this candidate's closure crosses. Empty when it crosses none. Optional for the same reason as `classification`. */
+  readonly retainedBlockers?: readonly RetainedBlocker[];
+  /** Generated recipe explaining what would unblock each retained blocker. Optional for the same reason as `classification`. */
+  readonly recipe?: readonly RecipeStep[];
 }
 
 export interface Portfolio {

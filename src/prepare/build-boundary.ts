@@ -1,0 +1,259 @@
+/**
+ * `compileBoundaryPreparationManifest` and its private helpers, split out of
+ * `build.ts` purely to keep that file under the line-count gate: this module
+ * owns nothing about the ordinary declaration-seam preparation path — only
+ * compiling one declared `compositionBoundaries`/`portPromotions` entry
+ * (`resolveBoundaries` output) into a replayable preparation manifest.
+ * `build.ts` still owns `compilePreparationManifest`, `PreparationManifestRendering`,
+ * and `baselineFileMode`, which this module borrows for boundary compilation.
+ */
+import { relative, resolve } from "node:path";
+
+import ts from "typescript";
+
+import { GENERATOR } from "../branding.ts";
+import type { MonocarveConfig } from "../config.ts";
+import type { DependencyGraph } from "../graph/model.ts";
+import { PlanningError } from "../plan/context.ts";
+import { resolveCommit, showBaseline } from "../util/git.ts";
+import { byCodeUnit, hashJson, hashText, type FileState, type Sha256 } from "../util/hash.ts";
+import { workspacePath } from "../util/paths.ts";
+import type { TemplateVars } from "../util/template.ts";
+import { planExistingPackageBoundary, type RetainedImporterInput } from "./boundary-imports.ts";
+import { planPortBoundary, type PortConsumerInput } from "./boundary-port.ts";
+import { resolveBoundaries, type ResolvedBoundary } from "./boundary-resolve.ts";
+import { createPreparationManifest, assertPreparationManifestValid, preparationOperationPaths } from "./manifest.ts";
+import type { PreparationManifest, PreparationReplayOperation } from "./manifest-types.ts";
+import { preparationCompilerOptions } from "./compiler-policy.ts";
+import { baselineFileMode, type PreparationManifestRendering } from "./build.ts";
+
+export interface CompileBoundaryPreparationManifestInput {
+  readonly rootDir: string;
+  readonly config: MonocarveConfig;
+  /** A revision, resolved atomically to the manifest baseline. */
+  readonly baselineCommit: string;
+  readonly graphDigest: Sha256;
+  /** Which declared `compositionBoundaries`/`portPromotions` entry to compile. */
+  readonly boundaryId: string;
+  /**
+   * A dependency graph freshly scanned at `baselineCommit`. Every baseline
+   * importer of the retained module is derived from `graph.incoming` — never
+   * from a hand-assembled list — because a caller-supplied importer set has
+   * no way to prove it is exhaustive. An importer this graph does not report
+   * cannot be rewritten, and (for `retire`) cannot be proven gone; both are
+   * refusals, not best-effort gaps. The graph's own `commit` must equal
+   * `baselineCommit`, or compilation refuses outright: a stale graph is
+   * exactly the incomplete evidence this exists to rule out.
+   */
+  readonly graph: DependencyGraph;
+  /** Config/caller-owned rendered values, recorded verbatim in the manifest. */
+  readonly rendering: PreparationManifestRendering;
+  /** "port" strategy only: explicit, caller-chosen destination for the promoted contract module. */
+  readonly contractTargetPath?: string;
+  /** "port" strategy only, when the boundary declares an appAdapter: reviewed template body. */
+  readonly adapterTemplateText?: string;
+  readonly templateVars?: TemplateVars;
+  readonly moduleSpecifierCalls?: readonly string[];
+  readonly resolutionExtensions?: readonly string[];
+  readonly cssImportExtensions?: readonly string[];
+}
+
+/**
+ * Compile one declared boundary-preparation plan from its config policy and
+ * a freshly scanned dependency graph, reading every donor and consumer from
+ * the resolved baseline exactly as `compilePreparationManifest` does.
+ *
+ * `compositionBoundaries` and `portPromotions` are normalized once by
+ * `resolveBoundaries`, then routed to the matching builder
+ * (`planExistingPackageBoundary` / `planPortBoundary`); both builders already
+ * discharge their own proofs (`boundary-proofs.ts`) before returning an
+ * operation set, so this function's own job is baseline resolution, importer
+ * discovery, operation assembly, and the same policy/identity rendering every
+ * preparation plan carries.
+ */
+export function compileBoundaryPreparationManifest(input: CompileBoundaryPreparationManifestInput): PreparationManifest {
+  const boundary = resolveBoundaries({
+    compositionBoundaries: input.config.compositionBoundaries,
+    portPromotions: input.config.portPromotions,
+  }).find((item) => item.id === input.boundaryId);
+  if (!boundary) throw new PlanningError(`unknown boundary id ${input.boundaryId}`);
+  const baseline = resolveCommit(input.rootDir, input.baselineCommit);
+  if (input.graph.commit !== baseline.commit) {
+    throw new PlanningError(`boundary ${boundary.id} importer graph was scanned at ${input.graph.commit ?? "an unknown commit"}, but the preparation baseline is ${baseline.commit}; rescan before compiling`);
+  }
+  const retainedText = showBaseline(input.rootDir, baseline.commit, boundary.retained);
+  if (retainedText === null) throw new PlanningError(`boundary retained module is absent from baseline: ${boundary.retained}`);
+  const retainedMode = baselineFileMode(input.rootDir, baseline.commit, boundary.retained);
+  const compilerOptions = preparationCompilerOptions(input.rootDir, input.config, boundary.retained);
+  if (boundary.strategy === "existing-package" && boundary.retire && !input.graph.nodes.has(boundary.retained)) {
+    // The graph carries no evidence at all for the retained path (it never
+    // resolved a node there), so it cannot prove the shim has zero
+    // importers. Retirement fails closed rather than trusting an absence of
+    // evidence as evidence of absence.
+    throw new PlanningError(`boundary ${boundary.id} declares retire, but the importer graph has no evidence for ${boundary.retained}; refusing to delete without graph proof`);
+  }
+  const importerPaths = [...new Set(input.graph.incoming.get(boundary.retained) ?? [])].sort(byCodeUnit);
+  const bindings = importerPaths.map((path) => resolveBoundaryImporter(input.rootDir, baseline.commit, compilerOptions, path, boundary.retained));
+  const operations = boundary.strategy === "existing-package"
+    ? planExistingPackageOperations(input, boundary, retainedText, retainedMode, bindings)
+    : planPortOperations(input, boundary, baseline.commit, retainedText, compilerOptions, bindings);
+  const ordered = [...operations].sort(boundaryOperationOrder);
+  const changedFiles = [...new Set(ordered.flatMap(preparationOperationPaths))].sort(byCodeUnit);
+  const manifest = createPreparationManifest({
+    schemaVersion: 1,
+    createdAt: baseline.committedAt,
+    generator: { ...GENERATOR },
+    baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: hashJson(input.config) },
+    graphDigest: input.graphDigest,
+    // Neither boundary strategy selects a physical type declaration group:
+    // "existing-package" only rewrites specifiers, and "port" copies a
+    // declaration's bytes into a write-file contract without touching the
+    // donor. There is nothing here for the type-only declarations ledger to
+    // own.
+    declarations: [],
+    operations: ordered,
+    compatibilityReexports: [],
+    changedFiles,
+    commits: { prepare: input.rendering.commit },
+    gates: {
+      package: [...input.rendering.gates.package].sort(byCodeUnit),
+      project: [...input.rendering.gates.project].sort(byCodeUnit),
+      workspace: [...input.rendering.gates.workspace].sort(byCodeUnit),
+    },
+  });
+  assertPreparationManifestValid(manifest);
+  return manifest;
+}
+
+interface BoundaryImporterBinding {
+  readonly path: string;
+  readonly preconditionHash: FileState;
+  readonly mode: number;
+  readonly text: string;
+  readonly specifier: string;
+  readonly importedSymbols: readonly string[];
+}
+
+function planExistingPackageOperations(
+  input: CompileBoundaryPreparationManifestInput,
+  boundary: Extract<ResolvedBoundary, { strategy: "existing-package" }>,
+  retainedText: string,
+  retainedMode: number,
+  bindings: readonly BoundaryImporterBinding[],
+): readonly PreparationReplayOperation[] {
+  const importers: RetainedImporterInput[] = bindings.map((binding) => ({
+    path: binding.path,
+    preconditionHash: binding.preconditionHash,
+    mode: binding.mode,
+    text: binding.text,
+    specifier: binding.specifier,
+    importedSymbols: binding.importedSymbols,
+  }));
+  const result = planExistingPackageBoundary({
+    rootDir: input.rootDir,
+    boundary,
+    retainedPrecondition: hashText(retainedText),
+    retainedMode,
+    importers,
+    ...(input.moduleSpecifierCalls === undefined ? {} : { moduleSpecifierCalls: input.moduleSpecifierCalls }),
+    ...(input.resolutionExtensions === undefined ? {} : { resolutionExtensions: input.resolutionExtensions }),
+    ...(input.cssImportExtensions === undefined ? {} : { cssImportExtensions: input.cssImportExtensions }),
+  });
+  if (result.deletion !== undefined) assertDeletionCoversGraphImporters(boundary, result.deletion, bindings);
+  return result.deletion === undefined ? result.rewrites : [...result.rewrites, result.deletion];
+}
+
+/**
+ * Re-derived proof, independent of `planExistingPackageBoundary`'s own
+ * bookkeeping, that the deletion's importer proof is exactly the graph's
+ * importer set for the retained module — not a subset of it. This is what
+ * turns "the caller says every importer was rewritten" into "the graph, at
+ * this exact baseline, agrees no importer was left out."
+ */
+function assertDeletionCoversGraphImporters(
+  boundary: Extract<ResolvedBoundary, { strategy: "existing-package" }>,
+  deletion: { readonly importerProof: readonly string[] },
+  bindings: readonly BoundaryImporterBinding[],
+): void {
+  const graphImporters = new Set(bindings.map((binding) => binding.path));
+  const proven = new Set(deletion.importerProof);
+  if (proven.size !== graphImporters.size || [...graphImporters].some((path) => !proven.has(path))) {
+    throw new PlanningError(`boundary ${boundary.id} retirement proof does not cover every graph-reported importer of ${boundary.retained}`);
+  }
+}
+
+function planPortOperations(
+  input: CompileBoundaryPreparationManifestInput,
+  boundary: Extract<ResolvedBoundary, { strategy: "port" }>,
+  baselineCommit: string,
+  retainedText: string,
+  compilerOptions: ts.CompilerOptions,
+  bindings: readonly BoundaryImporterBinding[],
+): readonly PreparationReplayOperation[] {
+  if (!input.contractTargetPath) throw new PlanningError(`boundary ${boundary.id} requires an explicit contract target path`);
+  if (input.contractTargetPath === boundary.retained) throw new PlanningError(`boundary ${boundary.id} contract target path must differ from the retained module`);
+  workspacePath(input.rootDir, input.contractTargetPath);
+  if (showBaseline(input.rootDir, baselineCommit, input.contractTargetPath) !== null) {
+    throw new PlanningError(`boundary contract target already exists at baseline: ${input.contractTargetPath}`);
+  }
+  const consumers: PortConsumerInput[] = bindings.map((binding) => ({
+    path: binding.path,
+    preconditionHash: binding.preconditionHash,
+    mode: binding.mode,
+    text: binding.text,
+    specifier: binding.specifier,
+  }));
+  const result = planPortBoundary({
+    rootDir: input.rootDir,
+    boundary,
+    retainedSourceText: retainedText,
+    compilerOptions,
+    contractTargetPath: input.contractTargetPath,
+    consumers,
+    ...(input.adapterTemplateText === undefined ? {} : { adapterTemplateText: input.adapterTemplateText }),
+    ...(input.templateVars === undefined ? {} : { templateVars: input.templateVars }),
+    ...(input.moduleSpecifierCalls === undefined ? {} : { moduleSpecifierCalls: input.moduleSpecifierCalls }),
+    ...(input.resolutionExtensions === undefined ? {} : { resolutionExtensions: input.resolutionExtensions }),
+    ...(input.cssImportExtensions === undefined ? {} : { cssImportExtensions: input.cssImportExtensions }),
+  });
+  return result.adapter === undefined ? [result.contract, ...result.rewrites] : [result.contract, result.adapter, ...result.rewrites];
+}
+
+/** Deterministic operation order: by mutated path, then kind, matching multi-build.ts. */
+function boundaryOperationOrder(left: PreparationReplayOperation, right: PreparationReplayOperation): number {
+  const path = (operation: PreparationReplayOperation) => operation.kind === "extract-type-declarations" ? operation.donor.path : operation.file.path;
+  return byCodeUnit(path(left), path(right)) || byCodeUnit(left.kind, right.kind);
+}
+
+/**
+ * Find the exact baseline import binding an operator-named importer uses to
+ * reach the retained module, and every named symbol it imports through that
+ * binding. Resolution is checker-driven (`ts.resolveModuleName`), never
+ * string matching, so a specifier that merely looks similar to the retained
+ * path can never be mistaken for a real edge.
+ */
+function resolveBoundaryImporter(
+  rootDir: string,
+  baselineCommit: string,
+  compilerOptions: ts.CompilerOptions,
+  importerPath: string,
+  retainedPath: string,
+): BoundaryImporterBinding {
+  const text = showBaseline(rootDir, baselineCommit, importerPath);
+  if (text === null) throw new PlanningError(`boundary importer is absent from baseline: ${importerPath}`);
+  const mode = baselineFileMode(rootDir, baselineCommit, importerPath);
+  const source = ts.createSourceFile(importerPath, text, ts.ScriptTarget.Latest, true, importerPath.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || !statement.moduleSpecifier.text.startsWith(".")) continue;
+    const specifier = statement.moduleSpecifier.text;
+    const resolved = ts.resolveModuleName(specifier, resolve(rootDir, importerPath), compilerOptions, ts.sys).resolvedModule?.resolvedFileName;
+    if (resolved === undefined || relative(rootDir, resolved).replaceAll("\\", "/") !== retainedPath) continue;
+    const importedSymbols: string[] = [];
+    const namedBindings = statement.importClause?.namedBindings;
+    if (namedBindings !== undefined && ts.isNamedImports(namedBindings)) {
+      for (const element of namedBindings.elements) importedSymbols.push((element.propertyName ?? element.name).text);
+    }
+    return { path: importerPath, preconditionHash: hashText(text), mode, text, specifier, importedSymbols: [...new Set(importedSymbols)].sort(byCodeUnit) };
+  }
+  throw new PlanningError(`${importerPath} does not import the retained module ${retainedPath} at baseline`);
+}

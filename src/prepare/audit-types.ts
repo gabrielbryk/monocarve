@@ -33,6 +33,18 @@ export interface PreparationAuditReport {
   readonly typeValueClaims: PreparationProofResult;
   /** The plan selection was based on this exact fresh workspace graph. */
   readonly graphDigest: PreparationProofResult;
+  /**
+   * Independent re-proof that every importer a boundary's `delete-module`
+   * operation retired no longer holds a value-level import into the retained
+   * root. Empty (0 checked, passed) for a manifest with no boundary deletion.
+   */
+  readonly retainedRootClearance: PreparationProofResult;
+  /**
+   * Independent re-proof that a boundary's rendered app adapter exports
+   * exactly its promoted contract's surface. Empty (0 checked, passed) for a
+   * manifest that carries no unambiguous single contract/adapter pair.
+   */
+  readonly adapterSurfaceParity: PreparationProofResult;
   readonly failures: readonly string[];
 }
 

@@ -25,6 +25,9 @@ import type { CommandSpec } from "./types.ts";
 import { graphDigest, load, loadGraph, outputPath, print, systemReason, writeOutput, type LoadedGraph } from "./shared.ts";
 import { campaignLedgerPath, createCampaignLedgerFile, loadCampaignLedger, persistCampaignLedger } from "./campaign-ledger-file.ts";
 export { writeCampaignLedgerAtomically } from "./campaign-ledger-file.ts";
+// The `boundary review|compile|simulate|apply` command group lives in its own
+// module purely to keep this file under the line-count gate.
+import { boundaryCommandSpec } from "./preparation-boundary.ts";
 
 async function campaignInit(args: ParsedArgs): Promise<void> {
   if (args.flags.has("graph")) throw new UsageError("campaign init refuses --graph; it must scan the native checkout at a stable HEAD");
@@ -283,7 +286,7 @@ async function freshNativeScan(args: ParsedArgs, rootDir: string, expectedHead: 
   return loaded;
 }
 
-function loadPreparationManifest(args: ParsedArgs, rootDir: string): { path: string; manifest: PreparationManifest } {
+export function loadPreparationManifest(args: ParsedArgs, rootDir: string): { path: string; manifest: PreparationManifest } {
   const input = flagString(args, "plan") ?? args.positionals[0];
   if (input === undefined) throw new UsageError("a preparation plan path is required (--plan <path>)");
   const path = relativeWorkspacePath(rootDir, input);
@@ -324,7 +327,7 @@ function workspaceAnalysisFor(args: ParsedArgs, loaded: LoadedGraph) {
   });
 }
 
-function requiredFlag(args: ParsedArgs, name: string): string {
+export function requiredFlag(args: ParsedArgs, name: string): string {
   const value = flagString(args, name);
   if (value === undefined) throw new UsageError(`--${name} <value> is required`);
   return value;
@@ -407,7 +410,7 @@ function relativeTypeSpecifier(fromPath: string, resolvedSourcePath: string, ori
   return specifier.startsWith(".") ? specifier : `./${specifier}`;
 }
 
-function readWorkspaceText(rootDir: string, path: string, label: string): string {
+export function readWorkspaceText(rootDir: string, path: string, label: string): string {
   try {
     return readFileSync(workspacePath(rootDir, path), "utf8");
   } catch (error) {
@@ -474,4 +477,5 @@ export const preparationCommands: Record<string, CommandSpec> = {
       throw new UsageError(`unknown campaign action ${JSON.stringify(action ?? "")}; expected init, status, advance, or record`);
     },
   },
+  boundary: boundaryCommandSpec,
 };

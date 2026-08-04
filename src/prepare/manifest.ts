@@ -16,7 +16,7 @@ import {
   type PreparationValidationResult,
   type ValidatePreparationManifestOptions,
 } from "./manifest-types.ts";
-import { validateReplayRecipe } from "./manifest-recipe.ts";
+import { validateDeletionRecipe, validateReplayRecipe, validateRewriteRecipe } from "./manifest-recipe.ts";
 
 const COMMIT_HASH = /^[0-9a-f]{7,64}$/;
 const COMMIT_SUBJECT = /^(?:refactor|fix|feat|chore|test|docs|ci|build|perf|style)(?:\([^)\n]+\))?!?: [^\n]+$/;
@@ -58,7 +58,7 @@ export function validatePreparationManifest(
   };
 
   validateHeader(manifest, add);
-  validateGroups(manifest.declarations, add);
+  validateGroups(manifest, add);
   validateOperations(manifest, add);
   validateCompatibility(manifest, add);
   validateScope(manifest, add);
@@ -96,8 +96,23 @@ function validateHeader(manifest: PreparationManifest, add: AddIssue): void {
   for (const tier of ["package", "project", "workspace"] as const) validateSortedStrings(manifest.gates?.[tier], `gates-${tier}`, `gates.${tier}`, add);
 }
 
-function validateGroups(groups: readonly PreparationDeclarationGroupSelector[], add: AddIssue): void {
-  if (groups.length === 0) add("declarations", "declarations must select at least one complete type group");
+/**
+ * A type-only extraction is selected by declaration group, so a manifest that
+ * carries one must name the groups it moved. A boundary preparation carries
+ * none: rewriting a specifier or deleting a retired shim selects no
+ * declaration, and `declarations: []` is the honest answer rather than a
+ * missing field. What must never be empty is the manifest as a whole — a plan
+ * that selects nothing and mutates nothing is not a preparation.
+ */
+function validateGroups(manifest: PreparationManifest, add: AddIssue): void {
+  const groups = manifest.declarations;
+  const extracts = manifest.operations.some((operation) => operation.kind === "extract-type-declarations");
+  if (groups.length === 0 && extracts) {
+    add("declarations", "a type-declaration extraction must select at least one complete type group");
+  }
+  if (groups.length === 0 && manifest.operations.length === 0) {
+    add("declarations", "a preparation must either select a declaration group or carry at least one operation");
+  }
   validateSorted(groups, groupKey, "declaration-order", "declarations must be sorted by source path, first span, and group id", add);
   const groupIds = new Set<string>();
   const groupNames = new Set<string>();
@@ -177,6 +192,15 @@ function validateOperations(manifest: PreparationManifest, add: AddIssue): void 
     }
     if (operation.kind === "write-file") {
       validateMutation(operation.file, operation.contents, "write-file", add);
+      continue;
+    }
+    if (operation.kind === "rewrite-module-specifier") {
+      validateMutation(operation.file, operation.contents, "rewrite-specifier", add);
+      validateRewriteRecipe(operation, add);
+      continue;
+    }
+    if (operation.kind === "delete-module") {
+      validateDeletionRecipe(operation, manifest.operations, add);
       continue;
     }
     validateExtractOperation(operation, groupById, includedGroups, add);

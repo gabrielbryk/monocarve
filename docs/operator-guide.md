@@ -81,6 +81,135 @@ checkout with a non-actionable `stale-head` phase, and names the precise review
 or application phase. The pair bound maps to two children per pair: one
 preparation and one extraction.
 
+## Boundary preparation
+
+A `retainedRoots` candidate is one an app module is not eligible to leave
+because something it still owns is genuinely app-specific — a shim for a
+package that already exists, or a real concrete type a portable module
+depends on. Boundary preparation unblocks that candidate by compiling exactly
+the substitution a reviewer already declared, from either of two related but
+**not interchangeable** config vocabularies. Monocarve validates a
+reviewer-declared contract; it never infers or guesses one on its own — a
+config gap here is a hard refusal, not a best-effort substitution.
+
+### `compositionBoundaries` (frontend vocabulary)
+
+```ts
+compositionBoundaries: [
+  {
+    id: "storage-shim",
+    retained: "apps/storefront/src/storage.ts",
+    strategy: "existing-package",
+    replacement: { specifier: "@acme/storage", symbols: ["Storage"] },
+    retire: true,
+  },
+  {
+    id: "clock-port",
+    retained: "apps/storefront/src/clock.ts",
+    strategy: "port",
+    contract: "Clock", contractModule: "clock",
+    appAdapter: "apps/storefront/src/clock-adapter.ts",
+    packageImport: "@acme/scheduling/clock",
+    symbols: ["Clock"], template: "clock-adapter",
+  },
+]
+```
+
+Each entry names one `retained` app module and a `strategy`:
+
+- `"existing-package"` — the retained module is a shim for a package that
+  already exists. Every consumer is rewritten to import `replacement.specifier`
+  instead, using exactly `replacement.symbols`; an import of any other symbol
+  from the shim is refused, not silently dropped. `retire: true` deletes the
+  shim once — and only once — every baseline importer has been rewritten in
+  the same manifest.
+- `"port"` — the retained module is genuinely app-specific. A portable module
+  instead imports a `contract`/`contractModule` from `packageImport`; the app
+  keeps its own concrete implementation in place. `contract`, `contractModule`,
+  `appAdapter`, `packageImport`, a non-empty `symbols` list, and a reviewed
+  `template` id are all required together — Monocarve never fills in a missing
+  half of a port declaration.
+
+### `portPromotions` (backend vocabulary)
+
+```ts
+portPromotions: [{
+  id: "clock-port",
+  retainedRoots: ["apps/scheduler/src"],
+  contractPackage: "@acme/scheduling",
+  contractModule: "clock",
+  appConcreteType: "apps/scheduler/src/clock.ts#Clock",
+  libraryPort: "Clock",
+  targetPackage: "@acme/scheduling-contracts",
+}]
+```
+
+`portPromotions` describes the same "port" mechanism from a library's point of
+view: a package depends on a port interface (`libraryPort`), and the app's
+current concrete type (`appConcreteType`, as `"path/to/file.ts#TypeName"`)
+already satisfies it in place. `libraryPort` must name the exact same
+declaration `appConcreteType` does — the preparation engine moves a
+declaration's bytes verbatim and cannot synthesize a rename. Unlike
+`compositionBoundaries`' `"port"` strategy, a promotion never declares an
+`appAdapter`: the app's existing concrete type is expected to already satisfy
+the promoted contract structurally, so nothing is rendered from a template.
+
+Both vocabularies share one `id` namespace: reusing the same `id` in both
+`compositionBoundaries` and `portPromotions` is refused.
+
+### Compiling and applying a boundary
+
+```sh
+bunx monocarve boundary review --id storage-shim
+bunx monocarve boundary compile --id storage-shim --write
+bunx monocarve boundary compile --id clock-port \
+  --target apps/storefront/src/contracts/clock.ts \
+  --template clock-adapter --write
+bunx monocarve boundary simulate --plan .monocarve/plans/prepare-<id>.json
+bunx monocarve boundary apply --plan .monocarve/plans/prepare-<id>.json --commit
+```
+
+`review` reports the resolved boundary and its baseline importers, discovered
+from a fresh dependency-graph scan, before compiling. `compile` re-derives
+that same importer set itself from the graph — an operator cannot hand it a
+partial list — and refuses `retire` unless the graph itself proves no
+importer of the retained module survives after this manifest's own rewrites;
+a module the graph has no evidence for refuses retirement outright rather
+than trusting an absence of evidence as evidence of absence. `--target` is
+required for `"port"` (the promoted contract's destination) and refused for
+`"existing-package"` (which only rewrites specifiers, creating nothing new).
+`--template <id>` resolves a `"port"` boundary's `appAdapter` body from
+`scaffoldTemplates.extraFiles` — the adapter is rendered only from a template
+a human has already reviewed, never synthesized. `simulate`/`apply` share the
+same replay-then-gate shape as `prepare-apply`.
+
+### The full refusal list
+
+Boundary compilation and its post-apply audit refuse, rather than repair:
+
+- an `"existing-package"` consumer importing a symbol outside the declared
+  `replacement.symbols`;
+- a specifier rewrite that resolves to nothing (no effect);
+- `retire: true` on a shim the importer graph has no evidence for, or whose
+  rewritten importer set the graph cannot prove is exhaustive;
+- a `"port"` declaration selecting anything but exactly one self-contained,
+  type-only declaration (a wider type-dependency closure or merge group is
+  refused, not partially promoted);
+- a relative type import inside the promoted declaration (there is no proof
+  for where it resolves from the new contract location);
+- any consumer whose use of the promoted symbol strays into value space;
+- a rewritten consumer that still holds a value-level import of a retained
+  root after promotion;
+- a rendered app adapter whose exported surface is not exactly its contract's
+  declared symbol list (narrower or wider both refuse); and
+- an appAdapter declared without a reviewed `template` id, or a `template` id
+  with no matching `scaffoldTemplates.extraFiles` entry.
+
+`prepare-audit`'s independent, post-apply re-proofs (`retainedRootClearance`,
+`adapterSurfaceParity` in its report) re-run the deletion and adapter-surface
+checks against the landed bytes, so a plan-time proof cannot silently go stale
+between compilation and apply.
+
 ## Rewriting path references in documents
 
 When extracted code is referenced by path in configuration, documentation, or

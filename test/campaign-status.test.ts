@@ -23,7 +23,8 @@ function appliedPreparation() {
     planId: "prepare-one", baselineCommit: "baseline", auditedRoot: "/fixture", passed: true,
     byteReplay: proof, fileModes: proof, renderedReplay: proof, selectorIntegrity: proof,
     declarationOwnership: proof, compatibilitySurface: proof, targetImportResolution: proof,
-    changedPathScope: proof, typeValueClaims: proof, graphDigest: proof, failures: [],
+    changedPathScope: proof, typeValueClaims: proof, graphDigest: proof,
+    retainedRootClearance: proof, adapterSurfaceParity: proof, failures: [],
   };
   return recordCampaignChildApplication(planned, {
     childId: "prepare-one", resultingCommit: "prepared",

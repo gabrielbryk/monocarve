@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 
 import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapters/registry.ts";
-import { renderPreparationPolicy, type MonocarveConfig } from "../config.ts";
+import { renderPreparationPolicy, type MonocarveConfig, type PreparationPolicyRenderInput } from "../config.ts";
 import { MonocarveError } from "../errors.ts";
 import { scanDependencyGraph } from "../graph/cruiser.ts";
 import { graphDigest } from "../plan/build.ts";
@@ -10,7 +10,7 @@ import { assertExactScope } from "../transaction/apply-commit.ts";
 import { type GateResult, runGateTiers } from "../transaction/simulate.ts";
 import { git, headCommit } from "../util/git.ts";
 import { fileState } from "../util/files.ts";
-import { hashJson, type FileState } from "../util/hash.ts";
+import { byCodeUnit, hashJson, type FileState } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";
 import { auditPreparationSync, type PreparationAuditReport } from "./audit.ts";
 import type { PreparationFreshGraphEvidence } from "./audit-types.ts";
@@ -21,7 +21,7 @@ import {
   type PreparationFilesystemOperation,
 } from "./journal.ts";
 import { assertPreparationManifestValid } from "./manifest.ts";
-import type { PreparationManifest } from "./manifest-types.ts";
+import type { PreparationFileMutation, PreparationManifest } from "./manifest-types.ts";
 import { createWorktree } from "../transaction/worktree.ts";
 
 export class PreparationSimulationError extends MonocarveError {
@@ -120,50 +120,77 @@ export async function scanPreparationManifestBaseline(options: {
 
 /** Convert rendered manifest operations into the deliberately tiny journal language. */
 export function preparationFilesystemOperations(manifest: PreparationManifest): readonly PreparationFilesystemOperation[] {
-  return manifest.operations.flatMap((operation) => {
-    if (operation.kind === "write-file") {
+  return manifest.operations.flatMap(preparationFilesystemOperationsFor);
+}
+
+function preparationFilesystemOperationsFor(operation: PreparationManifest["operations"][number]): readonly PreparationFilesystemOperation[] {
+  if (operation.kind === "write-file" || operation.kind === "rewrite-module-specifier") {
+    return [writeOperation(operation.file, operation.contents)];
+  }
+  if (operation.kind === "delete-module") {
+    // A deletion has no rendered bytes: the journal's tiny language only
+    // needs the precondition to prove the shim it removes is exactly the one
+    // this manifest was compiled against.
+    return [{ kind: "delete" as const, path: operation.file.path, preconditionHash: operation.file.preconditionHash, preconditionMode: operation.file.preconditionMode }];
+  }
+  return [writeOperation(operation.donor, operation.donorContents), writeOperation(operation.target, operation.targetContents)];
+}
+
+function writeOperation(file: PreparationFileMutation, contents: string): PreparationFilesystemOperation {
+  return {
+    kind: "write" as const,
+    path: file.path,
+    contents,
+    preconditionHash: file.preconditionHash,
+    preconditionMode: file.preconditionMode,
+    resultHash: file.resultHash,
+    resultMode: file.resultMode,
+  };
+}
+
+/**
+ * The application-owned donors a preparation's repository policy is rendered
+ * from, in deterministic order.
+ *
+ * A type extraction anchors on its donor and the new type module it points at.
+ * A boundary preparation has no extraction at all — it rewrites a specifier, or
+ * retires a shim — so it anchors on the rewritten application module and the
+ * package specifier it now imports. Written files (a generated contract, an app
+ * adapter) are deliberately not anchors: they are outputs, they may land outside
+ * every configured application, and `renderPreparationPolicy` refuses a donor it
+ * cannot attribute to one. A deletion is likewise not an anchor, because the
+ * rewrites that made the shim retirable are already in the same manifest and
+ * carry the specifier the policy needs.
+ */
+function policyAnchors(manifest: PreparationManifest): PreparationPolicyRenderInput[] {
+  return manifest.operations.flatMap((operation): PreparationPolicyRenderInput[] => {
+    if (operation.kind === "extract-type-declarations") {
       return [{
-        kind: "write" as const,
-        path: operation.file.path,
-        contents: operation.contents,
-        preconditionHash: operation.file.preconditionHash,
-        preconditionMode: operation.file.preconditionMode,
-        resultHash: operation.file.resultHash,
-        resultMode: operation.file.resultMode,
+        sourcePath: operation.donor.path,
+        targetPath: operation.target.path,
+        targetModuleSpecifier: operation.moduleSpecifier,
       }];
     }
-    return [
-      {
-        kind: "write" as const,
-        path: operation.donor.path,
-        contents: operation.donorContents,
-        preconditionHash: operation.donor.preconditionHash,
-        preconditionMode: operation.donor.preconditionMode,
-        resultHash: operation.donor.resultHash,
-        resultMode: operation.donor.resultMode,
-      },
-      {
-        kind: "write" as const,
-        path: operation.target.path,
-        contents: operation.targetContents,
-        preconditionHash: operation.target.preconditionHash,
-        preconditionMode: operation.target.preconditionMode,
-        resultHash: operation.target.resultHash,
-        resultMode: operation.target.resultMode,
-      },
-    ];
+    if (operation.kind !== "rewrite-module-specifier") return [];
+    return [...new Set(operation.rewrites.map((rewrite) => rewrite.to))]
+      .sort(byCodeUnit)
+      .map((specifier) => ({
+        sourcePath: operation.file.path,
+        targetPath: operation.file.path,
+        targetModuleSpecifier: specifier,
+      }));
   });
 }
 
 /** Refuse a hand-edited manifest that omits or changes repository-owned gates. */
 export function assertPreparationPolicy(config: MonocarveConfig, manifest: PreparationManifest): void {
-  const extractions = manifest.operations.filter((operation) => operation.kind === "extract-type-declarations");
-  if (extractions.length === 0) throw new PreparationSimulationError("a preparation policy requires at least one type-declaration extraction");
-  const policies = extractions.map((extraction) => renderPreparationPolicy(config, {
-      sourcePath: extraction.donor.path,
-      targetPath: extraction.target.path,
-      targetModuleSpecifier: extraction.moduleSpecifier,
-  }));
+  const anchors = policyAnchors(manifest);
+  if (anchors.length === 0) {
+    throw new PreparationSimulationError(
+      "a preparation policy requires at least one application-owned donor: a type-declaration extraction or a rewritten module specifier",
+    );
+  }
+  const policies = anchors.map((anchor) => renderPreparationPolicy(config, anchor));
   const commit = policies[0]!.commit;
   if (policies.some((policy) => hashJson(policy.commit) !== hashJson(commit))) throw new PreparationSimulationError("multi-file preparation members render different commit metadata");
   const union = (tier: "package" | "project" | "workspace") => [...new Set(policies.flatMap((policy) => policy.gates[tier]))].sort();

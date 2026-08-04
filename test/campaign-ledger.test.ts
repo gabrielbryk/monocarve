@@ -72,6 +72,8 @@ function preparationReport(planId: string, baselineCommit = BASELINE, passed = t
     graphDigest: proof,
     targetImportResolution: proof,
     renderedReplay: proof,
+    retainedRootClearance: proof,
+    adapterSurfaceParity: proof,
     failures: proof.failures,
   };
 }

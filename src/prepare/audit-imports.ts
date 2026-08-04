@@ -8,7 +8,41 @@ import type { MonocarveConfig } from "../config.ts";
 import { preparationCompilerOptions } from "./compiler-policy.ts";
 
 import { workspacePath } from "../util/paths.ts";
-import type { ExtractTypeDeclarationsOperation } from "./manifest-types.ts";
+import { assertNoRetainedValueImport, BoundaryProofError } from "./boundary-proofs.ts";
+import type { DeleteModuleOperation, ExtractTypeDeclarationsOperation, PreparationReplayOperation } from "./manifest-types.ts";
+
+/**
+ * Independent, post-replay re-proof that every importer this manifest
+ * rewrote away from a retired shim no longer holds a value-level import into
+ * it. `boundary-imports.ts` already proves this at plan time against the
+ * baseline text; this re-runs the exact same `assertNoRetainedValueImport`
+ * check against the landed bytes, so a build-time proof cannot silently go
+ * stale between planning and apply.
+ */
+export function verifyRetainedRootsClearOfValueImports(
+  rootDir: string,
+  operations: readonly PreparationReplayOperation[],
+  failures: string[],
+): void {
+  const deletions = operations.filter((operation): operation is DeleteModuleOperation => operation.kind === "delete-module");
+  for (const deletion of deletions) {
+    for (const importerPath of deletion.importerProof) verifyImporterClear(rootDir, deletion, importerPath, failures);
+  }
+}
+
+function verifyImporterClear(rootDir: string, deletion: DeleteModuleOperation, importerPath: string, failures: string[]): void {
+  const text = textAt(rootDir, importerPath);
+  if (text === null) {
+    failures.push(`retained-root proof cannot read rewritten importer: ${importerPath}`);
+    return;
+  }
+  try {
+    assertNoRetainedValueImport(text, importerPath, [deletion.file.path]);
+  } catch (error) {
+    if (error instanceof BoundaryProofError) failures.push(error.message);
+    else throw error;
+  }
+}
 
 export function verifyTargetImportProofs(
   rootDir: string,

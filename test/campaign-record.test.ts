@@ -49,6 +49,8 @@ function report(plan = child(), passed = true): PreparationAuditReport {
     changedPathScope: proof,
     typeValueClaims: proof,
     graphDigest: proof,
+    retainedRootClearance: proof,
+    adapterSurfaceParity: proof,
     failures: proof.failures,
   };
 }

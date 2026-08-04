@@ -55,6 +55,8 @@ function preparationAudit(plan: CampaignChildPlan): PreparationAuditReport {
     changedPathScope: proof(),
     typeValueClaims: proof(),
     graphDigest: proof(),
+    retainedRootClearance: proof(),
+    adapterSurfaceParity: proof(),
     failures: [],
   };
 }

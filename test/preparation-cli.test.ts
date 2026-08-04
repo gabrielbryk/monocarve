@@ -483,7 +483,8 @@ function preparationAudit(plan: CampaignChildPlan): PreparationAuditReport {
   return {
     planId: plan.planId, baselineCommit: plan.baselineCommit, auditedRoot: "/synthetic", passed: true,
     byteReplay: proof(), fileModes: proof(), selectorIntegrity: proof(), declarationOwnership: proof(), compatibilitySurface: proof(),
-    targetImportResolution: proof(), renderedReplay: proof(), changedPathScope: proof(), typeValueClaims: proof(), graphDigest: proof(), failures: [],
+    targetImportResolution: proof(), renderedReplay: proof(), changedPathScope: proof(), typeValueClaims: proof(), graphDigest: proof(),
+    retainedRootClearance: proof(), adapterSurfaceParity: proof(), failures: [],
   };
 }
 function extractionAudit(plan: CampaignChildPlan): AuditReport {

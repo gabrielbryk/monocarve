@@ -8,6 +8,7 @@ import { byCodeUnit, hashText } from "../util/hash.ts";
 import { partitionTests } from "../plan/consumers.ts";
 import { WorkspaceContext } from "../plan/context.ts";
 import { buildPathReferenceIndex, type PathReferenceIndex } from "../plan/path-references.ts";
+import { preparationRecipe } from "./recipe.ts";
 import {
   assessCandidate,
   dedupeReasons,
@@ -133,6 +134,9 @@ function candidateFor(
     rejectionReasons,
     warnings: [...new Set(assessed.warnings)],
     rewriteEscapes: assessed.rewriteEscapes,
+    classification: assessed.classification,
+    retainedBlockers: assessed.retainedBlockers,
+    recipe: preparationRecipe(config, assessed.retainedBlockers),
   };
   return { ...base, score: scoreCandidate(config, base) };
 }
@@ -196,7 +200,9 @@ export function scoreCandidate(config: MonocarveConfig, candidate: Omit<Portfoli
     candidate.dependencies.length * weights.prerequisite +
     candidate.rejectionReasons.length * weights.rejection +
     candidate.rewriteEscapes.length * weights.rewriteEscape +
-    (candidate.domains.length > 1 ? weights.domainCrossing : 0);
+    (candidate.domains.length > 1 ? weights.domainCrossing : 0) +
+    (candidate.domains.length > 1 ? weights.runtimeCrossing : 0) +
+    (candidate.retainedBlockers?.length ?? 0) * weights.retainedEdge;
 }
 
 export function pickNext(portfolio: Portfolio, alreadyExtracted: readonly string[] = []): PortfolioCandidate | null {

@@ -46,6 +46,16 @@ export interface ConfigDoctorReport {
     readonly commitConfigured: boolean;
     readonly gateTiersConfigured: readonly string[];
   };
+  readonly boundaries: {
+    readonly compositionBoundaries: readonly {
+      id: string; strategy: "existing-package" | "port"; retained: string;
+      retainedExists: boolean; referencedByRetainedRoots: boolean;
+    }[];
+    readonly portPromotions: readonly {
+      id: string; appConcreteType: string; appConcreteTypeFileExists: boolean;
+      referencedByRetainedRoots: boolean;
+    }[];
+  };
 }
 
 const EFFECTIVE_KEYS = [
@@ -77,6 +87,7 @@ export async function inspectConfig(input: ConfigDoctorInput): Promise<ConfigDoc
   const gateTiers = preparation.gates
     ? (["package", "project", "workspace"] as const).filter((tier) => preparation.gates?.[tier] !== undefined)
     : [];
+  const boundaries = boundaryReport(input.config, input.rootDir);
   return {
     configPath: input.configPath,
     rootDir: input.rootDir,
@@ -102,14 +113,77 @@ export async function inspectConfig(input: ConfigDoctorInput): Promise<ConfigDoc
     protectedPaths: [...input.config.portfolio.protectedPaths].sort(),
     dirtyPaths: [...new Set(statusEntries(input.rootDir).flatMap((entry) => entry.paths))].sort(),
     allowedDirtyPaths: [...input.config.transaction.allowDirtyPaths].sort(),
-    semanticIssues: scaffoldSemanticIssues(input.config, input.rootDir),
+    semanticIssues: [...scaffoldSemanticIssues(input.config, input.rootDir), ...boundaryIssues(input.config, boundaries)],
     preparation: {
       preparers: [{ kind: "type-only", declarations: ["interface", "type-alias"] }],
       policyConfigured: preparation.commit !== undefined && preparation.gates !== undefined,
       commitConfigured: preparation.commit !== undefined,
       gateTiersConfigured: gateTiers,
     },
+    boundaries,
   };
+}
+
+/**
+ * Surface `compositionBoundaries`/`portPromotions` and the config debt that
+ * would otherwise only be caught deep in `resolveBoundaries` or `next`: a
+ * retained path or concrete-type file that no longer exists, a boundary no
+ * `portfolio.retainedRoots` entry actually reaches (so nothing ever routes a
+ * blocked candidate to it), and an id reused across both vocabularies (that
+ * vocabulary pair shares one namespace, and a collision otherwise only fails
+ * once `resolveBoundaries` runs).
+ */
+function boundaryReport(config: MonocarveConfig, rootDir: string): ConfigDoctorReport["boundaries"] {
+  return {
+    compositionBoundaries: config.compositionBoundaries.map((boundary) => ({
+      id: boundary.id,
+      strategy: boundary.strategy,
+      retained: boundary.retained,
+      retainedExists: existsSync(join(rootDir, boundary.retained)),
+      referencedByRetainedRoots: underAnyRetainedRoot(boundary.retained, config.portfolio.retainedRoots),
+    })),
+    portPromotions: config.portPromotions.map((promotion) => ({
+      id: promotion.id,
+      appConcreteType: promotion.appConcreteType,
+      appConcreteTypeFileExists: existsSync(join(rootDir, concreteTypeFile(promotion.appConcreteType))),
+      referencedByRetainedRoots: promotion.retainedRoots.some((root) => underAnyRetainedRoot(root, config.portfolio.retainedRoots)),
+    })),
+  };
+}
+
+function underAnyRetainedRoot(path: string, retainedRoots: readonly string[]): boolean {
+  return retainedRoots.some((root) => path === root || path.startsWith(`${root}/`) || root.startsWith(`${path}/`));
+}
+
+function concreteTypeFile(appConcreteType: string): string {
+  return appConcreteType.slice(0, appConcreteType.indexOf("#"));
+}
+
+function boundaryIssues(config: MonocarveConfig, boundaries: ConfigDoctorReport["boundaries"]): ConfigDoctorReport["semanticIssues"] {
+  const issues: { severity: "error"; context: string; detail: string }[] = [];
+  for (const boundary of boundaries.compositionBoundaries) {
+    if (!boundary.retainedExists) {
+      issues.push({ severity: "error", context: "compositionBoundaries", detail: `boundary "${boundary.id}" retained path "${boundary.retained}" does not exist` });
+    }
+    if (!boundary.referencedByRetainedRoots) {
+      issues.push({ severity: "error", context: "compositionBoundaries", detail: `boundary "${boundary.id}" is declared but no portfolio.retainedRoots entry reaches "${boundary.retained}"; it can never be offered as a preparation recipe` });
+    }
+  }
+  for (const promotion of boundaries.portPromotions) {
+    if (!promotion.appConcreteTypeFileExists) {
+      issues.push({ severity: "error", context: "portPromotions", detail: `promotion "${promotion.id}" appConcreteType names a file that does not exist: "${concreteTypeFile(promotion.appConcreteType)}"` });
+    }
+    if (!promotion.referencedByRetainedRoots) {
+      issues.push({ severity: "error", context: "portPromotions", detail: `promotion "${promotion.id}" is declared but no portfolio.retainedRoots entry overlaps its retainedRoots; it can never be offered as a preparation recipe` });
+    }
+  }
+  const compositionIds = new Set(config.compositionBoundaries.map((boundary) => boundary.id));
+  for (const promotion of config.portPromotions) {
+    if (compositionIds.has(promotion.id)) {
+      issues.push({ severity: "error", context: "boundaries", detail: `id "${promotion.id}" is declared in both compositionBoundaries and portPromotions; boundary ids share one namespace across both vocabularies` });
+    }
+  }
+  return issues;
 }
 
 function scaffoldSemanticIssues(config: MonocarveConfig, rootDir: string): ConfigDoctorReport["semanticIssues"] {

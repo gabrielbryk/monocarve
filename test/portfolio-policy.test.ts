@@ -97,3 +97,75 @@ describe("portfolio protected-path policy", () => {
     expect(chart.eligible).toBe(false);
   });
 });
+
+/**
+ * `forbidTargetSuggestion: ["root"]` is a reclassification, not a rejection —
+ * the whole point is that a candidate whose only viable target is the root
+ * package stays real, ranked work instead of either a silent extraction
+ * target or a hard refusal. The fixture's `domains` config matches every file
+ * by pattern before the `${app}:__root__` fallback ever applies, so these
+ * tests clear it to exercise the fallback the fixture doesn't otherwise reach.
+ */
+function withPortfolioOverrides(config: MonocarveConfig, overrides: Record<string, unknown>): MonocarveConfig {
+  return parseConfig({ ...config, portfolio: { ...config.portfolio, domains: [], ...overrides } }, "<policy fixture>");
+}
+
+async function rootOnlyCandidate(config: MonocarveConfig) {
+  const { graph } = await fixture();
+  const candidate = buildPortfolio({ config, graph }).candidates.find(
+    (entry) => entry.files.length === 1 && entry.files[0] === "apps/web/src/types.ts",
+  );
+  if (!candidate) throw new Error("fixture no longer produces the standalone types.ts candidate");
+  return candidate;
+}
+
+describe("portfolio forbidTargetSuggestion policy", () => {
+  test('reclassifies a root-only-target candidate as "preparation" instead of rejecting it', async () => {
+    const { config } = await fixture();
+    const candidate = await rootOnlyCandidate(withPortfolioOverrides(config, { forbidTargetSuggestion: ["root"] }));
+
+    expect(candidate.domains).toEqual(["web:__root__"]);
+    expect(candidate.eligible).toBe(true);
+    expect(candidate.rejectionReasons).toEqual([]);
+    expect(candidate.classification).toBe("preparation");
+  });
+
+  test("the same candidate classifies as an ordinary extraction without the policy", async () => {
+    const { config } = await fixture();
+    const candidate = await rootOnlyCandidate(withPortfolioOverrides(config, {}));
+
+    expect(candidate.classification).toBe("extraction");
+  });
+});
+
+describe("raw graph scan is unaffected by boundary-aware ranking config", () => {
+  test("retainedRoots, forbidTargetSuggestion, compositionBoundaries, and portPromotions leave the scan byte-identical", async () => {
+    const { config } = await fixture();
+    const off = await scanDependencyGraph({ config, rootDir: FIXTURE, noCache: true });
+
+    const on = parseConfig(
+      {
+        ...config,
+        portfolio: { ...config.portfolio, retainedRoots: ["apps/web/src/widgets"], forbidTargetSuggestion: ["root"] },
+        compositionBoundaries: [
+          { id: "widgets-shim", retained: "apps/web/src/widgets/chart.ts", strategy: "existing-package", replacement: { specifier: "@acme/chart", symbols: ["renderChart"] } },
+        ],
+        portPromotions: [
+          {
+            id: "widgets-port",
+            retainedRoots: ["apps/web/src/widgets"],
+            contractPackage: "@acme/ports",
+            contractModule: "chart",
+            appConcreteType: "apps/web/src/widgets/chart.ts#Series",
+            libraryPort: "ChartPort",
+            targetPackage: "@acme/ports",
+          },
+        ],
+      },
+      "<policy fixture>",
+    );
+    const on2 = await scanDependencyGraph({ config: on, rootDir: FIXTURE, noCache: true });
+
+    expect(on2).toEqual(off);
+  });
+});

@@ -48,6 +48,22 @@ export const portfolio = z.strictObject({
        * still order sensibly against each other in `backlog`.
        */
       rejection: z.number().default(-1000),
+      /**
+       * Per retained-root blocker (see `retainedRoots`). Large and negative,
+       * like `rejection`, but smaller in magnitude: a preparation candidate is
+       * still real, ranked work — it should sort below genuinely extractable
+       * candidates, not below every rejected one.
+       */
+      retainedEdge: z.number().default(-250),
+      /**
+       * Applied once when a candidate's closure spans more than one runtime
+       * domain (browser vs. server, for example). Distinct from
+       * `domainCrossing`, which scores an application-declared `domains` split;
+       * this scores a difference the graph itself proves — a closure that
+       * imports across a runtime boundary cannot be a single portable package
+       * no matter how the domains are configured.
+       */
+      runtimeCrossing: z.number().default(-300),
     })
     .prefault({}),
   /** Candidate ids already extracted; `next`/`backlog` skip these. */
@@ -57,6 +73,28 @@ export const portfolio = z.strictObject({
    * exact path and its descendants; similarly named siblings remain eligible.
    */
   protectedPaths: z.array(protectedPath).default([]),
+  /**
+   * Paths or directory trees that must stay application-owned, distinct from
+   * `protectedPaths`. A protected path makes a candidate INELIGIBLE — it is a
+   * hard rejection, full stop. A retained root does the opposite: it makes an
+   * otherwise-portable candidate a *preparation* candidate rather than an
+   * extraction candidate, and drives a generated recipe explaining exactly what
+   * would have to change (a configured `compositionBoundaries` or
+   * `portPromotions` entry, or an honest "no configured substitution" gap) to
+   * unblock it. Declare a root here, not `protectedPaths`, whenever the intent
+   * is "this can't move yet, tell me how to make it movable" rather than
+   * "this must never move".
+   */
+  retainedRoots: z.array(relativePath).default([]),
+  /**
+   * Target shapes a candidate is not allowed to resolve to. Currently only
+   * `"root"`: a candidate whose only sensible target is the root package
+   * itself is not a distinct extractable unit — it is evidence the candidate
+   * still needs preparation (see `retainedRoots`), so it is classified
+   * `"preparation"` rather than rejected outright or offered as a genuine
+   * extraction target.
+   */
+  forbidTargetSuggestion: z.array(z.enum(["root"])).default([]),
 });
 
 export type PortfolioConfig = z.output<typeof portfolio>;
@@ -214,6 +252,159 @@ export const pathReferenceRewrites = z.strictObject({
 });
 
 export type PathReferenceRewritesConfig = z.output<typeof pathReferenceRewrites>;
+
+/* -------------------------------------------------------------------------- */
+/* Boundary preparation                                                       */
+/* -------------------------------------------------------------------------- */
+
+const kebabId = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "must be a lowercase kebab-case identifier");
+
+/**
+ * `compositionBoundaries` and `portPromotions` are one mechanism described in
+ * two vocabularies. Both exist to unblock a `retainedRoots` candidate by
+ * telling the engine, exactly and by hand, what a retained edge should become
+ * — never by letting the engine guess. `compositionBoundaries` speaks the
+ * frontend's language (a shim gets replaced by a real package, or a portable
+ * module imports a contract while the app keeps the concrete provider);
+ * `portPromotions` speaks the backend's (a library depends on a port, the app
+ * supplies the implementation). A later stage normalizes both into one
+ * internal `ResolvedBoundary` shape so the builder, proofs, and audit are
+ * written once; this file only defines the two surfaces a workspace author
+ * actually writes.
+ */
+export const compositionBoundaries = z
+  .array(
+    z
+      .strictObject({
+        id: kebabId,
+        /** The app module that must NOT move. This is the retained edge being addressed. */
+        retained: relativePath,
+        /**
+         * `"existing-package"`: the retained module is a shim for a package that
+         * already exists — rewrite every consumer of the shim to import the real
+         * package instead. `"port"`: the retained module is genuinely
+         * app-specific — a portable module instead imports a contract, and the
+         * app supplies the concrete implementation behind it.
+         */
+        strategy: z.enum(["existing-package", "port"]),
+        /**
+         * Required, and only meaningful, for `"existing-package"`. Naming the
+         * exact specifier and the exact symbols it must export is what lets the
+         * codemod rewrite consumers byte-for-byte instead of guessing at an
+         * equivalent import — an unnamed symbol is refused, not silently
+         * dropped.
+         */
+        replacement: z
+          .strictObject({
+            specifier: z.string().min(1),
+            symbols: z.array(z.string().min(1)).min(1),
+          })
+          .optional(),
+        /**
+         * Once no importer of the shim remains, delete it. Defaults to false
+         * because a shim can be intentionally long-lived (a compatibility
+         * surface other tooling still expects); deletion is opt-in per boundary.
+         */
+        retire: z.boolean().default(false),
+        /**
+         * The five fields below are required together, and only for
+         * `strategy: "port"`. `contract`/`contractModule` name the portable
+         * package's contract interface; `appAdapter` is the app-owned file that
+         * implements it; `packageImport` is how the portable module reaches the
+         * contract; `symbols` is the exhaustive set of names the portable side
+         * may consume. A config may not declare only some of these — the
+         * engine never fills in a missing contract itself, because guessing one
+         * is exactly the kind of silent correctness gap this tool exists to
+         * refuse.
+         */
+        contract: z.string().min(1).optional(),
+        contractModule: z.string().min(1).optional(),
+        appAdapter: relativePath.optional(),
+        packageImport: z.string().min(1).optional(),
+        /** Exhaustive symbol list the portable side may import through `packageImport`. */
+        symbols: z.array(z.string().min(1)).default([]),
+        /**
+         * Id of a reviewed adapter template (see `scaffoldTemplates`). Adapter
+         * code is generated only from a template a human has already reviewed —
+         * never synthesized ad hoc.
+         */
+        template: z.string().min(1).optional(),
+      })
+      .superRefine((boundary, ctx) => {
+        if (boundary.strategy === "existing-package" && boundary.replacement === undefined) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["replacement"],
+            message: 'strategy "existing-package" requires a "replacement" specifier and symbol list',
+          });
+        }
+        if (boundary.strategy === "port") {
+          const required: readonly (keyof typeof boundary)[] = ["contract", "contractModule", "appAdapter", "packageImport"];
+          for (const field of required) {
+            if (boundary[field] === undefined) {
+              ctx.addIssue({ code: "custom", path: [field], message: `strategy "port" requires "${field}"` });
+            }
+          }
+          if (boundary.symbols.length === 0) {
+            ctx.addIssue({ code: "custom", path: ["symbols"], message: 'strategy "port" requires a non-empty "symbols" list' });
+          }
+        }
+      }),
+  )
+  .default([])
+  .superRefine((boundaries, ctx) => {
+    const seen = new Set<string>();
+    for (const [index, boundary] of boundaries.entries()) {
+      if (seen.has(boundary.id)) ctx.addIssue({ code: "custom", path: [index, "id"], message: "compositionBoundaries id must be unique" });
+      seen.add(boundary.id);
+    }
+  });
+
+export type CompositionBoundariesConfig = z.output<typeof compositionBoundaries>;
+
+/** `path/to/file.ts#TypeName` — a file path, a `#`, and an exported type name. */
+const concreteTypeReference = z
+  .string()
+  .min(1)
+  .regex(/^[^#\s]+\.tsx?#[A-Za-z_$][\w$]*$/, 'must be "path/to/file.ts#TypeName"');
+
+/**
+ * The backend vocabulary for the same boundary-preparation mechanism as
+ * `compositionBoundaries`. A `portPromotion` names a library port (an
+ * interface the portable package depends on), the app-owned concrete type
+ * that currently satisfies it in place, and the package the port itself
+ * should live in. As with `compositionBoundaries`, every field is required
+ * together — a half-declared promotion fails to load rather than letting the
+ * engine invent the missing half.
+ */
+export const portPromotions = z
+  .array(
+    z.strictObject({
+      id: kebabId,
+      /** App-owned roots this promotion is meant to unblock; at least one. */
+      retainedRoots: z.array(relativePath).min(1),
+      /** Package the port contract is declared in. */
+      contractPackage: z.string().min(1),
+      /** Module within `contractPackage` that exports the port. */
+      contractModule: z.string().min(1),
+      /** The app's current concrete type, as `"path/to/file.ts#TypeName"`. */
+      appConcreteType: concreteTypeReference,
+      /** Name of the port interface the library depends on instead. */
+      libraryPort: z.string().min(1),
+      /** Package the port declaration is promoted into. */
+      targetPackage: z.string().min(1),
+    }),
+  )
+  .default([])
+  .superRefine((promotions, ctx) => {
+    const seen = new Set<string>();
+    for (const [index, promotion] of promotions.entries()) {
+      if (seen.has(promotion.id)) ctx.addIssue({ code: "custom", path: [index, "id"], message: "portPromotions id must be unique" });
+      seen.add(promotion.id);
+    }
+  });
+
+export type PortPromotionsConfig = z.output<typeof portPromotions>;
 
 export const graph = z.strictObject({
   /**

@@ -3,8 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
 import type { MonocarveConfig } from "../config.ts";
-import { showBaselineBytes, git } from "../util/git.ts";
-import { byCodeUnit, hashBytes, hashJson, hashText, MISSING, type FileState } from "../util/hash.ts";
+import { showBaselineBytes } from "../util/git.ts";
+import { hashBytes, hashJson, hashText, MISSING, type FileState } from "../util/hash.ts";
 import { normalizePath, workspacePath } from "../util/paths.ts";
 import type {
   CompatibilityReexportIntent,
@@ -19,6 +19,11 @@ import { verifyPreparationResultModes } from "./audit-modes.ts";
 import { verifyTargetImportProofs } from "./audit-imports.ts";
 import { verifyRenderedReplay } from "./audit-replay.ts";
 import { verifyCompatibilityResolution, verifyRenderedCompatibilitySurface, verifyTargetDeclarationCoverage } from "./audit-surface.ts";
+// The boundary-specific proofs (retainedRootClearance / adapterSurfaceParity)
+// live in their own module purely to keep this file under the line-count gate.
+import { computeBoundaryAuditProofs } from "./audit-boundary.ts";
+// The changed-path scope proof lives in its own module for the same reason.
+import { verifyChangedScope } from "./audit-scope.ts";
 export type { PreparationAuditOptions, PreparationAuditReport, PreparationProofResult } from "./audit-types.ts";
 export async function auditPreparation(options: PreparationAuditOptions): Promise<PreparationAuditReport> {
   return auditPreparationSync(options);
@@ -71,6 +76,7 @@ export function auditPreparationSync(options: PreparationAuditOptions): Preparat
   if (options.freshGraph.digest !== manifest.graphDigest) {
     graphFailures.push("manifest graph digest does not match the fresh graph evidence");
   }
+  const { retainedRootClearance, adapterSurfaceParity } = computeBoundaryAuditProofs(rootDir, manifest.operations);
 
   const byteReplay = preparationProof(byteFailures, extracts.length * 5 + manifest.operations.filter((item) => item.kind === "write-file").length * 3);
   const fileModes = preparationProof(modeFailures, modeChecks);
@@ -93,6 +99,8 @@ export function auditPreparationSync(options: PreparationAuditOptions): Preparat
     ...changedPathScope.failures,
     ...typeValueClaims.failures,
     ...graphDigest.failures,
+    ...retainedRootClearance.failures,
+    ...adapterSurfaceParity.failures,
   ];
   return {
     planId: manifest.planId,
@@ -109,6 +117,8 @@ export function auditPreparationSync(options: PreparationAuditOptions): Preparat
     changedPathScope,
     typeValueClaims,
     graphDigest,
+    retainedRootClearance,
+    adapterSurfaceParity,
     failures,
   };
 }
@@ -331,34 +341,6 @@ function verifyCompatibilityClaims(
   const actual = new Set(intent.exports.map((item) => item.name));
   for (const name of actual) if (!expected.has(name)) failures.push(`compatibility surface exports a private declaration: ${intent.fromPath}:${name}`);
   for (const name of expected) if (!actual.has(name)) failures.push(`compatibility surface omits a public declaration: ${intent.fromPath}:${name}`);
-}
-
-function verifyChangedScope(
-  rootDir: string,
-  baseline: string,
-  declared: readonly string[],
-  approvedManifestPath: string | undefined,
-  failures: string[],
-): void {
-  const expected = new Set(declared.map(normalizePath));
-  const actual = changedPaths(rootDir, baseline);
-  if (approvedManifestPath !== undefined) actual.delete(approvedManifestPath);
-  for (const path of [...actual].sort(byCodeUnit)) {
-    if (!expected.has(path)) failures.push(`changed path is outside preparation scope: ${path}`);
-  }
-  for (const path of [...expected].sort(byCodeUnit)) {
-    if (!actual.has(path)) failures.push(`declared changed path did not change: ${path}`);
-  }
-}
-
-function changedPaths(rootDir: string, baseline: string): Set<string> {
-  const diff = git({ cwd: rootDir }, "diff", "--name-only", baseline, "--", ".");
-  const untracked = git({ cwd: rootDir }, "ls-files", "--others", "--exclude-standard", "--");
-  return new Set([...lines(diff), ...lines(untracked)].map(normalizePath));
-}
-
-function lines(value: string): string[] {
-  return value === "" ? [] : value.split("\n").filter((item) => item.length > 0);
 }
 
 function readIfExists(rootDir: string, path: string): string | null {

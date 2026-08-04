@@ -11,13 +11,23 @@ import { evaluationClosure } from "../plan/evaluation-closure.ts";
 import type { SideEffectsDeclaration } from "../plan/manifest.ts";
 import type { PathReferenceIndex } from "../plan/path-references.ts";
 import { analyzeContainment, classifyEscapes } from "./containment.ts";
-import type { RejectionReason, RewriteEscape } from "./types.ts";
+import { retainedBlockers } from "./retained.ts";
+import type { RejectionReason, RetainedBlocker, RewriteEscape } from "./types.ts";
 
 export interface Assessment {
   readonly rejections: RejectionReason[];
   readonly warnings: string[];
   readonly assets: string[];
   readonly rewriteEscapes: RewriteEscape[];
+  /** Minimal retained-edge blockers this closure's edges prove (see retained.ts). */
+  readonly retainedBlockers: RetainedBlocker[];
+  /**
+   * `"preparation"` when the closure crosses a `portfolio.retainedRoots`
+   * boundary, or when its only viable target is the root package under
+   * `portfolio.forbidTargetSuggestion: ["root"]`. Neither case rejects the
+   * candidate — see the field doc on `PortfolioCandidate.classification`.
+   */
+  readonly classification: "extraction" | "preparation";
 }
 
 export function assessCandidate(
@@ -135,7 +145,38 @@ export function assessCandidate(
 
   warnings.push(...evaluationWarnings(config, context, graph, closure));
   pathReferenceWarning(warnings, pathReferences, closure, tests, analysis.assets);
-  return { rejections, warnings, assets: [...analysis.assets], rewriteEscapes: rewritable };
+
+  const blockers = retainedBlockers(context, graph, closure, config.portfolio.retainedRoots);
+  if (blockers.length > 0) {
+    const first = blockers[0]!;
+    warnings.push(
+      `closure reaches ${blockers.length} portfolio.retainedRoots module(s) ` +
+        `(first: ${first.file} -> ${first.target}, a ${first.kind} edge)`,
+    );
+  }
+  const classification = classifyCandidate(config, report, domains, blockers);
+
+  return { rejections, warnings, assets: [...analysis.assets], rewriteEscapes: rewritable, retainedBlockers: blockers, classification };
+}
+
+/**
+ * A closure whose closure-derived domains resolve to only the application's
+ * synthetic `__root__` domain (see `domainFor`) has no real target other than
+ * the app itself — `suggestedPackageName` would render it as `.../root`. That
+ * is graph-valid but not a package boundary, so `forbidTargetSuggestion:
+ * ["root"]` reclassifies it as preparation rather than either rejecting it or
+ * quietly offering `.../root` as a genuine extraction target.
+ */
+function classifyCandidate(
+  config: MonocarveConfig,
+  report: ComponentReport,
+  domains: readonly string[],
+  blockers: readonly RetainedBlocker[],
+): "extraction" | "preparation" {
+  if (blockers.length > 0) return "preparation";
+  const onlyRootDomain = report.application !== null && domains.length === 1 && domains[0] === `${report.application}:__root__`;
+  if (onlyRootDomain && config.portfolio.forbidTargetSuggestion.includes("root")) return "preparation";
+  return "extraction";
 }
 
 const WARNING_EXAMPLES = 3;

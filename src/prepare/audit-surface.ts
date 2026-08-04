@@ -6,7 +6,68 @@ import type { MonocarveConfig } from "../config.ts";
 import { preparationCompilerOptions } from "./compiler-policy.ts";
 
 import { workspacePath } from "../util/paths.ts";
-import type { CompatibilityReexportIntent, ExtractTypeDeclarationsOperation } from "./manifest-types.ts";
+import { assertAdapterSurfaceMatchesContract } from "./boundary-proofs.ts";
+import type { CompatibilityReexportIntent, ExtractTypeDeclarationsOperation, PreparationReplayOperation, PreparationWriteFileOperation } from "./manifest-types.ts";
+
+/**
+ * Independent, post-replay re-proof that a boundary's app-owned adapter
+ * exports exactly the surface its own promoted contract declares — reusing
+ * `assertAdapterSurfaceMatchesContract` rather than re-deriving the check.
+ * The expected surface is read from the contract's own landed bytes, never
+ * from config, so this stays a proof about what was actually committed.
+ *
+ * A manifest naming more than one `port-contract` or `app-adapter` write
+ * leaves the pairing between them genuinely undetermined from the manifest
+ * alone; Monocarve never guesses a pairing it was not told, so this proof
+ * only runs for the unambiguous single-boundary case.
+ */
+export function verifyAdapterSurfaceAgainstContract(
+  rootDir: string,
+  operations: readonly PreparationReplayOperation[],
+  failures: string[],
+): void {
+  const writes = operations.filter((operation): operation is PreparationWriteFileOperation => operation.kind === "write-file");
+  const contracts = writes.filter((operation) => operation.purpose === "port-contract");
+  const adapters = writes.filter((operation) => operation.purpose === "app-adapter");
+  if (contracts.length !== 1 || adapters.length !== 1) return;
+  const contract = contracts[0]!;
+  const adapter = adapters[0]!;
+  const contractText = textAt(rootDir, contract.file.path) ?? contract.contents;
+  const adapterText = textAt(rootDir, adapter.file.path) ?? adapter.contents;
+  const symbols = exportedTopLevelNames(contract.file.path, contractText);
+  try {
+    assertAdapterSurfaceMatchesContract(adapterText, adapter.file.path, symbols);
+  } catch (error) {
+    failures.push((error as Error).message);
+  }
+}
+
+function exportedTopLevelNames(path: string, text: string): string[] {
+  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
+  const names: string[] = [];
+  for (const statement of source.statements) {
+    const name = exportedDeclarationName(statement);
+    if (name) names.push(name);
+  }
+  return names;
+}
+
+function exportedDeclarationName(statement: ts.Statement): string | undefined {
+  if (!ts.canHaveModifiers(statement) || !(ts.getModifiers(statement) ?? []).some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) return undefined;
+  if (ts.isVariableStatement(statement)) {
+    const declaration = statement.declarationList.declarations[0];
+    return declaration && ts.isIdentifier(declaration.name) ? declaration.name.text : undefined;
+  }
+  if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) && statement.name) {
+    return statement.name.text;
+  }
+  return undefined;
+}
+
+function textAt(rootDir: string, path: string): string | null {
+  const absolute = workspacePath(rootDir, path);
+  return existsSync(absolute) ? readFileSync(absolute, "utf8") : null;
+}
 
 /** Refuse an extra target type declaration that has no selector-bound replay proof. */
 export function verifyTargetDeclarationCoverage(rootDir: string, operation: ExtractTypeDeclarationsOperation, failures: string[]): void {
