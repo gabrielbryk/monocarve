@@ -51,7 +51,7 @@ async function render() {
   const visibleIds = new Set(visibleNodes.map((node) => node.id));
   const scopedEdges = displayed.edges.filter((edge) => visibleIds.has(edge.from) && visibleIds.has(edge.to) && (!kind || edge.kinds.includes(kind)));
   const overview = viewElement.value === "domains";
-  const hierarchyEdges = overview && densityElement.value === "hierarchy" ? dependencyForest(visibleNodes, scopedEdges).edges : undefined;
+  const hierarchyEdges = overview && densityElement.value === "hierarchy" ? connectivityBackbone(visibleNodes, scopedEdges) : undefined;
   const visibleEdges = hierarchyEdges
     ?? (overview && densityElement.value === "backbone" ? backboneEdges(visibleNodes, scopedEdges) : scopedEdges);
   const compound = overview ? await globalThis.monocarveLayout.layoutCompound(visibleNodes, visibleEdges) : undefined;
@@ -215,6 +215,33 @@ function backboneEdges(nodes, edges) {
     if (outgoing[0]) selected.set(outgoing[0].id, outgoing[0]);
     if (incoming[0]) selected.set(incoming[0].id, incoming[0]);
   }
+  return [...selected.values()].sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function connectivityBackbone(nodes, edges) {
+  const layers = new Map(nodes.map((node) => [node.id, node.layer]));
+  const selected = new Map(dependencyForest(nodes, edges).edges.map((edge) => [edge.id, edge]));
+  const parent = new Map(nodes.map((node) => [node.id, node.id]));
+  const find = (id) => {
+    let root = id;
+    while (parent.get(root) !== root) root = parent.get(root);
+    while (id !== root) {
+      const next = parent.get(id);
+      parent.set(id, root);
+      id = next;
+    }
+    return root;
+  };
+  const connect = (from, to) => {
+    const left = find(from);
+    const right = find(to);
+    if (left === right) return false;
+    parent.set(right, left);
+    return true;
+  };
+  for (const edge of selected.values()) connect(edge.from, edge.to);
+  const candidates = edges.filter((edge) => !selected.has(edge.id)).sort((left, right) => edgePriority(left, right, layers));
+  for (const edge of candidates) if (connect(edge.from, edge.to)) selected.set(edge.id, edge);
   return [...selected.values()].sort((left, right) => left.id.localeCompare(right.id));
 }
 

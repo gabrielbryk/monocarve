@@ -20,6 +20,7 @@ describe("dependency graph visualization server", () => {
     expect(styles).toContain("min-height: 0; overflow: hidden");
     const client = await (await fetch(`${running.url}/assets/client.js`)).text();
     expect(client).toContain("dependencyForest");
+    expect(client).toContain("connectivityBackbone");
     expect(client).toContain("domainGraph");
     expect(() => new Function(client)).not.toThrow();
     const layout = await (await fetch(`${running.url}/assets/layout.js`)).text();
