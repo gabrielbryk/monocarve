@@ -33,6 +33,8 @@ function operationAccesses(plan: CampaignPlan, operation: PlanOperation, index: 
       ];
     case "rewrite-import":
       return [access(plan, operation.file, "exact", "read-write", "consumer-source", index, operation.kind, operation.donors)];
+    case "rewrite-fs-reference":
+      return [access(plan, operation.file, "exact", "read-write", "consumer-source", index, operation.kind, operation.rewrites.map((rewrite) => rewrite.donor))];
     case "write-file":
       return [access(
         plan,

@@ -93,6 +93,7 @@ function operationKey(operation: PlanOperation): string {
   switch (operation.kind) {
     case "move": case "move-with-rewrite": return `move:${operation.source}`;
     case "rewrite-import": return `path:${operation.file}`;
+    case "rewrite-fs-reference": return `fsref:${operation.file}`;
     case "write-file": case "migrate-path-keys": return `path:${operation.path}`;
     case "lockfile-importer": return `importer:${operation.packageRoot}`;
   }

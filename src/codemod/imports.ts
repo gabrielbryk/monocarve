@@ -63,7 +63,7 @@ export interface ModuleReference {
   readonly specifierSpan: SourceSpan | null;
 }
 
-interface Replacement {
+export interface Replacement {
   readonly start: number;
   readonly end: number;
   readonly text: string;
@@ -361,7 +361,7 @@ export function unsupportedModuleReferences(
   );
 }
 
-function applyReplacements(source: string, replacements: readonly Replacement[]): string {
+export function applyReplacements(source: string, replacements: readonly Replacement[]): string {
   return [...replacements]
     .sort((left, right) => right.start - left.start)
     .reduce((result, replacement) => result.slice(0, replacement.start) + replacement.text + result.slice(replacement.end), source);
@@ -376,7 +376,7 @@ function applyReplacements(source: string, replacements: readonly Replacement[])
  * else or does not parse at all. No package name in any ecosystem contains one
  * of these; the point is that if one ever does, the caller hears about it.
  */
-function fitsInLiteral(text: string, delimiter: string): boolean {
+export function fitsInLiteral(text: string, delimiter: string): boolean {
   if (delimiter !== '"' && delimiter !== "'" && delimiter !== "`") return false;
   if (text.includes(delimiter) || text.includes("\\") || /[\r\n]/.test(text)) return false;
   return delimiter !== "`" || !text.includes("${");

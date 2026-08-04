@@ -15,6 +15,7 @@ import {
   type MoveWithRewriteOperation,
   type WriteFileOperation,
 } from "../plan/manifest.ts";
+import { findStaticFsReferences } from "../plan/static-fs-references.ts";
 import { compileExternalConsumer } from "./external-consumer.ts";
 import { sourceConservation as proveSourceConservation } from "./audit-conservation.ts";
 import {
@@ -70,7 +71,7 @@ export function auditPlanSync(options: AuditOptions): AuditReport {
     if (baseline !== expected) byteFailures.push(`baseline blob does not match sourceBlobs: ${path}`);
   }
   for (const operation of manifest.operations) {
-    if (operation.kind !== "rewrite-import") continue;
+    if (operation.kind !== "rewrite-import" && operation.kind !== "rewrite-fs-reference") continue;
     if (stateAt(rootDir, operation.file) !== operation.resultHash) {
       byteFailures.push(`rewritten consumer does not match its declared result: ${operation.file}`);
     }
@@ -148,6 +149,16 @@ export function auditPlanSync(options: AuditOptions): AuditReport {
         }
       } else if (reference.resolved && movedSourcePaths.has(resolve(reference.resolved))) {
         movedPathEdges.push(`${file} -> ${specifier}`);
+      }
+    }
+
+    // Re-derived independently of every operation the plan declares: a static
+    // filesystem reference (`resolve(import.meta.dir, "…")`) is invisible to
+    // `inventoryModuleReferences` above, so this is the only place that would
+    // ever notice one still naming a path nothing occupies any more.
+    for (const match of findStaticFsReferences(current, absolute)) {
+      if (movedSourcePaths.has(match.resolvedAbsolute)) {
+        movedPathEdges.push(`${file} -> ${match.literal} (static fs reference)`);
       }
     }
 

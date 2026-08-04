@@ -13,12 +13,14 @@ import type {
   EvaluationModuleRecord,
   EvaluationPackageRecord,
   EvaluationReach,
+  FsReferenceRewrite,
   PlanOperation,
   PublicModule,
   SideEffectsDeclaration,
 } from "./manifest.ts";
 import { renderPublicModulePaths } from "./public-modules.ts";
 import { sourceExportsFromFile } from "./public-surface.ts";
+import { findStaticFsReferences, relativeFsLiteral, rewriteStaticFsReference } from "./static-fs-references.ts";
 
 export interface SourceSelection {
   readonly production: string[];
@@ -111,6 +113,69 @@ export function appendConsumerOperations(args: {
     });
   }
   return { consumers, dynamicImportDelta };
+}
+
+export interface StaticFsConsumer {
+  readonly file: string;
+  readonly rewrites: readonly FsReferenceRewrite[];
+}
+
+/**
+ * Consumers the import graph cannot see: files that name a moved source by a
+ * statically resolvable filesystem literal (see `static-fs-references.ts`)
+ * rather than by importing it.
+ *
+ * Scoped to files outside the moved set, mirroring `findConsumers` — a moved
+ * file that itself reads another moved file by static literal is not covered
+ * here; its own bytes are `move`d as-is, and no operation revisits them.
+ */
+export function appendStaticFsReferenceOperations(args: {
+  readonly context: WorkspaceContext;
+  readonly donorTargets: ReadonlyMap<string, string>;
+  readonly operations: PlanOperation[];
+}): { readonly consumers: StaticFsConsumer[] } {
+  const consumers: StaticFsConsumer[] = [];
+  for (const file of args.context.repositorySources()) {
+    if (args.donorTargets.has(file)) continue;
+    const rewrites = staticFsRewritesFor(args.context, file, args.donorTargets);
+    if (rewrites.length === 0) continue;
+    consumers.push({ file, rewrites });
+    const current = args.context.text(file);
+    const next = rewrites.reduce(
+      (text, rewrite) => rewriteStaticFsReference(text, args.context.absolute(file), args.context.absolute(rewrite.donor), rewrite.to),
+      current,
+    );
+    args.operations.push({
+      kind: "rewrite-fs-reference",
+      file,
+      rewrites,
+      preconditionHash: args.context.state(file),
+      resultHash: hashText(next),
+    });
+  }
+  return { consumers };
+}
+
+function staticFsRewritesFor(
+  context: WorkspaceContext,
+  file: string,
+  donorTargets: ReadonlyMap<string, string>,
+): FsReferenceRewrite[] {
+  const rewrites = new Map<string, FsReferenceRewrite>();
+  for (const match of findStaticFsReferences(context.text(file), context.absolute(file))) {
+    let donor: string;
+    try {
+      donor = context.relative(match.resolvedAbsolute);
+    } catch {
+      continue;
+    }
+    const target = donorTargets.get(donor);
+    if (target === undefined) continue;
+    const to = relativeFsLiteral(file, target);
+    if (to === match.literal) continue;
+    rewrites.set(JSON.stringify([match.literal, donor]), { from: match.literal, to, donor });
+  }
+  return [...rewrites.values()];
 }
 
 function appendDynamicImportDelta(

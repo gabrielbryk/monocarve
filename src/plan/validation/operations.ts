@@ -8,6 +8,7 @@ import { hashText, isFileState, isSha256 } from "../../util/hash.ts";
 import { relativeWorkspacePath } from "../../util/paths.ts";
 import { readManifest } from "../../graph/workspace.ts";
 import { isAnyMove, regeneratedArtifactPaths, type ExtractionManifest, type ImportRewrite, type PlanOperation } from "../manifest.ts";
+import { relativeFsLiteral } from "../static-fs-references.ts";
 import type { ValidatePlanOptions, ValidationIssue } from "./shared.ts";
 import { Issues } from "./shared.ts";
 
@@ -104,6 +105,12 @@ function validateOperation(
         issues.add("multiple-mutations", `multiple operations mutate ${operation.file}`, { operationIndex: index });
       }
       validateRewrite(operation, index, issues, context, mutated);
+      return;
+    case "rewrite-fs-reference":
+      if (movePaths.has(operation.file)) {
+        issues.add("multiple-mutations", `multiple operations mutate ${operation.file}`, { operationIndex: index });
+      }
+      validateFsReferenceRewrite(operation, index, issues, moves, mutated);
       return;
     case "write-file":
       if (movePaths.has(operation.path)) {
@@ -277,6 +284,43 @@ function validateRewrite(
   }
   if (operation.preconditionHash === operation.resultHash) {
     issues.add("rewrite-identity", `rewrite result must differ from precondition ${operation.file}`, at);
+  }
+  mutated.add(operation.file);
+}
+
+function validateFsReferenceRewrite(
+  operation: Extract<PlanOperation, { kind: "rewrite-fs-reference" }>,
+  index: number,
+  issues: Issues,
+  moves: readonly Extract<PlanOperation, { kind: "move" | "move-with-rewrite" }>[],
+  mutated: Set<string>,
+): void {
+  const at = { operationIndex: index, operationKind: operation.kind, path: operation.file };
+  if (mutated.has(operation.file)) issues.add("multiple-mutations", `multiple operations mutate ${operation.file}`, at);
+  if (operation.rewrites.length === 0) {
+    issues.add("fs-reference-empty", `rewrite-fs-reference must declare at least one rewrite: ${operation.file}`, at);
+  }
+  for (const rewrite of operation.rewrites) {
+    const move = moves.find((candidate) => candidate.source === rewrite.donor);
+    if (!move) {
+      issues.add("fs-reference-donor", `rewrite-fs-reference donor is not a moved source: ${rewrite.donor}`, at);
+      continue;
+    }
+    const expected = relativeFsLiteral(operation.file, move.target);
+    if (rewrite.to !== expected) {
+      issues.add(
+        "fs-reference-target",
+        `rewrite-fs-reference target for ${operation.file} must be the relative path to the moved file: expected ${expected}, got ${rewrite.to}`,
+        at,
+      );
+    }
+    if (rewrite.from === rewrite.to) issues.add("fs-reference-noop", `rewrite-fs-reference for ${operation.file} is a no-op`, at);
+  }
+  if (!isFileState(operation.preconditionHash) || !isSha256(operation.resultHash)) {
+    issues.add("fs-reference-hash", `rewrite-fs-reference hashes for ${operation.file} must be SHA-256`, at);
+  }
+  if (operation.preconditionHash === operation.resultHash) {
+    issues.add("fs-reference-identity", `rewrite-fs-reference result must differ from precondition ${operation.file}`, at);
   }
   mutated.add(operation.file);
 }

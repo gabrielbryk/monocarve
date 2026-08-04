@@ -9,6 +9,7 @@ import { HashMismatchError } from "../errors.ts";
 import { git } from "../util/git.ts";
 import { hashText } from "../util/hash.ts";
 import { isAnyMove, type PlanOperation } from "../plan/manifest.ts";
+import { rewriteStaticFsReference } from "../plan/static-fs-references.ts";
 import { JournalError } from "./journal-error.ts";
 import { readUtf8Artifact, runPathMigrationCommand } from "./path-migrations.ts";
 
@@ -21,6 +22,7 @@ export function applyOperation(
 ): void {
   if (isAnyMove(operation)) return applyMove(config, operation, root, useGitMv);
   if (operation.kind === "rewrite-import") return applyImportRewrite(config, operation, root);
+  if (operation.kind === "rewrite-fs-reference") return applyFsReferenceRewrite(operation, root);
   if (operation.kind === "lockfile-importer") return applyLockfileImporter(adapter, operation, root);
   if (operation.kind === "migrate-path-keys") return applyPathMigration(config, operation, root);
   return applyWrite(operation, root);
@@ -70,6 +72,15 @@ function rewriteLegacy(config: MonocarveConfig, operation: Extract<PlanOperation
     (text, donor) => rewriteResolvedImportSpecifier(text, file, resolve(root, donor), target, root, config.moduleSpecifierCalls, config.assetExtensions, config.cssImportExtensions),
     readFileSync(file, "utf8"),
   );
+}
+
+function applyFsReferenceRewrite(operation: Extract<PlanOperation, { kind: "rewrite-fs-reference" }>, root: string): void {
+  const file = resolve(root, operation.file);
+  const next = operation.rewrites.reduce(
+    (text, rewrite) => rewriteStaticFsReference(text, file, resolve(root, rewrite.donor), rewrite.to),
+    readFileSync(file, "utf8"),
+  );
+  writeChecked(file, operation.file, next, operation.resultHash);
 }
 
 function applyLockfileImporter(

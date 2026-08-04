@@ -81,5 +81,5 @@ function applyStructured(root: string, operations: ReturnType<typeof packageOper
 function operationKey(operation: ReturnType<typeof packageOperations>[number]): string {
   return operation.kind === "lockfile-importer" ? `importer:${operation.packageRoot}`
     : operation.kind === "write-file" || operation.kind === "migrate-path-keys" ? `path:${operation.path}`
-    : operation.kind === "rewrite-import" ? `path:${operation.file}` : `move:${operation.source}`;
+    : operation.kind === "rewrite-import" || operation.kind === "rewrite-fs-reference" ? `path:${operation.file}` : `move:${operation.source}`;
 }

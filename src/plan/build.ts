@@ -14,7 +14,7 @@ import { composeDonorDependencyPruning, donorDependencyPruningCandidates } from 
 import { consumerWiringOperations, packageOperations, projectedLockfile } from "./scaffold.ts";
 import { PLAN_SCHEMA_VERSION, type EscapeRewrite, type ExtractionManifest, type PlanOperation } from "./manifest.ts";
 import { sourceExportsFromFile, type ExportSurface } from "./public-surface.ts";
-import { appendConsumerOperations, consumerApplications, escapeRewritesFor, evaluationEffectsFor, selectExtractionSources } from "./build-phases.ts";
+import { appendConsumerOperations, appendStaticFsReferenceOperations, consumerApplications, escapeRewritesFor, evaluationEffectsFor, selectExtractionSources } from "./build-phases.ts";
 import { assertCompiledOperationInvariants, projectedArtifactEvidence } from "./projected-workspace.ts";
 import { baselineOf, derivePackageRoot, generatedFilesFor, graphDigest, moveOperation, pathMigrationOperations, renderGates } from "./build-support.ts";
 
@@ -60,6 +60,7 @@ function buildJournal(state: BuildState, selection: ReturnType<typeof selectExtr
   const operations = selection.sources.map((source, index) => moveOperation(state.context, source, selection.targets[index]!, rewrites.get(source) ?? []));
   operations.push(...selection.assets.map((asset, index) => moveOperation(state.context, asset, selection.assetTargets[index]!, [])));
   const { consumers } = appendConsumerOperations({ context: state.context, sources: [...selection.sources, ...selection.assets], packageName: state.packageName, publicSpecifierFor: selection.publicSpecifierFor, operations });
+  appendStaticFsReferenceOperations({ context: state.context, donorTargets: donorTargetsOf(selection), operations });
   const dependencies = dependenciesFor(state, selection.sources, rewrites);
   const input = { context: state.context, config: state.config, application: state.application, packageManager: state.packageManager, taskRunner: state.taskRunner, packageName: state.packageName, packageRoot: state.packageRoot, projectId: state.projectId, templates: state.templates, production: selection.production, tests: selection.tests, assets: selection.assets, dependencies, publicModules: selection.publicModules };
   const packageWiring = packageOperations(input);
@@ -157,7 +158,13 @@ function dependencyDecisionsFor(state: BuildState, sources: readonly string[], d
     .sort((left, right) => byCodeUnit(left.name, right.name) || byCodeUnit(left.decision, right.decision));
 }
 function sourceBlobsFor(context: WorkspaceContext, paths: readonly string[]): Record<string, Sha256> { const blobs: Record<string, Sha256> = {}; for (const path of paths) { const state = context.state(path); if (state === "missing") throw new PlanningError(`selected source does not exist: ${path}`); blobs[path] = state; } return blobs; }
-function operationPathsOf(operation: PlanOperation): string[] { switch (operation.kind) { case "move": case "move-with-rewrite": return [operation.source, operation.target]; case "rewrite-import": return [operation.file]; case "write-file": return [operation.path]; case "lockfile-importer": return [operation.lockfile]; case "migrate-path-keys": return [operation.path]; } }
+function operationPathsOf(operation: PlanOperation): string[] { switch (operation.kind) { case "move": case "move-with-rewrite": return [operation.source, operation.target]; case "rewrite-import": case "rewrite-fs-reference": return [operation.file]; case "write-file": return [operation.path]; case "lockfile-importer": return [operation.lockfile]; case "migrate-path-keys": return [operation.path]; } }
+function donorTargetsOf(selection: ReturnType<typeof selectExtractionSources>): Map<string, string> {
+  const map = new Map<string, string>();
+  selection.sources.forEach((source, index) => map.set(source, selection.targets[index]!));
+  selection.assets.forEach((asset, index) => map.set(asset, selection.assetTargets[index]!));
+  return map;
+}
 function dedupeExports(entries: readonly ExportSurface[]): ExportSurface[] { const seen = new Set<string>(); return entries.filter((entry) => { if (seen.has(entry.name)) return false; seen.add(entry.name); return true; }).sort((left, right) => byCodeUnit(left.name, right.name)); }
 function trailer(config: MonocarveConfig, vars: Record<string, string>): { body?: string } { return config.commitTemplates.trailer ? { body: renderTemplate(config.commitTemplates.trailer, vars) } : {}; }
 function profileCandidateName(config: MonocarveConfig, suggested: string): string { return config.packageScope !== "" && suggested.startsWith(config.packageScope) ? suggested.slice(config.packageScope.length) : suggested; }

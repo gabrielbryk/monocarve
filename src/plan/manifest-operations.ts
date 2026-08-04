@@ -23,6 +23,21 @@ export interface RewriteImportOperation {
   readonly resultHash: Sha256;
 }
 
+export interface FsReferenceRewrite {
+  readonly from: string;
+  readonly to: string;
+  /** Moved source this rewrite targets, workspace-relative at its pre-move path. */
+  readonly donor: string;
+}
+
+export interface RewriteFsReferenceOperation {
+  readonly kind: "rewrite-fs-reference";
+  readonly file: string;
+  readonly rewrites: readonly FsReferenceRewrite[];
+  readonly preconditionHash: FileState;
+  readonly resultHash: Sha256;
+}
+
 export interface WriteFileOperation {
   readonly kind: "write-file";
   readonly path: string;
@@ -75,6 +90,7 @@ export interface MigratePathKeysOperation {
 export type PlanOperation =
   | MoveOperation
   | RewriteImportOperation
+  | RewriteFsReferenceOperation
   | WriteFileOperation
   | LockfileImporterOperation
   | MoveWithRewriteOperation

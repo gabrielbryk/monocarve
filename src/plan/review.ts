@@ -51,6 +51,7 @@ const OPERATION_KINDS: readonly PlanOperationKind[] = [
   "move",
   "move-with-rewrite",
   "rewrite-import",
+  "rewrite-fs-reference",
   "write-file",
   "lockfile-importer",
   "migrate-path-keys",

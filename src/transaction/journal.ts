@@ -95,7 +95,13 @@ function recordEffect(result: EntryContext["result"], operation: PlanOperation):
     result.filesWritten.push(operation.target);
     return;
   }
-  result.filesWritten.push(operation.kind === "lockfile-importer" ? operation.lockfile : operation.kind === "rewrite-import" ? operation.file : operation.path);
+  result.filesWritten.push(
+    operation.kind === "lockfile-importer"
+      ? operation.lockfile
+      : operation.kind === "rewrite-import" || operation.kind === "rewrite-fs-reference"
+        ? operation.file
+        : operation.path,
+  );
 }
 
 function resetGitMoves(options: ExecuteJournalOptions): void {

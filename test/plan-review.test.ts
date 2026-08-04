@@ -59,6 +59,7 @@ describe("plan review summary", () => {
       move: 1,
       "move-with-rewrite": 0,
       "rewrite-import": 1,
+      "rewrite-fs-reference": 0,
       "write-file": 1,
       "lockfile-importer": 1,
       "migrate-path-keys": 1,

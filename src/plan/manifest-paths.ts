@@ -19,6 +19,7 @@ export function operationTargets(operation: PlanOperation): string[] {
   switch (operation.kind) {
     case "move": case "move-with-rewrite": return [operation.target];
     case "rewrite-import": return [operation.file];
+    case "rewrite-fs-reference": return [operation.file];
     case "write-file": return [operation.path];
     case "lockfile-importer": return [operation.lockfile];
     case "migrate-path-keys": return [operation.path];
