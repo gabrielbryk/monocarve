@@ -1,0 +1,10 @@
+{
+  "name": "@acme/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@acme/format": "workspace:*",
+    "@acme/logger": "workspace:*"
+  }
+}

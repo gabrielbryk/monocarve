@@ -1,0 +1,5 @@
+.chart {
+  display: flex;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}

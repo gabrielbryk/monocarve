@@ -1,0 +1,277 @@
+# CLI reference
+
+This reference mirrors the executable command registry. Run
+`monocarve <command> --help` for the same usage and safety boundary at the
+terminal. Commands print JSON whenever their result is structured or `--json`
+is supplied; `--out` writes the same deterministic representation to a file
+where supported.
+
+## Global options
+
+| option | meaning |
+| --- | --- |
+| `--config <path>` | Use an explicit config instead of discovering upward from `cwd`. |
+| `--cwd <path>` | Start workspace and config discovery from this directory. |
+| `--graph <app>=<file>` | Replay a captured scanner report; repeat for multiple applications. Campaign commands that require fresh evidence refuse it. |
+| `--json`, `-j` | Request machine-readable output. |
+| `--help`, `-h` | Show top-level or command help. |
+| `--version`, `-v` | Print the CLI version. |
+
+## Discovery and diagnosis
+
+| command | usage and boundary |
+| --- | --- |
+| `plan` | `plan --candidate <id> ... [--verify-lockfile] [--write]` — compile deterministically; `--verify-lockfile` first replays the plan and requires a real configured package-manager round-trip. |
+| `scan` | `scan [--app <name>] [--no-cache] [--include-extracted] [--out <path>]` — build the configured dependency model without editing the workspace. |
+| `layers` | `layers [--app <name>] [--out <path>]` — report domains, components, and dependency-first layers. |
+| `portfolio` | `portfolio [--app <name>] [--limit <n>] [--include-extracted] [--communities] [--hub-inbound-threshold <n>]` — rank eligible whole-file candidates and report population totals. |
+| `candidates` | `candidates [--candidate <id>] [--path <path>] [--eligibility <all\|eligible\|blocked>] [--app <name>] [--include-extracted]` — inspect candidate details or filter by claimed workspace path and eligibility; add `--json` for stable full details. |
+| `backlog` | `backlog [--app <name>] [--limit <n>] [--include-extracted] [--marginal]` — explain blocked candidates; marginal mode is only a one-blocker lower bound. |
+| `config-doctor` | `config-doctor` — report the discovered config and root, effective value provenance, application and package resolution, adapter availability, compiler profiles, generated and path-keyed artifacts, configured module calls, protected and dirty paths, and preparation coverage. It is strictly read-only: no gates, generators, installers, or preparers run. JSON configs report `explicit` versus `default` provenance; dynamically loaded configs report `unknown` where the original shape is not safely recoverable. |
+| `explain` | `explain --plan <path> (--dependency <name> \| --artifact <path>) [--json]` — read persisted provenance for one dependency decision or the exact operation chain and final hash for one artifact. |
+| `symbols` | `symbols --file <path> [--out <path>]` — declaration graph, type/value spaces, merged groups, exact references, and SCCs for one file. |
+| `split-candidates` | `split-candidates --file <path> [--app <name>] [--out <path>]` — rank declaration SCCs using external consumers and domain affinity. |
+| `seams` | `seams --file <path> --candidate <id> [--target <path>] [--app <name>]` — propose one reviewed declaration seam and its safety blockers. |
+| `seams-multi` | `seams-multi --file <path> --file <path> [--app <name>]` — analyze exact symbol edges and SCCs across at least two explicit files. |
+| `conflicts` | `conflicts --plan <candidate>=<manifest> [--plan <candidate>=<manifest> ...]` — compare same-baseline path ownership. Every wave still requires replan between applied children. |
+| `check` | `check import-extensions` — run the configured package import-extension policy. |
+
+## Extraction planning
+
+```text
+plan --candidate <id>
+     [--profile <name> | --package-name <name> [--package-root <path>]]
+     [--force] [--out <path>] [--write [--commit-approval]]
+```
+
+`plan` compiles a hash-journaled manifest but does not edit source. An explicit
+package name resolves its root from the workspace graph when that package
+already exists; `--package-root` is an optional override. A root containing
+`package.json` is extended, otherwise a new package is scaffolded. Named profiles
+own their target and cannot be overridden. `--force` bypasses portfolio eligibility only;
+validation, preconditions, simulation, branch policy, and audit remain mandatory.
+The result names `targetMode` (`existing` or `new`) and `targetPackageRoot` so
+automation does not need to infer topology from scaffold operations. `next`
+reports the same fields.
+
+With `--write`, the result also reports the exact manifest path, rendered
+approval subject, `git add` argument vector, explicit `approve` command, and
+subsequent `apply` command. Nothing is approved implicitly. Add
+`--commit-approval` only after review to create a commit containing exactly the
+manifest; it requires `--write` and refuses any other staged, modified, or
+untracked path.
+
+| command | usage and boundary |
+| --- | --- |
+| `plan-review` | `plan-review --plan <path> [--approval-subject <subject>] [--json]` — render the deterministic, read-only operator review, including exact move targets and approval inputs. |
+| `next` | `next [--app <name>] [--profile <name>] [--package-name <name>] [--write] [--apply] [--verify-lockfile]` — choose the highest-ranked candidate; `--apply` simulates only. |
+| `relocate-tests` | `relocate-tests --suite <name> [--out <path>] [--write]` — compile a configured leaf integration-test package. |
+| `refresh` | `refresh --plan <path> [--out <path> --write | --write --replace [--commit-approval]]` — safely recompile a stale plan at current `HEAD`; replacement is always explicit. |
+
+To append a candidate to an existing package:
+
+```sh
+monocarve plan --candidate <id> --package-name @acme/existing --write
+```
+
+Review `target.packageRoot` and every move operation's exact target path before
+committing the manifest. The plan extends existing package exports, entrypoint, dependencies, project
+references, consumers, and lockfile blocks. It does not recreate or register
+the package.
+
+Run `monocarve plan-review --plan <path>` before approval for a human-readable
+review of target mode, exact top-level and nested move targets, operation counts,
+dependency and consumer wiring, public exports, generated outputs, repository
+gates, and warnings. Add `--json` for its stable structured form. The approval
+section records the manifest path and defaults its subject to `commits.plan`;
+`--approval-subject` supplies a different exact proposed subject for review.
+
+If a repository gate reports a moved file, use the target path recorded in the
+manifest—not a guessed flattened package path—when updating path-keyed lint,
+coverage, or complexity baselines. Any baseline change alters HEAD, so compile
+and commit a fresh manifest afterward.
+
+For a stale reviewed plan, `refresh` resolves the same candidate from a fresh
+graph and refuses dirty workspaces or drift in the application, target,
+profile, source closure, source bytes, gates, or commit policy. It reports a
+`semanticDiff` separately from baseline provenance changes:
+
+```sh
+monocarve refresh --plan .monocarve/plans/c-example.json
+monocarve refresh --plan .monocarve/plans/c-example.json \
+  --out .monocarve/plans/c-example-refreshed.json --write
+monocarve refresh --plan .monocarve/plans/c-example.json --write --replace
+```
+
+The first command cannot write. The second writes a separate file. The third is
+the explicit tracked-manifest replacement path; add `--commit-approval` only
+after reviewing the semantic diff. `plan --write` refuses an existing output
+and prints this refresh command instead of silently overwriting it.
+
+Every compiled plan also carries `projectedArtifacts`, the canonical final
+hashes of its structured outputs, and `dependencyDecisions`, the source paths
+and production/test/type-only reasons behind target additions and reviewed
+donor removals. Validation refuses either record when it contradicts the
+operation journal or declared dependency sections.
+
+Use `explain` when reviewing either record without re-running discovery:
+
+```sh
+monocarve explain --plan .monocarve/plans/c-example.json --dependency library
+monocarve explain --plan .monocarve/plans/c-example.json --artifact libs/example/package.json
+```
+
+The command is read-only and accepts exactly one selector. Its JSON form is a
+stable projection of evidence already bound into the reviewed manifest; it
+does not infer new reasons from the current checkout.
+
+## Extraction execution
+
+| command | usage and boundary |
+| --- | --- |
+| `approve` | `approve --plan <path> [--commit]` — validate and display exact approval evidence without mutation; `--commit` explicitly commits only the manifest. |
+| `verify` | `verify --plan <path>` — read-only manifest validation plus apply preflight. |
+| `doctor` | `doctor --plan <path> [--verify-lockfile]` — replay, audit, and run repository gates in a disposable worktree. |
+| `inspect-gates` | `inspect-gates --plan <path>` — run every declared gate separately against the landed plan, attributing exact repository-visible changed paths and suggesting missing generated-artifact declarations without changing the checkout. |
+| `apply` | `apply --plan <path> [--commit] [--resume] [--refresh-if-baseline-only] [--skip-gates] [--verify-lockfile]` — always simulates first; without `--commit`, the checkout is unchanged. |
+| `apply-status` | `apply-status` — read-only durable phase and owner evidence for a committing apply. |
+| `apply-recover` | `apply-recover --plan <path>` — release only a stopped matching owner, then print the verified apply/resume argv. |
+| `audit` | `audit --plan <path> [--skip-compile-proof]` — independently verify the tree produced by the plan. Run it immediately after apply. |
+
+`--skip-simulation` is explicitly refused. `--resume` accepts only a verified
+transaction boundary. `--skip-gates` does not bypass validation, journal,
+scope, or audit proofs; normal operation should run the configured gates.
+`--refresh-if-baseline-only` requires `--commit` and is a narrow stale-plan recovery: it replaces the
+manifest only when fresh planning yields no semantic diff, exits unsuccessfully,
+and prints the exact approval command. It never approves or applies the
+refreshed plan in the same invocation. Source, closure, target, config, or
+execution-policy drift remains a hard refusal.
+
+After journal replay and generated-artifact regeneration, simulation checks a
+repository-wide structured postcondition: every registered package has no
+dependency duplicated across manifest sections, every `workspace:` dependency
+names a registered package, and every package manifest agrees with its
+lockfile importer. A committing apply repeats the same audit against the real
+checkout after its commits; failure enters normal transaction rollback.
+On failure, the result keeps the compatible bounded `output` excerpt and adds a
+structured `failedGate` (`tier`, `command`, `exitCode`, `outputHead`,
+`outputTail`, and `logPath`). The full stdout/stderr log is stored beside the
+retained failed worktree under `transaction.worktreeRoot`, not in the gated checkout.
+`gateRetry` supplies its exact cwd and configured command. If persistence fails, `logWriteFailure` records
+that secondary error without hiding the gate failure. Logs are not secret-
+redacted; configure gate commands to avoid printing credentials. The generic
+`transaction.gateRetries` policy defaults to zero, is capped at three, and
+records every exit code/output excerpt in `attempts`; it never silently drops a
+failed attempt that later passes.
+
+## Declaration preparation
+
+| command | usage and boundary |
+| --- | --- |
+| `prepare-plan` | `prepare-plan --file <path> --candidate <id> --target <path> --module-specifier <specifier> --group <id> [--group <id> ...] [--out <path>] [--write]` — compile only explicitly reviewed type-only groups. |
+| `prepare-multi-plan` | `prepare-multi-plan --spec <path> [--out <path>] [--write]` — compile exact reviewed per-donor members into one atomic multi-file preparation. |
+| `prepare-apply` | `prepare-apply --plan <path> [--commit]` — isolated replay by default; with `--commit`, require approved-manifest provenance and audit immediately. |
+| `prepare-audit` | `prepare-audit --plan <path>` — independently replay declaration, import, graph, mode, and public-surface evidence. |
+
+Preparation uses the workspace's configured `preparation.commit` and non-empty
+`preparation.gates`; CLI flags cannot invent or remove that policy.
+
+`prepare-multi-plan --spec <path> [--out <path>] [--write]` accepts a reviewed
+JSON specification containing one multi-file candidate and at least two
+per-donor members (`file`, local `candidate`, `target`, `moduleSpecifier`, and
+exact `groups`). The union must exactly cover the atomic multi-file SCC. Each
+donor transform is independently replayable, targets may not collide, all
+cross-file edges must be type-only, and the result is one manifest committed,
+audited, and rolled back as a unit.
+
+## Configured preparers and ratchets
+
+| command | usage and boundary |
+| --- | --- |
+| `preparer-plan` | `preparer-plan --extraction <path> --preparer <id> --source <path> [--out <path>] [--write]` — run one configured preparer in a disposable baseline worktree and compile its declared outputs into a reviewable manifest. |
+| `preparer-simulate` | `preparer-simulate --plan <path>` — replay captured outputs and their configured verification without changing the checkout. |
+| `preparer-apply` | `preparer-apply --plan <path>` — require the exact manifest as the sole commit directly above its extraction baseline, simulate first, then journal-apply reviewed outputs with rollback; never commits the outputs. |
+| `preparer-commit` | `preparer-commit --plan <path>` — verify exact applied bytes and modes, refuse guarded branches or any extra dirty path, and commit only declared outputs with configured metadata. |
+
+Preparers are generic repository-owned pre-extraction commands. Each config
+entry declares an `id`, `phase: "pre-extraction"`, `command`, output path
+templates, optional `verify` command, and commit metadata. Templates may use `{app}`,
+`{package}`, `{packageRoot}`, `{planId}`, `{sourcePath}`, and `{targetPath}`;
+the last two come from one exact byte-identical move in the extraction
+manifest. Planning refuses undeclared writes and non-UTF-8 output files.
+
+```ts
+preparers: [{
+  id: "quality-ratchet",
+  phase: "pre-extraction",
+  command: "node tools/promote-ratchet.mjs {targetPath}",
+  outputs: ["quality/baselines/{targetPath}.json"],
+  verify: "node tools/check-ratchet.mjs {targetPath}",
+  commit: { subject: "chore: promote ratchet for {targetPath}" },
+}]
+```
+
+The preparer manifest is separate from the extraction manifest so its exact
+hashes, modes, rendered commands, and destination binding can be reviewed on
+their own. Commit that manifest alone directly above the extraction baseline
+before application; no approval subject is prescribed. No output commit subject
+is inferred: commit the applied outputs yourself according to repository
+policy—or use `preparer-commit` to enforce the configured subject and exact
+scope—then regenerate the extraction plan from the new `HEAD` because the
+reviewed extraction manifest is now stale. Verification commands run only in
+disposable worktrees, never during real-checkout journal replay. Ignored scratch
+writes are discarded with that worktree and are not captured or applied.
+
+Preparers that must inspect the moved tree use `postJournalPreparers`. Each
+declares `phase: "after-journal-before-gates"`, a command, exact outputs,
+optional move-path triggers, and an optional verification command. Outputs are
+recorded in the extraction manifest, regenerated before audit and gates, and
+included in the wiring commit. Undeclared repository changes still fail the
+changed-scope audit.
+
+Use a pre-extraction preparer for deterministic source compatibility edits
+(strict TypeScript fixes, test-environment directives, or explicit ambient
+stubs), then `preparer-commit` and regenerate the extraction plan. Use a
+post-journal preparer only for declared artifacts whose computation requires the
+destination paths, such as path-keyed lint or complexity baselines. This split
+preserves the extraction move commit as pure R100 renames.
+
+With `transaction.nodeModules: "install"`, simulation installs twice: once at
+the baseline and again after the journal creates package manifests and lockfile
+importers. The second install proves that a newly scaffolded package can resolve
+the dependencies declared by the plan.
+
+Asset consumers are planned with the same exactness as code consumers. A
+retained TypeScript/JavaScript import of a moved configured asset—including a
+query suffix such as `?url`—is rewritten to the asset's package subpath. For
+ordered stylesheet manifests, list their configured extensions in
+`cssImportExtensions`; `@import` references are then discovered and rewritten
+by literal span. Shared assets therefore require a subpath public surface;
+barrel-only plans refuse instead of emitting an unresolvable package-root import.
+
+## `campaign`
+
+```text
+campaign init --campaign <ledger> --id <id> --objective <text>
+              --max-pairs <count> [--write]
+campaign status --campaign <ledger>
+campaign advance --campaign <ledger>
+                 [--next-plan <manifest> --pair <id>] [--write]
+campaign record --campaign <ledger> --plan <manifest> --pair <id> [--write]
+```
+
+Campaign ledgers must live beneath configured `campaignDir` and be git-ignored.
+`init` and `advance` require fresh native scans and refuse captured `--graph`
+evidence. `advance` queues exactly one reviewed child and never applies it.
+`record` audits and records an already-applied child with a fresh post-apply
+scan. `status` is read-only and reports stale HEAD as non-actionable.
+
+## Exit codes
+
+| code | meaning |
+| --- | --- |
+| `0` | Command completed and its reported proof passed. |
+| `1` | Expected domain operation completed with a failed validation, simulation, check, or audit result. |
+| `3` | A selected adapter or integration is explicitly not yet ported. |
+| `64` | Invalid command usage or refused operator input. |
+| `70` | Unexpected internal defect; the CLI prints the full cause chain. |

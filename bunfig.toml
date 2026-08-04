@@ -1,0 +1,4 @@
+[test]
+# Only `test/` is a test root. `fixtures/` deliberately contains a file named
+# `*.test.ts` — it is input data for the engine, not a suite to execute.
+root = "./test"

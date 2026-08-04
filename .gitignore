@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+artifacts/
+*.tsbuildinfo
+
+# tool scratch space (worktrees, simulation roots, generated plans under test)
+.monocarve/
+tmp/
+*.log
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# env
+.env
+.env.*
+!.env.example

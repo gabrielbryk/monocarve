@@ -1,0 +1,185 @@
+import { rewriteResolvedImportSpecifier } from "../codemod/imports.ts";
+import { evaluationEffectKinds, type EvaluationEffectKind } from "../codemod/side-effects.ts";
+import { isAssetPath, type MonocarveConfig } from "../config.ts";
+import type { DependencyGraph } from "../graph/model.ts";
+import type { PortfolioCandidate } from "../portfolio/types.ts";
+import { byCodeUnit, hashText } from "../util/hash.ts";
+import { consumerApplications, findConsumers, partitionTests, type Consumer } from "./consumers.ts";
+import { PlanningError, WorkspaceContext } from "./context.ts";
+import { evaluationClosure } from "./evaluation-closure.ts";
+import type {
+  EscapeRewrite,
+  EvaluationEffectRecord,
+  EvaluationModuleRecord,
+  EvaluationPackageRecord,
+  EvaluationReach,
+  PlanOperation,
+  PublicModule,
+  SideEffectsDeclaration,
+} from "./manifest.ts";
+import { renderPublicModulePaths } from "./public-modules.ts";
+import { sourceExportsFromFile } from "./public-surface.ts";
+
+export interface SourceSelection {
+  readonly production: string[];
+  readonly assets: string[];
+  readonly tests: string[];
+  readonly sources: string[];
+  readonly targets: string[];
+  readonly assetTargets: string[];
+  readonly entrypointPath: string;
+  readonly publicModules: PublicModule[];
+  readonly publicSpecifierFor: ReadonlyMap<string, string>;
+}
+
+export function selectExtractionSources(args: {
+  readonly context: WorkspaceContext;
+  readonly candidate: PortfolioCandidate;
+  readonly packageRoot: string;
+  readonly entrypoint: string;
+  readonly packageName: string;
+  readonly publicSurface: MonocarveConfig["scaffoldTemplates"]["publicSurface"];
+}): SourceSelection {
+  const production = args.candidate.files.filter((path) => args.context.isProductionSource(path)).sort();
+  const assets = [...args.candidate.assets].sort();
+  const partition = partitionTests(args.context, production, [...args.candidate.tests].sort(), assets);
+  const tests = [...partition.travelling];
+  const sources = [...production, ...tests];
+  const targetOf = (source: string): string => `${args.packageRoot}/src/${args.context.targetRelativePath(source)}`;
+  const targets = sources.map(targetOf);
+  const assetTargets = assets.map(targetOf);
+  const allTargets = [...targets, ...assetTargets];
+  if (new Set(allTargets).size !== allTargets.length) {
+    throw new PlanningError("two selected files would land on the same target path");
+  }
+  const entrypointPath = `${args.packageRoot}/${args.entrypoint}`;
+  if (allTargets.includes(entrypointPath)) {
+    throw new PlanningError(`barrel self-import: a moved file would land on the generated entrypoint ${entrypointPath}`);
+  }
+  const moduleSources = [...production, ...assets];
+  const moduleTargets = [...targets.slice(0, production.length), ...assetTargets];
+  const rendered = renderPublicModulePaths(
+    args.publicSurface,
+    moduleSources.map((source) => args.context.targetRelativePath(source)),
+  );
+  const publicModules = rendered.map(({ exportKey, exportTarget }, index) => ({
+    source: moduleSources[index]!,
+    target: moduleTargets[index]!,
+    specifier: `${args.packageName}/${exportKey.slice(2)}`,
+    exportKey,
+    exportTarget,
+    requiredExports: index < production.length ? sourceExportsFromFile(args.context.absolute(moduleSources[index]!), moduleSources[index]!) : [],
+  }));
+  return {
+    production, assets, tests, sources, targets, assetTargets, entrypointPath, publicModules,
+    publicSpecifierFor: new Map(publicModules.map((entry) => [entry.source, entry.specifier])),
+  };
+}
+
+export function escapeRewritesFor(candidate: PortfolioCandidate): Map<string, EscapeRewrite[]> {
+  const rewrites = new Map<string, EscapeRewrite[]>();
+  for (const escape of candidate.rewriteEscapes) {
+    const entries = rewrites.get(escape.file) ?? [];
+    entries.push({ donorlessSpecifier: escape.specifier, packageSpecifier: escape.package });
+    rewrites.set(escape.file, entries);
+  }
+  return rewrites;
+}
+
+export function appendConsumerOperations(args: {
+  readonly context: WorkspaceContext;
+  readonly sources: readonly string[];
+  readonly packageName: string;
+  readonly publicSpecifierFor: ReadonlyMap<string, string>;
+  readonly operations: PlanOperation[];
+}): { readonly consumers: Consumer[]; readonly dynamicImportDelta: { readonly added: string[]; readonly removed: string[] } } {
+  const consumers = findConsumers(args.context, args.sources, args.packageName, args.publicSpecifierFor).map((consumer) =>
+    args.context.isTest(consumer.file) ? { ...consumer, dependencySection: "dev" as const } : consumer,
+  );
+  for (const consumer of consumers) for (const donor of consumer.donors) {
+    if (isAssetPath(args.context.config, donor) && !args.publicSpecifierFor.has(donor)) {
+      throw new PlanningError(`retained asset consumer ${consumer.file} requires a configured public subpath for ${donor}`);
+    }
+  }
+  const dynamicImportDelta = { added: [] as string[], removed: [] as string[] };
+  for (const consumer of consumers) {
+    appendDynamicImportDelta(args.context, consumer, args.packageName, args.publicSpecifierFor, dynamicImportDelta);
+    const next = rewriteConsumer(args.context, consumer, args.packageName, args.publicSpecifierFor);
+    args.operations.push({
+      kind: "rewrite-import", file: consumer.file, donors: [...consumer.donors], rewrites: consumer.rewrites,
+      preconditionHash: args.context.state(consumer.file), resultHash: hashText(next),
+    });
+  }
+  return { consumers, dynamicImportDelta };
+}
+
+function appendDynamicImportDelta(
+  context: WorkspaceContext,
+  consumer: Consumer,
+  packageName: string,
+  publicSpecifierFor: ReadonlyMap<string, string>,
+  delta: { added: string[]; removed: string[] },
+): void {
+  const references = context.moduleReferences(consumer.file)
+    .filter((reference) => reference.dynamic && reference.specifier !== null && reference.resolved !== null)
+    .filter((reference) => consumer.donors.some((donor) => context.absolute(donor) === reference.resolved));
+  for (const reference of references) {
+    delta.removed.push(reference.specifier!);
+    const donor = consumer.donors.find((entry) => context.absolute(entry) === reference.resolved);
+    delta.added.push(donor === undefined ? packageName : (publicSpecifierFor.get(donor) ?? packageName));
+  }
+}
+
+function rewriteConsumer(
+  context: WorkspaceContext,
+  consumer: Consumer,
+  packageName: string,
+  publicSpecifierFor: ReadonlyMap<string, string>,
+): string {
+  const current = context.text(consumer.file);
+  const next = consumer.donors.reduce(
+    (value, donor) => rewriteResolvedImportSpecifier(
+      value, context.absolute(consumer.file), context.absolute(donor), publicSpecifierFor.get(donor) ?? packageName, context.rootDir,
+      context.config.moduleSpecifierCalls, context.config.assetExtensions, context.config.cssImportExtensions,
+    ), current,
+  );
+  if (next === current) throw new PlanningError(`consumer ${consumer.file} would not change when repointed at ${packageName}`);
+  return next;
+}
+
+export function evaluationEffectsFor(args: {
+  readonly config: MonocarveConfig;
+  readonly context: WorkspaceContext;
+  readonly graph: DependencyGraph;
+  readonly production: readonly string[];
+  readonly targets: readonly string[];
+  readonly rewrites: ReadonlyMap<string, readonly EscapeRewrite[]>;
+  readonly packageWiring: readonly PlanOperation[];
+  readonly entrypointPath: string;
+}): EvaluationEffectRecord[] {
+  const entrypoint = args.packageWiring.find(
+    (operation): operation is Extract<PlanOperation, { kind: "write-file" }> => operation.kind === "write-file" && operation.path === args.entrypointPath,
+  );
+  const closure = evaluationClosure({ config: args.config, context: args.context, graph: args.graph, seeds: args.production, rewrites: args.rewrites });
+  return evaluationInventory([
+    ...args.production.map((source, index) => ({ subject: "module" as const, reach: "moved" as const, path: args.targets[index]!, kinds: args.context.evaluationEffectKinds(source) })),
+    ...(entrypoint ? [{ subject: "module" as const, reach: "generated" as const, path: entrypoint.path, kinds: evaluationEffectKinds(entrypoint.contents, entrypoint.path) }] : []),
+    ...closure.reached.map((path) => ({ subject: "module" as const, reach: "reached" as const, path, kinds: args.context.evaluationEffectKinds(path) })),
+    ...closure.packages.map((entry) => ({ subject: "package" as const, name: entry.name, sideEffects: entry.sideEffects })),
+  ]);
+}
+
+function evaluationInventory(entries: readonly (
+  | { readonly subject: "module"; readonly reach: EvaluationReach; readonly path: string; readonly kinds: readonly EvaluationEffectKind[] }
+  | { readonly subject: "package"; readonly name: string; readonly sideEffects: SideEffectsDeclaration }
+)[]): EvaluationEffectRecord[] {
+  const modules = entries.flatMap((entry): EvaluationModuleRecord[] => entry.subject === "module" && entry.kinds.length > 0
+    ? [{ subject: "module", reach: entry.reach, path: entry.path, kinds: [...new Set(entry.kinds)].sort(byCodeUnit) }] : [])
+    .sort((left, right) => byCodeUnit(left.path, right.path));
+  const packages = entries.flatMap((entry): EvaluationPackageRecord[] => entry.subject === "package"
+    ? [{ subject: "package", name: entry.name, sideEffects: entry.sideEffects }] : [])
+    .sort((left, right) => byCodeUnit(left.name, right.name));
+  return [...modules, ...packages];
+}
+
+export { consumerApplications };
