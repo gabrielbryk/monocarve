@@ -132,6 +132,15 @@ export async function simulatePlan(options: SimulateOptions): Promise<Simulation
     preflightJournal(config, manifest, worktree.workspacePath);
     const journal = await executeJournal({ config, treeRoot: worktree.workspacePath, manifest });
 
+    // Some repository-owned post-journal generators deliberately inventory the
+    // Git index (for example, a source-duplicate ratchet). The journal writes
+    // a faithful filesystem tree, but its moved targets are otherwise
+    // untracked until the later gate setup. Commit that exact journal result
+    // before generators run so each observes the same package boundaries that
+    // the eventual gate will inspect. Generated outputs remain unstaged and
+    // are still audited against their declared post-journal provenance below.
+    commitSimulatedExtraction(worktree.workspacePath, manifest);
+
     // Before the audit, and therefore before the gates: from here down every
     // reader sees the tree an apply would produce, generated files included. A
     // registry regenerated after the audit would make the audit's verdict about
