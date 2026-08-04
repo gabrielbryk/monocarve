@@ -14,16 +14,31 @@ export function verifyPreparationResultModes(
   operations: readonly PreparationReplayOperation[],
   failures: string[],
 ): number {
-  const mutations = operations.flatMap((operation) => operation.kind === "extract-type-declarations"
-    ? [operation.donor, operation.target]
-    : [operation.file]);
-  for (const mutation of mutations) {
-    const actual = modeAt(rootDir, mutation.path);
-    if (actual !== mutation.resultMode) {
-      failures.push(`landed mode differs: ${mutation.path} (expected ${mutation.resultMode}, got ${actual})`);
+  let checked = 0;
+  for (const operation of operations) {
+    if (operation.kind === "delete-module") {
+      checked += 1;
+      const actual = modeAt(rootDir, operation.file.path);
+      // Delete operations predate a missing-mode sentinel and serialize their
+      // structurally required resultMode as 0. That value is not a file mode:
+      // the approved result is absence, as the journal already enforces.
+      if (actual !== MISSING) {
+        failures.push(`landed deletion did not remove ${operation.file.path} (expected missing, got ${actual})`);
+      }
+      continue;
+    }
+    const mutations = operation.kind === "extract-type-declarations"
+      ? [operation.donor, operation.target]
+      : [operation.file];
+    for (const mutation of mutations) {
+      checked += 1;
+      const actual = modeAt(rootDir, mutation.path);
+      if (actual !== mutation.resultMode) {
+        failures.push(`landed mode differs: ${mutation.path} (expected ${mutation.resultMode}, got ${actual})`);
+      }
     }
   }
-  return mutations.length;
+  return checked;
 }
 
 function modeAt(rootDir: string, path: string): number | typeof MISSING | "non-file" {

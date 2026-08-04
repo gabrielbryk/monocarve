@@ -8,6 +8,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { buildDependencyGraph, type ScanReport } from "../src/graph/build.ts";
+import { verifyPreparationResultModes } from "../src/prepare/audit-modes.ts";
 import { compileBoundaryPreparationManifest, type CompileBoundaryPreparationManifestInput } from "../src/prepare/build.ts";
 import { validatePreparationManifest } from "../src/prepare/manifest.ts";
 import type { PreparationManifest } from "../src/prepare/manifest-types.ts";
@@ -29,12 +30,13 @@ const TSCONFIG = JSON.stringify({
 });
 
 /**
- * `env-shim`, `retire:false`: the smallest boundary manifest that carries no
- * extraction at all — a single rewrite-module-specifier operation.
+ * `env-shim`: the smallest boundary manifest that carries no extraction at
+ * all — a rewrite-module-specifier operation, optionally followed by the
+ * deletion that retires its shim.
  * `gates.workspace` is caller-controlled so the simulation-failure test can
  * force a real, observable gate failure.
  */
-function existingPackageFixture(workspaceGate: string): { readonly root: string; readonly config: ReturnType<typeof fixtureConfig>; readonly manifest: PreparationManifest } {
+function existingPackageFixture(workspaceGate: string, retire = false): { readonly root: string; readonly config: ReturnType<typeof fixtureConfig>; readonly manifest: PreparationManifest } {
   const root = fixtureRepo({
     "apps/api/tsconfig.json": TSCONFIG,
     [RETAINED]: RETAINED_SOURCE,
@@ -46,7 +48,7 @@ function existingPackageFixture(workspaceGate: string): { readonly root: string;
       retained: RETAINED,
       strategy: "existing-package",
       replacement: { specifier: "@acme/env", symbols: ["env"] },
-      retire: false,
+      retire,
     }],
     preparation: {
       gates: { package: [], project: [], workspace: [workspaceGate] },
@@ -142,5 +144,30 @@ describe("simulatePreparation — failure restores the tree and leaves the real 
     const afterStatus = fixtureGit(root, "status", "--porcelain");
     expect(afterHead).toBe(beforeHead);
     expect(afterStatus).toBe("");
+  }, 30_000);
+
+  test("a retired existing-package shim audits its result as missing, while a retained shim fails the same proof", async () => {
+    const { root, config, manifest } = existingPackageFixture("true", true);
+    const deletion = manifest.operations.find((operation) => operation.kind === "delete-module");
+    if (!deletion || deletion.kind !== "delete-module") throw new Error("expected retired existing-package boundary deletion");
+
+    // Failure sensitivity: before replay the shim still exists, so the delete
+    // result proof must reject it rather than treating legacy resultMode: 0 as
+    // an ordinary file permission mode.
+    const failures: string[] = [];
+    expect(verifyPreparationResultModes(root, [deletion], failures)).toBe(1);
+    expect(failures).toEqual([
+      `landed deletion did not remove ${RETAINED} (expected missing, got 420)`,
+    ]);
+
+    const result = await simulatePreparation({
+      config,
+      rootDir: root,
+      manifest,
+      baselineGraphScanner: async ({ baselineCommit }) => ({ commit: baselineCommit, digest: manifest.graphDigest }),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.audit?.fileModes).toEqual({ passed: true, checked: 2, failures: [] });
   }, 30_000);
 });
