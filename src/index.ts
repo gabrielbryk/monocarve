@@ -7,6 +7,7 @@ export * from "./util/hash.ts";
 export * from "./util/template.ts";
 export * from "./graph/index.ts";
 export * from "./symbols/index.ts";
+export * from "./visualization/model.ts";
 export * from "./seams/index.ts";
 export * from "./portfolio/index.ts";
 export * from "./plan/index.ts";

@@ -23,6 +23,7 @@ where supported.
 | --- | --- |
 | `plan` | `plan --candidate <id> ... [--verify-lockfile] [--write]` — compile deterministically; `--verify-lockfile` first replays the plan and requires a real configured package-manager round-trip. |
 | `scan` | `scan [--app <name>] [--no-cache] [--include-extracted] [--out <path>]` — build the configured dependency model without editing the workspace. |
+| `visualize` | `visualize [--app <name>] [--port <number>] [--no-open] [--no-cache] [--include-extracted]` — serve the current SCC-level dependency graph as an interactive loopback-only web UI. Search and edge-kind filters are local; Rescan rebuilds the read-only graph. |
 | `layers` | `layers [--app <name>] [--out <path>]` — report domains, components, and dependency-first layers. |
 | `portfolio` | `portfolio [--app <name>] [--limit <n>] [--include-extracted] [--communities] [--hub-inbound-threshold <n>]` — rank eligible whole-file candidates and report population totals. |
 | `candidates` | `candidates [--candidate <id>] [--path <path>] [--eligibility <all\|eligible\|blocked>] [--app <name>] [--include-extracted]` — inspect candidate details or filter by claimed workspace path and eligibility; add `--json` for stable full details. |

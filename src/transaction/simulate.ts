@@ -48,7 +48,6 @@ export interface GateCommandOutput {
   readonly stdout: string;
   readonly stderr: string;
 }
-
 /** Injectable process boundary for deterministic scheduler tests. */
 export type GateCommandRunner = (
   command: readonly string[],

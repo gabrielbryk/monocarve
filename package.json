@@ -63,7 +63,9 @@
   },
   "dependencies": {
     "dependency-cruiser": "^16.10.0",
+    "open": "^10.2.0",
     "typescript": "^5.9.0",
+    "vis-network": "^10.1.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {

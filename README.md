@@ -20,6 +20,25 @@ Monocarve is intentionally conservative. Start with `scan`, `portfolio`, and
 `plan`; applying a plan is a separate, explicit transaction that first proves
 the same journal in a disposable worktree.
 
+To explore the same dependency model visually, run:
+
+```sh
+monocarve visualize
+```
+
+This opens a loopback-only interactive web UI. Its default architecture view
+aggregates SCCs by configured domain and turns each domain's strongest outgoing
+dependency into a deterministic parent edge. Cycles are broken deterministically,
+the resulting dependency trees are packed as separate spatial islands, and the
+largest island is focused initially. Select a node to highlight its local
+relationships, overlay the broader backbone or all connections when needed, or
+double-click a domain to drill into the underlying components. The component view collapses import cycles into
+their atomic SCCs and lays them out by dependency layer. Both views support
+zooming, application/domain scoping, search, typed-edge filtering, inspection,
+explicit live rescans, and an agent-oriented high-contrast rendering with white
+background, black directional edges, and strongly bordered labels. Use `--app <name>` to constrain the scan itself or
+`--no-open` when running remotely.
+
 ## Why
 
 Carving a package out of a mature application is mechanically simple and

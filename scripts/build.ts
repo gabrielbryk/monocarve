@@ -37,14 +37,18 @@ const dependencyCruiserReporterPlugin: BunPlugin = {
 };
 
 await build({ entrypoints: ["src/index.ts", "src/config.ts"], outdir: "dist", naming: "[name].js" });
-await build({ entrypoints: ["src/cli.ts"], outdir: "dist", naming: "monocarve.js" });
+await build({
+  entrypoints: ["src/monocarve.ts"],
+  outdir: "dist",
+  naming: { entry: "[name].[ext]", chunk: "chunks/[name]-[hash].[ext]", asset: "assets/[name]-[hash].[ext]" },
+});
 run(["bun", "x", "tsc", "--project", "tsconfig.build.json"]);
 chmodSync(resolve(root, "dist/monocarve.js"), 0o755);
 
 if (!bundleOnly) {
   mkdirSync(resolve(root, "artifacts"), { recursive: true });
   await build({
-    entrypoints: ["src/cli.ts"],
+    entrypoints: ["src/monocarve.ts"],
     compile: { outfile: resolve(root, "artifacts/monocarve"), autoloadDotenv: false, autoloadBunfig: false },
   });
 }
