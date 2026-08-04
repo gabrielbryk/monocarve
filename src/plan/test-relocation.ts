@@ -4,7 +4,7 @@ import { byCodeUnit } from "../util/hash.ts";
 import { PlanningError, type WorkspaceContext } from "./context.ts";
 import type { TestRelocationPartition } from "./consumers.ts";
 
-/** Partition direct test importers for the opt-in self-contained policy. */
+/** Partition direct test importers without moving app-local test support. */
 export function partitionTests(
   context: WorkspaceContext,
   production: readonly string[],
@@ -15,10 +15,14 @@ export function partitionTests(
   const fixedRetained = classified.filter((test) => context.testKind(test) !== "unit");
   const unitTests = classified.filter((test) => context.testKind(test) === "unit");
   fixedRetained.forEach((test) => validateFixedRetainedTest(context, test, assets));
-  if (context.config.testRelocation.strategy === "all-importers") {
-    return { travelling: unitTests, retained: fixedRetained };
-  }
-  return partitionUnitTests(context, production, unitTests, assets, fixedRetained);
+  return partitionUnitTests(
+    context,
+    production,
+    unitTests,
+    assets,
+    fixedRetained,
+    context.config.testRelocation.strategy === "all-importers",
+  );
 }
 
 function validateFixedRetainedTest(context: WorkspaceContext, test: string, assets: readonly string[]): void {
@@ -40,12 +44,13 @@ function partitionUnitTests(
   tests: readonly string[],
   assets: readonly string[],
   fixedRetained: readonly string[],
+  allowUnsupportedReference: boolean,
 ): TestRelocationPartition {
   const moved = new Set([...production, ...assets]);
   const travelling: string[] = [];
   const retained: string[] = [];
   for (const test of tests) {
-    const result = classifyUnitTest(context, test, moved, assets);
+    const result = classifyUnitTest(context, test, moved, assets, allowUnsupportedReference);
     if (result === "travelling") travelling.push(test);
     else retained.push(test);
   }
@@ -57,8 +62,11 @@ function classifyUnitTest(
   test: string,
   moved: ReadonlySet<string>,
   assets: readonly string[],
+  allowUnsupportedReference: boolean,
 ): "travelling" | "retained" {
-  if (context.hasUnsupportedReference(test)) throw new PlanningError(`unsupported module reference in test importer ${test}`);
+  if (!allowUnsupportedReference && context.hasUnsupportedReference(test)) {
+    throw new PlanningError(`unsupported module reference in test importer ${test}`);
+  }
   const movedAssets = new Set<string>();
   const selfContained = context.moduleReferences(test).every((reference) =>
     testReferenceTravels(context, test, reference.specifier, reference.resolved, moved, assets, movedAssets),

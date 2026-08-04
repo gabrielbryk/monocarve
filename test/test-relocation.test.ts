@@ -144,7 +144,7 @@ describe("self-contained test relocation", () => {
     });
   });
 
-  test("records a retained test as a dev-only, hash-proven consumer rewrite", async () => {
+  test("retains a default-strategy test with app-local support and compiles its donor rewrite", async () => {
     const files = {
       [`${sourceRoot}/unit.ts`]: "export const unit = 1;\n",
       [`${sourceRoot}/shell.ts`]: "export const shell = 1;\n",
@@ -163,7 +163,6 @@ describe("self-contained test relocation", () => {
       packageRoots: ["libs"],
       testPathPatterns: ["\\.test\\.ts$"],
       assetExtensions: [".css"],
-      testRelocation: { strategy: "self-contained" },
       moduleSpecifierCalls: ["vi.mock"],
       portfolio: { minFiles: 1 },
       scaffoldTemplates: {
@@ -183,6 +182,7 @@ describe("self-contained test relocation", () => {
     const candidate = buildPortfolio({ config: configured, graph }).candidates.find((entry) => entry.files.includes(`${sourceRoot}/unit.ts`));
     expect(candidate?.eligible).toBe(true);
     const manifest = buildPlanSync({ config: configured, rootDir: root, graph, candidate: candidate!, baselineCommit: graph.commit!, packageName: "unit" });
+    expect(validatePlan(manifest, { config: configured, rootDir: root })).toMatchObject({ ok: true });
     expect(manifest.source.tests).toEqual([]);
     expect(manifest.consumers).toContainEqual(expect.objectContaining({
       file: `${sourceRoot}/unit.test.ts`,
@@ -209,6 +209,77 @@ describe("self-contained test relocation", () => {
     }
     expect(read(root, `${sourceRoot}/unit.test.ts`)).toBe(beforeTest);
     expect(read(root, `${sourceRoot}/unit.ts`)).toBe(files[`${sourceRoot}/unit.ts`]);
+  });
+
+  test("keeps a closure-contained test travelling in the compiled manifest", () => {
+    const files = {
+      [`${sourceRoot}/unit.ts`]: "export const unit = 1;\n",
+      [`${sourceRoot}/unit.test.ts`]: 'import { unit } from "./unit.ts"; void unit;\n',
+    };
+    const root = fixtureRepo({
+      "package.json": '{"private":true}\n',
+      "pnpm-workspace.yaml": "packages:\n  - apps/*\n  - libs/*\n",
+      "apps/api/package.json": '{"name":"@acme/api"}\n',
+      "apps/api/tsconfig.json": '{"compilerOptions":{"moduleResolution":"bundler"}}\n',
+      "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\n  apps/api: {}\n",
+      ...files,
+    });
+    const configured = parseConfig({
+      applications: [{ name: "api", sourceRoot, tsconfig: "apps/api/tsconfig.json", packageName: "@acme/api" }],
+      packageRoots: ["libs"],
+      testPathPatterns: ["\\.test\\.ts$"],
+      portfolio: { minFiles: 1 },
+      scaffoldTemplates: { packageJson: { contents: "{}" } },
+    });
+    const graph = buildDependencyGraph({
+      config: configured,
+      rootDir: root,
+      commit: fixtureGit(root, "rev-parse", "HEAD").trim(),
+      reports: { api: { modules: [
+        { source: `${sourceRoot}/unit.ts`, dependencies: [] },
+        { source: `${sourceRoot}/unit.test.ts`, dependencies: [{ module: "./unit.ts", resolved: `${sourceRoot}/unit.ts` }] },
+      ] } },
+    });
+    const candidate = buildPortfolio({ config: configured, graph }).candidates.find((entry) => entry.files.includes(`${sourceRoot}/unit.ts`));
+    expect(candidate?.eligible).toBe(true);
+    const manifest = buildPlanSync({ config: configured, rootDir: root, graph, candidate: candidate!, baselineCommit: graph.commit!, packageName: "unit" });
+    expect(manifest.source.tests).toEqual([`${sourceRoot}/unit.test.ts`]);
+    expect(manifest.operations).toContainEqual(expect.objectContaining({
+      kind: "move",
+      source: `${sourceRoot}/unit.test.ts`,
+      target: "libs/unit/src/unit.test.ts",
+    }));
+    expect(manifest.consumers.some((consumer) => consumer.file === `${sourceRoot}/unit.test.ts`)).toBe(false);
+    expect(validatePlan(manifest, { config: configured, rootDir: root })).toMatchObject({ ok: true });
+  });
+
+  test("keeps a production closure escape fail-closed", () => {
+    const files = {
+      [`${sourceRoot}/unit.ts`]: 'import { shell } from "./shell.ts"; export const unit = shell;\n',
+      [`${sourceRoot}/shell.ts`]: "export const shell = 1;\n",
+    };
+    const root = fixtureRepo({
+      "package.json": "{}\n",
+      "apps/api/package.json": "{}\n",
+      "apps/api/tsconfig.json": '{"compilerOptions":{"moduleResolution":"bundler"}}\n',
+      ...files,
+    });
+    const configured = config();
+    const graph = buildDependencyGraph({
+      config: configured,
+      rootDir: root,
+      commit: fixtureGit(root, "rev-parse", "HEAD").trim(),
+      reports: { api: { modules: Object.keys(files).map((source) => ({ source, dependencies: [] })) } },
+    });
+    const candidate = buildPortfolio({ config: configured, graph }).candidates.find(
+      (entry) => entry.files.length === 1 && entry.files[0] === `${sourceRoot}/unit.ts`,
+    );
+    expect(candidate?.rejectionReasons).toContainEqual({
+      code: "closure-escapes-app-code",
+      detail: "1 relative import(s) leave the closure for code no package exports",
+      edges: [`${sourceRoot}/unit.ts -> ./shell.ts`],
+    });
+    expect(candidate?.eligible).toBe(false);
   });
 
   test("profiles change target, scaffold, gates, and manifest identity without colliding", () => {

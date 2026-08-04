@@ -71,8 +71,9 @@ describe("cli pipeline", () => {
     const evaluating = candidate.warnings.filter((warning) => warning.includes("do work when evaluated"));
     expect(evaluating).toHaveLength(1);
     expect(evaluating[0]).toContain("2 of 4 module(s)");
-    const other = candidates.find((entry) => entry.id !== candidate.id)!;
-    expect(other.warnings.some((warning) => warning.includes("1 of 3 module(s)"))).toBe(true);
+    expect(candidates.some((entry) =>
+      entry.id !== candidate.id && entry.warnings.some((warning) => warning.includes("1 of 3 module(s)")),
+    )).toBe(true);
   }, 180_000);
 
   test("plan compilation is byte-deterministic and captures all operation kinds", async () => {

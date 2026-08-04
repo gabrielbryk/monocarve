@@ -62,10 +62,10 @@ export const portfolio = z.strictObject({
 export type PortfolioConfig = z.output<typeof portfolio>;
 
 /**
- * How co-located tests participate in an extraction.  The default preserves
- * the historical, conservative behaviour: every direct test importer moves
- * with the production closure.  `self-contained` is opt-in because retaining
- * a test turns it into a package consumer and therefore needs a rewrite proof.
+ * How co-located tests participate in an extraction. Both strategies retain a
+ * test that reaches app-local support outside the moved closure, because that
+ * support must not be pulled into a production package. The default still
+ * permits computed test-only references; `self-contained` refuses them.
  */
 export const testRelocation = z.strictObject({
   strategy: z.enum(["all-importers", "self-contained"]).default("all-importers"),

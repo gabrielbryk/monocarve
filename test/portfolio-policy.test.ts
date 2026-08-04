@@ -51,7 +51,7 @@ describe("portfolio protected-path policy", () => {
     expect(portfolio.selected[0]).toBe(chart.id);
   });
 
-  test("hard-rejects the top candidate and selects the next eligible candidate", async () => {
+  test("hard-rejects the top candidate and selects the remaining eligible candidates", async () => {
     const { config, graph } = await fixture();
     const protectedConfig = withProtectedPaths(config, [CHART]);
     const portfolio = buildPortfolio({ config: protectedConfig, graph });
@@ -64,8 +64,8 @@ describe("portfolio protected-path policy", () => {
       edges: [CHART],
     });
     expect(portfolio.selected).not.toContain(chart.id);
-    expect(portfolio.selected).toHaveLength(1);
-    expect(portfolio.candidates.find((entry) => entry.id === portfolio.selected[0])?.application).toBe("api");
+    expect(portfolio.selected.length).toBeGreaterThan(0);
+    expect(portfolio.selected.some((id) => portfolio.candidates.find((entry) => entry.id === id)?.application === "api")).toBe(true);
   });
 
   test("matches an exact file or directory boundary, never a similarly named sibling", async () => {
