@@ -115,10 +115,10 @@ function validateOperation(
       validateFsReferenceRewrite(operation, index, issues, moves, mutated);
       return;
     case "write-file":
-      if (movePaths.has(operation.path)) {
+      if (movePaths.has(operation.path) && !isPromotionCompatibilityWrite(manifest, operation)) {
         issues.add("multiple-mutations", `multiple operations mutate ${operation.path}`, { operationIndex: index });
       }
-      validateWrite(operation, index, options, issues, mutated);
+      validateWrite(operation, index, options, issues, mutated, isPromotionCompatibilityWrite(manifest, operation));
       return;
     case "lockfile-importer":
       validateLockfileImporter(operation, index, options, issues, manifest, mutated);
@@ -360,6 +360,7 @@ function validateWrite(
   options: ValidatePlanOptions,
   issues: Issues,
   mutated: Set<string>,
+  allowAfterMove = false,
 ): void {
   const at = { operationIndex: index, operationKind: operation.kind, path: operation.path };
   try {
@@ -367,13 +368,20 @@ function validateWrite(
   } catch (error) {
     issues.add("write-path", (error as Error).message, at);
   }
-  if (mutated.has(operation.path)) issues.add("multiple-mutations", `multiple operations mutate ${operation.path}`, at);
+  if (mutated.has(operation.path) && !allowAfterMove) issues.add("multiple-mutations", `multiple operations mutate ${operation.path}`, at);
   if (typeof operation.contents !== "string") issues.add("write-contents", "write contents must be a string", at);
   else if (operation.resultHash !== hashText(operation.contents)) issues.add("write-hash", `write hash mismatch ${operation.path}`, at);
   if (!isFileState(operation.preconditionHash)) {
     issues.add("write-hash", `write precondition for ${operation.path} must be a SHA-256 hash or "missing"`, at);
   }
   mutated.add(operation.path);
+}
+
+function isPromotionCompatibilityWrite(manifest: ExtractionManifest, operation: Extract<PlanOperation, { kind: "write-file" }>): boolean {
+  return manifest.modulePromotion?.retireSource === false
+    && operation.path === manifest.modulePromotion.source
+    && operation.generator === "module-promotion:compatibility-reexport"
+    && operation.preconditionHash === "missing";
 }
 
 function validateLockfileImporter(

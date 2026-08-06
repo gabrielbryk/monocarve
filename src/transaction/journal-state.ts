@@ -52,6 +52,7 @@ export function isAtPrecondition(adapter: PackageManagerAdapter, operation: Plan
 export function preflightJournal(config: MonocarveConfig, manifest: ExtractionManifest, root: string): void {
   const adapter = createPackageManagerAdapter(config);
   for (const operation of manifest.operations) {
+    if (operation.kind === "write-file" && operation.generator === "module-promotion:compatibility-reexport" && manifest.modulePromotion?.source === operation.path && manifest.operations.some((item) => isAnyMove(item) && item.source === operation.path)) continue;
     if (isCompleted(adapter, operation, root) || isAtPrecondition(adapter, operation, root)) continue;
     throw new JournalError(`operation precondition failed: ${operation.kind} (${operationPaths(operation).join(" -> ")})`);
   }

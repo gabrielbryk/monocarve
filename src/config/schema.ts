@@ -3,7 +3,7 @@ import { z } from "zod";
 import { SCRATCH_DIRNAME } from "../branding.ts";
 import { assetEmissionProofs, generatedArtifacts, pathMigrations, postJournalPreparers, transaction } from "./schema-artifacts.ts";
 import { application, commitTemplates, extractionProfiles, firstPartyPackage, gates, preparationPolicy, preparers, scaffoldTemplates } from "./schema-core.ts";
-import { compositionBoundaries, graph, integrationTestSuites, pathReferences, pathReferenceRewrites, portfolio, portPromotions, testKinds, testRelocation } from "./schema-policy.ts";
+import { compositionBoundaries, generatedSourceAdoptions, graph, integrationTestSuites, modulePromotions, pathReferences, pathReferenceRewrites, portfolio, portPromotions, testKinds, testRelocation } from "./schema-policy.ts";
 import { regexSource, relativePath } from "./primitives.ts";
 import { validateExtractionProfiles } from "./profiles.ts";
 import { validateFirstPartyPackages, validateIntegrationTestSuites, validateTestKinds } from "./validation.ts";
@@ -117,6 +117,8 @@ export const monocarveConfigSchema = z.strictObject({
   compositionBoundaries,
   /** Backend vocabulary for the same boundary-preparation mechanism. */
   portPromotions,
+  modulePromotions,
+  generatedSourceAdoptions,
   transaction: transaction.prefault({}),
   generatedArtifacts: generatedArtifacts.prefault({}),
   pathMigrations: pathMigrations.prefault({}),
@@ -139,6 +141,16 @@ export const monocarveConfigSchema = z.strictObject({
   validateIntegrationTestSuites(config, ctx);
   validateTestKinds(config, ctx);
   validateFirstPartyPackages(config, ctx);
+  const boundaryIds = new Map<string, string>();
+  for (const item of config.compositionBoundaries) boundaryIds.set(item.id, "compositionBoundaries");
+  for (const item of config.portPromotions) if (!boundaryIds.has(item.id)) boundaryIds.set(item.id, "portPromotions");
+  for (const [field, items] of [["modulePromotions", config.modulePromotions], ["generatedSourceAdoptions", config.generatedSourceAdoptions]] as const) {
+    items.forEach((item, index) => {
+      const prior = boundaryIds.get(item.id);
+      if (prior !== undefined) ctx.addIssue({ code: "custom", path: [field, index, "id"], message: `boundary id is already declared in ${prior}` });
+      else boundaryIds.set(item.id, field);
+    });
+  }
   config.cssImportExtensions.forEach((extension, index) => {
     if (!config.assetExtensions.includes(extension)) ctx.addIssue({ code: "custom", path: ["cssImportExtensions", index], message: "CSS import extension must also be an asset extension" });
   });

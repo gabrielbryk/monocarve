@@ -1,10 +1,10 @@
 /** Commit construction and exact-scope proofs for a committed apply. */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { fileState } from "../util/files.ts";
 import { git, headCommit } from "../util/git.ts";
-import { pureRenames, regeneratedArtifactPaths, wiringPaths, type ExtractionManifest, type MoveOperation } from "../plan/manifest.ts";
+import { pureRenames, regeneratedArtifactPaths, wiringPaths, type ExtractionManifest, type MoveOperation, type WriteFileOperation } from "../plan/manifest.ts";
 import { ApplyError, type ApplyResult, type ApplyState } from "./apply-types.ts";
 
 export function commitAppliedPlan(rootDir: string, manifest: ExtractionManifest, state: ApplyState, onMoveCommitted?: (commit: string) => void): Pick<ApplyResult, "moveCommit" | "wiringCommit"> {
@@ -18,10 +18,19 @@ export function commitAppliedPlan(rootDir: string, manifest: ExtractionManifest,
 function commitMoves(rootDir: string, manifest: ExtractionManifest, state: ApplyState, moves: readonly MoveOperation[]): string | undefined {
   const paths = moves.flatMap((move) => [move.source, move.target]);
   if (state !== "pre-apply" || paths.length === 0) return undefined;
-  const stageable = paths.filter((path) => existsSync(resolve(rootDir, path)));
-  if (stageable.length > 0) git({ cwd: rootDir, quiet: true }, "add", "-A", "--", ...stageable);
-  assertExactMoveDiff(git({ cwd: rootDir }, "diff", "--cached", "--name-status", "--find-renames=100%", "--"), moves, rootDir);
-  commitStaged(rootDir, manifest.commits.move.subject, manifest.commits.move.body);
+  const compatibility = manifest.modulePromotion?.retireSource === false
+    ? manifest.operations.find((operation): operation is WriteFileOperation => operation.kind === "write-file" && operation.path === manifest.modulePromotion?.source && operation.generator === "module-promotion:compatibility-reexport")
+    : undefined;
+  const compatibilityBytes = compatibility === undefined ? undefined : readFileSync(resolve(rootDir, compatibility.path));
+  try {
+    if (compatibility !== undefined) rmSync(resolve(rootDir, compatibility.path));
+    const stageable = paths.filter((path) => existsSync(resolve(rootDir, path)));
+    if (stageable.length > 0) git({ cwd: rootDir, quiet: true }, "add", "-A", "--", ...stageable);
+    assertExactMoveDiff(git({ cwd: rootDir }, "diff", "--cached", "--name-status", "--find-renames=100%", "--"), moves, rootDir);
+    commitStaged(rootDir, manifest.commits.move.subject, manifest.commits.move.body);
+  } finally {
+    if (compatibility !== undefined && compatibilityBytes !== undefined) writeFileSync(resolve(rootDir, compatibility.path), compatibilityBytes);
+  }
   return headCommit(rootDir);
 }
 

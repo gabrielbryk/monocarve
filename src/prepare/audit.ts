@@ -24,6 +24,7 @@ import { verifyCompatibilityResolution, verifyRenderedCompatibilitySurface, veri
 import { computeBoundaryAuditProofs } from "./audit-boundary.ts";
 // The changed-path scope proof lives in its own module for the same reason.
 import { verifyChangedScope } from "./audit-scope.ts";
+import { verifyGeneratedSourceOperations } from "./audit-generated-source.ts";
 export type { PreparationAuditOptions, PreparationAuditReport, PreparationProofResult } from "./audit-types.ts";
 export async function auditPreparation(options: PreparationAuditOptions): Promise<PreparationAuditReport> {
   return auditPreparationSync(options);
@@ -55,9 +56,8 @@ export function auditPreparationSync(options: PreparationAuditOptions): Preparat
     verifyMutationBytes(rootDir, manifest.baseline.commit, operation, baselineByPath, byteFailures);
   }
   const modeChecks = verifyPreparationResultModes(rootDir, manifest.operations, modeFailures);
-  for (const operation of manifest.operations) {
-    if (operation.kind === "write-file") verifyWriteBytes(rootDir, manifest.baseline.commit, operation, byteFailures);
-  }
+  for (const operation of manifest.operations) if (operation.kind === "write-file") verifyWriteBytes(rootDir, manifest.baseline.commit, operation, byteFailures);
+  verifyGeneratedSourceOperations(rootDir, manifest.baseline.commit, manifest.operations, byteFailures);
   for (const operation of extracts) verifyRenderedReplay(operation, baselineByPath.get(operation.donor.path), replayFailures);
 
   const selectors = extracts.flatMap((operation) => operation.declarations.flatMap((group) => group.declarations));

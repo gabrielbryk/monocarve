@@ -52,6 +52,7 @@ export function validatePlan(manifest: ExtractionManifest, options: ValidatePlan
   const target = validateTarget(manifest, options, issues, [...source.files, ...source.assets], containedPath);
   validateDependencies(manifest, options, issues);
   const consumers = validateConsumers(manifest, issues, target.packageName, target.publicModules, containedPath);
+  validateModulePromotion(manifest, consumers, issues);
   validateMetadata(manifest, issues, containedPath);
   validateOperations(manifest, options, issues, {
     ...source,
@@ -63,6 +64,22 @@ export function validatePlan(manifest: ExtractionManifest, options: ValidatePlan
     entrypoint: `${target.packageRoot}/${target.entrypoint}`,
   });
   return validationResult(issues);
+}
+
+function validateModulePromotion(manifest: ExtractionManifest, consumers: ReadonlySet<string>, issues: Issues): void {
+  const promotion = manifest.modulePromotion;
+  if (promotion === undefined) return;
+  if (manifest.source.files.length !== 1 || manifest.source.files[0] !== promotion.source) issues.add("module-promotion", "module promotion must select exactly its configured source module");
+  const importerProof = [...promotion.importerProof];
+  if (new Set(importerProof).size !== importerProof.length || importerProof.some((path, index) => index > 0 && path <= importerProof[index - 1]!)) issues.add("module-promotion-importers", "module promotion importer proof must be sorted and unique");
+  if (importerProof.length !== consumers.size || importerProof.some((path) => !consumers.has(path))) issues.add("module-promotion-importers", "module promotion importer proof must exactly equal compiled consumers");
+  const before = promotion.cycleCut.before;
+  const after = promotion.cycleCut.after;
+  if (before.length < 2 || !before.includes(promotion.source)) issues.add("module-promotion-cycle-cut", "cycle-cut baseline must be a multi-module SCC containing the source");
+  const afterMembers = after.flat();
+  if (afterMembers.includes(promotion.source) || afterMembers.length !== before.length - 1 || afterMembers.some((path) => !before.includes(path))) issues.add("module-promotion-cycle-cut", "cycle-cut result must partition every baseline SCC member except the promoted source");
+  if (Math.max(0, ...after.map((component) => component.length)) >= before.length) issues.add("module-promotion-cycle-cut", "cycle-cut proof does not reduce the largest SCC");
+  if (promotion.cycleCut.removedEdges.length === 0 || promotion.cycleCut.removedEdges.some((edge) => edge.from !== promotion.source && edge.to !== promotion.source)) issues.add("module-promotion-cycle-cut", "removed SCC edges must be non-empty and incident to the promoted source");
 }
 
 function validateHeader(manifest: ExtractionManifest, options: ValidatePlanOptions, issues: Issues): void {

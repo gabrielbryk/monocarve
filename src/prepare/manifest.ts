@@ -203,6 +203,16 @@ function validateOperations(manifest: PreparationManifest, add: AddIssue): void 
       validateDeletionRecipe(operation, manifest.operations, add);
       continue;
     }
+    if (operation.kind === "adopt-generated-source") {
+      validateMutation(operation.file, operation.contents, "generated-source-adoption", add);
+      if (!isWorkspacePath(operation.declaredSource) || operation.file.preconditionHash === "missing" || operation.file.preconditionMode === "missing" || operation.removedHeader.lines < 1 || !isSha256(operation.removedHeader.hash)) add("generated-source-adoption", "adoption must bind an existing artifact, missing source path, and exact removed header", operation.file.path);
+      continue;
+    }
+    if (operation.kind === "delete-generated-source-generator") {
+      if (operation.file.preconditionHash === "missing" || operation.file.preconditionMode === "missing" || operation.adoptedOutputs.length === 0) add("generated-source-generator", "generator retirement requires an existing generator and adopted output proof", operation.file.path);
+      validateSortedStrings(operation.adoptedOutputs, "generated-source-generator", "adoptedOutputs", add);
+      continue;
+    }
     validateExtractOperation(operation, groupById, includedGroups, add);
   }
   if (includedGroups.size !== groupById.size) add("operation-declarations", "operations must include every declared extraction group exactly once");

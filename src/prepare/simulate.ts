@@ -124,10 +124,10 @@ export function preparationFilesystemOperations(manifest: PreparationManifest): 
 }
 
 function preparationFilesystemOperationsFor(operation: PreparationManifest["operations"][number]): readonly PreparationFilesystemOperation[] {
-  if (operation.kind === "write-file" || operation.kind === "rewrite-module-specifier") {
+  if (operation.kind === "write-file" || operation.kind === "rewrite-module-specifier" || operation.kind === "adopt-generated-source") {
     return [writeOperation(operation.file, operation.contents)];
   }
-  if (operation.kind === "delete-module") {
+  if (operation.kind === "delete-module" || operation.kind === "delete-generated-source-generator") {
     // A deletion has no rendered bytes: the journal's tiny language only
     // needs the precondition to prove the shim it removes is exactly the one
     // this manifest was compiled against.
@@ -171,6 +171,7 @@ function policyAnchors(manifest: PreparationManifest): PreparationPolicyRenderIn
         targetModuleSpecifier: operation.moduleSpecifier,
       }];
     }
+    if (operation.kind === "adopt-generated-source") return [{ sourcePath: operation.file.path, targetPath: operation.file.path, targetModuleSpecifier: operation.policySpecifier }];
     if (operation.kind !== "rewrite-module-specifier") return [];
     return [...new Set(operation.rewrites.map((rewrite) => rewrite.to))]
       .sort(byCodeUnit)

@@ -195,10 +195,10 @@ boundary simulate --plan <manifest>
 boundary apply --plan <manifest> [--commit]
 ```
 
-`boundary` compiles one declared entry from `compositionBoundaries` or
-`portPromotions` — see "Boundary preparation" in the operator guide for the
-two config vocabularies, the `existing-package`/`port` strategies, and the
-full refusal list. `review` is read-only: it resolves the boundary and
+`boundary` compiles one declared entry from `compositionBoundaries`,
+`portPromotions`, `modulePromotions`, or `generatedSourceAdoptions` — see
+"Boundary preparation" in the operator guide for their distinct proof
+boundaries. `review` is read-only: it resolves the entry and
 reports its baseline importers as discovered by a fresh dependency-graph
 scan, for inspection before compiling. `compile` re-derives that same
 importer set itself from the graph — it never accepts a hand-typed importer

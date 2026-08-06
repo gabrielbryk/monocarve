@@ -65,6 +65,8 @@ export type { PublicSurfaceConfig, TemplateSource } from "./config/primitives.ts
 export type {
   GraphConfig,
   IntegrationTestSuiteConfig,
+  GeneratedSourceAdoptionsConfig,
+  ModulePromotionsConfig,
   PathReferencesConfig,
   PortfolioConfig,
   TestKind,

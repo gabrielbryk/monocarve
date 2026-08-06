@@ -406,6 +406,50 @@ export const portPromotions = z
 
 export type PortPromotionsConfig = z.output<typeof portPromotions>;
 
+/**
+ * Reviewed exception to SCC-closure selection: promote one complete module as
+ * a byte-identical package surface and let the compiler derive every importer.
+ */
+export const modulePromotions = z.array(z.strictObject({
+  id: kebabId,
+  source: relativePath,
+  targetPackage: z.string().min(1),
+  /** Public module key relative to the package root, without an extension. */
+  targetModule: z.string().min(1).default("index"),
+  /** False retains a compatibility re-export at the old path. */
+  retireSource: z.boolean().default(true),
+})).default([]).superRefine((items, ctx) => {
+  const seen = new Set<string>();
+  items.forEach((item, index) => {
+    if (seen.has(item.id)) ctx.addIssue({ code: "custom", path: [index, "id"], message: "modulePromotions id must be unique" });
+    seen.add(item.id);
+  });
+});
+
+export type ModulePromotionsConfig = z.output<typeof modulePromotions>;
+
+/** Explicit adoption of orphaned generated output as durable source. */
+export const generatedSourceAdoptions = z.array(z.strictObject({
+  id: kebabId,
+  artifacts: z.array(z.strictObject({
+    path: relativePath,
+    /** Must equal the missing source declared by the artifact header. */
+    missingSource: relativePath,
+    /** Exact leading line count removed from the artifact. */
+    removeHeaderLines: z.number().int().positive(),
+  })).min(1),
+  /** Optional generator retired only when no other provenance header names it. */
+  retireGenerator: relativePath.optional(),
+})).default([]).superRefine((items, ctx) => {
+  const seen = new Set<string>();
+  items.forEach((item, index) => {
+    if (seen.has(item.id)) ctx.addIssue({ code: "custom", path: [index, "id"], message: "generatedSourceAdoptions id must be unique" });
+    seen.add(item.id);
+  });
+});
+
+export type GeneratedSourceAdoptionsConfig = z.output<typeof generatedSourceAdoptions>;
+
 export const graph = z.strictObject({
   /**
    * Resolve type-only imports too. Required: a type-only edge is still a
