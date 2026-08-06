@@ -21,12 +21,13 @@ import { baselineOf, derivePackageRoot, generatedFilesFor, graphDigest, moveOper
 export interface BuildPlanOptions {
   readonly config: MonocarveConfig; readonly rootDir: string; readonly graph: DependencyGraph; readonly candidate: PortfolioCandidate;
   readonly baselineCommit: string; readonly packageName?: string; readonly packageRoot?: string; readonly profile?: string; readonly context?: WorkspaceContext;
+  readonly modulePromotion?: ExtractionManifest["modulePromotion"];
 }
 export async function buildPlan(options: BuildPlanOptions): Promise<ExtractionManifest> { return buildPlanSync(options); }
 
 export function buildPlanSync(options: BuildPlanOptions): ExtractionManifest {
   const state = prepareBuild(options);
-  const selection = selectExtractionSources({ context: state.context, candidate: state.candidate, packageRoot: state.packageRoot, entrypoint: state.templates.entrypoint, packageName: state.packageName, publicSurface: state.templates.publicSurface });
+  const selection = selectExtractionSources({ context: state.context, candidate: state.candidate, packageRoot: state.packageRoot, entrypoint: state.templates.entrypoint, packageName: state.packageName, publicSurface: state.templates.publicSurface, ...(options.modulePromotion === undefined ? {} : { targetModule: options.modulePromotion.targetModule }) });
   assertAssetImportersReachable(state.graph, selection.production, selection.assets);
   const rewrites = escapeRewritesFor(state.candidate);
   const operations = buildJournal(state, selection, rewrites);
@@ -59,6 +60,12 @@ function prepareBuild(options: BuildPlanOptions): BuildState {
 function buildJournal(state: BuildState, selection: ReturnType<typeof selectExtractionSources>, rewrites: ReadonlyMap<string, readonly EscapeRewrite[]>): PlanOperation[] {
   const operations = selection.sources.map((source, index) => moveOperation(state.context, source, selection.targets[index]!, rewrites.get(source) ?? []));
   operations.push(...selection.assets.map((asset, index) => moveOperation(state.context, asset, selection.assetTargets[index]!, [])));
+  const promotion = state.options.modulePromotion;
+  if (promotion !== undefined && !promotion.retireSource) {
+    const specifier = promotion.targetModule === "index" ? state.packageName : `${state.packageName}/${promotion.targetModule.replace(/^\.\//, "")}`;
+    const contents = `export * from ${JSON.stringify(specifier)};\n`;
+    operations.push({ kind: "write-file", path: promotion.source, contents, preconditionHash: "missing", resultHash: hashText(contents), generator: "module-promotion:compatibility-reexport" });
+  }
   const { consumers } = appendConsumerOperations({ context: state.context, sources: [...selection.sources, ...selection.assets], packageName: state.packageName, publicSpecifierFor: selection.publicSpecifierFor, operations });
   appendStaticFsReferenceOperations({ context: state.context, donorTargets: donorTargetsOf(selection), operations });
   // Documents must be rewritten before any preparer or artifact regeneration
@@ -155,7 +162,7 @@ function buildManifest(state: BuildState, selection: ReturnType<typeof selectExt
   const currentLockHash = state.context.exists(state.packageManager.lockfileName) ? state.packageManager.lockfileImporterHash(state.context.text(state.packageManager.lockfileName), state.packageRoot) : undefined;
   const applicationLines = state.graph.paths.filter((path) => state.graph.nodes.get(path)?.application === state.candidate.application).reduce((total, path) => total + (state.graph.nodes.get(path)?.lineCount ?? 0), 0);
   const movedLines = selection.production.reduce((total, path) => total + (state.graph.nodes.get(path)?.lineCount ?? 0), 0);
-  return { schemaVersion: PLAN_SCHEMA_VERSION, planId: profilePlanId(state.candidate.id, state.profile.name), createdAt: state.baseline.committedAt, generator: { ...GENERATOR }, baselineCommit: state.baseline.commit, graphDigest: graphDigest(state.graph), application: state.candidate.application,
+  return { schemaVersion: PLAN_SCHEMA_VERSION, planId: profilePlanId(state.candidate.id, state.profile.name), createdAt: state.baseline.committedAt, generator: { ...GENERATOR }, baselineCommit: state.baseline.commit, graphDigest: graphDigest(state.graph), application: state.candidate.application, ...(state.options.modulePromotion === undefined ? {} : { modulePromotion: state.options.modulePromotion }),
     target: { packageName: state.packageName, packageRoot: state.packageRoot, entrypoint: state.templates.entrypoint, projectId: state.projectId, ...(state.profile.name === undefined ? {} : { profile: { name: state.profile.name, candidateName: state.candidateName } }), requiredExports: selection.publicModules.length > 0 ? [] : dedupeExports(selection.production.flatMap((source) => sourceExportsFromFile(state.context.absolute(source), source))), ...(selection.publicModules.length > 0 ? { publicModules: selection.publicModules } : {}) },
     source: { files: selection.production, tests: selection.tests, ...(selection.assets.length > 0 ? { assets: selection.assets } : {}), sccs: Object.fromEntries(state.candidate.sccs.filter((scc) => scc.members.some((member) => selection.production.includes(member))).map((scc) => [scc.id, scc.members.filter((member) => selection.production.includes(member))])) }, dependencies, dependencyDecisions, projectedArtifacts: projectedArtifactEvidence(operations), ...(pruningCandidates.length === 0 ? {} : { donorDependencyPruning: { mode: state.config.dependencyPruning.mode, candidates: pruningCandidates } }), sourceBlobs, operations,
     consumers: consumers.map((consumer) => ({ file: consumer.file, owner: consumer.package, expectedImporter: consumer.expectedImporter, specifiers: consumer.rewrites, external: state.graph.nodes.get(consumer.file)?.application !== state.candidate.application, dependencySection: sections.get(consumer.package) ?? "runtime" })), generatedFiles,

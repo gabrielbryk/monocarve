@@ -94,6 +94,19 @@ export interface ExtractionManifest {
   readonly baselineCommit: string;
   readonly graphDigest: Sha256;
   readonly application: string;
+  /** Present only for a reviewed singleton cycle-cut selection. */
+  readonly modulePromotion?: {
+    readonly id: string;
+    readonly source: string;
+    readonly targetModule: string;
+    readonly retireSource: boolean;
+    readonly importerProof: readonly string[];
+    readonly cycleCut: {
+      readonly before: readonly string[];
+      readonly after: readonly (readonly string[])[];
+      readonly removedEdges: readonly { readonly from: string; readonly to: string }[];
+    };
+  };
   readonly target: PlanTarget;
   readonly source: PlanSource;
   readonly dependencies: PlanDependencies;

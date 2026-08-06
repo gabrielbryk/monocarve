@@ -193,11 +193,30 @@ export interface DeleteModuleOperation {
   readonly importerProof: readonly string[];
 }
 
+/** Explicit, byte-recorded conversion of orphaned generated output to source. */
+export interface AdoptGeneratedSourceOperation {
+  readonly kind: "adopt-generated-source";
+  readonly file: PreparationFileMutation;
+  readonly declaredSource: string;
+  readonly policySpecifier: string;
+  readonly removedHeader: { readonly lines: number; readonly hash: Sha256 };
+  readonly contents: string;
+}
+
+/** A generator deleted only with an exhaustive proof of its former outputs. */
+export interface DeleteGeneratedSourceGeneratorOperation {
+  readonly kind: "delete-generated-source-generator";
+  readonly file: PreparationFileMutation;
+  readonly adoptedOutputs: readonly string[];
+}
+
 export type PreparationReplayOperation =
   | ExtractTypeDeclarationsOperation
   | PreparationWriteFileOperation
   | RewriteModuleSpecifierOperation
-  | DeleteModuleOperation;
+  | DeleteModuleOperation
+  | AdoptGeneratedSourceOperation
+  | DeleteGeneratedSourceGeneratorOperation;
 
 /** A type-only surface retained at the old module path after preparation. */
 export interface CompatibilityReexportIntent {

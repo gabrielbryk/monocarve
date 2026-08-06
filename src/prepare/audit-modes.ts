@@ -16,7 +16,7 @@ export function verifyPreparationResultModes(
 ): number {
   let checked = 0;
   for (const operation of operations) {
-    if (operation.kind === "delete-module") {
+    if (operation.kind === "delete-module" || operation.kind === "delete-generated-source-generator") {
       checked += 1;
       const actual = modeAt(rootDir, operation.file.path);
       // Delete operations predate a missing-mode sentinel and serialize their

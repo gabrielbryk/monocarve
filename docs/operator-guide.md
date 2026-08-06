@@ -157,6 +157,59 @@ the promoted contract structurally, so nothing is rendered from a template.
 Both vocabularies share one `id` namespace: reusing the same `id` in both
 `compositionBoundaries` and `portPromotions` is refused.
 
+### Module promotion (cycle cuts)
+
+```ts
+modulePromotions: [{
+  id: "resource-contracts",
+  source: "apps/api/src/resources/schemas.ts",
+  targetPackage: "@acme/resource-contracts",
+  targetModule: "index",
+  retireSource: true,
+}]
+```
+
+A module promotion is an explicit exception to ordinary SCC-closure selection.
+The reviewer selects exactly one complete source module; compilation derives
+every importer from the fresh graph and the compiler's own reference index,
+then emits an ordinary extraction manifest. Package scaffolding, dependencies,
+exports, tests, path migrations, simulation, apply, and audit therefore use the
+same engine as any other extraction. The manifest additionally records the
+baseline SCC, every incident edge removed by the promotion, and the SCCs left
+after the cut. Compilation refuses a singleton/non-cycle selection, a partial
+importer inventory, or a cut that does not reduce the largest SCC.
+
+`targetModule: "index"` exposes the moved module at the package root. A
+subpath value uses the configured public-surface templates. `retireSource: true`
+removes the old module path; `false` recreates it as a compatibility
+re-export in the wiring commit. Committed apply temporarily withholds that
+re-export while staging the move, independently verifies the first commit is
+R100, then restores and commits the compatibility file with the other wiring.
+
+### Adopting orphaned generated source
+
+```ts
+generatedSourceAdoptions: [{
+  id: "durable-contracts",
+  artifacts: [{
+    path: "apps/api/src/resources/schemas.ts",
+    missingSource: "spec/resources.schema.json",
+    removeHeaderLines: 3,
+  }],
+  retireGenerator: "apps/api/scripts/generate-contracts.ts",
+}]
+```
+
+This preparation is deliberately explicit. Compilation verifies the artifact's
+configured provenance marker, verifies the named source is absent at the exact
+Git baseline, and records both the removed header hash and complete adopted
+bytes. `retireGenerator` is optional; when present, Monocarve scans every
+tracked baseline file and refuses deletion unless every provenance header that
+names that generator belongs to the same adoption. Simulation and audit replay
+the exact before/after bytes and prove both source absence and generator
+deletion. A later module-promotion plan is compiled only after this adoption
+lands, so orphaned generated output is never silently treated as source.
+
 ### Compiling and applying a boundary
 
 ```sh
@@ -169,8 +222,9 @@ bunx monocarve boundary simulate --plan .monocarve/plans/prepare-<id>.json
 bunx monocarve boundary apply --plan .monocarve/plans/prepare-<id>.json --commit
 ```
 
-`review` reports the resolved boundary and its baseline importers, discovered
-from a fresh dependency-graph scan, before compiling. `compile` re-derives
+`review` reports the resolved boundary, module promotion, or generated-source
+adoption and its applicable baseline evidence, discovered from a fresh
+dependency-graph scan, before compiling. `compile` re-derives
 that same importer set itself from the graph — an operator cannot hand it a
 partial list — and refuses `retire` unless the graph itself proves no
 importer of the retained module survives after this manifest's own rewrites;

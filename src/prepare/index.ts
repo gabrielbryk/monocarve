@@ -6,3 +6,4 @@ export * from "./selectors.ts";
 export * from "./simulate.ts";
 export * from "./apply.ts";
 export * from "./multi-build.ts";
+export * from "./generated-source-adoption.ts";

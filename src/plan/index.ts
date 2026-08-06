@@ -2,6 +2,7 @@ export * from "./manifest.ts";
 export * from "./public-surface.ts";
 export * from "./context.ts";
 export * from "./consumers.ts";
+export * from "./module-promotion.ts";
 export * from "./dependencies.ts";
 export * from "./dependency-usage.ts";
 export * from "./scaffold.ts";

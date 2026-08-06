@@ -41,6 +41,7 @@ export function selectExtractionSources(args: {
   readonly entrypoint: string;
   readonly packageName: string;
   readonly publicSurface: MonocarveConfig["scaffoldTemplates"]["publicSurface"];
+  readonly targetModule?: string;
 }): SourceSelection {
   const production = args.candidate.files.filter((path) => args.context.isProductionSource(path)).sort();
   const assets = [...args.candidate.assets].sort();
@@ -72,6 +73,22 @@ export function selectExtractionSources(args: {
     exportTarget,
     requiredExports: index < production.length ? sourceExportsFromFile(args.context.absolute(moduleSources[index]!), moduleSources[index]!) : [],
   }));
+  if (args.targetModule !== undefined) {
+    if (publicModules.length === 0 && args.targetModule === "index") {
+      // Barrel-mode scaffolds already expose the selected module at the package
+      // root; the generated entrypoint is the reviewed `index` surface.
+    } else {
+    if (publicModules.length !== 1) throw new PlanningError("a module promotion must select exactly one production module");
+    const promoted = publicModules[0]!;
+    const key = args.targetModule === "index" ? "." : `./${args.targetModule.replace(/^\.\//, "")}`;
+    publicModules[0] = {
+      ...promoted,
+      specifier: key === "." ? args.packageName : `${args.packageName}/${key.slice(2)}`,
+      exportKey: key,
+      exportTarget: key === "." ? `./${args.entrypoint}` : promoted.exportTarget,
+    };
+    }
+  }
   return {
     production, assets, tests, sources, targets, assetTargets, entrypointPath, publicModules,
     publicSpecifierFor: new Map(publicModules.map((entry) => [entry.source, entry.specifier])),

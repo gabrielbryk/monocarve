@@ -59,8 +59,9 @@ export function auditPlanSync(options: AuditOptions): AuditReport {
   /* -- 1. byte fidelity -------------------------------------------------- */
 
   const byteFailures: string[] = [];
+  const compatibilitySource = manifest.modulePromotion?.retireSource === false ? manifest.modulePromotion.source : undefined;
   for (const move of moves) {
-    if (stateAt(rootDir, move.source) !== MISSING) byteFailures.push(`moved source still present: ${move.source}`);
+    if (stateAt(rootDir, move.source) !== MISSING && move.source !== compatibilitySource) byteFailures.push(`moved source still present: ${move.source}`);
     const landed = stateAt(rootDir, move.target);
     if (landed !== move.resultHash) {
       byteFailures.push(`moved bytes differ at ${move.target} (expected ${move.resultHash}, got ${landed})`);
