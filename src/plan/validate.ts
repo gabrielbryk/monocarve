@@ -7,15 +7,18 @@
  */
 
 import { resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 
-import { isFirstPartyPackageOwner, isPackageOwner, packageNameMatcher, testKindOf } from "../config.ts";
+import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapters/registry.ts";
+import { getApplication, isFirstPartyPackageOwner, isPackageOwner, packageNameMatcher, resolveExtractionProfile, testKindOf } from "../config.ts";
 import { PlanValidationError } from "../errors.ts";
 import { isSourceModulePath } from "../util/files.ts";
 import { isSha256, stableStringify } from "../util/hash.ts";
 import { relativeWorkspacePath } from "../util/paths.ts";
 import { readManifest } from "../graph/workspace.ts";
-import { PLAN_SCHEMA_VERSION, operationPaths, type ExtractionManifest } from "./manifest.ts";
+import { LEGACY_PLAN_SCHEMA_VERSION, PLAN_SCHEMA_VERSION, operationPaths, type ExtractionManifest } from "./manifest.ts";
 import { projectedArtifactEvidence } from "./projected-workspace.ts";
+import { buildPlanProvenance } from "./provenance.ts";
 import { validateIntegrationTestSuite } from "./validation/integration.ts";
 import { validateDonorSurface, validateOperations } from "./validation/operations.ts";
 import { Issues, validationResult, type ValidatePlanOptions, type ValidationResult } from "./validation/shared.ts";
@@ -30,8 +33,8 @@ export function validatePlan(manifest: ExtractionManifest, options: ValidatePlan
   const issues = new Issues();
   const { rootDir } = options;
 
-  if (manifest.schemaVersion !== PLAN_SCHEMA_VERSION) {
-    issues.add("schema-version", `manifest schemaVersion must be ${PLAN_SCHEMA_VERSION}`);
+  if (manifest.schemaVersion !== LEGACY_PLAN_SCHEMA_VERSION && manifest.schemaVersion !== PLAN_SCHEMA_VERSION) {
+    issues.add("schema-version", `manifest schemaVersion must be ${LEGACY_PLAN_SCHEMA_VERSION} or ${PLAN_SCHEMA_VERSION}`);
     return validationResult(issues);
   }
   validateHeader(manifest, options, issues);
@@ -70,6 +73,45 @@ function validateHeader(manifest: ExtractionManifest, options: ValidatePlanOptio
   if (!options.config.applications.some((app) => app.name === manifest.application)) {
     issues.add("application", `manifest application ${JSON.stringify(manifest.application)} is not configured`);
   }
+  validateProvenance(manifest, options, issues);
+}
+
+function validateProvenance(manifest: ExtractionManifest, options: ValidatePlanOptions, issues: Issues): void {
+  const actual = manifest.provenance;
+  if (actual === undefined) {
+    if (manifest.schemaVersion === PLAN_SCHEMA_VERSION) issues.add("provenance", `schema-v${PLAN_SCHEMA_VERSION} manifests must include provenance`);
+    return;
+  }
+  if (!isSha256(actual.configDigest ?? "")) issues.add("config-digest", "provenance.configDigest must be a SHA-256 hash");
+  if (!isSha256(actual.policyDigest ?? "")) issues.add("policy-digest", "provenance.policyDigest must be a SHA-256 hash");
+  if (!isSha256(actual.compiler?.artifactIntegrity ?? "")) issues.add("compiler-integrity", "provenance.compiler.artifactIntegrity must be a SHA-256 hash");
+  for (const [kind, adapter] of Object.entries(actual.adapters ?? {})) {
+    if (!adapter?.id) issues.add("adapter-provenance", `${kind} adapter id must be non-empty`);
+    if (!Number.isInteger(adapter?.contractVersion) || adapter.contractVersion < 1) issues.add("adapter-provenance", `${kind} adapter contractVersion must be a positive integer`);
+    if (adapter?.declaredVersion !== undefined && adapter.declaredVersion === "") issues.add("adapter-provenance", `${kind} adapter declaredVersion must be non-empty when present`);
+  }
+  if (!("packageManager" in (actual.adapters ?? {})) || !("taskRunner" in (actual.adapters ?? {}))) {
+    issues.add("adapter-provenance", "provenance.adapters must include packageManager and taskRunner");
+    return;
+  }
+  if (!options.config.applications.some((app) => app.name === manifest.application)) return;
+  const application = getApplication(options.config, manifest.application);
+  const profile = resolveExtractionProfile(options.config, application, manifest.target?.profile?.name);
+  const packageManager = createPackageManagerAdapter(options.config);
+  const taskRunner = createTaskRunnerAdapter(options.config);
+  const rootManifest = resolve(options.rootDir, "package.json");
+  const expected = buildPlanProvenance({
+    config: options.config,
+    profileGates: profile.gates,
+    scaffoldTemplates: profile.scaffoldTemplates,
+    packageManager,
+    taskRunner,
+    ...(existsSync(rootManifest) ? { rootPackageJson: readFileSync(rootManifest, "utf8") } : {}),
+  });
+  if (actual.configDigest !== expected.configDigest) issues.add("config-digest", "plan configuration digest does not match the effective configuration");
+  if (actual.policyDigest !== expected.policyDigest) issues.add("policy-digest", "plan policy digest does not match the effective planning policy");
+  if (stableStringify(actual.adapters) !== stableStringify(expected.adapters)) issues.add("adapter-provenance", "plan adapter provenance does not match the configured adapters");
+  if (stableStringify(actual.compiler) !== stableStringify(expected.compiler)) issues.add("compiler-integrity", "plan compiler identity does not match this compiler");
 }
 
 function validateSource(

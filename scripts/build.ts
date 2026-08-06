@@ -1,9 +1,13 @@
 import { chmodSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import type { BunPlugin } from "bun";
+import { sourceTreeIntegrity } from "../src/build-identity.ts";
+import { buildSourceRevision } from "./build-stamp.ts";
 
 const root = resolve(import.meta.dir, "..");
 const bundleOnly = process.argv.includes("--bundle-only");
+const buildIntegrity = sourceTreeIntegrity(resolve(root, "src"));
+const sourceRevision = buildSourceRevision(root);
 
 rmSync(resolve(root, "dist"), { recursive: true, force: true });
 if (!bundleOnly) rmSync(resolve(root, "artifacts"), { recursive: true, force: true });
@@ -55,6 +59,11 @@ async function build(overrides: Bun.BuildConfig): Promise<void> {
     plugins: [dependencyCruiserReporterPlugin],
     root,
     ...overrides,
+    define: {
+      ...overrides.define,
+      __MONOCARVE_BUILD_INTEGRITY__: JSON.stringify(buildIntegrity),
+      __MONOCARVE_SOURCE_REVISION__: sourceRevision === undefined ? "undefined" : JSON.stringify(sourceRevision),
+    },
   });
   if (!result.success) throw new AggregateError(result.logs, "bundle failed");
 }

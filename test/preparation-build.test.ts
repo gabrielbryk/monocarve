@@ -49,7 +49,7 @@ describe("preparation manifest compiler", () => {
       requiredAs: "type",
       proofBaselineHash: hashText(TYPE_SOURCE),
     }]);
-  });
+  }, 15_000);
 
   test("refuses a seam whose source evidence is stale", () => {
     const root = fixtureRepo(fixtureFiles(TYPE_SOURCE));

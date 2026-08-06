@@ -20,6 +20,8 @@ describe("extraction transaction against a scratch repository", () => {
     const root = fixtureRepo(extractionFiles());
     const config = fixtureConfig(root);
     const manifest = baseManifest(root);
+    expect(manifest.schemaVersion).toBe(3);
+    expect(manifest.provenance).toBeDefined();
     expect(() => assertPlanValid(manifest, { config, rootDir: root })).not.toThrow();
     const manifestPath = landManifest(root, manifest);
 
@@ -381,6 +383,21 @@ describe("extraction transaction against a scratch repository", () => {
     await expect(
       applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, resume: true }),
     ).rejects.toThrow("cannot be re-applied");
+  }, 120_000);
+
+  test("preflight identifies the applied boundary through later commits and directs the operator to audit", async () => {
+    const root = fixtureRepo(extractionFiles());
+    const config = fixtureConfig(root);
+    const manifest = baseManifest(root);
+    const manifestPath = landManifest(root, manifest);
+    await applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true });
+    write(root, "notes.txt", "legitimate follow-up\n");
+    fixtureGit(root, "add", "--", "notes.txt");
+    fixtureGit(root, "commit", "-qm", "docs: follow applied extraction");
+
+    await expect(preflight({ config, rootDir: root, manifest, manifestPath })).resolves.toEqual([
+      `plan ${manifest.planId} is already applied; run monocarve audit --plan ${manifestPath}`,
+    ]);
   }, 120_000);
 
   test("throws before the move commit when an out-of-scope file is already staged", async () => {

@@ -1,8 +1,11 @@
-import { rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { pnpmAdapter } from "../../src/adapters/pnpm.ts";
+import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../../src/adapters/registry.ts";
 import { rewriteResolvedImportSpecifier } from "../../src/codemod/imports.ts";
+import { getApplication, parseConfig, resolveExtractionProfile } from "../../src/config.ts";
+import { buildPlanProvenance } from "../../src/plan/provenance.ts";
 import { hashText } from "../../src/util/hash.ts";
 import type { ExtractionManifest, PlanOperation } from "../../src/plan/manifest.ts";
 import { fixtureGit, read, write } from "./fixture-repo.ts";
@@ -105,8 +108,10 @@ export function baseManifest(root: string): ExtractionManifest {
     },
   ];
 
+  const versioned = fixturePlanVersion(root);
+
   return {
-    schemaVersion: 2,
+    ...versioned,
     planId: "fixture-extraction",
     createdAt: new Date().toISOString(),
     generator: { name: "monocarve", version: "0.0.0" },
@@ -151,6 +156,24 @@ export function baseManifest(root: string): ExtractionManifest {
       wiring: { subject: "refactor(@acme/analytics): wire @acme/analytics into the workspace" },
     },
     gates: { package: [], project: [], workspace: ["true"] },
+  };
+}
+
+function fixturePlanVersion(root: string): Pick<ExtractionManifest, "schemaVersion" | "provenance"> {
+  const configPath = join(root, "monocarve.config.json");
+  if (!existsSync(configPath)) return { schemaVersion: 2 };
+  const config = parseConfig(JSON.parse(readFileSync(configPath, "utf8")), configPath);
+  const profile = resolveExtractionProfile(config, getApplication(config, "api"), undefined);
+  return {
+    schemaVersion: 3,
+    provenance: buildPlanProvenance({
+      config,
+      profileGates: profile.gates,
+      scaffoldTemplates: profile.scaffoldTemplates,
+      packageManager: createPackageManagerAdapter(config),
+      taskRunner: createTaskRunnerAdapter(config),
+      rootPackageJson: readFileSync(join(root, "package.json"), "utf8"),
+    }),
   };
 }
 

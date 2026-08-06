@@ -357,10 +357,8 @@ bunx monocarve refresh --plan .monocarve/plans/c-example456.json \
 
 Refresh refuses source, closure, target/profile, or execution-policy drift. The
 first invocation is read-only; writing requires the explicit `--out` path.
-For a baseline-only prep commit, `apply --commit --refresh-if-baseline-only` can perform
-the same safe replacement in place. It succeeds only when the semantic diff is
-empty, then stops with a non-zero status and prints the exact approval command;
-it never combines refresh, approval, and application.
+The refreshed manifest is always a distinct review artifact. Monocarve refuses
+in-place replacement and never combines refresh, approval, and application.
 
 Review the manifest before approving it. In particular, review the baseline
 commit, every operation and precondition/result hash, target package and

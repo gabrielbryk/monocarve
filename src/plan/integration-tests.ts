@@ -16,6 +16,7 @@ import { inferDependencies } from "./dependencies.ts";
 import { renderGates, graphDigest, moveOperation } from "./build.ts";
 import { PlanningError, WorkspaceContext } from "./context.ts";
 import { operationPaths, PLAN_SCHEMA_VERSION, type ExtractionManifest, type PlanOperation } from "./manifest.ts";
+import { buildPlanProvenance } from "./provenance.ts";
 import { packageOperations } from "./scaffold.ts";
 import { collectIntegrationTestClosure, selectIntegrationTestRoots } from "./integration-test-closure.ts";
 
@@ -104,6 +105,7 @@ export function buildIntegrationTestPlanSync(options: BuildIntegrationTestPlanOp
     planId: `tests--${options.suite}`,
     createdAt: baseline.committedAt,
     generator: { ...GENERATOR },
+    provenance: buildPlanProvenance({ config, profileGates: profile.gates, scaffoldTemplates: profile.scaffoldTemplates, packageManager, taskRunner, ...(context.exists("package.json") ? { rootPackageJson: context.text("package.json") } : {}) }),
     baselineCommit: baseline.commit,
     graphDigest: graphDigest(graph),
     application: application.name,

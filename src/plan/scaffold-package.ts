@@ -156,30 +156,34 @@ function entrypointOperation(input: ScaffoldInput, templates: ReturnType<typeof 
 
 function tsconfigOperations(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>): PlanOperation[] {
   const target = templates.projectReferences.target;
-  const root = target === "tsconfig.json" ? undefined : rootTsconfigOperation(input, templates);
   const references = projectReferences(input, templates);
+  const root = target === "tsconfig.json" ? undefined : rootTsconfigOperation(input, templates, solutionReferences(input));
   const referenced = projectReferenceOperation(input, templates, target, references);
   return [root, referenced].filter((operation): operation is PlanOperation => operation !== undefined);
 }
 
-function rootTsconfigOperation(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>): PlanOperation | undefined {
+function solutionReferences(input: ScaffoldInput): { path: string }[] {
+  return input.dependencies.packageReferences.map((reference) => ({
+    path: relativePosix(resolve("/", input.packageRoot), resolve("/", reference)),
+  }));
+}
+
+function rootTsconfigOperation(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>, references: readonly { path: string }[]): PlanOperation | undefined {
   const path = `${input.packageRoot}/tsconfig.json`;
   if (input.context.exists(path) || !templates.tsconfig) return undefined;
-  return writeOperation(input.context, path, stringifyJson(parseJsonFile(render(input, templates.tsconfig), path)), "scaffold:tsconfig");
+  const rendered = parseJsonFile(render(input, templates.tsconfig), path) as { references?: readonly { path?: string }[] };
+  const existing = rendered.references ?? [];
+  const merged = [...existing, ...references.filter((entry) => !existing.some((item) => item.path === entry.path))];
+  return writeOperation(input.context, path, stringifyJson(merged.length > 0 ? { ...rendered, references: merged } : rendered), "scaffold:tsconfig");
 }
 
 function projectReferences(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>): { path: string }[] {
-  return input.dependencies.packageReferences.map((reference) => ({
-    path: relativePosix(
-      resolve("/", input.packageRoot),
-      resolve(
-        "/",
-        templates.projectReferences.dependencyTarget === "tsconfig.json"
-          ? reference
-          : `${reference}/${templates.projectReferences.dependencyTarget}`,
-      ),
-    ),
-  }));
+  return input.dependencies.packageReferences.map((reference) => {
+    const target = templates.projectReferences.dependencyTarget === "tsconfig.json"
+      ? reference
+      : `${reference}/${templates.projectReferences.dependencyTarget}`;
+    return { path: relativePosix(resolve("/", input.packageRoot), resolve("/", target)) };
+  });
 }
 
 function projectReferenceOperation(
@@ -244,7 +248,17 @@ function taskFileContents(input: ScaffoldInput, templates: ReturnType<typeof tem
   // future tests; the override is generated only for a brand-new Moon package
   // and must be removed when its first test travels in a later extraction.
   if (input.taskRunner.id !== "moon" || input.tests === undefined || input.tests.length > 0) return taskFile;
-  return `${taskFile.trimEnd()}\n\n# Generated for a package with no travelling test files; remove when it gains one.\ntasks:\n  test:\n    args: [${emptySuiteArgument(input, templates)}]\n`;
+  const lines = taskFile.trimEnd().split("\n");
+  const testIndex = lines.findIndex((line) => line.trim() === "test:");
+  if (testIndex < 0) {
+    return `${taskFile.trimEnd()}\n\n# Generated for a package with no travelling test files; remove when it gains one.\ntasks:\n  test:\n    args: [${emptySuiteArgument(input, templates)}]\n`;
+  }
+  const argsIndex = lines.findIndex((line, index) => index > testIndex && /^\s{4}args:/.test(line));
+  if (argsIndex < 0) {
+    throw new PlanningError("Moon task scaffold must declare a test task with args before applying an empty-test override");
+  }
+  lines[argsIndex] = `    args: [${emptySuiteArgument(input, templates)}]`;
+  return `${lines.join("\n")}\n`;
 }
 
 /** The empty-suite flag is runner syntax, not Moon syntax. Infer it from the

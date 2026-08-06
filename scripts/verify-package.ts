@@ -10,6 +10,8 @@
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, relative, resolve } from "node:path";
+import { sourceTreeIntegrity } from "../src/build-identity.ts";
+import { buildSourceRevision } from "./build-stamp.ts";
 
 interface PackageJson {
   readonly name: string;
@@ -54,6 +56,11 @@ function declaredBins(pkg: PackageJson): readonly [string, string][] {
 
 const root = resolve(import.meta.dir, "..");
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as PackageJson;
+const bundledCli = readFileSync(join(root, "dist/monocarve.js"), "utf8");
+const expectedIntegrity = sourceTreeIntegrity(join(root, "src"));
+if (!bundledCli.includes(expectedIntegrity)) fail("bundled CLI omits the exact canonical source integrity stamp");
+const expectedRevision = buildSourceRevision(root);
+if (expectedRevision !== undefined && !bundledCli.includes(expectedRevision)) fail("bundled CLI omits the tool source revision stamp");
 const cacheRoot = join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "monocarve-package-verification");
 mkdirSync(cacheRoot, { recursive: true });
 const scratch = mkdtempSync(join(cacheRoot, "run-"));

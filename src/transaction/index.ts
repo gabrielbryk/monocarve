@@ -7,3 +7,5 @@ export * from "./apply.ts";
 export * from "./audit.ts";
 export * from "./rollback.ts";
 export * from "./external-consumer.ts";
+export * from "./commit-evidence.ts";
+export * from "./lifecycle-status.ts";

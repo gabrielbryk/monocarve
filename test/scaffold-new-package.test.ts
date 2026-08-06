@@ -105,7 +105,9 @@ test("puts inferred workspace references in a configured library project", () =>
   );
 
   expect(JSON.parse(writes.get("libs/new-package/tsconfig.json")!)).toEqual({
-    compilerOptions: { composite: true }, files: [], references: [{ path: "./tsconfig.lib.json" }, { path: "./tsconfig.spec.json" }],
+    compilerOptions: { composite: true }, files: [], references: [
+      { path: "./tsconfig.lib.json" }, { path: "./tsconfig.spec.json" }, { path: "../format" },
+    ],
   });
   expect(JSON.parse(writes.get("libs/new-package/tsconfig.lib.json")!)).toEqual({
     compilerOptions: { jsx: "react-jsx" }, references: [{ path: "../format/tsconfig.lib.json" }],

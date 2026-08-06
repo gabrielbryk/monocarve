@@ -66,7 +66,7 @@ untracked path.
 | `plan-review` | `plan-review --plan <path> [--approval-subject <subject>] [--json]` — render the deterministic, read-only operator review, including exact move targets and approval inputs. |
 | `next` | `next [--app <name>] [--profile <name>] [--package-name <name>] [--write] [--apply] [--verify-lockfile]` — choose the highest-ranked candidate; `--apply` simulates only. |
 | `relocate-tests` | `relocate-tests --suite <name> [--out <path>] [--write]` — compile a configured leaf integration-test package. |
-| `refresh` | `refresh --plan <path> [--out <path> --write | --write --replace [--commit-approval]]` — safely recompile a stale plan at current `HEAD`; replacement is always explicit. |
+| `refresh` | `refresh --plan <path> [--out <new-path> --write [--commit-approval]]` — safely recompile a stale plan at current `HEAD` to a distinct immutable review artifact. |
 
 To append a candidate to an existing package:
 
@@ -100,13 +100,12 @@ profile, source closure, source bytes, gates, or commit policy. It reports a
 monocarve refresh --plan .monocarve/plans/c-example.json
 monocarve refresh --plan .monocarve/plans/c-example.json \
   --out .monocarve/plans/c-example-refreshed.json --write
-monocarve refresh --plan .monocarve/plans/c-example.json --write --replace
 ```
 
-The first command cannot write. The second writes a separate file. The third is
-the explicit tracked-manifest replacement path; add `--commit-approval` only
-after reviewing the semantic diff. `plan --write` refuses an existing output
-and prints this refresh command instead of silently overwriting it.
+The first command cannot write. The second writes a separate file exclusively;
+add `--commit-approval` only after reviewing the semantic diff. Reviewed plan
+bytes are immutable: `--replace` and apply-time refresh are refused. `plan
+--write` also refuses an existing output instead of silently overwriting it.
 
 Every compiled plan also carries `projectedArtifacts`, the canonical final
 hashes of its structured outputs, and `dependencyDecisions`, the source paths
@@ -133,19 +132,21 @@ does not infer new reasons from the current checkout.
 | `verify` | `verify --plan <path>` — read-only manifest validation plus apply preflight. |
 | `doctor` | `doctor --plan <path> [--verify-lockfile]` — replay, audit, and run repository gates in a disposable worktree. |
 | `inspect-gates` | `inspect-gates --plan <path>` — run every declared gate separately against the landed plan, attributing exact repository-visible changed paths and suggesting missing generated-artifact declarations without changing the checkout. |
-| `apply` | `apply --plan <path> [--commit] [--resume] [--refresh-if-baseline-only] [--skip-gates] [--verify-lockfile]` — always simulates first; without `--commit`, the checkout is unchanged. |
+| `apply` | `apply --plan <path> [--commit] [--resume] [--skip-gates] [--verify-lockfile]` — always simulates first; without `--commit`, the checkout is unchanged. |
 | `apply-status` | `apply-status` — read-only durable phase and owner evidence for a committing apply. |
 | `apply-recover` | `apply-recover --plan <path>` — release only a stopped matching owner, then print the verified apply/resume argv. |
 | `audit` | `audit --plan <path> [--skip-compile-proof]` — independently verify the tree produced by the plan. Run it immediately after apply. |
+| `status` | `status [--plan <path>] [--receipt <path>] [--reconciliation <path>]` — classify exact approval/application evidence, current audit state, and optional immutable evidence, then print one safe next command. |
+| `reconcile` | `reconcile --plan <path> --reason <text> --approval-subject <subject> [--out <path>] [--write]` — compile a separate immutable record for declared byte/generated drift without changing the approved plan. |
+| `reconcile-approve` | `reconcile-approve --record <path> [--commit]` — inspect or create the exact record-only approval commit. |
+| `receipt` | `receipt --plan <path> [--reconciliation <approved-record>] [--out <path>] [--write]` — compile an immutable passing-audit receipt linked to the exact application and, when supplied, approved reconciliation. |
 
 `--skip-simulation` is explicitly refused. `--resume` accepts only a verified
 transaction boundary. `--skip-gates` does not bypass validation, journal,
 scope, or audit proofs; normal operation should run the configured gates.
-`--refresh-if-baseline-only` requires `--commit` and is a narrow stale-plan recovery: it replaces the
-manifest only when fresh planning yields no semantic diff, exits unsuccessfully,
-and prints the exact approval command. It never approves or applies the
-refreshed plan in the same invocation. Source, closure, target, config, or
-execution-policy drift remains a hard refusal.
+Refreshing is a separate compile step to a new path. It never approves or
+applies the refreshed plan in the same invocation. Source, closure, target,
+config, or execution-policy drift remains a hard refusal.
 
 After journal replay and generated-artifact regeneration, simulation checks a
 repository-wide structured postcondition: every registered package has no

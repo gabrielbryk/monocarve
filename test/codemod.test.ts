@@ -17,7 +17,8 @@ import {
   unsupportedModuleReferences,
   applyEscapeRewrites,
 } from "../src/codemod/imports.ts";
-import { sourceExportsFromFile } from "../src/plan/public-surface.ts";
+import { sourceExportsFromBaseline, sourceExportsFromFile } from "../src/plan/public-surface.ts";
+import { cleanupFixtures, fixtureGit, fixtureRepo } from "./support/fixture-repo.ts";
 
 const scratch: string[] = [];
 
@@ -31,6 +32,7 @@ function scratchFile(name: string, contents: string): string {
 
 afterEach(() => {
   while (scratch.length > 0) rmSync(scratch.pop()!, { recursive: true, force: true });
+  cleanupFixtures();
 });
 
 describe("module reference inventory", () => {
@@ -221,5 +223,19 @@ describe("public surface", () => {
         { name: "NestedType", typeOnly: true },
       ]),
     );
+  });
+
+  test("resolves re-export chains from immutable baseline files after the live files disappear", () => {
+    const root = fixtureRepo({
+      "src/nested.ts": "export const nested = 1;\nexport interface NestedType { value: string }\n",
+      "src/surface.ts": 'export * from "./nested.ts";\n',
+    });
+    const baseline = fixtureGit(root, "rev-parse", "HEAD");
+    rmSync(join(root, "src"), { recursive: true });
+
+    expect(sourceExportsFromBaseline(root, baseline, "src/surface.ts")).toEqual([
+      { name: "NestedType", typeOnly: true },
+      { name: "nested", typeOnly: false },
+    ]);
   });
 });

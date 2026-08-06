@@ -3,8 +3,9 @@ import type { Sha256 } from "../util/hash.ts";
 import type { ExportSurface } from "./public-surface.ts";
 import type { ImportRewrite, PlanOperation } from "./manifest-operations.ts";
 
-/** v2 requires each consumer's dependency section to be explicit. */
-export const PLAN_SCHEMA_VERSION = 2 as const;
+/** v2 requires dependency sections; v3 additionally requires compiler provenance. */
+export const LEGACY_PLAN_SCHEMA_VERSION = 2 as const;
+export const PLAN_SCHEMA_VERSION = 3 as const;
 
 export interface CommitSpec { readonly subject: string; readonly body?: string }
 export interface ConsumerRewrite {
@@ -71,6 +72,20 @@ export interface GeneratedFileRecord {
   readonly verify?: string;
 }
 export interface DynamicImportDelta { readonly added: readonly string[]; readonly removed: readonly string[] }
+export interface PlanAdapterProvenance {
+  readonly id: string;
+  readonly contractVersion: number;
+  readonly declaredVersion?: string;
+}
+export interface PlanProvenance {
+  readonly configDigest: Sha256;
+  readonly policyDigest: Sha256;
+  readonly compiler: { readonly artifactIntegrity: Sha256; readonly sourceRevision?: string };
+  readonly adapters: {
+    readonly packageManager: PlanAdapterProvenance;
+    readonly taskRunner: PlanAdapterProvenance;
+  };
+}
 export type EvaluationReach = "moved" | "generated" | "reached";
 export interface EvaluationModuleRecord {
   readonly subject: "module";
@@ -87,10 +102,12 @@ export interface EvaluationPackageRecord {
 export type EvaluationEffectRecord = EvaluationModuleRecord | EvaluationPackageRecord;
 
 export interface ExtractionManifest {
-  readonly schemaVersion: typeof PLAN_SCHEMA_VERSION;
+  readonly schemaVersion: typeof LEGACY_PLAN_SCHEMA_VERSION | typeof PLAN_SCHEMA_VERSION;
   readonly planId: string;
   readonly createdAt: string;
   readonly generator: { readonly name: string; readonly version: string };
+  /** Absent only on legacy schema-v2 manifests. */
+  readonly provenance?: PlanProvenance;
   readonly baselineCommit: string;
   readonly graphDigest: Sha256;
   readonly application: string;

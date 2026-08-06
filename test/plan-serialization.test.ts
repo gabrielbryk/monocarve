@@ -42,10 +42,19 @@ const assetHash = hashText(".widget { color: red; }\n");
  */
 function manifest(): ExtractionManifest {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     planId: "shape-fixture",
     createdAt: "2024-01-02T03:04:05.000Z",
     generator: { name: "monocarve", version: "0.0.0" },
+    provenance: {
+      configDigest: hashText("config"),
+      policyDigest: hashText("policy"),
+      compiler: { artifactIntegrity: hashText("compiler"), sourceRevision: "0123456789abcdef0123456789abcdef01234567" },
+      adapters: {
+        packageManager: { id: "synthetic-pm", contractVersion: 2, declaredVersion: "1.2.3" },
+        taskRunner: { id: "synthetic-runner", contractVersion: 3 },
+      },
+    },
     baselineCommit: "0123456789abcdef0123456789abcdef01234567",
     graphDigest: hashText("shape"),
     application: "api",

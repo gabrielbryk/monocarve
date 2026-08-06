@@ -207,7 +207,7 @@ describe("cli error reporting", () => {
     expect(audited.stderr).toBe("");
     expect(audited.code).toBe(1);
     expect((JSON.parse(audited.stdout) as { failures: string[] }).failures).toEqual([
-      "[schema-version] manifest schemaVersion must be 2",
+      "[schema-version] manifest schemaVersion must be 2 or 3",
     ]);
   }, 120_000);
 

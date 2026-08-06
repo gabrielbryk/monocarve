@@ -82,7 +82,7 @@ function existingPlanError(rootDir: string, path: string, currentBaseline: strin
   }
   return new UsageError(
     `refusing to overwrite existing plan ${path}; existing baseline ${existingBaseline}, current baseline ${currentBaseline}. `
-    + `The existing file was not changed. Refresh it explicitly with ${TOOL_NAME} refresh --plan ${JSON.stringify(path)} --write --replace`,
+    + `The existing file was not changed. Refresh it explicitly with ${TOOL_NAME} refresh --plan ${JSON.stringify(path)} --out <new-path> --write`,
   );
 }
 
@@ -147,10 +147,9 @@ async function next(args: ParsedArgs): Promise<void> {
 async function refresh(args: ParsedArgs): Promise<void> {
   const outFlag = flagString(args, "out");
   const written = flagBool(args, "write");
-  const replace = flagBool(args, "replace");
   if (flagBool(args, "commit-approval") && !written) throw new UsageError("--commit-approval requires --write");
-  if (replace && (!written || outFlag !== undefined)) throw new UsageError("--replace requires --write and cannot be combined with --out");
-  if (written && outFlag === undefined && !replace) {
+  if (flagBool(args, "replace")) throw new UsageError("--replace is no longer supported; refresh always writes a distinct manifest for review");
+  if (written && outFlag === undefined) {
     throw new UsageError("--write requires an explicit --out <path>; refresh never overwrites its input implicitly");
   }
   const loaded = await loadGraph(args);
@@ -172,8 +171,9 @@ async function refresh(args: ParsedArgs): Promise<void> {
         ? candidate.id === existing.planId
         : `${candidate.id}--${existing.target.profile.name}` === existing.planId),
   });
-  const output = replace ? path : outFlag === undefined ? undefined : outputPath(loaded.rootDir, outFlag);
-  if (written && output !== undefined) writeOutput(loaded.rootDir, output, serializeManifest(result.manifest));
+  const output = outFlag === undefined ? undefined : outputPath(loaded.rootDir, outFlag);
+  if (output === path) throw new UsageError("refresh output must differ from the input manifest path");
+  if (written && output !== undefined) writeOutput(loaded.rootDir, output, serializeManifest(result.manifest), { exclusive: true });
   const approval = written && output !== undefined
     ? flagBool(args, "commit-approval")
       ? commitManifestApproval({ config: loaded.config, rootDir: loaded.rootDir, manifest: result.manifest, manifestPath: output })
@@ -188,7 +188,7 @@ async function refresh(args: ParsedArgs): Promise<void> {
     manifest: result.manifest,
     ...(output === undefined ? {} : { output }),
     written,
-    replaced: replace,
+    replaced: false,
     ...(approval === undefined ? {} : { approval: approvalGuidance(output!, approval) }),
   }, args);
 }
@@ -241,5 +241,5 @@ export const planningCommands: Record<string, CommandSpec> = {
   explain: { summary: "explain why a plan changes one dependency or artifact", usage: "explain --plan <path> (--dependency <name> | --artifact <path>) [--json]", details: "Read-only. Reports persisted dependency source/reason evidence or the exact operation chain and projected final hash for an artifact.", run: explainPlan },
   "relocate-tests": { summary: "compile a configured integration-test package", usage: "relocate-tests --suite <name> [--out <path>] [--write]", details: "The suite and all target/scaffold policy come from configuration.", run: relocateTests },
   next: { summary: "pick and plan the highest-scoring candidate", usage: "next [--app <name>] [--profile <name>] [--package-name <name>] [--write] [--apply] [--verify-lockfile]", details: "--apply runs simulation only; it does not commit. Use plan when you need an explicit candidate or package root.", run: next },
-  refresh: { summary: "safely recompile a stale extraction plan at HEAD", usage: "refresh --plan <path> [--out <path> --write | --write --replace [--commit-approval]]", details: "Read-only by default. Refuses dirty workspaces and candidate, application, target/profile, closure, source-byte, or configured execution-policy drift. --replace is the explicit tracked-manifest replacement path; review semanticDiff before approving it.", run: refresh },
+  refresh: { summary: "safely recompile a stale extraction plan at HEAD", usage: "refresh --plan <path> [--out <new-path> --write [--commit-approval]]", details: "Read-only by default. Refuses dirty workspaces and candidate, application, target/profile, closure, source-byte, or configured execution-policy drift. Written refreshes use a distinct exclusive path and require fresh review; the input manifest is immutable.", run: refresh },
 };

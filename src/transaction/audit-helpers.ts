@@ -4,7 +4,7 @@ import { dirname, extname, resolve } from "node:path";
 import { fileState, sourceFiles } from "../util/files.ts";
 import { MISSING, hashBytes } from "../util/hash.ts";
 import { relativePosix } from "../util/paths.ts";
-import { PLAN_SCHEMA_VERSION, type ExtractionManifest } from "../plan/manifest.ts";
+import { LEGACY_PLAN_SCHEMA_VERSION, PLAN_SCHEMA_VERSION, type ExtractionManifest } from "../plan/manifest.ts";
 import type { MonocarveConfig } from "../config.ts";
 import { showBaseline } from "../util/git.ts";
 import type { AuditReport, ProofResult } from "./audit-types.ts";
@@ -55,11 +55,12 @@ export function showBaselineHash(rootDir: string, commit: string, path: string):
 
 export function unauditableManifest(config: MonocarveConfig, manifest: ExtractionManifest): string[] {
   const value = manifest as unknown as Record<string, unknown>;
-  if (value["schemaVersion"] !== PLAN_SCHEMA_VERSION) return [`[schema-version] manifest schemaVersion must be ${PLAN_SCHEMA_VERSION}`];
+  if (value["schemaVersion"] !== LEGACY_PLAN_SCHEMA_VERSION && value["schemaVersion"] !== PLAN_SCHEMA_VERSION) return [`[schema-version] manifest schemaVersion must be ${LEGACY_PLAN_SCHEMA_VERSION} or ${PLAN_SCHEMA_VERSION}`];
   const failures: string[] = [];
   const require = (key: string, ok: boolean, kind: string): void => { if (!ok) failures.push(`[manifest-shape] ${key} must be ${kind}`); };
   const isArray = (key: string): boolean => Array.isArray(value[key]);
   const isRecord = (key: string): boolean => typeof value[key] === "object" && value[key] !== null && !Array.isArray(value[key]);
+  if (value["schemaVersion"] === PLAN_SCHEMA_VERSION) require("provenance", isRecord("provenance"), "an object");
   require("baselineCommit", typeof value["baselineCommit"] === "string", "a string");
   require("sourceBlobs", isRecord("sourceBlobs"), "an object"); require("operations", isArray("operations"), "an array");
   require("consumers", isArray("consumers"), "an array"); require("generatedFiles", isArray("generatedFiles"), "an array");

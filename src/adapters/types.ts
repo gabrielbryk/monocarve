@@ -68,6 +68,10 @@ export type AdapterEditResult =
 
 export interface PackageManagerAdapter {
   readonly id: string;
+  /** Version of this adapter's deterministic planning/replay contract. */
+  readonly contractVersion?: number;
+  /** Version declaration carried by tracked root package.json bytes, if unambiguous. */
+  declaredVersion?(rootPackageJson: string): string | undefined;
 
   /** Lockfile basename at the workspace root, e.g. `pnpm-lock.yaml`. */
   readonly lockfileName: string;
@@ -170,6 +174,10 @@ export interface PackageManagerAdapter {
 
 export interface TaskRunnerAdapter {
   readonly id: string;
+  /** Version of this adapter's deterministic planning/replay contract. */
+  readonly contractVersion?: number;
+  /** Version declaration carried by tracked root package.json bytes, if unambiguous. */
+  declaredVersion?(rootPackageJson: string): string | undefined;
 
   /** Project file created for a new package, e.g. `moon.yml`. Null when none. */
   readonly projectFileName: string | null;

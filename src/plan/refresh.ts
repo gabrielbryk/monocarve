@@ -78,6 +78,11 @@ export function refreshExtractionPlan(options: RefreshPlanOptions): RefreshPlanR
   // only HEAD had advanced.
   assertSame("configured gates", existing.gates, refreshed.gates);
   assertSame("configured commits", existing.commits, refreshed.commits);
+  if (existing.provenance !== undefined) {
+    assertSame("configuration provenance", existing.provenance.configDigest, refreshed.provenance?.configDigest);
+    assertSame("planning policy provenance", existing.provenance.policyDigest, refreshed.provenance?.policyDigest);
+    assertSame("adapter provenance", existing.provenance.adapters, refreshed.provenance?.adapters);
+  }
 
   return {
     manifest: refreshed,

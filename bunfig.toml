@@ -2,3 +2,7 @@
 # Only `test/` is a test root. `fixtures/` deliberately contains a file named
 # `*.test.ts` — it is input data for the engine, not a suite to execute.
 root = "./test"
+# TypeScript program construction and subprocess-backed CLI proofs can cross
+# Bun's 5s default when the full suite runs concurrently. Keep hangs bounded
+# while leaving genuinely long E2E cases to their own explicit timeouts.
+timeout = 60000

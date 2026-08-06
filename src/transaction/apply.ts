@@ -3,6 +3,7 @@ import { resetCodemodCaches } from "../codemod/imports.ts";
 import { createPackageManagerAdapter } from "../adapters/registry.ts";
 import { isGuardedBranch, type MonocarveConfig } from "../config.ts";
 import { PreflightError } from "../errors.ts";
+import { TOOL_NAME } from "../branding.ts";
 import { disallowedDirtyPaths } from "../util/dirty-tree.ts";
 import { currentBranch, git, headCommit, tryGit } from "../util/git.ts";
 import { manifestPaths, planSensitivePaths, regeneratedArtifactPaths, pureRenames } from "../plan/manifest.ts";
@@ -16,6 +17,7 @@ import { simulatePlan, type SimulationResult } from "./simulate.ts";
 import { installWorkspaceDependencies } from "./worktree.ts";
 import { beginApplyTransaction } from "./apply-state.ts";
 import { auditRepositoryPostconditions, repositoryPostconditionPaths } from "./postconditions.ts";
+import { inspectCommitChain } from "./commit-evidence.ts";
 
 export { assertExactMoveDiff, assertExactScope } from "./apply-commit.ts";
 export { ApplyError, type ApplyOptions, type ApplyResult, type ApplyState } from "./apply-types.ts";
@@ -206,7 +208,14 @@ export async function preflight(options: ApplyOptions): Promise<string[]> {
   const dirty = uncleanForPlan(options);
   if (dirty.length > 0) blockers.push(`working tree is not clean: ${dirty.join(", ")}`);
   if (headCommit(options.rootDir) !== options.manifest.baselineCommit) {
-    try { approvedManifestState(options, headCommit(options.rootDir)); } catch (error) { blockers.push((error as Error).message); }
+    const head = headCommit(options.rootDir);
+    if (options.manifestPath !== undefined && inspectCommitChain({
+      rootDir: options.rootDir, manifest: options.manifest, manifestPath: options.manifestPath, headCommit: head,
+    }).phase === "applied") {
+      blockers.push(`plan ${options.manifest.planId} is already applied; run ${TOOL_NAME} audit --plan ${options.manifestPath}`);
+    } else {
+      try { approvedManifestState(options, head); } catch (error) { blockers.push((error as Error).message); }
+    }
   }
   return blockers;
 }

@@ -40,11 +40,11 @@ test("refresh is read-only by default and writes only to an explicit output", as
   const manifest = JSON.parse(readFileSync(join(root, refreshedPath), "utf8")) as { baselineCommit: string };
   expect(manifest.baselineCommit).toBe(fixtureGit(root, "rev-parse", "HEAD"));
 
-  const replaced = await runJsonIn<{ written: boolean; replaced: boolean; output: string; approval: { workflow: { failFast: boolean; steps: string[][] } } }>(
-    root, "refresh", "--plan", stale, "--write", "--replace", "--no-cache",
-  );
-  expect(replaced).toMatchObject({ written: true, replaced: true, output: stale, approval: { workflow: { failFast: true } } });
-  expect(replaced.approval.workflow.steps[0]).toEqual(["monocarve", "approve", "--plan", stale, "--commit"]);
+  const original = readFileSync(join(root, stale), "utf8");
+  const replace = await runIn(root, "refresh", "--plan", stale, "--write", "--replace", "--no-cache");
+  expect(replace.code).toBe(64);
+  expect(replace.stderr).toContain("--replace is no longer supported");
+  expect(readFileSync(join(root, stale), "utf8")).toBe(original);
 }, 30_000);
 
 test("refresh refuses write without an explicit output path", async () => {
@@ -73,11 +73,11 @@ test("plan refuses to delete or silently overwrite an existing manifest", async 
   expect(repeated.stderr).toContain(`existing baseline ${oldBaseline}`);
   expect(repeated.stderr).toContain(`current baseline ${currentBaseline}`);
   expect(repeated.stderr).toContain("The existing file was not changed");
-  expect(repeated.stderr).toContain(`refresh --plan "${path}" --write --replace`);
+  expect(repeated.stderr).toContain(`refresh --plan "${path}" --out <new-path> --write`);
   expect(readFileSync(join(root, path), "utf8")).toBe(original);
 }, 30_000);
 
-test("apply baseline-only refresh rewrites the plan but stops for a new approval", async () => {
+test("apply refuses baseline-only replacement and preserves the reviewed plan", async () => {
   const root = committedWorkspace();
   const portfolio = await runJsonIn<{ top: { id: string; files: string[] }[] }>(root, "portfolio", "--no-cache");
   const candidate = portfolio.top.find((entry) => entry.files.includes("apps/web/src/widgets/chart.ts"))!;
@@ -87,16 +87,13 @@ test("apply baseline-only refresh rewrites the plan but stops for a new approval
   write(root, "docs/preparation.md", "baseline-only preparation\n");
   fixtureGit(root, "add", "--", "docs/preparation.md");
   fixtureGit(root, "commit", "-qm", "docs: prepare extraction");
-  const current = fixtureGit(root, "rev-parse", "HEAD");
+  const original = readFileSync(join(root, path), "utf8");
 
   const result = await runIn(root, "apply", "--plan", path, "--commit", "--refresh-if-baseline-only", "--no-cache");
-  expect(result.code).toBe(1);
-  const report = JSON.parse(result.stdout) as { refreshed: boolean; applied: boolean; semanticDiff: unknown[]; next: string[] };
-  expect(report).toMatchObject({ refreshed: true, applied: false, semanticDiff: [] });
-  expect(report.next).toEqual(["monocarve", "approve", "--plan", path, "--commit"]);
-  const refreshed = JSON.parse(readFileSync(join(root, path), "utf8")) as { baselineCommit: string };
-  expect(refreshed.baselineCommit).toBe(current);
-  expect(refreshed.baselineCommit).not.toBe(old.baselineCommit);
+  expect(result.code).toBe(64);
+  expect(result.stderr).toContain("--refresh-if-baseline-only is no longer supported");
+  expect(readFileSync(join(root, path), "utf8")).toBe(original);
+  expect(old.baselineCommit).not.toBe(fixtureGit(root, "rev-parse", "HEAD"));
   expect(fixtureGit(root, "log", "-1", "--format=%s")).toBe("docs: prepare extraction");
 }, 60_000);
 
@@ -104,7 +101,7 @@ test("baseline refresh cannot mutate through a simulation-only apply", async () 
   const root = committedWorkspace();
   const result = await runIn(root, "apply", "--plan", ".monocarve/missing.json", "--refresh-if-baseline-only");
   expect(result.code).toBe(64);
-  expect(result.stderr).toContain("--refresh-if-baseline-only requires --commit");
+  expect(result.stderr).toContain("--refresh-if-baseline-only is no longer supported");
 });
 
 test("next refuses to overwrite an existing reviewed manifest", async () => {

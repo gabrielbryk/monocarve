@@ -20,6 +20,8 @@ const WORKSPACE_MANIFEST = "pnpm-workspace.yaml";
 
 export const pnpmAdapter: PackageManagerAdapter = {
   id: "pnpm",
+  contractVersion: 1,
+  declaredVersion: (text) => declaredPackageManagerVersion(text, "pnpm"),
   lockfileName: LOCKFILE_NAME,
   workspaceManifestName: WORKSPACE_MANIFEST,
   listPackages: (rootDir) => listPackages(rootDir, WORKSPACE_MANIFEST),
@@ -38,6 +40,17 @@ export const pnpmAdapter: PackageManagerAdapter = {
   installCommand: () => ["pnpm", "install", "--frozen-lockfile"],
   lockfileOnlyCommand: () => ["pnpm", "install", "--lockfile-only"],
 };
+
+function declaredPackageManagerVersion(text: string, name: string): string | undefined {
+  try {
+    const value = (JSON.parse(text) as { packageManager?: unknown }).packageManager;
+    if (typeof value !== "string" || !value.startsWith(`${name}@`)) return undefined;
+    const version = value.slice(name.length + 1);
+    return version === "" ? undefined : version;
+  } catch {
+    return undefined;
+  }
+}
 
 function applyImporter(text: string, root: string, block: string, mode?: LockfileImporterMode): string {
   return mode === "replace" ? replaceImporter(text, root, block) : insertImporter(text, root, block);

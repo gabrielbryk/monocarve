@@ -4,7 +4,9 @@ import { WorkspaceContext } from "../context.ts";
 import { renderGates } from "../build.ts";
 import { isAnyMove, type ExtractionManifest, type PlanOperation } from "../manifest.ts";
 import { renderPublicModulePaths } from "../public-modules.ts";
-import { sourceExportsFromFile } from "../public-surface.ts";
+import { sourceExportsFromBaseline } from "../public-surface.ts";
+import { hashText } from "../../util/hash.ts";
+import { showBaseline } from "../../util/git.ts";
 import { packageOperations } from "../scaffold.ts";
 import type { ValidatePlanOptions } from "./shared.ts";
 import { Issues } from "./shared.ts";
@@ -39,13 +41,20 @@ export function validatePublicModules(
     );
     const expected = moduleSources.map((source, index) => {
       const paths = rendered[index]!;
+      const baseline = showBaseline(options.rootDir, manifest.baselineCommit, source);
+      if (baseline === null) throw new Error(`baseline source does not exist: ${source}`);
+      if (hashText(baseline) !== manifest.sourceBlobs[source]) {
+        throw new Error(`baseline source does not match recorded source blob: ${source}`);
+      }
       return {
         source,
         target: moves.get(source),
         specifier: `${manifest.target.packageName}/${paths.exportKey.slice(2)}`,
         exportKey: paths.exportKey,
         exportTarget: paths.exportTarget,
-        requiredExports: index < manifest.source.files.length ? sourceExportsFromFile(context.absolute(source), source) : [],
+        requiredExports: index < manifest.source.files.length
+          ? sourceExportsFromBaseline(options.rootDir, manifest.baselineCommit, source)
+          : [],
       };
     });
     const comparable = actual.map(({ source, target, specifier, exportKey, exportTarget, requiredExports }) => ({

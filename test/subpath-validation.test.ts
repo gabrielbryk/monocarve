@@ -5,12 +5,13 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { rmSync } from "node:fs";
 
 import type { MonocarveConfig } from "../src/config.ts";
 import type { ExtractionManifest, ImportRewrite, PlanOperation, PublicModule } from "../src/plan/manifest.ts";
 import { assertPlanValid, validatePlan } from "../src/plan/validate.ts";
 import { hashText } from "../src/util/hash.ts";
-import { cleanupFixtures, fixtureConfig, fixtureRepo } from "./support/fixture-repo.ts";
+import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, write } from "./support/fixture-repo.ts";
 
 const ALPHA = "apps/api/src/alpha.ts";
 const BETA = "apps/api/src/beta.ts";
@@ -87,7 +88,7 @@ function setup(): { root: string; config: MonocarveConfig; manifest: ExtractionM
     planId: "subpath-validation-fixture",
     createdAt: "2026-01-01T00:00:00.000Z",
     generator: { name: "monocarve", version: "0.0.0" },
-    baselineCommit: "0123456789abcdef0123456789abcdef01234567",
+    baselineCommit: fixtureGit(root, "rev-parse", "HEAD"),
     graphDigest: hashText("subpath-validation"),
     application: "api",
     target: {
@@ -133,6 +134,42 @@ describe("public subpath plan validation", () => {
   test("accepts exact source-derived exports and donor routes", () => {
     const { root, config, manifest } = setup();
     expect(() => assertPlanValid(manifest, { config, rootDir: root })).not.toThrow();
+  });
+
+  test("accepts baseline export evidence after donors move out of the live tree", () => {
+    const { root, config, manifest } = setup();
+    for (const module of manifest.target.publicModules!) {
+      write(root, module.target, module.source === ALPHA ? alphaSource : betaSource);
+      rmSync(`${root}/${module.source}`);
+    }
+    expect(() => assertPlanValid(manifest, { config, rootDir: root })).not.toThrow();
+  });
+
+  test("rejects forged export evidence after donors move out of the live tree", () => {
+    const { root, config, manifest } = setup();
+    for (const module of manifest.target.publicModules!) {
+      write(root, module.target, module.source === ALPHA ? alphaSource : betaSource);
+      rmSync(`${root}/${module.source}`);
+    }
+    const [alpha, ...rest] = manifest.target.publicModules!;
+    const forged: ExtractionManifest = {
+      ...manifest,
+      target: { ...manifest.target, publicModules: [{ ...alpha!, requiredExports: [] }, ...rest] },
+    };
+    expect(() => assertPlanValid(forged, { config, rootDir: root })).toThrow(
+      "public module map does not match configured surface templates",
+    );
+  });
+
+  test("rejects baseline bytes that disagree with the recorded source blob", () => {
+    const { root, config, manifest } = setup();
+    const forged: ExtractionManifest = {
+      ...manifest,
+      sourceBlobs: { ...manifest.sourceBlobs, [ALPHA]: hashText("different bytes\n") },
+    };
+    expect(() => assertPlanValid(forged, { config, rootDir: root })).toThrow(
+      `baseline source does not match recorded source blob: ${ALPHA}`,
+    );
   });
 
   test.each([

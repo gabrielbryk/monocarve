@@ -182,7 +182,7 @@ export function registerCliTailTests(input: { readonly candidate: () => Candidat
     expect(audited.code).toBe(1);
     const report = JSON.parse(audited.stdout) as { passed: boolean; failures: string[]; unauditable?: string[]; byteFidelity: { passed: boolean; checked: number; failures: string[] } };
     expect(report.passed).toBe(false);
-    expect(report.failures).toEqual(["[schema-version] manifest schemaVersion must be 2"]);
+    expect(report.failures).toEqual(["[schema-version] manifest schemaVersion must be 2 or 3"]);
     expect(report.unauditable).toEqual(report.failures);
     expect(report.byteFidelity).toEqual({ passed: false, checked: 0, failures: [] });
     const verified = await runIn(FIXTURE, "verify", "--plan", legacyPath);

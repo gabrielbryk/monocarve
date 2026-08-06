@@ -7,6 +7,8 @@ import { planningCommands } from "./planning.ts";
 import { preparationCommands } from "./preparation.ts";
 import { preparerCommands } from "./preparers.ts";
 import { transactionCommands } from "./transactions.ts";
+import { lifecycleCommands } from "./lifecycle.ts";
+import { reconciliationCommands } from "./reconciliation.ts";
 import type { CommandSpec } from "./types.ts";
 
 function qualify(spec: CommandSpec): CommandSpec {
@@ -14,7 +16,7 @@ function qualify(spec: CommandSpec): CommandSpec {
 }
 
 export const COMMANDS: Record<string, CommandSpec> = Object.fromEntries(
-  Object.entries({ ...discoveryCommands, ...configDoctorCommands, ...planningCommands, ...preparationCommands, ...preparerCommands, ...transactionCommands })
+  Object.entries({ ...discoveryCommands, ...configDoctorCommands, ...planningCommands, ...preparationCommands, ...preparerCommands, ...transactionCommands, ...lifecycleCommands, ...reconciliationCommands })
     .map(([name, spec]) => [name, qualify(spec)]),
 );
 

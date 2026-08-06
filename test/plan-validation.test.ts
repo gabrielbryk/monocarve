@@ -11,6 +11,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { assertPlanValid, validatePlan } from "../src/plan/validate.ts";
+import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../src/adapters/registry.ts";
+import { moonAdapter, noneTaskRunner } from "../src/adapters/moon.ts";
+import { pnpmAdapter } from "../src/adapters/pnpm.ts";
+import { getApplication, resolveExtractionProfile } from "../src/config.ts";
+import { buildPlanProvenance } from "../src/plan/provenance.ts";
 import { hashText } from "../src/util/hash.ts";
 import type { ExtractionManifest, PlanOperation } from "../src/plan/manifest.ts";
 import { projectedArtifactEvidence } from "../src/plan/projected-workspace.ts";
@@ -85,6 +90,59 @@ describe("plan validation", () => {
   test("accepts a well-formed plan", () => {
     const { root, config } = repo();
     expect(() => assertPlanValid(manifest(), { config, rootDir: root })).not.toThrow();
+  });
+
+  test("accepts legacy v2 plans and deterministic current provenance", () => {
+    const { root, config } = repo();
+    const profile = resolveExtractionProfile(config, getApplication(config, "api"), undefined);
+    const input = { config, profileGates: profile.gates, scaffoldTemplates: profile.scaffoldTemplates, packageManager: createPackageManagerAdapter(config), taskRunner: createTaskRunnerAdapter(config), rootPackageJson: '{ "name": "fixture-workspace", "private": true }\n' };
+    expect(buildPlanProvenance(input)).toEqual(buildPlanProvenance(input));
+    expect(input.packageManager.declaredVersion?.('{ "packageManager": "pnpm@9.15.0" }')).toBe("9.15.0");
+    const current: ExtractionManifest = { ...manifest(), schemaVersion: 3, provenance: buildPlanProvenance(input) };
+    expect(validatePlan(current, { config, rootDir: root }).issues).toEqual([]);
+    expect(validatePlan(manifest(), { config, rootDir: root }).issues).toEqual([]);
+    const { provenance: _stripped, ...stripped } = current;
+    expect(validatePlan(stripped as ExtractionManifest, { config, rootDir: root }).issues.some((issue) => issue.rule === "provenance")).toBe(true);
+  });
+
+  test("rejects independently forged provenance claims", () => {
+    const { root, config } = repo();
+    const profile = resolveExtractionProfile(config, getApplication(config, "api"), undefined);
+    const provenance = buildPlanProvenance({ config, profileGates: profile.gates, scaffoldTemplates: profile.scaffoldTemplates, packageManager: createPackageManagerAdapter(config), taskRunner: createTaskRunnerAdapter(config), rootPackageJson: '{ "name": "fixture-workspace" }\n' });
+    const cases = [
+      { value: { ...provenance, configDigest: hashText("forged-config") }, rule: "config-digest" },
+      { value: { ...provenance, policyDigest: hashText("forged-policy") }, rule: "policy-digest" },
+      { value: { ...provenance, adapters: { ...provenance.adapters, packageManager: { ...provenance.adapters.packageManager, contractVersion: 99 } } }, rule: "adapter-provenance" },
+      { value: { ...provenance, compiler: { artifactIntegrity: hashText("forged-compiler") } }, rule: "compiler-integrity" },
+    ];
+    for (const entry of cases) {
+      const result = validatePlan({ ...manifest(), schemaVersion: 3, provenance: entry.value }, { config, rootDir: root });
+      expect(result.issues.some((issue) => issue.rule === entry.rule)).toBe(true);
+    }
+  });
+
+  test("adapter provenance uses tracked declarations and never executable PATH state", () => {
+    const { config } = repo();
+    const profile = resolveExtractionProfile(config, getApplication(config, "api"), undefined);
+    const base = { config, profileGates: profile.gates, scaffoldTemplates: profile.scaffoldTemplates };
+    const declared = JSON.stringify({ packageManager: "pnpm@9.15.0", devDependencies: { "@moonrepo/cli": "^1.31.0" } });
+    const previousPath = process.env.PATH;
+    const first = buildPlanProvenance({ ...base, packageManager: pnpmAdapter, taskRunner: moonAdapter, rootPackageJson: declared });
+    process.env.PATH = "/definitely/not/a/toolchain";
+    try {
+      expect(buildPlanProvenance({ ...base, packageManager: pnpmAdapter, taskRunner: moonAdapter, rootPackageJson: declared })).toEqual(first);
+    } finally {
+      process.env.PATH = previousPath;
+    }
+    expect(first.adapters).toEqual({
+      packageManager: { id: "pnpm", contractVersion: 1, declaredVersion: "9.15.0" },
+      taskRunner: { id: "moon", contractVersion: 1, declaredVersion: "^1.31.0" },
+    });
+    const absent = buildPlanProvenance({ ...base, packageManager: pnpmAdapter, taskRunner: noneTaskRunner, rootPackageJson: "not-json" });
+    expect(absent.adapters).toEqual({
+      packageManager: { id: "pnpm", contractVersion: 1 },
+      taskRunner: { id: "none", contractVersion: 1 },
+    });
   });
 
   test("rejects forged projected artifact and dependency-decision evidence", () => {

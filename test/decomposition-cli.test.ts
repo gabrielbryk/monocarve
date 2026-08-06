@@ -77,7 +77,7 @@ test("split-candidates reports cross-file consumer affinity without editing the 
   };
   expect(report.consumers).toContainEqual(expect.objectContaining({ groupName: "renderChart", affinity: "browser" }));
   expect(report.splitCandidates).toContainEqual(expect.objectContaining({ names: ["renderChart"] }));
-});
+}, 15_000);
 
 test("conflicts exposes exact shared-consumer evidence and replan-safe waves through the CLI", async () => {
   const root = workspace();
