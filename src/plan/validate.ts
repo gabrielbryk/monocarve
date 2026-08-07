@@ -16,7 +16,7 @@ import { isSourceModulePath } from "../util/files.ts";
 import { isSha256, stableStringify } from "../util/hash.ts";
 import { relativeWorkspacePath } from "../util/paths.ts";
 import { readManifest } from "../graph/workspace.ts";
-import { LEGACY_PLAN_SCHEMA_VERSION, PLAN_SCHEMA_VERSION, operationPaths, type ExtractionManifest } from "./manifest.ts";
+import { LEGACY_PLAN_SCHEMA_VERSION, PLAN_SCHEMA_VERSION, isSupportedExtractionManifestVersion, operationPaths, type ExtractionManifest } from "./manifest.ts";
 import { projectedArtifactEvidence } from "./projected-workspace.ts";
 import { buildPlanProvenance } from "./provenance.ts";
 import { validateIntegrationTestSuite } from "./validation/integration.ts";
@@ -33,7 +33,7 @@ export function validatePlan(manifest: ExtractionManifest, options: ValidatePlan
   const issues = new Issues();
   const { rootDir } = options;
 
-  if (manifest.schemaVersion !== LEGACY_PLAN_SCHEMA_VERSION && manifest.schemaVersion !== PLAN_SCHEMA_VERSION) {
+  if (!isSupportedExtractionManifestVersion(manifest.schemaVersion)) {
     issues.add("schema-version", `manifest schemaVersion must be ${LEGACY_PLAN_SCHEMA_VERSION} or ${PLAN_SCHEMA_VERSION}`);
     return validationResult(issues);
   }

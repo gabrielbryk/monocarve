@@ -2,13 +2,15 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { buildDependencyGraph, type ScanReport } from "../src/graph/build.ts";
 import { compileModulePromotion, modulePromotionImporterEvidence } from "../src/plan/module-promotion.ts";
+import { serializeManifest } from "../src/plan/build.ts";
 import { validatePlan } from "../src/plan/validate.ts";
 import { resolveCommit } from "../src/util/git.ts";
 import { WorkspaceContext } from "../src/plan/context.ts";
 import { executeJournal } from "../src/transaction/journal.ts";
 import { commitAppliedPlan } from "../src/transaction/apply-commit.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
-import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, read } from "./support/fixture-repo.ts";
+import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, read, write } from "./support/fixture-repo.ts";
+import { runIn } from "./support/cli.ts";
 
 afterEach(cleanupFixtures);
 
@@ -126,6 +128,27 @@ describe("module promotion", () => {
     expect(manifest.consumers.map((item) => item.file)).toEqual([OTHER, CONSUMER, CONSUMER_ROOT_TEST]);
     expect(manifest.modulePromotion?.importerProof).toEqual([OTHER, CONSUMER, CONSUMER_ROOT_TEST]);
     expect(manifest.operations.some((item) => item.kind === "rewrite-import" && item.file === CONSUMER_ROOT_TEST)).toBe(true);
+  });
+
+  test("boundary simulate and non-committing apply route a schema-v3 promotion as extraction", async () => {
+    const fixture = setup({ cycle: false });
+    const manifest = compileModulePromotion({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, context: new WorkspaceContext(fixture.config, fixture.root), baselineCommit: fixture.baseline.commit, promotionId: "resource-contracts" });
+    const planPath = "resource-contracts-v3.json";
+    write(fixture.root, planPath, serializeManifest(manifest));
+
+    const simulated = await runIn(fixture.root, "boundary", "simulate", "--plan", planPath, "--json");
+    expect(simulated.code).toBe(0);
+    expect(JSON.parse(simulated.stdout).planId).toBe(manifest.planId);
+    const applied = await runIn(fixture.root, "boundary", "apply", "--plan", planPath, "--json");
+    expect(applied.code).toBe(0);
+    expect(JSON.parse(applied.stdout)).toMatchObject({ ok: true, planId: manifest.planId, rolledBack: false });
+
+    const invalidPath = "resource-contracts-v3-invalid.json";
+    write(fixture.root, invalidPath, serializeManifest({ ...manifest, modulePromotion: { ...manifest.modulePromotion!, importerProof: [] } }));
+    const invalid = await runIn(fixture.root, "boundary", "apply", "--plan", invalidPath, "--json");
+    expect(invalid.code).toBe(1);
+    expect(invalid.stderr).toContain("module promotion importer proof");
+    expect(invalid.stderr).not.toContain("groups.length");
   });
 
   test("validation rejects a manifest whose cycle-cut proof is made non-failing", () => {
