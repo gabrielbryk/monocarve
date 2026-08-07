@@ -35,6 +35,7 @@ export interface RetainedImporterInput {
   readonly specifier: string;
   /** Exact bound names this importer takes through that specifier. */
   readonly importedSymbols: readonly string[];
+  readonly moduleSpecifierCall?: string;
 }
 
 export interface PlanExistingPackageBoundaryInput {
@@ -98,7 +99,12 @@ function planImporterRewrite(
   return {
     kind: "rewrite-module-specifier",
     file,
-    rewrites: [{ from: importer.specifier, to: boundary.replacementSpecifier, symbols: [...importer.importedSymbols].sort(byCodeUnit) }],
+    rewrites: [{
+      from: importer.specifier,
+      to: boundary.replacementSpecifier,
+      symbols: [...importer.importedSymbols].sort(byCodeUnit),
+      ...(importer.moduleSpecifierCall === undefined ? {} : { moduleSpecifierCall: importer.moduleSpecifierCall }),
+    }],
     contents,
   };
 }

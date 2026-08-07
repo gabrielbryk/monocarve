@@ -9,6 +9,9 @@ import { partitionTests } from "../plan/consumers.ts";
 import { WorkspaceContext } from "../plan/context.ts";
 import { buildPathReferenceIndex, type PathReferenceIndex } from "../plan/path-references.ts";
 import { preparationRecipe } from "./recipe.ts";
+import { groupEquivalentCandidates } from "./groups.ts";
+import { recommendCandidate } from "./recommendation.ts";
+import { detectCompatibilityShims } from "./shims.ts";
 import {
   assessCandidate,
   dedupeReasons,
@@ -38,8 +41,9 @@ export function buildPortfolio(options: PortfolioOptions): Portfolio {
   const applicationGraph = buildApplicationGraph(graph, options.application);
   const reports = componentReports(config, graph, applicationGraph);
   const skip = new Set(options.includeExtracted ? [] : config.portfolio.extracted);
+  const compatibilityShims = detectCompatibilityShims(context, graph);
   const candidates = reports
-    .map((report) => candidateFor(config, context, pathReferences, graph, applicationGraph, reports, report))
+    .map((report) => candidateFor(config, context, pathReferences, graph, applicationGraph, reports, report, compatibilityShims))
     .filter((candidate): candidate is PortfolioCandidate => candidate !== null)
     .filter((candidate) => !skip.has(candidate.id));
   return {
@@ -47,6 +51,7 @@ export function buildPortfolio(options: PortfolioOptions): Portfolio {
     ...(graph.commit === undefined ? {} : { commit: graph.commit }),
     candidates,
     selected: selectNonOverlapping(candidates),
+    equivalenceGroups: groupEquivalentCandidates(candidates, config.portfolio.equivalenceThreshold),
   };
 }
 
@@ -73,6 +78,7 @@ function candidateFor(
   applicationGraph: ApplicationGraph,
   reports: readonly ComponentReport[],
   report: ComponentReport,
+  allCompatibilityShims: readonly import("./types.ts").CompatibilityShim[],
 ): PortfolioCandidate | null {
   if (report.application === null) return null;
   const components = applicationGraph.condensed.components;
@@ -114,6 +120,7 @@ function candidateFor(
   const consumerChurn = report.inboundNodes.length + report.testImporterFiles.length;
   const coverage = tests.length === 0 ? 0 : Math.min(1, tests.length / Math.max(1, closure.length));
   const rejectionReasons = dedupeReasons(rejections);
+  const compatibilityShims = allCompatibilityShims.filter((shim) => closure.includes(shim.path));
   const base = {
     id,
     application: report.application,
@@ -134,11 +141,13 @@ function candidateFor(
     rejectionReasons,
     warnings: [...new Set(assessed.warnings)],
     rewriteEscapes: assessed.rewriteEscapes,
+    compatibilityShims,
     classification: assessed.classification,
     retainedBlockers: assessed.retainedBlockers,
     recipe: preparationRecipe(config, assessed.retainedBlockers),
   };
-  return { ...base, score: scoreCandidate(config, base) };
+  const recommendation = recommendCandidate(config, context, graph, base, compatibilityShims);
+  return { ...base, recommendation, score: scoreCandidate(config, { ...base, recommendation }) };
 }
 
 function candidateSccs(ids: ReadonlySet<number>, components: readonly (readonly string[])[]): Scc[] {
@@ -193,7 +202,8 @@ export function suggestedPackageName(
 
 export function scoreCandidate(config: MonocarveConfig, candidate: Omit<PortfolioCandidate, "score">): number {
   const weights = config.portfolio.weights;
-  return candidate.lineCount * weights.lineCount +
+  const advisoryLineCount = candidate.lineCount - (candidate.compatibilityShims ?? []).reduce((sum, shim) => sum + shim.lineCount, 0);
+  return advisoryLineCount * weights.lineCount +
     candidate.files.length * weights.fileCount +
     candidate.consumerChurn * weights.consumerCount +
     candidate.coverage * weights.testCoverage +
@@ -208,7 +218,7 @@ export function scoreCandidate(config: MonocarveConfig, candidate: Omit<Portfoli
 export function pickNext(portfolio: Portfolio, alreadyExtracted: readonly string[] = []): PortfolioCandidate | null {
   const skip = new Set(alreadyExtracted);
   return portfolio.candidates
-    .filter((candidate) => candidate.eligible && !skip.has(candidate.id))
+    .filter((candidate) => candidate.eligible && candidate.recommendation?.status === "recommended" && !skip.has(candidate.id))
     .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))[0] ?? null;
 }
 

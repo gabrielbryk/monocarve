@@ -5,7 +5,7 @@ import { MonocarveError } from "../errors.ts";
 import type { Scc } from "../graph/model.ts";
 import { byCodeUnit, stableStringify } from "../util/hash.ts";
 import { normalizePath, relativeWorkspacePath } from "../util/paths.ts";
-import type { Portfolio, PortfolioCandidate, RecipeStep, RejectionCode, RetainedBlocker } from "./types.ts";
+import type { CandidateRecommendation, CompatibilityShim, Portfolio, PortfolioCandidate, RecipeStep, RejectionCode, RetainedBlocker } from "./types.ts";
 
 export type CandidateEligibility = "all" | "eligible" | "blocked";
 
@@ -50,6 +50,8 @@ export interface CandidateDetail {
   readonly retainedBlockers: readonly RetainedBlocker[];
   /** What would unblock each retained blocker, one step per blocker. */
   readonly recipe: readonly RecipeStep[];
+  readonly compatibilityShims: readonly CompatibilityShim[];
+  readonly recommendation?: CandidateRecommendation;
 }
 
 export class CandidateLookupError extends MonocarveError {
@@ -86,12 +88,13 @@ export function formatCandidateTable(details: readonly CandidateDetail[]): strin
     candidate.id,
     candidate.eligible ? "eligible" : "blocked",
     candidate.classification ?? "-",
+    candidate.recommendation?.status ?? "-",
     String(candidate.score),
     String(candidate.lineCount),
     String(candidate.closure.length),
     candidate.targetSuggestion.packageName,
   ]);
-  const table = [["ID", "STATE", "CLASS", "SCORE", "LOC", "PATHS", "TARGET"], ...rows];
+  const table = [["ID", "STATE", "CLASS", "RECOMMENDATION", "SCORE", "LOC", "PATHS", "TARGET"], ...rows];
   const widths = table[0]!.map((_, column) => Math.max(...table.map((row) => row[column]!.length)));
   return `${table.map((row) => row.map((cell, column) => cell.padEnd(widths[column]!)).join("  ").trimEnd()).join("\n")}\n`;
 }
@@ -118,6 +121,8 @@ function candidateDetail(candidate: PortfolioCandidate, config: MonocarveConfig)
     ...(candidate.classification === undefined ? {} : { classification: candidate.classification }),
     retainedBlockers: [...(candidate.retainedBlockers ?? [])].sort((left, right) => byCodeUnit(left.target, right.target)),
     recipe: [...(candidate.recipe ?? [])].sort((left, right) => byCodeUnit(left.blocker.target, right.blocker.target)),
+    compatibilityShims: [...(candidate.compatibilityShims ?? [])].sort((left, right) => byCodeUnit(left.path, right.path)),
+    ...(candidate.recommendation === undefined ? {} : { recommendation: candidate.recommendation }),
   };
 }
 

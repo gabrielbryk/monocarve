@@ -8,7 +8,7 @@ afterAll(cleanupFixtures);
 
 test("refresh is read-only by default and writes only to an explicit output", async () => {
   const root = committedWorkspace();
-  const portfolio = await runJsonIn<{ top: { id: string; files: string[] }[] }>(root, "portfolio", "--no-cache");
+  const portfolio = await runJsonIn<{ top: { id: string; files: string[] }[] }>(root, "portfolio", "--recommendation", "all", "--no-cache");
   const candidate = portfolio.top.find((entry) => entry.files.includes("apps/web/src/widgets/chart.ts"));
   expect(candidate).toBeDefined();
   const stale = ".monocarve/stale.json";
@@ -58,7 +58,7 @@ test("refresh refuses write without an explicit output path", async () => {
 
 test("plan refuses to delete or silently overwrite an existing manifest", async () => {
   const root = committedWorkspace();
-  const portfolio = await runJsonIn<{ top: { id: string; files: string[] }[] }>(root, "portfolio", "--no-cache");
+  const portfolio = await runJsonIn<{ top: { id: string; files: string[] }[] }>(root, "portfolio", "--recommendation", "all", "--no-cache");
   const candidate = portfolio.top.find((entry) => entry.files.includes("apps/web/src/widgets/chart.ts"))!;
   const path = ".monocarve/existing.json";
   expect((await runIn(root, "plan", "--candidate", candidate.id, "--package-name", "@acme/chart", "--out", path, "--write", "--no-cache")).code).toBe(0);
@@ -79,7 +79,7 @@ test("plan refuses to delete or silently overwrite an existing manifest", async 
 
 test("apply refuses baseline-only replacement and preserves the reviewed plan", async () => {
   const root = committedWorkspace();
-  const portfolio = await runJsonIn<{ top: { id: string; files: string[] }[] }>(root, "portfolio", "--no-cache");
+  const portfolio = await runJsonIn<{ top: { id: string; files: string[] }[] }>(root, "portfolio", "--recommendation", "all", "--no-cache");
   const candidate = portfolio.top.find((entry) => entry.files.includes("apps/web/src/widgets/chart.ts"))!;
   const path = ".monocarve/stale-for-apply.json";
   await runJsonIn(root, "plan", "--candidate", candidate.id, "--package-name", "@acme/chart", "--out", path, "--write", "--no-cache");

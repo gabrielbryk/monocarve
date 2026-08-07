@@ -1,14 +1,17 @@
 /** Commands for read-only seam proposals and declaration preparation plans. */
 
 import { readFileSync } from "node:fs";
-import { dirname, relative } from "node:path";
 
 import { flagBool, flagNumber, flagString, flagStrings, type ParsedArgs } from "../cli/args.ts";
+import { TOOL_NAME } from "../branding.ts";
 import { domainFor, getApplication, renderPreparationPolicy } from "../config.ts";
 import { IoError, UsageError } from "../errors.ts";
 import { advanceCampaign, createCampaignLedger, describeCampaignStatus, recordCampaignApplication, type CampaignAuditEvidence, type CampaignChildPlan, type GraphMetricSnapshot } from "../campaign/index.ts";
 import { summarizeGraph } from "../graph/index.ts";
 import { parseManifest } from "../plan/build.ts";
+import { buildPlanSync, serializeManifest } from "../plan/build.ts";
+import { formatPlanReview, summarizePlanReview } from "../plan/review.ts";
+import { buildPortfolio } from "../portfolio/index.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
 import { applyPreparation } from "../prepare/apply.ts";
 import { auditPreparation } from "../prepare/audit.ts";
@@ -21,13 +24,13 @@ import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
 import { headCommit } from "../util/git.ts";
 import { hashJson } from "../util/hash.ts";
 import { auditPlan } from "../transaction/audit.ts";
-import type { CommandSpec } from "./types.ts";
-import { graphDigest, load, loadGraph, outputPath, print, systemReason, writeOutput, type LoadedGraph } from "./shared.ts";
+import { assertPlannableTree, graphDigest, load, loadGraph, outputPath, print, systemReason, writeOutput, type LoadedGraph } from "./shared.ts";
 import { campaignLedgerPath, createCampaignLedgerFile, loadCampaignLedger, persistCampaignLedger } from "./campaign-ledger-file.ts";
 export { writeCampaignLedgerAtomically } from "./campaign-ledger-file.ts";
-// The `boundary review|compile|simulate|apply` command group lives in its own
-// module purely to keep this file under the line-count gate.
 import { boundaryCommandSpec } from "./preparation-boundary.ts";
+import { preparationCommandSpecs } from "./preparation-command-specs.ts";
+import { parseJsonObject, readWorkspaceText, relativeTypeSpecifier } from "./preparation-io.ts";
+export { readWorkspaceText } from "./preparation-io.ts";
 
 async function campaignInit(args: ParsedArgs): Promise<void> {
   if (args.flags.has("graph")) throw new UsageError("campaign init refuses --graph; it must scan the native checkout at a stable HEAD");
@@ -60,6 +63,87 @@ async function campaignShowStatus(args: ParsedArgs): Promise<void> {
   const { config, rootDir } = await load(args);
   const loaded = loadCampaignLedger(rootDir, config, requiredFlag(args, "campaign"));
   print({ schema: "campaign-status", campaignPath: loaded.path, ...describeCampaignStatus(loaded.campaign, headCommit(rootDir)) }, args);
+}
+
+interface StableCampaignSpec {
+  readonly application: string;
+  readonly targets: readonly { readonly path: string; readonly packageName: string; readonly packageRoot?: string }[];
+}
+
+/** Re-resolve stable source paths against one fresh HEAD and compile only the first remaining target. */
+async function campaignResolve(args: ParsedArgs): Promise<void> {
+  if (args.flags.has("graph")) throw new UsageError("campaign resolve refuses --graph; it must rescan the native checkout at a stable HEAD");
+  const { rootDir } = await load(args);
+  const specPath = relativeWorkspacePath(rootDir, requiredFlag(args, "targets"));
+  let spec: StableCampaignSpec;
+  try { spec = JSON.parse(readWorkspaceText(rootDir, specPath, "campaign target list")) as StableCampaignSpec; }
+  catch (error) { throw new UsageError(`could not parse campaign target list ${specPath}: ${systemReason(error)}`); }
+  if (!spec || typeof spec.application !== "string" || !Array.isArray(spec.targets) || spec.targets.length === 0) {
+    throw new UsageError("campaign target list requires application and a non-empty targets array");
+  }
+  const identities = new Set<string>();
+  for (const [index, target] of spec.targets.entries()) {
+    if (!target || typeof target.path !== "string" || typeof target.packageName !== "string" || !target.path || !target.packageName) {
+      throw new UsageError(`campaign target ${index} requires non-empty path and packageName`);
+    }
+    if (identities.has(target.path)) throw new UsageError(`duplicate campaign target path: ${target.path}`);
+    identities.add(target.path);
+  }
+  const scanArgs: ParsedArgs = { ...args, flags: new Map(args.flags).set("app", spec.application).set("no-cache", true) };
+  const loaded = await loadGraph(scanArgs);
+  const portfolio = buildPortfolio({ config: loaded.config, graph: loaded.graph, context: loaded.context, application: spec.application });
+  const statuses: { path: string; packageName: string; outcome: string; candidateId?: string; detail?: string }[] = [];
+  let selected: { target: StableCampaignSpec["targets"][number]; candidate: (typeof portfolio.candidates)[number] } | undefined;
+  for (const target of spec.targets) {
+    const path = relativeWorkspacePath(rootDir, target.path);
+    const matches = portfolio.candidates.filter((candidate) => candidate.seed.members.includes(path));
+    if (matches.length === 0) {
+      const existsInApplication = loaded.graph.nodes.get(path)?.application === spec.application;
+      statuses.push({ path, packageName: target.packageName, outcome: existsInApplication ? "unresolved" : "already-extracted", detail: existsInApplication ? "no principal candidate currently resolves this path" : "path is no longer application-owned" });
+      if (existsInApplication) break;
+      continue;
+    }
+    if (matches.length > 1) {
+      statuses.push({ path, packageName: target.packageName, outcome: "ambiguous", detail: matches.map(({ id }) => id).sort().join(", ") });
+      break;
+    }
+    const candidate = matches[0]!;
+    if (!candidate.eligible) {
+      statuses.push({ path, packageName: target.packageName, outcome: "blocked", candidateId: candidate.id, detail: candidate.rejectionReasons.map(({ detail }) => detail).join("; ") });
+      break;
+    }
+    statuses.push({ path, packageName: target.packageName, outcome: "ready", candidateId: candidate.id });
+    selected = { target, candidate };
+    break;
+  }
+  if (!selected) {
+    print({ schema: "target-campaign", application: spec.application, baselineCommit: loaded.graph.commit, targets: statuses, outcome: statuses.every(({ outcome }) => outcome === "already-extracted") ? "completed" : "stopped" }, args);
+    return;
+  }
+  const manifest = buildPlanSync({
+    config: loaded.config, rootDir, graph: loaded.graph, context: loaded.context, candidate: selected.candidate,
+    baselineCommit: loaded.graph.commit ?? "HEAD", packageName: selected.target.packageName,
+    ...(selected.target.packageRoot === undefined ? {} : { packageRoot: selected.target.packageRoot }),
+  });
+  const out = outputPath(rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
+  assertPlannableTree(loaded, manifest, out, args);
+  const written = flagBool(args, "write");
+  if (written) writeOutput(rootDir, out, serializeManifest(manifest), { exclusive: true });
+  const result = {
+    schema: "target-campaign", application: spec.application, baselineCommit: loaded.graph.commit,
+    targets: statuses, outcome: "review-required", manifest, output: out, written,
+    next: written
+      ? `${TOOL_NAME} apply --plan ${JSON.stringify(out)} --commit`
+      : `${TOOL_NAME} campaign resolve --targets ${JSON.stringify(specPath)} --write`,
+  };
+  if (flagBool(args, "json")) print(result, args);
+  else {
+    const review = summarizePlanReview(manifest, {
+      baselinePaths: loaded.graph.workspace.owners.includes(manifest.target.packageRoot) ? [`${manifest.target.packageRoot}/package.json`] : [],
+      manifestPath: out,
+    });
+    print(`${formatPlanReview(review).trimEnd()}\n\nNext: ${result.next}`, args);
+  }
 }
 
 /** Compile a read-only, declaration-SCC seam proposal for one configured source file. */
@@ -400,82 +484,17 @@ function graphSnapshot(loaded: LoadedGraph): GraphMetricSnapshot {
   };
 }
 
-function relativeTypeSpecifier(fromPath: string, resolvedSourcePath: string, originalSpecifier: string): string {
-  let destination = resolvedSourcePath;
-  const originalExtension = originalSpecifier.match(/(\.[^./]+)$/)?.[1];
-  const resolvedExtension = resolvedSourcePath.match(/(\.[^./]+)$/)?.[1];
-  if (originalExtension === undefined && resolvedExtension !== undefined) destination = resolvedSourcePath.slice(0, -resolvedExtension.length);
-  else if (originalExtension !== undefined && resolvedExtension !== undefined) destination = `${resolvedSourcePath.slice(0, -resolvedExtension.length)}${originalExtension}`;
-  const specifier = relative(dirname(fromPath), destination).replaceAll("\\", "/");
-  return specifier.startsWith(".") ? specifier : `./${specifier}`;
-}
-
-export function readWorkspaceText(rootDir: string, path: string, label: string): string {
-  try {
-    return readFileSync(workspacePath(rootDir, path), "utf8");
-  } catch (error) {
-    throw new IoError(`could not read ${label} ${path}: ${systemReason(error)}`);
-  }
-}
-
-function parseJsonObject(text: string, path: string, label: string): Record<string, unknown> {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch (error) {
-    throw new UsageError(`could not parse ${label} ${path}: ${systemReason(error)}`);
-  }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new UsageError(`${label} ${path} is not a JSON object`);
-  }
-  return parsed as Record<string, unknown>;
-}
-
-export const preparationCommands: Record<string, CommandSpec> = {
-  seams: {
-    summary: "compile a read-only declaration-SCC seam proposal",
-    usage: "seams --file <path> --candidate <id> [--target <path>] [--app <name>]",
-    details: "Reports moved and retained groups, boundary imports, consumers, cycles, blockers, and type-only preparation eligibility without writing files.",
-    run: seams,
-  },
-  "seams-multi": {
-    summary: "compile read-only declaration SCCs across explicit source files",
-    usage: "seams-multi --file <path> --file <path> [--app <name>]",
-    details: "Requires at least two configured application files and reports exact cross-file symbol edges, merged declarations, SCCs, and affected consumers.",
-    run: multiFileSeams,
-  },
-  "prepare-plan": {
-    summary: "compile a type-only declaration preparation plan",
-    usage: "prepare-plan --file <path> --candidate <id> --target <path> --module-specifier <specifier> --group <id> [--group <id> ...] [--out <path>] [--write]",
-    details: "Only explicitly reviewed, safely type-only groups are accepted. Commit the written manifest with its rendered plan subject before prepare-apply --commit.",
-    run: preparePlan,
-  },
-  "prepare-multi-plan": { summary: "compile one atomic multi-file type preparation", usage: "prepare-multi-plan --spec <path> [--out <path>] [--write]", details: "The JSON spec names one reviewed multi-file candidate plus per-donor candidate, groups, target, and module specifier. Compilation requires exact atomic coverage and emits one replayable manifest; it never edits source.", run: prepareMultiPlan },
-  "prepare-audit": {
-    summary: "audit an applied declaration-preparation plan",
-    usage: "prepare-audit --plan <path>",
-    details: "Independently rescans baseline graph evidence and replays the exact declaration, import, and public-surface recipe.",
-    run: prepareAudit,
-  },
-  "prepare-apply": {
-    summary: "simulate or apply a reviewed declaration-preparation plan",
-    usage: "prepare-apply --plan <path> [--commit]",
-    details: "Without --commit, runs replay, audit, and configured preparation gates in isolation. With --commit, requires the approved manifest commit and audits immediately.",
-    run: prepareApply,
-  },
-  campaign: {
-    summary: "initialize, inspect, advance, or record a campaign",
-    usage: "campaign init --campaign <ledger> --id <id> --objective <text> --max-pairs <count> [--write]\n       campaign status --campaign <ledger>\n       campaign advance --campaign <ledger> [--next-plan <manifest> --pair <id>] [--write]\n       campaign record --campaign <ledger> --plan <manifest> --pair <id> [--write]",
-    details: "Ledgers are mutable, git-ignored operational state beneath configured campaignDir. Advance rescans and queues one child for review; record audits and persists an already-applied child. Neither silently applies a plan.",
-    run: async (args) => {
-      const action = args.positionals[0];
-      const nested = { ...args, positionals: args.positionals.slice(1) };
-      if (action === "init") return campaignInit(nested);
-      if (action === "status") return campaignShowStatus(nested);
-      if (action === "advance") return campaignAdvance(nested);
-      if (action === "record") return campaignRecord(nested);
-      throw new UsageError(`unknown campaign action ${JSON.stringify(action ?? "")}; expected init, status, advance, or record`);
-    },
-  },
+export const preparationCommands = preparationCommandSpecs({
+  seams,
+  multiFileSeams,
+  preparePlan,
+  prepareMultiPlan,
+  prepareAudit,
+  prepareApply,
+  campaignResolve,
+  campaignInit,
+  campaignShowStatus,
+  campaignAdvance,
+  campaignRecord,
   boundary: boundaryCommandSpec,
-};
+});

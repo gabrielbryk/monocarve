@@ -13,7 +13,8 @@
  *    the file. Dropping either would make an unplannable closure look clean.
  */
 
-import { resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { relative, resolve } from "node:path";
 
 import {
   applicationFor,
@@ -29,6 +30,7 @@ import {
 import { isDeclarationPath, isSourceModulePath, lineCount } from "../util/files.ts";
 import { byCodeUnit } from "../util/hash.ts";
 import { normalizePath } from "../util/paths.ts";
+import { inventoryModuleReferences } from "../codemod/imports.ts";
 import { fileFacts } from "./syntax.ts";
 import type {
   DependencyGraph,
@@ -168,7 +170,7 @@ export function buildDependencyGraph(options: BuildGraphOptions): DependencyGrap
     }
   }
 
-  const testImporters = collectTestImporters(config, everyFirstParty, nodeSet);
+  const testImporters = collectTestImporters(config, rootDir, everyFirstParty, nodeSet);
   const testKinds = new Map<string, "unit" | "integration" | "e2e">();
   for (const path of [...everyFirstParty.keys()].sort(byCodeUnit)) {
     const kind = testKindOf(config, path);
@@ -248,6 +250,7 @@ function recordExternal(
 
 function collectTestImporters(
   config: MonocarveConfig,
+  rootDir: string,
   modules: ReadonlyMap<string, ScannedModule>,
   nodes: ReadonlySet<string>,
 ): Map<string, Set<string>> {
@@ -257,6 +260,30 @@ function collectTestImporters(
     for (const dependency of module.dependencies) {
       const resolvedPath = dependency.resolved ? normalizePath(dependency.resolved) : undefined;
       if (!resolvedPath || !nodes.has(resolvedPath)) continue;
+      const importers = result.get(resolvedPath) ?? new Set<string>();
+      importers.add(module.source);
+      result.set(resolvedPath, importers);
+    }
+    // dependency-cruiser does not model workspace-configured module-specifier
+    // calls such as `vi.mock("./module")`. They are still module references:
+    // deleting or moving the target without rewriting the mock leaves a test
+    // pointing at a path that no longer exists. Union the AST inventory into
+    // the cruiser report so every downstream importer proof sees both forms.
+    const importerPath = resolve(rootDir, module.source);
+    if (!existsSync(importerPath)) continue;
+    const source = readFileSync(importerPath, "utf8");
+    for (const reference of inventoryModuleReferences(
+      source,
+      importerPath,
+      true,
+      rootDir,
+      config.moduleSpecifierCalls,
+      config.assetExtensions,
+      config.cssImportExtensions,
+    )) {
+      if (reference.resolved === null) continue;
+      const resolvedPath = normalizePath(relative(rootDir, reference.resolved));
+      if (!nodes.has(resolvedPath)) continue;
       const importers = result.get(resolvedPath) ?? new Set<string>();
       importers.add(module.source);
       result.set(resolvedPath, importers);

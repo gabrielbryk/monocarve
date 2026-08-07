@@ -30,6 +30,8 @@ const IMPORTER = "apps/api/src/orders/service.ts";
 const IMPORTER_SOURCE = 'import { env } from "../config/env.ts";\nexport const value = env;\n';
 const TEST_IMPORTER = "apps/api/src/orders/service.test.ts";
 const TEST_IMPORTER_SOURCE = 'import { env } from "../config/env.ts";\nvoid env;\n';
+const MOCK_IMPORTER = "apps/api/src/orders/service.mock.test.ts";
+const MOCK_IMPORTER_SOURCE = 'vi.mock("../config/env.ts");\n';
 
 const PORT_RETAINED = "apps/api/src/widget.ts";
 const PORT_RETAINED_SOURCE = "export interface Widget { amount: number }\n";
@@ -40,7 +42,7 @@ const ADAPTER_PATH = "apps/api/src/widget-adapter.ts";
 const ADAPTER_TEMPLATE_TEXT = "export class Widget {\n  amount = 0;\n}\n";
 
 const TSCONFIG = JSON.stringify({
-  compilerOptions: { strict: true, noEmit: true, module: "ESNext", moduleResolution: "Bundler" },
+  compilerOptions: { strict: true, noEmit: true, module: "ESNext", moduleResolution: "Bundler", baseUrl: "../../..", paths: { "@acme/env": ["libs/env/src/index.ts"] } },
   include: ["src/**/*.ts"],
 });
 
@@ -56,20 +58,22 @@ interface ExistingPackageFixture {
  * single symbol is fully covered by the declared replacement — the ordinary,
  * fully-satisfiable case.
  */
-function existingPackageFixture(overrides: { readonly extraModules?: readonly ScanReport["modules"][number][]; readonly extraFiles?: Readonly<Record<string, string>>; readonly retire?: boolean; readonly selective?: boolean } = {}): ExistingPackageFixture {
+function existingPackageFixture(overrides: { readonly extraModules?: readonly ScanReport["modules"][number][]; readonly extraFiles?: Readonly<Record<string, string>>; readonly retire?: boolean; readonly selective?: boolean; readonly pathReferences?: boolean; readonly replacementSpecifier?: string } = {}): ExistingPackageFixture {
   const root = fixtureRepo({
     "apps/api/tsconfig.json": TSCONFIG,
     [RETAINED]: RETAINED_SOURCE,
     [IMPORTER]: IMPORTER_SOURCE,
+    "libs/env/src/index.ts": 'export const env = "prod";\n',
     ...(overrides.extraFiles ?? {}),
   });
   const config = fixtureConfig(root, {
+    moduleSpecifierCalls: ["vi.mock"],
     testKinds: { unit: ["\\.test\\.ts$"], integration: [], e2e: [] },
     compositionBoundaries: [{
       id: "env-shim",
       retained: RETAINED,
       strategy: "existing-package",
-      replacement: { specifier: "@acme/env", symbols: ["env"] },
+      replacement: { specifier: overrides.replacementSpecifier ?? "@acme/env", symbols: ["env"] },
       retire: overrides.retire ?? true,
       selective: overrides.selective ?? false,
     }],
@@ -77,6 +81,15 @@ function existingPackageFixture(overrides: { readonly extraModules?: readonly Sc
       gates: { package: [], project: [], workspace: ["true"] },
       commit: { subject: "refactor: prepare env boundary" },
     },
+    ...(overrides.pathReferences ? {
+      pathReferenceRewrites: {
+        enabled: true,
+        roots: [{ root: ".agents", extensions: [".md"], mode: "exact-path-token" as const }],
+        onAmbiguousMatch: "refuse" as const,
+        matchExtensionless: false,
+        minSegments: 3,
+      },
+    } : {}),
   });
   const baseline = resolveCommit(root, "HEAD");
   const modules: ScanReport["modules"][number][] = [
@@ -204,6 +217,40 @@ describe("compileBoundaryPreparationManifest — existing-package strategy", () 
     expect(graph.testImporters.get(RETAINED)).toContain(TEST_IMPORTER);
     expect(rewrites).toEqual([IMPORTER, TEST_IMPORTER].sort(byCodeUnit));
     expect(deletion?.kind === "delete-module" ? deletion.importerProof : []).toEqual(rewrites);
+  });
+
+  test("includes mock-only test consumers in retirement rewrites and proof", () => {
+    const { input, graph } = existingPackageFixture({
+      extraFiles: { [MOCK_IMPORTER]: MOCK_IMPORTER_SOURCE },
+      extraModules: [{ source: MOCK_IMPORTER, dependencies: [] }],
+    });
+
+    const manifest = compileBoundaryPreparationManifest(input);
+    const rewrite = manifest.operations.find(
+      (operation) => operation.kind === "rewrite-module-specifier" && operation.file.path === MOCK_IMPORTER,
+    );
+    const deletion = manifest.operations.find((operation) => operation.kind === "delete-module");
+    expect(graph.testImporters.get(RETAINED)).toContain(MOCK_IMPORTER);
+    expect(rewrite?.kind === "rewrite-module-specifier" ? rewrite.contents : "").toBe(
+      'vi.mock("@acme/env");\n',
+    );
+    expect(deletion?.kind === "delete-module" ? deletion.importerProof : []).toContain(MOCK_IMPORTER);
+  });
+
+  test("rewrites configured non-source path citations when retiring a shim", () => {
+    const citation = ".agents/skills/example/SKILL.md";
+    const fixture = existingPackageFixture({
+      pathReferences: true,
+      replacementSpecifier: "../../../../libs/env/src/index.ts",
+      extraFiles: { [citation]: `See ${RETAINED} for the runtime contract.\n` },
+    });
+
+    const manifest = compileBoundaryPreparationManifest(fixture.input);
+    const operation = manifest.operations.find((item) => item.kind === "write-file" && item.file.path === citation);
+    expect(operation).toMatchObject({ kind: "write-file", purpose: "wiring" });
+    if (!operation || operation.kind !== "write-file") throw new Error("expected path citation rewrite");
+    expect(operation.contents).toContain("libs/env/src/index.ts");
+    expect(operation.contents).not.toContain(RETAINED);
   });
 
   test("selective mode rewrites fully covered importers and retains mixed consumers", () => {

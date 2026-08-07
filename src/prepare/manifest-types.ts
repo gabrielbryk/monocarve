@@ -163,7 +163,13 @@ export interface PreparationWriteFileOperation {
 export interface RewriteModuleSpecifierOperation {
   readonly kind: "rewrite-module-specifier";
   readonly file: PreparationFileMutation;
-  readonly rewrites: readonly { readonly from: string; readonly to: string; readonly symbols: readonly string[] }[];
+  readonly rewrites: readonly {
+    readonly from: string;
+    readonly to: string;
+    readonly symbols: readonly string[];
+    /** Configured module-specifier call (for example `vi.mock`) instead of an import binding. */
+    readonly moduleSpecifierCall?: string;
+  }[];
   /** Full replayable text, exactly as extract-type-declarations carries it. */
   readonly contents: string;
 }

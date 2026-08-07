@@ -37,8 +37,8 @@ describe("preparation application", () => {
 
   test("returns a gate failure without changing the reviewed checkout", async () => {
     const root = fixture();
-    const config = preparationConfig(root, "false");
-    const manifest = manifestFor(root, config, ["false"]);
+    const config = preparationConfig(root, "printf 'specific gate diagnostic\\n' >&2; false");
+    const manifest = manifestFor(root, config, ["printf 'specific gate diagnostic\\n' >&2; false"]);
     landManifest(root, manifest);
     const before = fixtureGit(root, "rev-parse", "HEAD");
 
@@ -46,6 +46,11 @@ describe("preparation application", () => {
 
     expect(result.ok).toBe(false);
     expect(result.failure).toContain("gate failed");
+    expect(result.failedGate).toMatchObject({
+      tier: "workspace",
+      output: expect.stringContaining("specific gate diagnostic"),
+      outputTail: expect.stringContaining("specific gate diagnostic"),
+    });
     expect(fixtureGit(root, "rev-parse", "HEAD")).toBe(before);
     expect(read(root, DONOR)).toBe(SOURCE);
     expect(existsSync(join(root, TARGET))).toBe(false);

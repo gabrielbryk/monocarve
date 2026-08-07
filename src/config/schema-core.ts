@@ -266,6 +266,11 @@ export const scaffoldTemplates = z.strictObject({
    * from the moved code (`{ "typescript": "catalog:" }`). Inferred entries win.
    */
   devDependencies: z.record(z.string().min(1), z.string().min(1)).prefault({}),
+  /** Extra dev dependencies keyed by an inferred runtime or dev dependency. */
+  devDependenciesByDependency: z.record(
+    z.string().min(1),
+    z.record(z.string().min(1), z.string().min(1)),
+  ).prefault({}),
   /**
    * Statement template appended to the generated entrypoint barrel for each
    * moved production file. `{specifier}` is the package-relative specifier.

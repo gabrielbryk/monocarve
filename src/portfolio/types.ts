@@ -82,6 +82,49 @@ export interface ConsumerRef {
   readonly external: boolean;
 }
 
+export interface CompatibilityShim {
+  readonly path: string;
+  readonly packageName: string;
+  readonly replacementSpecifier: string;
+  readonly symbols: readonly string[];
+  readonly productionConsumers: readonly string[];
+  readonly testConsumers: readonly string[];
+  readonly lineCount: number;
+}
+
+export type RecommendationReasonCode =
+  | "generic-target"
+  | "composition-adjacent"
+  | "compatibility-shim"
+  | "cross-domain"
+  | "high-inbound"
+  | "high-fan-out"
+  | "large-review"
+  | "evaluation-effects";
+
+export interface RecommendationReason {
+  readonly code: RecommendationReasonCode;
+  readonly detail: string;
+  readonly paths: readonly string[];
+}
+
+export interface TargetRecommendation {
+  readonly packageName: string;
+  readonly action: "extend" | "create";
+  readonly confidence: "high" | "medium" | "low";
+  readonly compatibility: "compatible" | "requires-review";
+  readonly reasons: readonly string[];
+}
+
+export interface CandidateRecommendation {
+  readonly status: "recommended" | "review-required" | "discouraged";
+  readonly cohesion: "high" | "medium" | "low";
+  readonly reasons: readonly RecommendationReason[];
+  readonly requiresExplicitPackageName: boolean;
+  readonly highInboundModules: readonly string[];
+  readonly targetOptions: readonly TargetRecommendation[];
+}
+
 /**
  * One retained edge a candidate's closure crosses: an import that reaches a
  * `portfolio.retainedRoots` module. Distinguishing `"value"` from `"type"` at
@@ -162,6 +205,8 @@ export interface PortfolioCandidate {
    */
   readonly warnings: readonly string[];
   readonly rewriteEscapes: readonly RewriteEscape[];
+  readonly compatibilityShims?: readonly CompatibilityShim[];
+  readonly recommendation?: CandidateRecommendation;
 
   /**
    * `"extraction"` is an ordinary candidate. `"preparation"` is a candidate
@@ -189,6 +234,15 @@ export interface Portfolio {
    * be extracted in sequence without two of them claiming the same file.
    */
   readonly selected: readonly string[];
+  readonly equivalenceGroups?: readonly CandidateEquivalenceGroup[];
+}
+
+export interface CandidateEquivalenceGroup {
+  readonly id: string;
+  readonly representativeId: string;
+  readonly candidateIds: readonly string[];
+  readonly sharedFileCount: number;
+  readonly similarity: number;
 }
 
 export function eligibleCandidates(portfolio: Portfolio): PortfolioCandidate[] {

@@ -29,7 +29,7 @@ export function registerCliTailTests(input: { readonly candidate: () => Candidat
 
   test("verify validates the plan and names the preflight blocker the tree earns", async () => {
     const workspace = committedWorkspace();
-    const portfolio = await runJsonIn<PortfolioReport>(workspace, "portfolio");
+    const portfolio = await runJsonIn<PortfolioReport>(workspace, "portfolio", "--recommendation", "all");
     const target = portfolio.top.find((entry) => entry.files.includes("apps/web/src/widgets/chart.ts"));
     expect(target).toBeDefined();
     const written = await runJsonIn<{ output: string }>(workspace, "plan", "--candidate", target!.id, "--package-name", "@acme/chart", "--write");
@@ -96,8 +96,10 @@ export function registerCliTailTests(input: { readonly candidate: () => Candidat
   }, 180_000);
 
   test("next picks the highest-scoring candidate and can plan it unattended", async () => {
+    const portfolio = await runJson<PortfolioReport>("portfolio");
+    if (!portfolio.top[0]) throw new Error("fixture has no architecturally recommended candidate");
     const next = await runJson<{ candidate: string; packageName: string; written: boolean }>("next");
-    expect(next.candidate).toBe(input.candidate().id);
+    expect(next.candidate).toBe(portfolio.top[0].id);
     expect(next.packageName).toBe(input.candidate().suggestedPackageName);
     expect(next.written).toBe(false);
   }, 180_000);
@@ -182,7 +184,7 @@ export function registerCliTailTests(input: { readonly candidate: () => Candidat
     expect(audited.code).toBe(1);
     const report = JSON.parse(audited.stdout) as { passed: boolean; failures: string[]; unauditable?: string[]; byteFidelity: { passed: boolean; checked: number; failures: string[] } };
     expect(report.passed).toBe(false);
-    expect(report.failures).toEqual(["[schema-version] manifest schemaVersion must be 2 or 3"]);
+    expect(report.failures).toEqual(["[schema-version] manifest schemaVersion must be 2, 3, or 4"]);
     expect(report.unauditable).toEqual(report.failures);
     expect(report.byteFidelity).toEqual({ passed: false, checked: 0, failures: [] });
     const verified = await runIn(FIXTURE, "verify", "--plan", legacyPath);

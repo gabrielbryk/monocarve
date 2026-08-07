@@ -21,13 +21,14 @@ where supported.
 
 | command | usage and boundary |
 | --- | --- |
-| `plan` | `plan --candidate <id> ... [--verify-lockfile] [--write]` — compile deterministically; `--verify-lockfile` first replays the plan and requires a real configured package-manager round-trip. |
+| `plan` | `plan --candidate <id> ... [--verify-lockfile] [--out <path>] [--write] [--commit-approval] [--json] [--verbose]` — compile deterministically; terminals get the concise review while pipes and explicit machine modes retain the complete manifest. |
 | `scan` | `scan [--app <name>] [--no-cache] [--include-extracted] [--out <path>]` — build the configured dependency model without editing the workspace. |
 | `visualize` | `visualize [--app <name>] [--port <number>] [--no-open] [--no-cache] [--include-extracted]` — serve the current SCC-level dependency graph as an interactive loopback-only web UI. Search and edge-kind filters are local; Rescan rebuilds the read-only graph. |
 | `layers` | `layers [--app <name>] [--out <path>]` — report domains, components, and dependency-first layers. |
-| `portfolio` | `portfolio [--app <name>] [--limit <n>] [--include-extracted] [--communities] [--hub-inbound-threshold <n>]` — rank eligible whole-file candidates and report population totals. |
-| `candidates` | `candidates [--candidate <id>] [--path <path>] [--eligibility <all\|eligible\|blocked>] [--app <name>] [--include-extracted]` — inspect candidate details or filter by claimed workspace path and eligibility; add `--json` for stable full details. |
-| `backlog` | `backlog [--app <name>] [--limit <n>] [--include-extracted] [--marginal]` — explain blocked candidates; marginal mode is only a one-blocker lower bound. |
+| `portfolio` | `portfolio [--app <name>] [--limit <n>] [--recommendation <status>] [--strategy <cohesive\|max-loc\|low-risk\|campaign\|preparation>] [--include-extracted] [--communities] [--hub-inbound-threshold <n>] [--out <path>]` — show one representative per near-equivalent group; defaults to architecturally recommended candidates. |
+| `candidates` | `candidates [--candidate <id> \| --equivalence-group <id>] [--path <path>] [--eligibility <all\|eligible\|blocked>] [--app <name>] [--include-extracted] [--out <path>]` — inspect candidate details, expand a grouped set of variants, or filter by claimed path and eligibility. |
+| `scope` | `scope --path <source> --package-name <name> [--app <name>] [--verify-lockfile] [--out <path>] [--write] [--json]` — resolve a stable principal path, compile its current plan, and show the concise review without writing by default. |
+| `backlog` | `backlog [--app <name>] [--limit <n>] [--include-extracted] [--marginal] [--out <path>]` — explain blocked candidates; marginal mode is only a one-blocker lower bound. |
 | `config-doctor` | `config-doctor` — report the discovered config and root, effective value provenance, application and package resolution, adapter availability, compiler profiles, generated and path-keyed artifacts, configured module calls, protected and dirty paths, and preparation coverage. It is strictly read-only: no gates, generators, installers, or preparers run. JSON configs report `explicit` versus `default` provenance; dynamically loaded configs report `unknown` where the original shape is not safely recoverable. |
 | `explain` | `explain --plan <path> (--dependency <name> \| --artifact <path>) [--json]` — read persisted provenance for one dependency decision or the exact operation chain and final hash for one artifact. |
 | `symbols` | `symbols --file <path> [--out <path>]` — declaration graph, type/value spaces, merged groups, exact references, and SCCs for one file. |
@@ -281,6 +282,21 @@ by literal span. Shared assets therefore require a subpath public surface;
 barrel-only plans refuse instead of emitting an unresolvable package-root import.
 
 ## `campaign`
+
+New campaigns use stable source identities rather than candidate IDs:
+
+```sh
+monocarve campaign resolve --targets campaign.targets.json
+```
+
+The target file contains an application and an ordered `targets` array of
+`{ "path": "apps/web/src/feature.ts", "packageName": "@acme/feature" }`.
+Resolve always scans current HEAD, skips targets no longer owned by the
+application, compiles at most one current candidate, and stops for review. It
+writes the plan only with `--write`. This lets candidate IDs change after each
+applied extraction without invalidating the campaign definition.
+
+The commands below are retained only to finish existing schema-v1 pair ledgers:
 
 ```text
 campaign init --campaign <ledger> --id <id> --objective <text>

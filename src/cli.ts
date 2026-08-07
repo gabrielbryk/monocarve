@@ -4,7 +4,7 @@
 import { TOOL_NAME, TOOL_VERSION } from "./branding.ts";
 import { parseArgs } from "./cli/args.ts";
 import { COMMANDS, USAGE, commandHelp } from "./commands/index.ts";
-import { NotYetPortedError, MonocarveError, UsageError } from "./errors.ts";
+import { IoError, NotYetPortedError, MonocarveError, UsageError } from "./errors.ts";
 import { resetCodemodCaches } from "./codemod/imports.ts";
 
 export { parseArgs, type ParsedArgs } from "./cli/args.ts";
@@ -27,10 +27,30 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
   try {
     resetCodemodCaches();
-    await spec.run(args);
+    await runWithCompleteStdout(() => spec.run(args));
     return process.exitCode === undefined ? 0 : Number(process.exitCode);
   } catch (error) {
     return reportCommandFailure(error, spec.usage, args.command);
+  }
+}
+
+/**
+ * Bun may buffer a large pipe write. An immediate `process.exit(...)` used to
+ * terminate the executable before those bytes reached the reader, producing a
+ * successful but truncated JSON document. Keep an error listener installed for
+ * the whole command and enqueue an empty sentinel write before returning; its
+ * callback runs only after every earlier stdout write has completed.
+ */
+async function runWithCompleteStdout(run: () => Promise<void>): Promise<void> {
+  let failure: Error | undefined;
+  const capture = (error: Error): void => { failure ??= error; };
+  process.stdout.on("error", capture);
+  try {
+    await run();
+    await new Promise<void>((resolve) => process.stdout.write("", () => resolve()));
+    if (failure !== undefined) throw new IoError(`could not write stdout: ${failure.message}`);
+  } finally {
+    process.stdout.off("error", capture);
   }
 }
 
@@ -74,4 +94,4 @@ function causeChain(error: unknown): string {
   return chain;
 }
 
-if (import.meta.main) process.exit(await main(process.argv.slice(2)));
+if (import.meta.main) process.exitCode = await main(process.argv.slice(2));

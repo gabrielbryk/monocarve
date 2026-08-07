@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { protectedPath, regexSource, relativePath } from "./primitives.ts";
+export { generatedSourceAdoptions, graph, type GeneratedSourceAdoptionsConfig, type GraphConfig } from "./schema-extensions.ts";
 
 const domain = z.strictObject({
   name: z.string().min(1),
@@ -95,6 +96,21 @@ export const portfolio = z.strictObject({
    * extraction target.
    */
   forbidTargetSuggestion: z.array(z.enum(["root"])).default([]),
+  /** Directory names too generic to be useful package boundaries. Advisory only. */
+  genericTargetSegments: z
+    .array(z.string().min(1))
+    .default(["root", "components", "src", "shared", "common", "utils"]),
+  /** Minimum production fan-in before a pure re-export is reported as a compatibility shim. */
+  compatibilityShimMinInbound: z.number().int().nonnegative().default(5),
+  /** Advisory complexity thresholds; these never make a candidate ineligible. */
+  highInboundThreshold: z.number().int().positive().default(12),
+  highFanOutThreshold: z.number().int().positive().default(8),
+  maxRecommendedFiles: z.number().int().positive().optional(),
+  maxRecommendedLines: z.number().int().positive().optional(),
+  /** Extra workspace-specific composition-adjacent paths that need review. */
+  compositionAdjacentPatterns: z.array(regexSource).default([]),
+  /** Production-file Jaccard similarity used to collapse near-identical candidates. */
+  equivalenceThreshold: z.number().min(0.5).max(1).default(0.95),
 });
 
 export type PortfolioConfig = z.output<typeof portfolio>;
@@ -456,55 +472,3 @@ export const valueSplits = z.array(z.strictObject({
 });
 
 export type ValueSplitsConfig = z.output<typeof valueSplits>;
-
-/** Explicit adoption of orphaned generated output as durable source. */
-export const generatedSourceAdoptions = z.array(z.strictObject({
-  id: kebabId,
-  /** Application-owned path used to render repository policy for package-only adoptions. */
-  policyAnchor: relativePath.optional(),
-  artifacts: z.array(z.strictObject({
-    path: relativePath,
-    /** Must equal the missing source declared by the artifact header. */
-    missingSource: relativePath,
-    /** Exact leading line count removed from the artifact. */
-    removeHeaderLines: z.number().int().positive(),
-  })).min(1),
-  /** Optional generator retired only when no other provenance header names it. */
-  retireGenerator: relativePath.optional(),
-})).default([]).superRefine((items, ctx) => {
-  const seen = new Set<string>();
-  items.forEach((item, index) => {
-    if (seen.has(item.id)) ctx.addIssue({ code: "custom", path: [index, "id"], message: "generatedSourceAdoptions id must be unique" });
-    seen.add(item.id);
-  });
-});
-
-export type GeneratedSourceAdoptionsConfig = z.output<typeof generatedSourceAdoptions>;
-
-export const graph = z.strictObject({
-  /**
-   * Resolve type-only imports too. Required: a type-only edge is still a
-   * containment violation, and missing it produces plans that do not compile.
-   * Maps to dependency-cruiser's `--ts-pre-compilation-deps`.
-   */
-  tsPreCompilationDeps: z.boolean().default(true),
-  /** Extra dependency-cruiser config to merge, repo-relative. */
-  cruiserConfig: relativePath.optional(),
-  /**
-   * Patterns excluded from the scan entirely (vendored trees, generated code).
-   *
-   * Empty by default, and it should usually stay that way. An excluded module
-   * does not merely vanish from the node list — dependency-cruiser also drops
-   * every *edge pointing at it*, so excluding a path silently deletes facts the
-   * model needs. In particular `node_modules` must NOT be listed here: dropping
-   * those edges erases the external-package inventory, and the scaffolded
-   * `package.json` then omits the runtime dependencies the moved code imports.
-   * Traversal into `node_modules` is already prevented by `doNotFollow`, and
-   * non-first-party modules are filtered out of the node set regardless.
-   */
-  exclude: z.array(z.string().min(1)).default([]),
-  /** Cache scans keyed by tree hash. Disable when debugging the scanner. */
-  cache: z.boolean().default(true),
-});
-
-export type GraphConfig = z.output<typeof graph>;

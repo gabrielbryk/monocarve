@@ -10,6 +10,7 @@ import { hashJson } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";
 import { rollback } from "../transaction/rollback.ts";
 import { snapshotPaths } from "../transaction/journal.ts";
+import type { GateResult } from "../transaction/simulate.ts";
 import { auditPreparationSync, type PreparationAuditReport } from "./audit.ts";
 import type { PreparationBaselineGraphScanner } from "./simulate.ts";
 import {
@@ -60,6 +61,8 @@ export interface PreparationApplyResult {
   readonly prepareCommit?: string;
   readonly rolledBack: boolean;
   readonly audit?: PreparationAuditReport;
+  /** Structured diagnostics from the authoritative simulated gate failure. */
+  readonly failedGate?: GateResult;
   readonly failure?: string;
 }
 
@@ -73,6 +76,7 @@ export async function applyPreparation(options: ApplyPreparationOptions): Promis
       ok: false,
       planId: options.manifest.planId,
       rolledBack: false,
+      ...(simulation.failedGate === undefined ? {} : { failedGate: simulation.failedGate }),
       ...(simulation.failure === undefined ? {} : { failure: simulation.failure }),
     };
   }
@@ -86,6 +90,7 @@ async function simulatedOnly(options: ApplyPreparationOptions): Promise<Preparat
     planId: options.manifest.planId,
     rolledBack: false,
     ...(simulation.audit === undefined ? {} : { audit: simulation.audit }),
+    ...(simulation.failedGate === undefined ? {} : { failedGate: simulation.failedGate }),
     ...(simulation.failure === undefined ? {} : { failure: simulation.failure }),
   };
 }

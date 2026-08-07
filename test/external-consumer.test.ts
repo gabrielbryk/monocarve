@@ -154,6 +154,7 @@ describe("external consumer compile proof", () => {
 
     expect(result.passed).toBe(false);
     expect(result.diagnostics.join("\n")).toContain("@acme/utility/feature");
+    expect(result.diagnostics[0]).toMatch(/\(\d+,\d+\): TS\d+:/);
   });
 
   test("fails when a JavaScript-only dependency loses its DefinitelyTyped declaration", () => {

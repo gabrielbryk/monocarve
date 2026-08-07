@@ -51,12 +51,20 @@ export function compileExternalConsumer(options: CompileExternalConsumerOptions)
       ...compilerOptions,
       ...(declaredTypes.types.length > 0 ? { types: declaredTypes.types } : {}),
     });
-    const diagnostics = ts.getPreEmitDiagnostics(program)
-      .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"));
+    const diagnostics = ts.getPreEmitDiagnostics(program).map(formatDiagnostic);
     return { passed: diagnostics.length === 0, fixture, diagnostics };
   } finally {
     rmSync(fixtureRoot, { recursive: true, force: true });
   }
+}
+
+function formatDiagnostic(diagnostic: ts.Diagnostic): string {
+  const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+  if (diagnostic.file === undefined || diagnostic.start === undefined) {
+    return `TS${diagnostic.code}: ${message}`;
+  }
+  const position = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
+  return `${diagnostic.file.fileName}(${position.line + 1},${position.character + 1}): TS${diagnostic.code}: ${message}`;
 }
 
 function compilerOptionsFor(

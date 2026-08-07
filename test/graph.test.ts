@@ -99,6 +99,26 @@ describe("dependency model", () => {
     expect(graph.testKinds.get("apps/api/src/orders/models.test.ts")).toBe("unit");
   });
 
+  test("records configured mock calls as test importers even when the scanner omits them", () => {
+    const graph = graphOf({
+      web: {
+        modules: [
+          { source: "apps/web/src/widgets/chart.ts", dependencies: [] },
+          {
+            source: "apps/web/src/widgets/mock-only.test.ts",
+            dependencies: [],
+          },
+        ],
+      },
+    }, { moduleSpecifierCalls: ["vi.mock"] });
+
+    // The empty synthetic cruiser dependency list proves the configured-call
+    // AST inventory, rather than the scanner report, supplies the edge.
+    expect([...(graph.testImporters.get("apps/web/src/widgets/chart.ts") ?? [])]).toEqual([
+      "apps/web/src/widgets/mock-only.test.ts",
+    ]);
+  });
+
   test("records configured integration and e2e intent outside production nodes", () => {
     const graph = graphOf({
       api: { modules: [

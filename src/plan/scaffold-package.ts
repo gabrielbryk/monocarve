@@ -149,7 +149,14 @@ function record(value: unknown): Record<string, string> {
 }
 
 function templateDevDependencies(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>, scaffolding = true): Record<string, string> {
-  return scaffolding ? { ...templates.devDependencies, ...input.dependencies.dev } : input.dependencies.dev;
+  if (!scaffolding) return input.dependencies.dev;
+  const inferred = { ...input.dependencies.runtime, ...input.dependencies.dev };
+  const conditional = Object.fromEntries(
+    Object.entries(templates.devDependenciesByDependency)
+      .filter(([dependency]) => inferred[dependency] !== undefined)
+      .flatMap(([, additions]) => Object.entries(additions)),
+  );
+  return { ...templates.devDependencies, ...conditional, ...input.dependencies.dev };
 }
 
 function entrypointOperation(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>, scaffolding: boolean): PlanOperation | undefined {

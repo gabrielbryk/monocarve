@@ -1,0 +1,1 @@
+vi.mock("./chart.ts");

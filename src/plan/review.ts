@@ -26,6 +26,7 @@ export interface PlanReviewSummary {
   readonly schemaVersion: 1;
   readonly planId: string;
   readonly baselineCommit: string;
+  readonly assessment?: ExtractionManifest["assessment"];
   readonly target: {
     readonly mode: "new" | "existing" | "unknown";
     readonly root: string;
@@ -118,6 +119,7 @@ function collectRewrittenDocuments(manifest: ExtractionManifest): RewrittenDocum
 
 function warnings(manifest: ExtractionManifest, context: PlanReviewContext): PlanReviewSummary["warnings"] {
   const result: { code: string; message: string }[] = [];
+  for (const reason of manifest.assessment?.reasons ?? []) result.push({ code: reason.code, message: reason.detail });
   if (!context.baselinePaths) result.push({ code: "target-mode-unknown", message: "Baseline paths were not supplied; target existence is unproven." });
   if (!context.manifestPath) result.push({ code: "approval-path-missing", message: "No manifest path was supplied for approval." });
   if (!(context.approvalSubject ?? manifest.commits.plan?.subject)) result.push({ code: "approval-subject-missing", message: "No approval commit subject was supplied." });
@@ -147,6 +149,7 @@ export function summarizePlanReview(manifest: ExtractionManifest, context: PlanR
     schemaVersion: 1,
     planId: manifest.planId,
     baselineCommit: manifest.baselineCommit,
+    ...(manifest.assessment === undefined ? {} : { assessment: manifest.assessment }),
     target: {
       mode: targetMode(manifest, context.baselinePaths),
       root: manifest.target.packageRoot,
@@ -197,6 +200,12 @@ export function formatPlanReview(summary: PlanReviewSummary): string {
   const lines = [
     `Plan ${summary.planId}`,
     `Target: ${summary.target.name} (${summary.target.mode}) at ${summary.target.root}`,
+    ...(summary.assessment === undefined ? [] : [
+      `Recommendation: ${summary.assessment.status}; cohesion=${summary.assessment.cohesion}`,
+      `  selected ${summary.assessment.selectedTarget.action}: ${summary.assessment.selectedTarget.packageName}`,
+      ...summary.assessment.targetOptions.map((target) => `  target ${target.action}: ${target.packageName} (${target.confidence}, ${target.compatibility})`),
+    ]),
+    ...(summary.warnings.length === 0 ? [] : ["Warnings:", ...summary.warnings.map((warning) => `  [${warning.code}] ${warning.message}`)]),
     `Moves: ${summary.moves.length}`,
     ...summary.moves.map((move) => `  ${move.source} -> ${move.target}`),
     ...(summary.rewrittenDocuments.length > 0
@@ -225,6 +234,5 @@ export function formatPlanReview(summary: PlanReviewSummary): string {
     ...summary.gates.workspace.map((gate) => `  workspace: ${gate}`),
     `Approval: ${summary.approval.subject ?? "(missing subject)"} @ ${summary.approval.manifestPath ?? "(missing path)"}`,
   ];
-  if (summary.warnings.length > 0) lines.push("Warnings:", ...summary.warnings.map((warning) => `  [${warning.code}] ${warning.message}`));
   return `${lines.join("\n")}\n`;
 }

@@ -23,7 +23,10 @@ async function invoke(root: string, command: "reconcile" | "receipt" | "reconcil
 
 async function appliedWorkspace(): Promise<{ root: string; path: string; manifest: ExtractionManifest }> {
   const root = committedWorkspace();
-  const portfolio = await runJsonIn<{ top: { id: string }[] }>(root, "portfolio", "--no-cache");
+  // Reconciliation needs a plan with the fixture's generated-artifact path;
+  // request the full mechanically eligible set rather than the new
+  // architecturally-recommended default slice.
+  const portfolio = await runJsonIn<{ top: { id: string }[] }>(root, "portfolio", "--recommendation", "all", "--strategy", "max-loc", "--no-cache");
   const candidate = portfolio.top[0];
   if (candidate === undefined) throw new Error("fixture has no candidate");
   const planned = await runJsonIn<{ output: string }>(root, "plan", "--candidate", candidate.id, "--package-name", "@acme/reconciled", "--out", "plans/reconciliation-source.json", "--write", "--no-cache");

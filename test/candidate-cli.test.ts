@@ -18,7 +18,18 @@ describe("candidate CLI", () => {
     expect(result.stdout).toContain("--candidate <id>");
     expect(result.stdout).toContain("--path <path>");
     expect(result.stdout).toContain("--eligibility <all|eligible|blocked>");
+    expect(result.stdout).toContain("--equivalence-group <id>");
   });
+
+  test("expands an equivalence group by its representative candidate id", async () => {
+    const portfolio = await runJson<{ top: { id: string; equivalenceGroup: { candidateIds: string[] } }[] }>(
+      "portfolio", "--recommendation", "all", "--json",
+    );
+    const representative = portfolio.top[0];
+    if (!representative) throw new Error("fixture produced no portfolio group");
+    const details = await runJson<CandidateDetail[]>("candidates", "--equivalence-group", representative.id, "--json");
+    expect(details.map(({ id }) => id).sort()).toEqual([...representative.equivalenceGroup.candidateIds].sort());
+  }, 240_000);
 
   test("filters by a claimed path and emits stable detailed JSON", async () => {
     const args = ["candidates", "--path", "apps/web/src/widgets/chart.ts", "--eligibility", "eligible", "--json"];
@@ -44,6 +55,28 @@ describe("candidate CLI", () => {
     expect(result.stdout).toContain("ID");
     expect(result.stdout).toContain("STATE");
     expect(result.stdout).toContain(candidate.id);
+  }, 240_000);
+
+  test("scope renders the concise review through piped stdout unless JSON is explicit", async () => {
+    const human = await run(
+      "scope",
+      "--path", "apps/web/src/widgets/chart.ts",
+      "--package-name", "@acme/chart-ui",
+    );
+    expect(human.code).toBe(0);
+    expect(human.stderr).toBe("");
+    expect(human.stdout).toStartWith("Plan c-");
+    expect(human.stdout).toContain("Target: @acme/chart-ui");
+    expect(human.stdout).not.toContain('"schema":"scope"');
+
+    const machine = await run(
+      "scope",
+      "--path", "apps/web/src/widgets/chart.ts",
+      "--package-name", "@acme/chart-ui",
+      "--json",
+    );
+    expect(machine.code).toBe(0);
+    expect((JSON.parse(machine.stdout) as { schema: string }).schema).toBe("scope");
   }, 240_000);
 
   test("refuses absent ids and invalid eligibility values", async () => {

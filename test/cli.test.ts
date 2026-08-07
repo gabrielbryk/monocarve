@@ -34,7 +34,7 @@ let planPath = "";
 
 describe("cli pipeline", () => {
   beforeAll(async () => {
-    const portfolio = await runJson<PortfolioReport>("portfolio");
+    const portfolio = await runJson<PortfolioReport>("portfolio", "--recommendation", "all", "--strategy", "max-loc");
     candidates = portfolio.top;
     const chart = portfolio.top.find((entry) => entry.assets.length > 0);
     if (!chart) throw new Error("fixture portfolio produced no candidate with assets");

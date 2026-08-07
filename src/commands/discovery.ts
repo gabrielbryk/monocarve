@@ -24,7 +24,7 @@ import { analyzePlanConflicts, type CampaignPlan } from "../campaign/index.ts";
 import { analyzeTypeScriptSource, analyzeWorkspaceSymbols } from "../symbols/index.ts";
 import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
 import type { CommandSpec } from "./types.ts";
-import { graphDigest, load, loadGraph, print, systemReason, writeOutput, type LoadedGraph } from "./shared.ts";
+import { graphDigest, load, loadGraph, print, printReport, systemReason, writeOutput, type LoadedGraph } from "./shared.ts";
 
 function portfolioFor(args: ParsedArgs, loaded: LoadedGraph) {
   const application = flagString(args, "app");
@@ -44,6 +44,38 @@ function portfolioTotals(portfolio: { readonly candidates: readonly { readonly e
 } {
   const eligible = portfolio.candidates.filter((candidate) => candidate.eligible).length;
   return { candidates: portfolio.candidates.length, eligible, blocked: portfolio.candidates.length - eligible };
+}
+
+function portfolioView(result: ReturnType<typeof portfolioFor>, args: ParsedArgs) {
+  const requested = flagString(args, "recommendation") ?? "recommended";
+  if (!["all", "recommended", "review-required", "discouraged"].includes(requested)) {
+    throw new UsageError("--recommendation must be one of all, recommended, review-required, or discouraged");
+  }
+  const eligible = eligibleCandidates(result).filter((candidate) =>
+    requested === "all" || candidate.recommendation?.status === requested
+  );
+  const byId = new Map(eligible.map((candidate) => [candidate.id, candidate]));
+  const grouped = (result.equivalenceGroups ?? []).flatMap((group) => {
+    const representative = byId.get(group.representativeId) ?? group.candidateIds.map((id) => byId.get(id)).find(Boolean);
+    return representative ? [{ ...representative, equivalenceGroup: group }] : [];
+  });
+  const strategy = flagString(args, "strategy") ?? "cohesive";
+  if (!["cohesive", "max-loc", "low-risk", "campaign", "preparation"].includes(strategy)) {
+    throw new UsageError("--strategy must be one of cohesive, max-loc, low-risk, campaign, or preparation");
+  }
+  return grouped.sort((left, right) => {
+    if (strategy === "cohesive" || strategy === "campaign") {
+      const order = { high: 0, medium: 1, low: 2 } as const;
+      const delta = order[left.recommendation?.cohesion ?? "low"] - order[right.recommendation?.cohesion ?? "low"];
+      if (delta !== 0) return delta;
+    }
+    if (strategy === "preparation") {
+      const delta = Number(right.classification === "preparation") - Number(left.classification === "preparation");
+      if (delta !== 0) return delta;
+    }
+    if (strategy === "low-risk") return left.lineCount - right.lineCount || left.id.localeCompare(right.id);
+    return right.score - left.score || left.id.localeCompare(right.id);
+  });
 }
 
 async function scan(args: ParsedArgs): Promise<void> {
@@ -104,35 +136,48 @@ async function portfolio(args: ParsedArgs): Promise<void> {
   const loaded = await loadGraph(args);
   if (flagBool(args, "communities")) {
     const application = flagString(args, "app");
-    print(analyzeCommunities(loaded.graph, {
+    printReport(loaded.rootDir, analyzeCommunities(loaded.graph, {
       ...(application === undefined ? {} : { application }),
       ...(args.flags.has("hub-inbound-threshold") ? { hubInboundThreshold: flagNumber(args, "hub-inbound-threshold", 12) } : {}),
     }), args);
     return;
   }
   const result = portfolioFor(args, loaded);
-  const eligible = eligibleCandidates(result);
+  const eligible = portfolioView(result, args);
   const limit = flagNumber(args, "limit", 20);
-  print({
-    schema: "portfolio", totals: portfolioTotals(result), limit, truncated: eligible.length > limit,
+  printReport(loaded.rootDir, {
+    schema: "portfolio", totals: { ...portfolioTotals(result), equivalenceGroups: result.equivalenceGroups?.length ?? 0 }, limit, truncated: eligible.length > limit,
     top: eligible.slice(0, limit), selected: result.selected,
   }, args);
 }
 
 async function candidates(args: ParsedArgs): Promise<void> {
   const loaded = await loadGraph(args);
+  const result = portfolioFor(args, loaded);
   const eligibility = flagString(args, "eligibility") ?? "all";
   if (!isCandidateEligibility(eligibility)) {
     throw new UsageError("--eligibility must be one of all, eligible, or blocked");
   }
   const candidate = flagString(args, "candidate");
+  const equivalenceGroup = flagString(args, "equivalence-group");
+  if (candidate !== undefined && equivalenceGroup !== undefined) throw new UsageError("--candidate and --equivalence-group are mutually exclusive");
   const path = flagString(args, "path");
-  const details = queryCandidates(portfolioFor(args, loaded), loaded.config, {
+  const group = equivalenceGroup === undefined ? undefined : result.equivalenceGroups?.find((entry) =>
+    entry.id === equivalenceGroup || entry.representativeId === equivalenceGroup
+  );
+  if (equivalenceGroup !== undefined && group === undefined) throw new UsageError(`equivalence group not found: ${equivalenceGroup}`);
+  const query = {
     ...(candidate === undefined ? {} : { id: candidate }),
     ...(path === undefined ? {} : { path }),
     eligibility,
-  });
-  process.stdout.write(flagBool(args, "json") ? serializeCandidateDetails(details) : formatCandidateTable(details));
+  };
+  const details = group === undefined
+    ? queryCandidates(result, loaded.config, query)
+    : group.candidateIds.flatMap((id) => queryCandidates(result, loaded.config, { ...query, id }));
+  const rendered = flagBool(args, "json") ? serializeCandidateDetails(details) : formatCandidateTable(details);
+  const out = flagString(args, "out");
+  if (out !== undefined) writeOutput(loaded.rootDir, out, rendered);
+  process.stdout.write(rendered);
 }
 
 function isCandidateEligibility(value: string): value is CandidateEligibility {
@@ -170,14 +215,14 @@ async function backlog(args: ParsedArgs): Promise<void> {
   const limit = flagNumber(args, "limit", 20);
   if (flagBool(args, "marginal")) {
     const blockers = marginalBlockers(blocked);
-    print({
+    printReport(loaded.rootDir, {
       schema: "backlog-marginal",
       scope: "one-change lower bound: counts only candidates with exactly one rejection and, for edge-level reasons, exactly one edge; multi-blocker candidates are occurrences only",
       totals: portfolioTotals(result), limit, truncated: blockers.length > limit, top: blockers.slice(0, limit),
     }, args);
     return;
   }
-  print({
+  printReport(loaded.rootDir, {
     schema: "backlog", totals: portfolioTotals(result), limit, truncated: blocked.length > limit,
     top: blocked.slice(0, limit).map((candidate) => ({
       id: candidate.id, application: candidate.application, lineCount: candidate.lineCount,
@@ -192,10 +237,10 @@ export const discoveryCommands: Record<string, CommandSpec> = {
   layers: { summary: "report domains, components, and dependency layers", usage: "layers [--app <name>] [--out <path>]", details: "Read-only architecture report derived from the current or captured graph.", run: layers },
   symbols: { summary: "analyze one file's declaration and symbol graph", usage: "symbols --file <path> [--out <path>]", details: "Reports declarations, type/value spaces, exact references, merged groups, and SCCs; never edits the file.", run: symbols },
   "split-candidates": { summary: "rank symbol split suggestions for one file", usage: "split-candidates --file <path> [--app <name>] [--out <path>]", details: "Ranks declaration SCCs using cross-file consumers and configured domain affinity.", run: splitCandidates },
-  portfolio: { summary: "rank eligible extraction candidates", usage: "portfolio [--app <name>] [--limit <n>] [--include-extracted] [--communities] [--hub-inbound-threshold <n>]", details: "Shows eligible candidates, selected same-baseline candidates, warnings, and whole-portfolio totals. --communities adds the diagnostic community report.", run: portfolio },
-  candidates: { summary: "inspect and filter extraction candidates", usage: "candidates [--candidate <id>] [--path <path>] [--eligibility <all|eligible|blocked>] [--app <name>] [--include-extracted]", details: "Shows a compact table by default. --json emits stable full details including the claimed closure, SCCs, blockers and concrete edges, warnings, and target suggestion. Paths are workspace-relative or absolute paths inside the workspace.", run: candidates },
+  portfolio: { summary: "rank eligible extraction candidates", usage: "portfolio [--app <name>] [--limit <n>] [--recommendation <status>] [--strategy <cohesive|max-loc|low-risk|campaign|preparation>] [--include-extracted] [--communities] [--hub-inbound-threshold <n>] [--out <path>]", details: "Shows one representative per near-equivalent group. Recommended, cohesive candidates are the default; --recommendation all exposes the complete mechanically eligible set.", run: portfolio },
+  candidates: { summary: "inspect and filter extraction candidates", usage: "candidates [--candidate <id> | --equivalence-group <id>] [--path <path>] [--eligibility <all|eligible|blocked>] [--app <name>] [--include-extracted] [--out <path>]", details: "Shows a compact table by default. --equivalence-group accepts either a group id or its representative candidate id and expands every variant. --json emits stable full details including the closure, SCCs, blockers, recommendation, shims, and target options.", run: candidates },
   conflicts: { summary: "compare same-baseline plan conflicts", usage: "conflicts --plan <candidate>=<manifest> [--plan <candidate>=<manifest> ...]", details: "Classifies hard and replan-mergeable path conflicts. Reported waves still require rescan and replan between applied children.", run: conflicts },
-  backlog: { summary: "explain blocked candidates and edges", usage: "backlog [--app <name>] [--limit <n>] [--include-extracted] [--marginal]", details: "--marginal reports a conservative one-blocker lower bound; it does not claim a full unlock simulation.", run: backlog },
+  backlog: { summary: "explain blocked candidates and edges", usage: "backlog [--app <name>] [--limit <n>] [--include-extracted] [--marginal] [--out <path>]", details: "--marginal reports a conservative one-blocker lower bound; it does not claim a full unlock simulation.", run: backlog },
 };
 
 export { portfolioFor };

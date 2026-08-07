@@ -3,12 +3,13 @@ import type { Sha256 } from "../util/hash.ts";
 import type { ExportSurface } from "./public-surface.ts";
 import type { ImportRewrite, PlanOperation } from "./manifest-operations.ts";
 
-/** v2 requires dependency sections; v3 additionally requires compiler provenance. */
+/** v2 requires dependency sections; v3 adds compiler provenance; v4 persists architectural assessment. */
 export const LEGACY_PLAN_SCHEMA_VERSION = 2 as const;
-export const PLAN_SCHEMA_VERSION = 3 as const;
+export const PREVIOUS_PLAN_SCHEMA_VERSION = 3 as const;
+export const PLAN_SCHEMA_VERSION = 4 as const;
 
-export function isSupportedExtractionManifestVersion(value: unknown): value is typeof LEGACY_PLAN_SCHEMA_VERSION | typeof PLAN_SCHEMA_VERSION {
-  return value === LEGACY_PLAN_SCHEMA_VERSION || value === PLAN_SCHEMA_VERSION;
+export function isSupportedExtractionManifestVersion(value: unknown): value is typeof LEGACY_PLAN_SCHEMA_VERSION | typeof PREVIOUS_PLAN_SCHEMA_VERSION | typeof PLAN_SCHEMA_VERSION {
+  return value === LEGACY_PLAN_SCHEMA_VERSION || value === PREVIOUS_PLAN_SCHEMA_VERSION || value === PLAN_SCHEMA_VERSION;
 }
 
 /** Structural routing only; full extraction validation remains authoritative. */
@@ -113,7 +114,7 @@ export interface EvaluationPackageRecord {
 export type EvaluationEffectRecord = EvaluationModuleRecord | EvaluationPackageRecord;
 
 export interface ExtractionManifest {
-  readonly schemaVersion: typeof LEGACY_PLAN_SCHEMA_VERSION | typeof PLAN_SCHEMA_VERSION;
+  readonly schemaVersion: typeof LEGACY_PLAN_SCHEMA_VERSION | typeof PREVIOUS_PLAN_SCHEMA_VERSION | typeof PLAN_SCHEMA_VERSION;
   readonly planId: string;
   readonly createdAt: string;
   readonly generator: { readonly name: string; readonly version: string };
@@ -122,6 +123,31 @@ export interface ExtractionManifest {
   readonly baselineCommit: string;
   readonly graphDigest: Sha256;
   readonly application: string;
+  /** Architectural judgment captured at compile time, independent of mechanical validity. */
+  readonly assessment?: {
+    readonly status: "recommended" | "review-required" | "discouraged";
+    readonly cohesion: "high" | "medium" | "low";
+    readonly reasons: readonly { readonly code: string; readonly detail: string; readonly paths: readonly string[] }[];
+    readonly compatibilityShims: readonly {
+      readonly path: string;
+      readonly packageName: string;
+      readonly replacementSpecifier: string;
+      readonly productionConsumers: readonly string[];
+      readonly testConsumers: readonly string[];
+    }[];
+    readonly targetOptions: readonly {
+      readonly packageName: string;
+      readonly action: "extend" | "create";
+      readonly confidence: "high" | "medium" | "low";
+      readonly compatibility: "compatible" | "requires-review";
+      readonly reasons: readonly string[];
+    }[];
+    readonly selectedTarget: {
+      readonly packageName: string;
+      readonly packageRoot: string;
+      readonly action: "extend" | "create";
+    };
+  };
   /** Present only for a reviewed complete-module architectural boundary cut. */
   readonly modulePromotion?: {
     readonly id: string;

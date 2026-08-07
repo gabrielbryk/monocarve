@@ -143,13 +143,13 @@ describe("end to end", () => {
     expect(ledgerRecord?.regenerateOnApply).toBe(true);
     expect(ledgerRecord?.regenerate).toBe("sh scripts/module-ledger.sh");
     expect(manifest.changedFiles).toContain("generated/module-ledger.json");
-    // Four modules under `apps/web/src` before, one after: the whole closure
-    // left the application.
+    // The mock-only retained consumer remains alongside the unrelated module;
+    // the extracted production closure itself still leaves the application.
     expect(JSON.parse(readFileSync(join(root, "generated/module-ledger.json"), "utf8"))).toEqual({
-      "apps/web/src": 1,
+      "apps/web/src": 2,
       "apps/api/src": 2,
     });
-    expect(fixtureGit(root, "show", "HEAD:generated/module-ledger.json")).toContain('"apps/web/src": 1');
+    expect(fixtureGit(root, "show", "HEAD:generated/module-ledger.json")).toContain('"apps/web/src": 2');
 
     // The package is real: scaffolding, dependencies, project references, barrel.
     const created = JSON.parse(readFileSync(join(root, "libs/chart/package.json"), "utf8")) as {

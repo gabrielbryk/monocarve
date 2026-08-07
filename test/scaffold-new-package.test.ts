@@ -139,3 +139,29 @@ test("refuses a configured reference target without a scaffold template", () => 
     dependencies: { runtime: {}, dev: {}, packageReferences: [] },
   })).toThrow('projectReferences.target "tsconfig.lib.json" must name a configured scaffold extraFile');
 });
+
+test("adds conditional dev dependencies only when their trigger dependency is inferred", () => {
+  const root = fixtureRepo({
+    "pnpm-workspace.yaml": "packages:\n  - libs/*\n",
+    "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      leaflet:\n        specifier: ^1.9.4\n        version: 1.9.4\n    devDependencies:\n      '@types/leaflet':\n        specifier: ^1.9.21\n        version: 1.9.21\n\npackages:\n\n  leaflet@1.9.4: {}\n  '@types/leaflet@1.9.21': {}\n",
+  });
+  const config = fixtureConfig(root, {
+    scaffoldTemplates: {
+      packageJson: { contents: '{"name":"{package}"}\n' },
+      devDependenciesByDependency: {
+        leaflet: { "@types/leaflet": "^1.9.21" },
+        absent: { "@types/absent": "^1.0.0" },
+      },
+    },
+  });
+  const operations = packageOperations({
+    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
+    packageManager: pnpmAdapter, taskRunner: noneTaskRunner, packageName: "@acme/map",
+    packageRoot: "libs/map", projectId: "map", production: ["apps/api/src/map.ts"],
+    dependencies: { runtime: { leaflet: "^1.9.4" }, dev: {}, packageReferences: [] },
+  });
+  const manifest = operations.find((operation) => operation.kind === "write-file" && operation.path === "libs/map/package.json");
+  if (manifest?.kind !== "write-file") throw new Error("package manifest was not scaffolded");
+  const parsed = JSON.parse(manifest.contents);
+  expect(parsed.devDependencies).toEqual({ "@types/leaflet": "^1.9.21" });
+});

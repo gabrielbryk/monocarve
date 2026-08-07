@@ -24,7 +24,7 @@ test("dependency and artifact explanations expose exact persisted provenance", (
 
 test("explain CLI is read-only and requires one selector", async () => {
   const root = committedWorkspace();
-  const portfolio = await runJsonIn<{ top: { id: string }[] }>(root, "portfolio", "--no-cache");
+  const portfolio = await runJsonIn<{ top: { id: string }[] }>(root, "portfolio", "--recommendation", "all", "--strategy", "max-loc", "--no-cache");
   const planned = await runJsonIn<{ output: string; dependencies: { runtime: Record<string, string> } }>(root, "plan", "--candidate", portfolio.top[0]!.id, "--package-name", "@acme/chart", "--write", "--no-cache");
   const dependency = Object.keys(planned.dependencies.runtime)[0]!;
   const explained = await runJsonIn<{ kind: string; name: string; decisions: unknown[] }>(root, "explain", "--plan", planned.output, "--dependency", dependency, "--json");

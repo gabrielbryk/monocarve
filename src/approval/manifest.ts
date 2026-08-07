@@ -5,6 +5,7 @@ import { isGuardedBranch, type MonocarveConfig } from "../config.ts";
 import { PreflightError } from "../errors.ts";
 import { serializeManifest } from "../plan/build.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
+import { serializePreparationManifest, type PreparationManifest } from "../prepare/index.ts";
 import { serializePreparerManifest, type PreparerManifest } from "../preparer/index.ts";
 import { currentBranch, git, gitBytes, headCommit, repositoryPrefix, showBaseline } from "../util/git.ts";
 import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
@@ -12,7 +13,7 @@ import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
 export interface ManifestApprovalOptions {
   readonly rootDir: string;
   readonly config: MonocarveConfig;
-  readonly manifest: ExtractionManifest | PreparerManifest;
+  readonly manifest: ExtractionManifest | PreparationManifest | PreparerManifest;
   /** Absolute or workspace-relative path of the manifest written by `plan`. */
   readonly manifestPath: string;
 }
@@ -103,26 +104,34 @@ export function commitManifestApproval(options: ManifestApprovalOptions): Manife
   return { ...evidence, commit };
 }
 
-function isPreparerManifest(manifest: ExtractionManifest | PreparerManifest): manifest is PreparerManifest {
+type ApprovableManifest = ExtractionManifest | PreparationManifest | PreparerManifest;
+
+function isPreparationManifest(manifest: ApprovableManifest): manifest is PreparationManifest {
+  return "commits" in manifest && "prepare" in manifest.commits;
+}
+
+function isPreparerManifest(manifest: ApprovableManifest): manifest is PreparerManifest {
   return "preparer" in manifest && "baseline" in manifest;
 }
 
-function approvalBaseline(manifest: ExtractionManifest | PreparerManifest): string {
-  return isPreparerManifest(manifest) ? manifest.baseline.commit : manifest.baselineCommit;
+function approvalBaseline(manifest: ApprovableManifest): string {
+  return isPreparerManifest(manifest) || isPreparationManifest(manifest) ? manifest.baseline.commit : manifest.baselineCommit;
 }
 
-function approvalCommitMessage(manifest: ExtractionManifest | PreparerManifest): { readonly subject: string; readonly body?: string } {
+function approvalCommitMessage(manifest: ApprovableManifest): { readonly subject: string; readonly body?: string } {
+  if (isPreparationManifest(manifest)) return manifest.commits.prepare;
   if (isPreparerManifest(manifest)) return { subject: `chore(monocarve): approve ${manifest.preparer.id}` };
   const planCommit = manifest.commits.plan;
   if (planCommit === undefined) throw new PreflightError("manifest does not declare a plan approval commit");
   return planCommit;
 }
 
-function approvalSubject(manifest: ExtractionManifest | PreparerManifest): string {
+function approvalSubject(manifest: ApprovableManifest): string {
   return approvalCommitMessage(manifest).subject;
 }
 
-function serializeApprovalManifest(manifest: ExtractionManifest | PreparerManifest): string {
+function serializeApprovalManifest(manifest: ApprovableManifest): string {
+  if (isPreparationManifest(manifest)) return serializePreparationManifest(manifest);
   return isPreparerManifest(manifest) ? serializePreparerManifest(manifest) : serializeManifest(manifest);
 }
 

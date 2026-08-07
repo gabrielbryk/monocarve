@@ -19,6 +19,7 @@ import { showBaseline } from "../util/git.ts";
 import type { CommandSpec } from "./types.ts";
 import { assertPlannableTree, load, loadGraph, loadManifest, outputPath, print, writeOutput } from "./shared.ts";
 import { portfolioFor } from "./discovery.ts";
+import { relativeWorkspacePath } from "../util/paths.ts";
 
 async function plan(args: ParsedArgs): Promise<void> {
   if (flagBool(args, "commit-approval") && !flagBool(args, "write")) {
@@ -34,6 +35,9 @@ async function plan(args: ParsedArgs): Promise<void> {
     throw new UsageError(`candidate ${candidateId} is not eligible: ${candidate.rejectionReasons.map((reason) => reason.detail).join("; ")}`);
   }
   const packageName = flagString(args, "package-name");
+  if (candidate.recommendation?.requiresExplicitPackageName && packageName === undefined && flagString(args, "profile") === undefined) {
+    throw new UsageError(`candidate ${candidate.id} requires an explicit --package-name because its architectural recommendation is ${candidate.recommendation.status}`);
+  }
   const packageRoot = flagString(args, "package-root");
   const profile = flagString(args, "profile");
   const manifest = buildPlanSync({
@@ -63,13 +67,67 @@ async function plan(args: ParsedArgs): Promise<void> {
       ? commitManifestApproval({ config: loaded.config, rootDir: loaded.rootDir, manifest, manifestPath: out })
       : manifestApprovalEvidence({ config: loaded.config, rootDir: loaded.rootDir, manifest, manifestPath: out })
     : undefined;
-  print({
+  const full = {
     ...manifest,
     targetMode: targetMode(loaded, manifest.target.packageRoot), targetPackageRoot: manifest.target.packageRoot,
     output: out, written,
     ...(roundTrip?.lockfileVerification === undefined ? {} : { lockfileVerification: roundTrip.lockfileVerification }),
     ...(approval === undefined ? {} : { approval: approvalGuidance(out, approval) }),
-  }, args);
+  };
+  if (flagBool(args, "json") || flagBool(args, "verbose") || !process.stdout.isTTY) {
+    print(full, args);
+  } else {
+    const review = summarizePlanReview(manifest, {
+      baselinePaths: targetMode(loaded, manifest.target.packageRoot) === "existing"
+        ? [`${manifest.target.packageRoot}/package.json`] : [],
+      manifestPath: out,
+    });
+    print(`${formatPlanReview(review).trimEnd()}\n\nOutput: ${out} (${written ? "written" : "dry run"})`, args);
+  }
+}
+
+async function scope(args: ParsedArgs): Promise<void> {
+  const loaded = await loadGraph(args);
+  const input = flagString(args, "path") ?? args.positionals[0];
+  if (input === undefined) throw new UsageError("--path <source> is required");
+  const packageName = flagString(args, "package-name");
+  if (packageName === undefined) throw new UsageError("--package-name <name> is required; scope never infers architectural ownership");
+  const path = relativeWorkspacePath(loaded.rootDir, input);
+  const candidates = portfolioFor(args, loaded).candidates.filter((candidate) => candidate.seed.members.includes(path));
+  if (candidates.length === 0) throw new UsageError(`no current principal candidate has seed path ${path}; it may already be extracted or outside the selected application`);
+  if (candidates.length > 1) throw new UsageError(`seed path ${path} is ambiguous across candidates: ${candidates.map(({ id }) => id).sort().join(", ")}`);
+  const candidate = candidates[0]!;
+  if (!candidate.eligible && !flagBool(args, "force")) {
+    throw new UsageError(`candidate ${candidate.id} is not eligible: ${candidate.rejectionReasons.map(({ detail }) => detail).join("; ")}`);
+  }
+  const packageRoot = flagString(args, "package-root");
+  const manifest = buildPlanSync({
+    config: loaded.config, rootDir: loaded.rootDir, graph: loaded.graph, context: loaded.context,
+    candidate, baselineCommit: loaded.graph.commit ?? "HEAD", packageName,
+    ...(packageRoot === undefined ? {} : { packageRoot }),
+  });
+  const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
+  assertPlannableTree(loaded, manifest, out, args);
+  const simulation = flagBool(args, "verify-lockfile")
+    ? await simulatePlan({ config: loaded.config, rootDir: loaded.rootDir, manifest, verifyLockfile: true, skipGates: true })
+    : undefined;
+  if (simulation && !simulation.ok) throw new PlanningError(`plan lockfile round-trip failed: ${simulation.failure ?? "unknown failure"}`);
+  const written = flagBool(args, "write");
+  if (written) writeOutput(loaded.rootDir, out, serializeManifest(manifest), { exclusive: true });
+  const review = summarizePlanReview(manifest, {
+    baselinePaths: showBaseline(loaded.rootDir, manifest.baselineCommit, `${manifest.target.packageRoot}/package.json`) === null
+      ? [] : [`${manifest.target.packageRoot}/package.json`],
+    manifestPath: out,
+  });
+  // `scope` promises a concise operator review by default. Unlike `plan`, it is
+  // commonly consumed through an agent subprocess where stdout is a pipe, so
+  // using TTY detection here silently switched the default to the full
+  // candidate + manifest payload (hundreds of kilobytes in a real workspace).
+  // Machine output is explicit through --json; piping human output must not
+  // change the command's semantics.
+  print(flagBool(args, "json")
+    ? { schema: "scope", path, candidate, review, manifest, output: out, written, ...(simulation ? { simulation } : {}) }
+    : formatPlanReview(review).trimEnd(), args);
 }
 
 function existingPlanError(rootDir: string, path: string, currentBaseline: string): UsageError {
@@ -236,7 +294,8 @@ export function approvalGuidance(out: string, evidence: ManifestApprovalEvidence
 }
 
 export const planningCommands: Record<string, CommandSpec> = {
-  plan: { summary: "compile a hash-journaled extraction plan", usage: "plan --candidate <id> [--profile <name> | --package-name <name> [--package-root <path>]] [--force] [--verify-lockfile] [--out <path>] [--write [--commit-approval]]", details: "--package-name resolves a known workspace package root automatically; --package-root is an explicit override. A root containing package.json is extended, otherwise a new package is scaffolded. --verify-lockfile replays the journal and asks the configured package manager to round-trip the projected lockfile before any output is written. --write reports exact review, approval, and apply actions; --commit-approval explicitly creates only the manifest approval commit. Review target.packageRoot and every move target first. Named profiles cannot be overridden. --force bypasses candidate eligibility only, never validation or transaction proofs.", run: plan },
+  plan: { summary: "compile a hash-journaled extraction plan", usage: "plan --candidate <id> [--profile <name> | --package-name <name> [--package-root <path>]] [--force] [--verify-lockfile] [--out <path>] [--write [--commit-approval]] [--json | --verbose]", details: "Prints the bounded operator review by default; --json or --verbose emits the full proof manifest. --package-name resolves a known workspace package root automatically; --package-root is an explicit override. A root containing package.json is extended, otherwise a new package is scaffolded. Low-confidence recommendations require an explicit target. --write reports exact review, approval, and apply actions; --commit-approval explicitly creates only the manifest approval commit.", run: plan },
+  scope: { summary: "resolve a stable source path and review its current plan", usage: "scope --path <source> --package-name <name> [--app <name>] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]", details: "Resolves the current principal SCC candidate from a stable source path. It requires an intentional target, prints a concise review by default, and never writes unless --write is explicit.", run: scope },
   "plan-review": { summary: "render the deterministic operator review for a plan", usage: "plan-review --plan <path> [--approval-subject <subject>] [--json]", details: "Reads the manifest and its Git baseline without changing the workspace. The review exposes exact move targets, wiring and public-surface changes, generated outputs, gates, warnings, and the subject/path inputs used for approval.", run: reviewPlan },
   explain: { summary: "explain why a plan changes one dependency or artifact", usage: "explain --plan <path> (--dependency <name> | --artifact <path>) [--json]", details: "Read-only. Reports persisted dependency source/reason evidence or the exact operation chain and projected final hash for an artifact.", run: explainPlan },
   "relocate-tests": { summary: "compile a configured integration-test package", usage: "relocate-tests --suite <name> [--out <path>] [--write]", details: "The suite and all target/scaffold policy come from configuration.", run: relocateTests },

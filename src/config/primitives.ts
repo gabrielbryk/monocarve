@@ -104,6 +104,10 @@ export const scaffoldTemplateOverrides = z.strictObject({
   extraFiles: z.record(z.string().min(1), templateSource).optional(),
   projectReferences: projectReferences.optional(),
   devDependencies: z.record(z.string().min(1), z.string().min(1)).optional(),
+  devDependenciesByDependency: z.record(
+    z.string().min(1),
+    z.record(z.string().min(1), z.string().min(1)),
+  ).optional(),
   publicSurface: publicSurfaceSchema.optional(),
 });
 

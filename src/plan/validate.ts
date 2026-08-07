@@ -16,7 +16,7 @@ import { isSourceModulePath } from "../util/files.ts";
 import { isSha256, stableStringify } from "../util/hash.ts";
 import { relativeWorkspacePath } from "../util/paths.ts";
 import { readManifest } from "../graph/workspace.ts";
-import { LEGACY_PLAN_SCHEMA_VERSION, PLAN_SCHEMA_VERSION, isSupportedExtractionManifestVersion, operationPaths, type ExtractionManifest } from "./manifest.ts";
+import { LEGACY_PLAN_SCHEMA_VERSION, PREVIOUS_PLAN_SCHEMA_VERSION, PLAN_SCHEMA_VERSION, isSupportedExtractionManifestVersion, operationPaths, type ExtractionManifest } from "./manifest.ts";
 import { projectedArtifactEvidence } from "./projected-workspace.ts";
 import { buildPlanProvenance } from "./provenance.ts";
 import { validateIntegrationTestSuite } from "./validation/integration.ts";
@@ -34,10 +34,11 @@ export function validatePlan(manifest: ExtractionManifest, options: ValidatePlan
   const { rootDir } = options;
 
   if (!isSupportedExtractionManifestVersion(manifest.schemaVersion)) {
-    issues.add("schema-version", `manifest schemaVersion must be ${LEGACY_PLAN_SCHEMA_VERSION} or ${PLAN_SCHEMA_VERSION}`);
+    issues.add("schema-version", `manifest schemaVersion must be ${LEGACY_PLAN_SCHEMA_VERSION}, ${PREVIOUS_PLAN_SCHEMA_VERSION}, or ${PLAN_SCHEMA_VERSION}`);
     return validationResult(issues);
   }
   validateHeader(manifest, options, issues);
+  validateAssessment(manifest, issues);
 
   const containedPath = (path: string, rule: string): boolean => {
     try {
@@ -64,6 +65,25 @@ export function validatePlan(manifest: ExtractionManifest, options: ValidatePlan
     entrypoint: `${target.packageRoot}/${target.entrypoint}`,
   });
   return validationResult(issues);
+}
+
+function validateAssessment(manifest: ExtractionManifest, issues: Issues): void {
+  const assessment = manifest.assessment;
+  if (assessment === undefined) return;
+  if (!["recommended", "review-required", "discouraged"].includes(assessment.status)) issues.add("assessment", "assessment status is invalid");
+  if (!["high", "medium", "low"].includes(assessment.cohesion)) issues.add("assessment", "assessment cohesion is invalid");
+  const sortedUnique = (values: readonly string[]): boolean =>
+    new Set(values).size === values.length && values.every((value, index) => index === 0 || value > values[index - 1]!);
+  for (const reason of assessment.reasons) {
+    if (!reason.code || !reason.detail || !sortedUnique(reason.paths)) issues.add("assessment", "assessment reasons require non-empty identity and sorted unique paths");
+  }
+  const shimPaths = assessment.compatibilityShims.map(({ path }) => path);
+  if (!sortedUnique(shimPaths)) issues.add("assessment", "compatibility shims must be sorted and unique by path");
+  const targetNames = assessment.targetOptions.map(({ packageName }) => packageName);
+  if (!sortedUnique(targetNames)) issues.add("assessment", "assessment target options must be sorted and unique by package name");
+  if (assessment.selectedTarget.packageName !== manifest.target.packageName || assessment.selectedTarget.packageRoot !== manifest.target.packageRoot) {
+    issues.add("assessment", "assessment selected target must match the executable plan target");
+  }
 }
 
 function validateModulePromotion(manifest: ExtractionManifest, consumers: ReadonlySet<string>, issues: Issues): void {
@@ -109,7 +129,7 @@ function validateHeader(manifest: ExtractionManifest, options: ValidatePlanOptio
 function validateProvenance(manifest: ExtractionManifest, options: ValidatePlanOptions, issues: Issues): void {
   const actual = manifest.provenance;
   if (actual === undefined) {
-    if (manifest.schemaVersion === PLAN_SCHEMA_VERSION) issues.add("provenance", `schema-v${PLAN_SCHEMA_VERSION} manifests must include provenance`);
+    if (manifest.schemaVersion !== LEGACY_PLAN_SCHEMA_VERSION) issues.add("provenance", `schema-v${manifest.schemaVersion} manifests must include provenance`);
     return;
   }
   if (!isSha256(actual.configDigest ?? "")) issues.add("config-digest", "provenance.configDigest must be a SHA-256 hash");

@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import { commitManifestApproval, manifestApprovalEvidence } from "../src/approval/manifest.ts";
 import { serializeManifest } from "../src/plan/build.ts";
+import { createPreparationManifest, serializePreparationManifest } from "../src/prepare/index.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, write } from "./support/fixture-repo.ts";
 import { baseManifest, extractionFiles } from "./support/transaction-fixture.ts";
 import { runIn } from "./support/cli.ts";
@@ -125,6 +126,35 @@ describe("guided manifest approval", () => {
     const committed = await runIn(fixture.rootDir, "approve", "--plan", path, "--commit");
     expect(committed.code).toBe(0);
     expect(fixtureGit(fixture.rootDir, "log", "-1", "--format=%s")).toBe("chore(monocarve): approve rewrite-boundary");
+    expect(fixtureGit(fixture.rootDir, "show", "--format=", "--name-only", "HEAD")).toBe(path);
+  });
+
+  test("CLI approves a preparation manifest with its declared prepare subject", async () => {
+    const fixture = setup();
+    rmSync(join(fixture.rootDir, fixture.manifestPath));
+    const preparation = createPreparationManifest({
+      schemaVersion: 1,
+      createdAt: new Date(Number(fixtureGit(fixture.rootDir, "show", "-s", "--format=%ct")) * 1000).toISOString(),
+      generator: { name: "monocarve", version: "1.0.0" },
+      baseline: {
+        commit: fixture.manifest.baselineCommit,
+        committerDate: new Date(Number(fixtureGit(fixture.rootDir, "show", "-s", "--format=%ct")) * 1000).toISOString(),
+        configDigest: hashJson(fixture.config),
+      },
+      graphDigest: "a".repeat(64),
+      declarations: [],
+      operations: [],
+      compatibilityReexports: [],
+      changedFiles: [],
+      commits: { prepare: { subject: "refactor(frontend): prepare extraction boundary" } },
+      gates: { package: [], project: [], workspace: [] },
+    });
+    const path = "plans/preparation.json";
+    write(fixture.rootDir, path, serializePreparationManifest(preparation));
+
+    const committed = await runIn(fixture.rootDir, "approve", "--plan", path, "--commit");
+    expect(committed.code).toBe(0);
+    expect(fixtureGit(fixture.rootDir, "log", "-1", "--format=%s")).toBe(preparation.commits.prepare.subject);
     expect(fixtureGit(fixture.rootDir, "show", "--format=", "--name-only", "HEAD")).toBe(path);
   });
 });

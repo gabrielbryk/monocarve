@@ -4,7 +4,7 @@ import { dirname, extname, resolve } from "node:path";
 import { fileState, sourceFiles } from "../util/files.ts";
 import { MISSING, hashBytes } from "../util/hash.ts";
 import { relativePosix } from "../util/paths.ts";
-import { LEGACY_PLAN_SCHEMA_VERSION, PLAN_SCHEMA_VERSION, type ExtractionManifest } from "../plan/manifest.ts";
+import { LEGACY_PLAN_SCHEMA_VERSION, PREVIOUS_PLAN_SCHEMA_VERSION, PLAN_SCHEMA_VERSION, type ExtractionManifest } from "../plan/manifest.ts";
 import type { MonocarveConfig } from "../config.ts";
 import { showBaseline } from "../util/git.ts";
 import type { AuditReport, ProofResult } from "./audit-types.ts";
@@ -55,7 +55,7 @@ export function showBaselineHash(rootDir: string, commit: string, path: string):
 
 export function unauditableManifest(config: MonocarveConfig, manifest: ExtractionManifest): string[] {
   const value = manifest as unknown as Record<string, unknown>;
-  if (value["schemaVersion"] !== LEGACY_PLAN_SCHEMA_VERSION && value["schemaVersion"] !== PLAN_SCHEMA_VERSION) return [`[schema-version] manifest schemaVersion must be ${LEGACY_PLAN_SCHEMA_VERSION} or ${PLAN_SCHEMA_VERSION}`];
+  if (value["schemaVersion"] !== LEGACY_PLAN_SCHEMA_VERSION && value["schemaVersion"] !== PREVIOUS_PLAN_SCHEMA_VERSION && value["schemaVersion"] !== PLAN_SCHEMA_VERSION) return [`[schema-version] manifest schemaVersion must be ${LEGACY_PLAN_SCHEMA_VERSION}, ${PREVIOUS_PLAN_SCHEMA_VERSION}, or ${PLAN_SCHEMA_VERSION}`];
   const failures: string[] = [];
   const require = (key: string, ok: boolean, kind: string): void => { if (!ok) failures.push(`[manifest-shape] ${key} must be ${kind}`); };
   const isArray = (key: string): boolean => Array.isArray(value[key]);

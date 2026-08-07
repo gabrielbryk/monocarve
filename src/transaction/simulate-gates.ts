@@ -6,7 +6,8 @@
  * `GateResult`/`GateCommandRunner` types and the diagnostics-plumbing default
  * runner call site; this module just executes against them.
  */
-import { join } from "node:path";
+import { mkdtempSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 import type { ExtractionManifest } from "../plan/manifest.ts";
 import { completeGateOutput, diagnosticExcerpts, failedGateOutput, persistDiagnostic } from "./gate-diagnostics.ts";
@@ -156,16 +157,25 @@ async function runBunGateCommand(
   command: readonly string[],
   options: { readonly cwd: string; readonly timeoutMs: number },
 ): Promise<GateCommandOutput> {
-  const process = Bun.spawn([...command], {
-    cwd: options.cwd,
-    stdout: "pipe",
-    stderr: "pipe",
-    timeout: options.timeoutMs,
-  });
-  const [exitCode, stdout, stderr] = await Promise.all([
-    process.exited,
-    new Response(process.stdout).text(),
-    new Response(process.stderr).text(),
-  ]);
-  return { exitCode, stdout, stderr };
+  // Keep compiler/test scratch off system /tmp: on long campaigns its tmpfs
+  // can exhaust inodes while the disposable worktree's backing disk is fine.
+  // A unique directory per command is concurrency-safe and is always removed.
+  const gateTemp = mkdtempSync(join(dirname(options.cwd), ".monocarve-gate-tmp-"));
+  try {
+    const child = Bun.spawn([...command], {
+      cwd: options.cwd,
+      env: { ...process.env, TMPDIR: gateTemp, TEMP: gateTemp, TMP: gateTemp },
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: options.timeoutMs,
+    });
+    const [exitCode, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    return { exitCode, stdout, stderr };
+  } finally {
+    rmSync(gateTemp, { recursive: true, force: true });
+  }
 }

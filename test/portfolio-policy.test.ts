@@ -128,6 +128,11 @@ describe("portfolio forbidTargetSuggestion policy", () => {
     expect(candidate.eligible).toBe(true);
     expect(candidate.rejectionReasons).toEqual([]);
     expect(candidate.classification).toBe("preparation");
+    expect(candidate.recommendation).toMatchObject({
+      status: "discouraged",
+      requiresExplicitPackageName: true,
+      reasons: expect.arrayContaining([expect.objectContaining({ code: "generic-target" })]),
+    });
   });
 
   test("the same candidate classifies as an ordinary extraction without the policy", async () => {

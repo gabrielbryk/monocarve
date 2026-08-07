@@ -17,7 +17,7 @@ import { pnpmAdapter } from "../src/adapters/pnpm.ts";
 import { getApplication, resolveExtractionProfile } from "../src/config.ts";
 import { buildPlanProvenance } from "../src/plan/provenance.ts";
 import { hashText } from "../src/util/hash.ts";
-import type { ExtractionManifest, PlanOperation } from "../src/plan/manifest.ts";
+import { PLAN_SCHEMA_VERSION, type ExtractionManifest, type PlanOperation } from "../src/plan/manifest.ts";
 import { projectedArtifactEvidence } from "../src/plan/projected-workspace.ts";
 import { cleanupFixtures, fixtureConfig, fixtureRepo } from "./support/fixture-repo.ts";
 
@@ -119,6 +119,21 @@ describe("plan validation", () => {
       const result = validatePlan({ ...manifest(), schemaVersion: 3, provenance: entry.value }, { config, rootDir: root });
       expect(result.issues.some((issue) => issue.rule === entry.rule)).toBe(true);
     }
+  });
+
+  test("rejects architectural assessment evidence whose ordering can hide a changed claim", () => {
+    const { root, config } = repo();
+    const profile = resolveExtractionProfile(config, getApplication(config, "api"), undefined);
+    const provenance = buildPlanProvenance({ config, profileGates: profile.gates, scaffoldTemplates: profile.scaffoldTemplates, packageManager: createPackageManagerAdapter(config), taskRunner: createTaskRunnerAdapter(config), rootPackageJson: '{ "name": "fixture-workspace", "private": true }\n' });
+    const assessed: ExtractionManifest = {
+      ...manifest(), schemaVersion: PLAN_SCHEMA_VERSION, provenance,
+      assessment: {
+        status: "review-required", cohesion: "medium",
+        reasons: [{ code: "high-inbound", detail: "review hub ownership", paths: ["z.ts", "a.ts"] }],
+        compatibilityShims: [], targetOptions: [], selectedTarget: { packageName: PACKAGE, packageRoot: PACKAGE_ROOT, action: "extend" },
+      },
+    };
+    expect(validatePlan(assessed, { config, rootDir: root }).issues.map(({ rule }) => rule)).toContain("assessment");
   });
 
   test("adapter provenance uses tracked declarations and never executable PATH state", () => {

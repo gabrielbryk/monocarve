@@ -35,8 +35,21 @@ export async function load(args: ParsedArgs): Promise<LoadedConfig> {
 }
 
 export function print(value: unknown, args: ParsedArgs): void {
-  if (flagBool(args, "json") || typeof value !== "string") process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
-  else process.stdout.write(`${value}\n`);
+  process.stdout.write(renderOutput(value, args));
+}
+
+export function renderOutput(value: unknown, args: ParsedArgs): string {
+  return flagBool(args, "json") || typeof value !== "string"
+    ? `${JSON.stringify(value, null, 2)}\n`
+    : `${value}\n`;
+}
+
+/** Emit one report to stdout and, when requested, the same complete bytes atomically to disk. */
+export function printReport(rootDir: string, value: unknown, args: ParsedArgs): void {
+  const rendered = renderOutput(value, args);
+  const out = flagString(args, "out");
+  if (out !== undefined) writeOutput(rootDir, out, rendered);
+  process.stdout.write(rendered);
 }
 
 function asScanReport(value: unknown, application: string, path: string): ScanReport {

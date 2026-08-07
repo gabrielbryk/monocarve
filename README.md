@@ -314,9 +314,10 @@ These are the main workflow commands, not the complete registry. Run
 | `prepare-multi-plan` | compile reviewed per-donor seams into one atomic multi-file preparation |
 | `prepare-apply` / `prepare-audit` | simulate or commit a preparation, then independently replay its proof |
 | `preparer-plan` / `preparer-simulate` / `preparer-apply` / `preparer-commit` | compile, prove, journal-apply, and explicitly commit configured declared-output ratchets |
-| `campaign init` / `campaign status` | start a bounded campaign from a fresh stable-HEAD scan, or report its exact next action and HEAD freshness |
-| `campaign advance` / `campaign record` | re-scan, queue one paired child for review, or record its immediate audit |
-| `portfolio` | ranked eligible candidates |
+| `campaign resolve` | re-scan and resolve the next ordered `{path, packageName}` target; compile at most one plan and stop for review |
+| legacy `campaign init/status/advance/record` | finish an existing schema-v1 preparation/extraction pair ledger |
+| `portfolio` | grouped candidates with separate mechanical eligibility and architectural recommendation |
+| `scope` | resolve a stable source path to its current candidate and review an intentional target |
 | `conflicts --plan <candidate>=<manifest> ...` | exact same-baseline operation conflicts and path-disjoint planning waves |
 | `plan` | compile a plan for one candidate; reports explicit `targetMode` and `targetPackageRoot` for new or existing packages |
 | `plan-review` | render the deterministic human review and exact approval inputs |

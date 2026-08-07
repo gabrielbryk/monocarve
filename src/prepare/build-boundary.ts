@@ -7,7 +7,8 @@
  * `build.ts` still owns `compilePreparationManifest`, `PreparationManifestRendering`,
  * and `baselineFileMode`, which this module borrows for boundary compilation.
  */
-import { relative, resolve } from "node:path";
+import { readdirSync, statSync } from "node:fs";
+import { extname, relative, resolve } from "node:path";
 
 import ts from "typescript";
 
@@ -15,6 +16,7 @@ import { GENERATOR } from "../branding.ts";
 import type { MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import { PlanningError } from "../plan/context.ts";
+import { rewritePathReferenceText, scanPathReferenceRewrites } from "../plan/path-reference-rewrites.ts";
 import { resolveCommit, showBaseline } from "../util/git.ts";
 import { byCodeUnit, hashJson, hashText, type FileState, type Sha256 } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";
@@ -97,10 +99,21 @@ export function compileBoundaryPreparationManifest(input: CompileBoundaryPrepara
     ...(input.graph.incoming.get(boundary.retained) ?? []),
     ...(input.graph.testImporters.get(boundary.retained) ?? []),
   ])].sort(byCodeUnit);
-  const bindings = importerPaths.map((path) => resolveBoundaryImporter(input.rootDir, baseline.commit, compilerOptions, path, boundary.retained));
-  const operations = boundary.strategy === "existing-package"
+  const bindings = importerPaths.map((path) => resolveBoundaryImporter(
+    input.rootDir,
+    baseline.commit,
+    compilerOptions,
+    path,
+    boundary.retained,
+    input.moduleSpecifierCalls ?? input.config.moduleSpecifierCalls,
+  ));
+  const boundaryOperations = boundary.strategy === "existing-package"
     ? planExistingPackageOperations(input, boundary, retainedText, retainedMode, bindings)
     : planPortOperations(input, boundary, baseline.commit, retainedText, compilerOptions, bindings);
+  const referenceOperations = boundary.strategy === "existing-package" && boundary.retire
+    ? planRetiredBoundaryPathReferences(input, boundary, baseline.commit, compilerOptions)
+    : [];
+  const operations = [...boundaryOperations, ...referenceOperations];
   const ordered = [...operations].sort(boundaryOperationOrder);
   const operationPaths = [...new Set(ordered.flatMap(preparationOperationPaths))].sort(byCodeUnit);
   const postJournalPreparers = preparationPostJournalRecords(input.config, operationPaths);
@@ -132,6 +145,63 @@ export function compileBoundaryPreparationManifest(input: CompileBoundaryPrepara
   return manifest;
 }
 
+function planRetiredBoundaryPathReferences(
+  input: CompileBoundaryPreparationManifestInput,
+  boundary: Extract<ResolvedBoundary, { strategy: "existing-package" }>,
+  baselineCommit: string,
+  compilerOptions: ts.CompilerOptions,
+): PreparationReplayOperation[] {
+  const settings = input.config.pathReferenceRewrites;
+  if (!settings.enabled || settings.roots.length === 0) return [];
+  const resolved = ts.resolveModuleName(
+    boundary.replacementSpecifier,
+    resolve(input.rootDir, boundary.retained),
+    compilerOptions,
+    ts.sys,
+  ).resolvedModule?.resolvedFileName;
+  if (!resolved) throw new PlanningError(`boundary ${boundary.id} replacement ${boundary.replacementSpecifier} does not resolve to a workspace path`);
+  const target = relative(input.rootDir, resolved).replaceAll("\\", "/");
+  const moves = [{ source: boundary.retained, target }];
+  const scanSettings = {
+    onAmbiguousMatch: settings.onAmbiguousMatch,
+    matchExtensionless: settings.matchExtensionless,
+    minSegments: settings.minSegments,
+  };
+  const operations: PreparationReplayOperation[] = [];
+  for (const root of settings.roots) {
+    for (const absolute of boundaryReferenceFiles(resolve(input.rootDir, root.root), root.extensions).sort()) {
+      if ((statSync(absolute, { throwIfNoEntry: false })?.size ?? 0) > settings.maxBytes) continue;
+      const path = relative(input.rootDir, absolute).replaceAll("\\", "/");
+      const text = showBaseline(input.rootDir, baselineCommit, path);
+      if (text === null) continue;
+      const scan = scanPathReferenceRewrites(text, path, moves, scanSettings);
+      if (scan.rewrites.length === 0) continue;
+      const contents = rewritePathReferenceText(text, scan.rewrites);
+      operations.push({
+        kind: "write-file",
+        purpose: "wiring",
+        file: {
+          path,
+          preconditionHash: hashText(text),
+          preconditionMode: baselineFileMode(input.rootDir, baselineCommit, path),
+          resultHash: hashText(contents),
+          resultMode: baselineFileMode(input.rootDir, baselineCommit, path),
+        },
+        contents,
+      });
+    }
+  }
+  return operations;
+}
+
+function boundaryReferenceFiles(directory: string, extensions: readonly string[]): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) return boundaryReferenceFiles(path, extensions);
+    return extensions.includes(extname(entry.name)) ? [path] : [];
+  });
+}
+
 interface BoundaryImporterBinding {
   readonly path: string;
   readonly preconditionHash: FileState;
@@ -139,6 +209,7 @@ interface BoundaryImporterBinding {
   readonly text: string;
   readonly specifier: string;
   readonly importedSymbols: readonly string[];
+  readonly moduleSpecifierCall?: string;
 }
 
 function planExistingPackageOperations(
@@ -159,6 +230,7 @@ function planExistingPackageOperations(
     text: binding.text,
     specifier: binding.specifier,
     importedSymbols: binding.importedSymbols,
+    ...(binding.moduleSpecifierCall === undefined ? {} : { moduleSpecifierCall: binding.moduleSpecifierCall }),
   }));
   const result = planExistingPackageBoundary({
     rootDir: input.rootDir,
@@ -166,9 +238,9 @@ function planExistingPackageOperations(
     retainedPrecondition: hashText(retainedText),
     retainedMode,
     importers,
-    ...(input.moduleSpecifierCalls === undefined ? {} : { moduleSpecifierCalls: input.moduleSpecifierCalls }),
-    ...(input.resolutionExtensions === undefined ? {} : { resolutionExtensions: input.resolutionExtensions }),
-    ...(input.cssImportExtensions === undefined ? {} : { cssImportExtensions: input.cssImportExtensions }),
+    moduleSpecifierCalls: input.moduleSpecifierCalls ?? input.config.moduleSpecifierCalls,
+    resolutionExtensions: input.resolutionExtensions ?? input.config.assetExtensions,
+    cssImportExtensions: input.cssImportExtensions ?? input.config.cssImportExtensions,
   });
   if (result.deletion !== undefined) assertDeletionCoversGraphImporters(boundary, result.deletion, bindings);
   return result.deletion === undefined ? result.rewrites : [...result.rewrites, result.deletion];
@@ -249,6 +321,7 @@ function resolveBoundaryImporter(
   compilerOptions: ts.CompilerOptions,
   importerPath: string,
   retainedPath: string,
+  moduleSpecifierCalls: readonly string[],
 ): BoundaryImporterBinding {
   const text = showBaseline(rootDir, baselineCommit, importerPath);
   if (text === null) throw new PlanningError(`boundary importer is absent from baseline: ${importerPath}`);
@@ -266,5 +339,49 @@ function resolveBoundaryImporter(
     }
     return { path: importerPath, preconditionHash: hashText(text), mode, text, specifier, importedSymbols: [...new Set(importedSymbols)].sort(byCodeUnit) };
   }
+  const configuredCall = findConfiguredModuleCall(source, rootDir, importerPath, retainedPath, compilerOptions, moduleSpecifierCalls);
+  if (configuredCall !== undefined) {
+    return {
+      path: importerPath,
+      preconditionHash: hashText(text),
+      mode,
+      text,
+      specifier: configuredCall.specifier,
+      importedSymbols: [],
+      moduleSpecifierCall: configuredCall.call,
+    };
+  }
   throw new PlanningError(`${importerPath} does not import the retained module ${retainedPath} at baseline`);
+}
+
+function findConfiguredModuleCall(
+  source: ts.SourceFile,
+  rootDir: string,
+  importerPath: string,
+  retainedPath: string,
+  compilerOptions: ts.CompilerOptions,
+  configuredCalls: readonly string[],
+): { readonly call: string; readonly specifier: string } | undefined {
+  let found: { call: string; specifier: string } | undefined;
+  const qualifiedName = (node: ts.Expression): string | undefined => {
+    if (ts.isIdentifier(node)) return node.text;
+    if (!ts.isPropertyAccessExpression(node)) return undefined;
+    const parent = qualifiedName(node.expression);
+    return parent === undefined ? undefined : `${parent}.${node.name.text}`;
+  };
+  const visit = (node: ts.Node): void => {
+    if (found !== undefined) return;
+    if (ts.isCallExpression(node)) {
+      const call = qualifiedName(node.expression);
+      const argument = node.arguments[0];
+      if (call !== undefined && configuredCalls.includes(call) && argument !== undefined && ts.isStringLiteralLike(argument)) {
+        const specifier = argument.text;
+        const resolved = ts.resolveModuleName(specifier, resolve(rootDir, importerPath), compilerOptions, ts.sys).resolvedModule?.resolvedFileName;
+        if (resolved !== undefined && relative(rootDir, resolved).replaceAll("\\", "/") === retainedPath) found = { call, specifier };
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return found;
 }

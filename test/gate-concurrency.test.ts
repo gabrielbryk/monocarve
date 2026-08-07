@@ -33,6 +33,26 @@ function deferred(): { readonly promise: Promise<void>; readonly resolve: () => 
 }
 
 describe("gate concurrency", () => {
+  test("default gate processes use cleaned scratch beside the gated workspace", async () => {
+    const parent = scratchDirectory();
+    const cwd = join(parent, "workspace");
+    await Bun.write(join(cwd, ".keep"), "");
+    const observed = join(cwd, "observed-tmpdir.txt");
+    const result = await runGateTiers({
+      gates: { ...emptyGates, workspace: ["record temp"] },
+      maxConcurrency: 1,
+      cwd,
+      timeoutMs: 1_000,
+      wrapCommand: () => [process.execPath, "-e", `await Bun.write(${JSON.stringify(observed)}, process.env.TMPDIR ?? '')`],
+    });
+
+    expect(result.failure).toBeUndefined();
+    const temp = readFileSync(observed, "utf8");
+    expect(temp.startsWith(parent)).toBeTrue();
+    expect(temp).toContain(".monocarve-gate-tmp-");
+    expect(existsSync(temp)).toBeFalse();
+  });
+
   test("defaults to serial execution and rejects invalid limits", () => {
     expect(parseConfig(gateConfig()).gates.maxConcurrency).toBe(1);
     expect(parseConfig(gateConfig()).transaction.gateRetries).toBe(0);
