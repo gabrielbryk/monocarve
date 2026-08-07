@@ -153,6 +153,13 @@ export interface ExtractionManifest {
   readonly integrationTestSuite?: IntegrationTestSuiteRecord;
   readonly sourceBlobs: Readonly<Record<string, Sha256>>;
   readonly operations: readonly PlanOperation[];
+  /** Configured path migrations proven byte-identical at plan time. */
+  readonly pathMigrationNoops?: readonly {
+    readonly path: string;
+    readonly command: string;
+    readonly moves: readonly { readonly source: string; readonly target: string }[];
+    readonly artifactHash: Sha256;
+  }[];
   readonly consumers: readonly ConsumerRewrite[];
   readonly generatedFiles: readonly GeneratedFileRecord[];
   readonly changedFiles: readonly string[];

@@ -169,6 +169,37 @@ describe("path-keyed artifact migrations", () => {
     expect(reverse).toEqual(forward);
   });
 
+  test("records and validates a triggered migration that is provably a no-op", () => {
+    const root = fixtureRepo(files());
+    write(root, BASELINE, `${JSON.stringify({ paths: {} }, null, 2)}\n`);
+    fixtureGit(root, "add", "--", BASELINE);
+    fixtureGit(root, "commit", "-qm", "test: seed pathless baseline");
+    const config = configFor(root);
+    const proofs: NonNullable<ExtractionManifest["pathMigrationNoops"]>[number][] = [];
+    const firstMove = moves(root)[1]!;
+    const operations = pathMigrationOperations(config, new WorkspaceContext(config, root), [firstMove], (proof) => proofs.push(proof));
+
+    expect(operations).toEqual([]);
+    expect(proofs).toEqual([{
+      path: BASELINE,
+      command: fixtureCommand(root),
+      moves: [{ source: FIRST, target: FIRST_TARGET }],
+      artifactHash: hashText(read(root, BASELINE)),
+    }]);
+
+    const placeholder: MigratePathKeysOperation = {
+      kind: "migrate-path-keys",
+      path: BASELINE,
+      command: fixtureCommand(root),
+      moves: [{ source: FIRST, target: FIRST_TARGET }],
+      preconditionHash: hashText(read(root, BASELINE)),
+      resultHash: hashText("changed"),
+    };
+    const base = manifest(root, placeholder);
+    const plan = { ...base, operations: [base.operations[0]!], pathMigrationNoops: proofs, changedFiles: [FIRST, FIRST_TARGET].sort() };
+    expect(validatePlan(plan, { config, rootDir: root }).issues).toEqual([]);
+  });
+
   test("rejects duplicate artifact paths at the config boundary", () => {
     const base: MonocarveUserConfig = {
       applications: [{ name: "api", sourceRoot: "apps/api/src", tsconfig: "apps/api/tsconfig.json" }],

@@ -68,18 +68,21 @@ export function generatedFilesFor(
   return [...declared, ...triggered, ...postJournal].sort((left, right) => byCodeUnit(left.path, right.path));
 }
 
-export function pathMigrationOperations(config: MonocarveConfig, context: WorkspaceContext, operations: readonly PlanOperation[]): MigratePathKeysOperation[] {
+export function pathMigrationOperations(config: MonocarveConfig, context: WorkspaceContext, operations: readonly PlanOperation[], onNoop?: (proof: { path: string; command: string; moves: readonly PathMove[]; artifactHash: Sha256 }) => void): MigratePathKeysOperation[] {
   const moves: PathMove[] = operations.filter((operation) => operation.kind === "move" || operation.kind === "move-with-rewrite")
     .map((operation) => ({ source: operation.source, target: operation.target }))
     .sort((left, right) => byCodeUnit(left.source, right.source) || byCodeUnit(left.target, right.target));
-  return triggeredPathMigrations(config, moves.map((move) => move.source)).map((artifact): MigratePathKeysOperation => {
+  return triggeredPathMigrations(config, moves.map((move) => move.source)).flatMap((artifact): MigratePathKeysOperation[] => {
     const preconditionHash = context.state(artifact.path);
     if (preconditionHash === "missing") throw new PlanningError(`path-keyed artifact does not exist: ${artifact.path}`);
     const contents = readUtf8Artifact(context.absolute(artifact.path), artifact.path);
     const shape = { path: artifact.path, command: artifact.command, moves };
     const resultHash = hashText(runPathMigrationCommand(context.rootDir, shape, contents, config.pathMigrations.timeoutMs));
-    if (resultHash === preconditionHash) throw new PlanningError(`path migration for ${artifact.path} did not change the artifact`);
-    return { kind: "migrate-path-keys", ...shape, preconditionHash, resultHash };
+    if (resultHash === preconditionHash) {
+      onNoop?.({ ...shape, artifactHash: preconditionHash });
+      return [];
+    }
+    return [{ kind: "migrate-path-keys", ...shape, preconditionHash, resultHash }];
   }).sort((left, right) => byCodeUnit(left.path, right.path));
 }
 
