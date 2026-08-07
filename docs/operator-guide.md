@@ -181,7 +181,11 @@ largest SCC to shrink. A singleton source instead carries a containment-cut
 proof: at least one cross-domain or cross-application edge must disappear, the
 application containment-edge count must improve by that exact amount, and the
 new package may not depend on any application module. Both paths refuse a
-partial importer inventory.
+partial importer inventory. Direct test importers use the ordinary relocation
+policy: only self-contained, source-owned tests travel with the module; tests
+that reach another domain's application support remain in place and have their
+imports rewritten. The importer proof is the exact union of those relocated
+tests and retained consumers.
 
 `targetModule: "index"` exposes the moved module at the package root. A
 subpath value uses the configured public-surface templates. `retireSource: true`
