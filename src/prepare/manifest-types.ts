@@ -149,7 +149,7 @@ export interface PreparationWriteFileOperation {
    * and the app-owned adapter that satisfies it. Both are ordinary,
    * fully-reviewable write-file operations — see `src/prepare/boundary-port.ts`.
    */
-  readonly purpose: "compatibility-reexport" | "wiring" | "port-contract" | "app-adapter";
+  readonly purpose: "compatibility-reexport" | "wiring" | "port-contract" | "app-adapter" | "value-split";
   readonly contents: string;
 }
 

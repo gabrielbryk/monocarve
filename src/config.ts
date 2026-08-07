@@ -67,6 +67,7 @@ export type {
   IntegrationTestSuiteConfig,
   GeneratedSourceAdoptionsConfig,
   ModulePromotionsConfig,
+  ValueSplitsConfig,
   PathReferencesConfig,
   PortfolioConfig,
   TestKind,

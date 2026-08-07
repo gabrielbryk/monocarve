@@ -3,7 +3,7 @@ import { z } from "zod";
 import { SCRATCH_DIRNAME } from "../branding.ts";
 import { assetEmissionProofs, generatedArtifacts, pathMigrations, postJournalPreparers, transaction } from "./schema-artifacts.ts";
 import { application, commitTemplates, extractionProfiles, firstPartyPackage, gates, preparationPolicy, preparers, scaffoldTemplates } from "./schema-core.ts";
-import { compositionBoundaries, generatedSourceAdoptions, graph, integrationTestSuites, modulePromotions, pathReferences, pathReferenceRewrites, portfolio, portPromotions, testKinds, testRelocation } from "./schema-policy.ts";
+import { compositionBoundaries, generatedSourceAdoptions, graph, integrationTestSuites, modulePromotions, pathReferences, pathReferenceRewrites, portfolio, portPromotions, testKinds, testRelocation, valueSplits } from "./schema-policy.ts";
 import { regexSource, relativePath } from "./primitives.ts";
 import { validateExtractionProfiles } from "./profiles.ts";
 import { validateFirstPartyPackages, validateIntegrationTestSuites, validateTestKinds } from "./validation.ts";
@@ -118,6 +118,7 @@ export const monocarveConfigSchema = z.strictObject({
   /** Backend vocabulary for the same boundary-preparation mechanism. */
   portPromotions,
   modulePromotions,
+  valueSplits,
   generatedSourceAdoptions,
   transaction: transaction.prefault({}),
   generatedArtifacts: generatedArtifacts.prefault({}),
@@ -144,7 +145,7 @@ export const monocarveConfigSchema = z.strictObject({
   const boundaryIds = new Map<string, string>();
   for (const item of config.compositionBoundaries) boundaryIds.set(item.id, "compositionBoundaries");
   for (const item of config.portPromotions) if (!boundaryIds.has(item.id)) boundaryIds.set(item.id, "portPromotions");
-  for (const [field, items] of [["modulePromotions", config.modulePromotions], ["generatedSourceAdoptions", config.generatedSourceAdoptions]] as const) {
+  for (const [field, items] of [["modulePromotions", config.modulePromotions], ["valueSplits", config.valueSplits], ["generatedSourceAdoptions", config.generatedSourceAdoptions]] as const) {
     items.forEach((item, index) => {
       const prior = boundaryIds.get(item.id);
       if (prior !== undefined) ctx.addIssue({ code: "custom", path: [field, index, "id"], message: `boundary id is already declared in ${prior}` });

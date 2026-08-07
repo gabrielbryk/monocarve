@@ -21,6 +21,7 @@ import { applyPlan } from "../transaction/apply.ts";
 import { simulatePlan } from "../transaction/simulate.ts";
 import { compileBoundaryPreparationManifest } from "../prepare/build.ts";
 import { compileGeneratedSourceAdoption, generatedSourceAdoptionPolicyAnchor } from "../prepare/generated-source-adoption.ts";
+import { compileValueSplit } from "../prepare/value-split.ts";
 import { resolveBoundaries } from "../prepare/boundary-resolve.ts";
 import { simulatePreparation } from "../prepare/simulate.ts";
 import { serializePreparationManifest } from "../prepare/index.ts";
@@ -48,6 +49,11 @@ async function boundaryReview(args: ParsedArgs): Promise<void> {
     print({ schema: "boundary-review", kind: "generated-source-adoption", adoption }, args);
     return;
   }
+  const valueSplit = loaded.config.valueSplits.find((item) => item.id === id);
+  if (valueSplit) {
+    print({ schema: "boundary-review", kind: "value-split", valueSplit }, args);
+    return;
+  }
   const boundary = findBoundary(loaded, id);
   const candidateImporters = [...(loaded.graph.incoming.get(boundary.retained) ?? [])];
   print({ schema: "boundary-review", boundary, candidateImporters }, args);
@@ -72,6 +78,16 @@ async function boundaryCompile(args: ParsedArgs): Promise<void> {
     const policySpecifier = policyAnchor.targetModuleSpecifier;
     const rendering = renderPreparationPolicy(loaded.config, policyAnchor);
     const manifest = compileGeneratedSourceAdoption({ rootDir: loaded.rootDir, config: loaded.config, graph: loaded.graph, baselineCommit: loaded.graph.commit ?? "HEAD", graphDigest: graphDigest(loaded.graph), adoptionId: id, rendering, policySpecifier });
+    const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
+    const written = flagBool(args, "write");
+    if (written) writeOutput(loaded.rootDir, out, serializePreparationManifest(manifest), { exclusive: true });
+    print({ ...manifest, output: out, written }, args);
+    return;
+  }
+  const valueSplit = loaded.config.valueSplits.find((item) => item.id === id);
+  if (valueSplit) {
+    const rendering = renderPreparationPolicy(loaded.config, { sourcePath: valueSplit.source, targetPath: valueSplit.target, targetModuleSpecifier: valueSplit.targetModuleSpecifier });
+    const manifest = compileValueSplit({ rootDir: loaded.rootDir, config: loaded.config, graph: loaded.graph, baselineCommit: loaded.graph.commit ?? "HEAD", graphDigest: graphDigest(loaded.graph), splitId: id, rendering });
     const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
     const written = flagBool(args, "write");
     if (written) writeOutput(loaded.rootDir, out, serializePreparationManifest(manifest), { exclusive: true });
@@ -186,7 +202,7 @@ function parseTemplateVars(args: ParsedArgs): Record<string, string> {
 export const boundaryCommandSpec: CommandSpec = {
   summary: "compile, review, simulate, or apply a declared architectural boundary",
   usage: "boundary review --id <boundaryId>\n       boundary compile --id <boundaryId> [--target <path>] [--template <id>] [--var key=value ...] [--out <path>] [--write]\n       boundary simulate --plan <manifest>\n       boundary apply --plan <manifest> [--commit]",
-  details: "review reports a declared composition boundary, port promotion, module promotion, or generated-source adoption and its graph-derived evidence. compile derives importer sets itself, records SCC-cut or provenance proofs where applicable, and never accepts a hand-typed importer list. simulate replays the compiled manifest in a disposable worktree; apply simulates and, with --commit, lands it.",
+  details: "review reports a declared composition boundary, port promotion, module promotion, value split, or generated-source adoption and its graph-derived evidence. compile derives importer sets and declaration SCCs itself, records SCC-cut or provenance proofs where applicable, and never accepts a hand-typed importer list. simulate replays the compiled manifest in a disposable worktree; apply simulates and, with --commit, lands it.",
   run: async (args) => {
     const action = args.positionals[0];
     const nested = { ...args, positionals: args.positionals.slice(1) };

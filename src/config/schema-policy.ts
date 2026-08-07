@@ -428,6 +428,30 @@ export const modulePromotions = z.array(z.strictObject({
 
 export type ModulePromotionsConfig = z.output<typeof modulePromotions>;
 
+/**
+ * Reviewed exception for extracting one dependency-closed exported value SCC
+ * from a mixed module. The compiler selects the declaration group itself and
+ * retains a compatibility re-export at the donor; it never accepts declaration
+ * spans or generated source text from configuration.
+ */
+export const valueSplits = z.array(z.strictObject({
+  id: kebabId,
+  source: relativePath,
+  symbol: z.string().regex(/^[A-Za-z_$][\w$]*$/u, "must be a TypeScript identifier"),
+  target: relativePath,
+  /** Exact specifier rendered from the donor to the target module. */
+  targetModuleSpecifier: z.string().min(1),
+})).default([]).superRefine((items, ctx) => {
+  const seen = new Set<string>();
+  items.forEach((item, index) => {
+    if (seen.has(item.id)) ctx.addIssue({ code: "custom", path: [index, "id"], message: "valueSplits id must be unique" });
+    seen.add(item.id);
+    if (item.source === item.target) ctx.addIssue({ code: "custom", path: [index, "target"], message: "value split target must differ from source" });
+  });
+});
+
+export type ValueSplitsConfig = z.output<typeof valueSplits>;
+
 /** Explicit adoption of orphaned generated output as durable source. */
 export const generatedSourceAdoptions = z.array(z.strictObject({
   id: kebabId,
