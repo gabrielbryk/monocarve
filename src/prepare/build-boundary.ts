@@ -93,7 +93,10 @@ export function compileBoundaryPreparationManifest(input: CompileBoundaryPrepara
     // evidence as evidence of absence.
     throw new PlanningError(`boundary ${boundary.id} declares retire, but the importer graph has no evidence for ${boundary.retained}; refusing to delete without graph proof`);
   }
-  const importerPaths = [...new Set(input.graph.incoming.get(boundary.retained) ?? [])].sort(byCodeUnit);
+  const importerPaths = [...new Set([
+    ...(input.graph.incoming.get(boundary.retained) ?? []),
+    ...(input.graph.testImporters.get(boundary.retained) ?? []),
+  ])].sort(byCodeUnit);
   const bindings = importerPaths.map((path) => resolveBoundaryImporter(input.rootDir, baseline.commit, compilerOptions, path, boundary.retained));
   const operations = boundary.strategy === "existing-package"
     ? planExistingPackageOperations(input, boundary, retainedText, retainedMode, bindings)

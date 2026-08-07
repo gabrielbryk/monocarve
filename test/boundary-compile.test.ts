@@ -28,6 +28,8 @@ const RETAINED = "apps/api/src/config/env.ts";
 const RETAINED_SOURCE = 'export const env = "prod";\n';
 const IMPORTER = "apps/api/src/orders/service.ts";
 const IMPORTER_SOURCE = 'import { env } from "../config/env.ts";\nexport const value = env;\n';
+const TEST_IMPORTER = "apps/api/src/orders/service.test.ts";
+const TEST_IMPORTER_SOURCE = 'import { env } from "../config/env.ts";\nvoid env;\n';
 
 const PORT_RETAINED = "apps/api/src/widget.ts";
 const PORT_RETAINED_SOURCE = "export interface Widget { amount: number }\n";
@@ -62,6 +64,7 @@ function existingPackageFixture(overrides: { readonly extraModules?: readonly Sc
     ...(overrides.extraFiles ?? {}),
   });
   const config = fixtureConfig(root, {
+    testKinds: { unit: ["\\.test\\.ts$"], integration: [], e2e: [] },
     compositionBoundaries: [{
       id: "env-shim",
       retained: RETAINED,
@@ -184,6 +187,23 @@ describe("compileBoundaryPreparationManifest — existing-package strategy", () 
 
     expect(second.planId).toBe(first.planId);
     expect(stableStringify(second)).toBe(stableStringify(first));
+  });
+
+  test("includes configured test importers in retirement rewrites and proof", () => {
+    const { input, graph } = existingPackageFixture({
+      extraFiles: { [TEST_IMPORTER]: TEST_IMPORTER_SOURCE },
+      extraModules: [{ source: TEST_IMPORTER, dependencies: [{ module: "../config/env.ts", resolved: RETAINED }] }],
+    });
+
+    const manifest = compileBoundaryPreparationManifest(input);
+    const rewrites = manifest.operations
+      .filter((operation) => operation.kind === "rewrite-module-specifier")
+      .map((operation) => operation.file.path)
+      .sort(byCodeUnit);
+    const deletion = manifest.operations.find((operation) => operation.kind === "delete-module");
+    expect(graph.testImporters.get(RETAINED)).toContain(TEST_IMPORTER);
+    expect(rewrites).toEqual([IMPORTER, TEST_IMPORTER].sort(byCodeUnit));
+    expect(deletion?.kind === "delete-module" ? deletion.importerProof : []).toEqual(rewrites);
   });
 
   test("selective mode rewrites fully covered importers and retains mixed consumers", () => {
