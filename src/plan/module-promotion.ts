@@ -21,6 +21,7 @@ export function compileModulePromotion(input: CompileModulePromotionInput): Extr
   if (!node.hasExports || node.isTest || node.isAsset || node.isDeclaration) {
     throw new PlanningError(`module promotion source must be one exported production implementation module: ${promotion.source}`);
   }
+  if (input.graph.commit !== input.baselineCommit) throw new PlanningError("module promotion requires a fresh graph at the exact baseline");
   const appGraph = buildApplicationGraph(input.graph, node.application);
   const component = appGraph.condensed.components[appGraph.condensed.componentByNode.get(promotion.source) ?? -1];
   if (!component) throw new PlanningError(`module promotion source is absent from the application SCC graph: ${promotion.source}`);
@@ -33,9 +34,16 @@ export function compileModulePromotion(input: CompileModulePromotionInput): Extr
     .filter((edge) => component.includes(edge.from) && component.includes(edge.to))
     .map(({ from, to }) => ({ from, to }))
     .sort((left, right) => left.from.localeCompare(right.from) || left.to.localeCompare(right.to));
-  if (component.length < 2 || removedEdges.length === 0 || Math.max(0, ...after.map((part) => part.length)) >= component.length) {
-    throw new PlanningError(`module promotion ${promotion.id} does not cut a multi-module SCC at the baseline`);
-  }
+  const cutsScc = component.length >= 2 && removedEdges.length > 0 && Math.max(0, ...after.map((part) => part.length)) < component.length;
+  const architecturalEdges = input.graph.edges.filter((edge) => isArchitecturalContainmentEdge(input.graph, edge.from, edge.to));
+  const containmentRemoved = architecturalEdges
+    .filter((edge) => edge.from === promotion.source || edge.to === promotion.source)
+    .map(({ from, to }) => ({ from, to }))
+    .sort((left, right) => left.from.localeCompare(right.from) || left.to.localeCompare(right.to));
+  const introducedApplicationDependencies = [...new Set((input.graph.outgoing.get(promotion.source) ?? [])
+    .filter((path) => input.graph.nodes.get(path)?.zone === "application"))].sort();
+  if (!cutsScc && containmentRemoved.length === 0) throw new PlanningError(`module promotion ${promotion.id} cuts neither a multi-module SCC nor an architectural containment edge at the baseline`);
+  if (!cutsScc && introducedApplicationDependencies.length > 0) throw new PlanningError(`module promotion ${promotion.id} would introduce a package dependency on application modules: ${introducedApplicationDependencies.join(", ")}`);
   const directTests = [...(input.graph.testImporters.get(promotion.source) ?? [])].sort();
   const importers = [...new Set([...(input.graph.incoming.get(promotion.source) ?? []), ...directTests])].sort();
   const scc: Scc = toSccs(appGraph.condensed).find((item) => item.members.includes(promotion.source))!;
@@ -51,7 +59,9 @@ export function compileModulePromotion(input: CompileModulePromotionInput): Extr
   const proof: NonNullable<ExtractionManifest["modulePromotion"]> = {
     id: promotion.id, source: promotion.source, targetModule: promotion.targetModule,
     retireSource: promotion.retireSource, importerProof: importers,
-    cycleCut: { before: [...component], after, removedEdges },
+    ...(cutsScc
+      ? { cycleCut: { before: [...component], after, removedEdges } }
+      : { containmentCut: { architecturalEdgesBefore: architecturalEdges.length, architecturalEdgesAfter: architecturalEdges.length - containmentRemoved.length, removedEdges: containmentRemoved, introducedApplicationDependencies } }),
   };
   const manifest = buildPlanSync({ ...input, candidate, packageName: promotion.targetPackage, modulePromotion: proof });
   const compiledImporters = manifest.consumers.map((item) => item.file).sort();
@@ -59,4 +69,11 @@ export function compileModulePromotion(input: CompileModulePromotionInput): Extr
     throw new PlanningError(`module promotion importer proof differs from the compiler-derived consumer set`);
   }
   return manifest;
+}
+
+function isArchitecturalContainmentEdge(graph: CompileModulePromotionInput["graph"], from: string, to: string): boolean {
+  const left = graph.nodes.get(from);
+  const right = graph.nodes.get(to);
+  if (left === undefined || right === undefined || (left.zone !== "application" && right.zone !== "application")) return false;
+  return left.application !== right.application || left.domain !== right.domain;
 }
