@@ -21,10 +21,11 @@ function setup(source: string) {
     [SOURCE]: source,
     "apps/api/src/consumer.ts": 'import { normalize } from "./mixed.js";\nexport const result = normalize(" value ");\n',
     "apps/api/ledger.txt": "baseline\n",
+    "apps/api/stable-ledger.txt": "stable\n",
   });
   const config = fixtureConfig(root, {
     preparation: { gates: { workspace: ["grep -q generated apps/api/ledger.txt"] }, commit: { subject: "refactor: split normalize value" } },
-    postJournalPreparers: [{ id: "ledger", phase: "after-journal-before-gates", command: "printf 'generated\\n' > apps/api/ledger.txt", outputs: ["apps/api/ledger.txt"], triggers: ["^apps/api/src/"] }],
+    postJournalPreparers: [{ id: "ledger", phase: "after-journal-before-gates", command: "printf 'generated\\n' > apps/api/ledger.txt", outputs: ["apps/api/ledger.txt", "apps/api/stable-ledger.txt"], triggers: ["^apps/api/src/"] }],
     valueSplits: [{ id: "normalize-value", source: SOURCE, symbol: "normalize", target: TARGET, targetModuleSpecifier: "./shared/normalize.js" }],
   });
   const baseline = resolveCommit(root, "HEAD");
@@ -44,6 +45,7 @@ describe("value split", () => {
     expect(writes.find((item) => item.file.path === TARGET)?.contents).toContain("/** Normalize a value. */\nexport function normalize");
     expect(writes.find((item) => item.file.path === SOURCE)?.contents).toContain('export { normalize } from "./shared/normalize.js";');
     expect(manifest.changedFiles).toContain("apps/api/ledger.txt");
+    expect(manifest.changedFiles).toContain("apps/api/stable-ledger.txt");
     const simulation = await simulatePreparation({ config: fixture.config, rootDir: fixture.root, manifest, baselineGraphScanner: async ({ baselineCommit }) => ({ commit: baselineCommit, digest: manifest.graphDigest }) });
     expect(simulation.ok).toBe(true);
     executePreparationJournal({ rootDir: fixture.root, operations: preparationFilesystemOperations(manifest) });

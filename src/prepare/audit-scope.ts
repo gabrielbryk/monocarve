@@ -16,15 +16,17 @@ export function verifyChangedScope(
   declared: readonly string[],
   approvedManifestPath: string | undefined,
   failures: string[],
+  optional: readonly string[] = [],
 ): void {
   const expected = new Set(declared.map(normalizePath));
+  const optionalPaths = new Set(optional.map(normalizePath));
   const actual = changedPaths(rootDir, baseline);
   if (approvedManifestPath !== undefined) actual.delete(approvedManifestPath);
   for (const path of [...actual].sort(byCodeUnit)) {
     if (!expected.has(path)) failures.push(`changed path is outside preparation scope: ${path}`);
   }
   for (const path of [...expected].sort(byCodeUnit)) {
-    if (!actual.has(path)) failures.push(`declared changed path did not change: ${path}`);
+    if (!actual.has(path) && !optionalPaths.has(path)) failures.push(`declared changed path did not change: ${path}`);
   }
 }
 

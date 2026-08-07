@@ -6,7 +6,6 @@ import { renderPreparationPolicy, type MonocarveConfig, type PreparationPolicyRe
 import { MonocarveError } from "../errors.ts";
 import { scanDependencyGraph } from "../graph/cruiser.ts";
 import { graphDigest } from "../plan/build.ts";
-import { assertExactScope } from "../transaction/apply-commit.ts";
 import { type GateResult, runGateTiers } from "../transaction/simulate.ts";
 import { git, headCommit } from "../util/git.ts";
 import { fileState } from "../util/files.ts";
@@ -20,7 +19,7 @@ import {
   verifyPreparationOperations,
   type PreparationFilesystemOperation,
 } from "./journal.ts";
-import { assertPreparationManifestValid } from "./manifest.ts";
+import { assertPreparationManifestValid, preparationOperationPaths } from "./manifest.ts";
 import type { PreparationFileMutation, PreparationManifest } from "./manifest-types.ts";
 import { createWorktree } from "../transaction/worktree.ts";
 import { runPreparationPostJournalPreparers } from "./post-journal.ts";
@@ -336,7 +335,13 @@ export function commitPreparationScope(
 ): void {
   git({ cwd: rootDir, quiet: true }, "add", "-A", "--", ...manifest.changedFiles);
   const staged = git({ cwd: rootDir }, "diff", "--cached", "--name-only", "--").split("\n").filter(Boolean);
-  assertExactScope(staged, manifest.changedFiles);
+  const allowed = new Set(manifest.changedFiles);
+  const mandatory = new Set(manifest.operations.flatMap(preparationOperationPaths));
+  const outside = staged.filter((path) => !allowed.has(path));
+  const missing = [...mandatory].filter((path) => !staged.includes(path));
+  if (outside.length > 0 || missing.length > 0) {
+    throw new PreparationSimulationError(`preparation commit scope differs: outside [${outside.join(", ")}], missing operation paths [${missing.join(", ")}]`);
+  }
   afterStage?.();
   const args = inertHooks ? ["-c", "core.hooksPath=/dev/null"] : [];
   git({ cwd: rootDir, quiet: true }, ...args, "commit", "--no-verify", "-m", manifest.commits.prepare.subject, ...(manifest.commits.prepare.body ? ["-m", manifest.commits.prepare.body] : []));
