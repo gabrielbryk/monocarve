@@ -9,6 +9,7 @@ import { currentBranch, git, headCommit, showBaseline, tryGit } from "../util/gi
 import { hashJson } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";
 import { rollback } from "../transaction/rollback.ts";
+import { snapshotPaths } from "../transaction/journal.ts";
 import { auditPreparationSync, type PreparationAuditReport } from "./audit.ts";
 import type { PreparationBaselineGraphScanner } from "./simulate.ts";
 import {
@@ -21,6 +22,7 @@ import {
 import { assertPreparationManifestValid, serializePreparationManifest } from "./manifest.ts";
 import type { PreparationManifest } from "./manifest-types.ts";
 import { assertPreparationPolicy, commitPreparationScope, preparationFilesystemOperations, simulatePreparation } from "./simulate.ts";
+import { runPreparationPostJournalPreparers } from "./post-journal.ts";
 
 export class PreparationApplyError extends Error {
   override readonly name = "PreparationApplyError";
@@ -159,7 +161,7 @@ async function applyCommittedPreparation(
     // The preparation journal owns filesystem recovery. An empty snapshot set
     // makes this helper restore only HEAD/index, never overwrite concurrent
     // residue the journal deliberately preserved.
-    snapshots: new Map(),
+    snapshots: snapshotPaths(rootDir, (manifest.postJournalPreparers ?? []).flatMap((item) => item.outputs)),
     staged: true,
     ...(indexTree === null ? {} : { indexTree }),
   };
@@ -177,6 +179,8 @@ async function applyCommittedPreparation(
     throw new PreparationApplyError(`preparation journal failed: ${(error as Error).message}`, residue);
   }
   try {
+    const preparation = runPreparationPostJournalPreparers(options.config, rootDir, manifest);
+    if (!preparation.ok) throw new PreparationApplyError(preparation.failure ?? "post-journal preparer failed");
     options.testHooks?.beforeCommit?.();
     commitPreparationScope(rootDir, manifest, true, options.testHooks?.afterStage);
     options.testHooks?.afterCommit?.();

@@ -347,7 +347,7 @@ function validateCompatibility(manifest: PreparationManifest, add: AddIssue): vo
 }
 
 function validateScope(manifest: PreparationManifest, add: AddIssue): void {
-  const paths = manifest.operations.flatMap(preparationOperationPaths).sort(byCodeUnit);
+  const paths = [...manifest.operations.flatMap(preparationOperationPaths), ...(manifest.postJournalPreparers ?? []).flatMap((item) => item.outputs)].sort(byCodeUnit);
   validateSortedStrings(manifest.changedFiles, "changed-files", "changedFiles", add);
   if (paths.length !== manifest.changedFiles.length || paths.some((path, index) => path !== manifest.changedFiles[index])) add("changed-files", "changedFiles must exactly equal the sorted operation mutation paths");
 }

@@ -23,6 +23,7 @@ import {
 import { assertPreparationManifestValid } from "./manifest.ts";
 import type { PreparationFileMutation, PreparationManifest } from "./manifest-types.ts";
 import { createWorktree } from "../transaction/worktree.ts";
+import { runPreparationPostJournalPreparers } from "./post-journal.ts";
 
 export class PreparationSimulationError extends MonocarveError {
   override readonly name = "PreparationSimulationError";
@@ -241,6 +242,12 @@ export async function simulatePreparation(options: SimulatePreparationOptions): 
     const operations = preparationFilesystemOperations(manifest);
     verifyPreparationOperations(worktree.workspacePath, operations);
     const journal = executePreparationJournal({ rootDir: worktree.workspacePath, operations });
+    const preparation = runPreparationPostJournalPreparers(config, worktree.workspacePath, manifest);
+    if (!preparation.ok) {
+      finalizeCompletedPreparationJournal(journal.recovery);
+      keep = !config.transaction.cleanup;
+      return failed(manifest, journal.applied.length, gates, baselineGraph, preparation.failure ?? "post-journal preparer failed", undefined, keep ? worktree.path : undefined);
+    }
     const audit = auditPreparationSync({ config, rootDir: worktree.workspacePath, manifest, freshGraph: baselineGraph });
     if (!audit.passed) {
       finalizeCompletedPreparationJournal(journal.recovery);
@@ -250,13 +257,16 @@ export async function simulatePreparation(options: SimulatePreparationOptions): 
     if (!options.skipGates && (options.runGates ?? config.transaction.simulateGates)) {
       commitPreparationScope(worktree.workspacePath, manifest, true);
       const taskRunner = createTaskRunnerAdapter(config);
+      const wrapCommand = preparation.changed && taskRunner.id === "moon"
+        ? (command: string) => taskRunner.wrapGateCommand(`MOON_FORCE=true MOON_CONCURRENCY=1 ${command}`)
+        : taskRunner.wrapGateCommand;
       const gateRun = await runGateTiers({
         gates: manifest.gates,
         maxConcurrency: config.gates.maxConcurrency,
         cwd: worktree.workspacePath,
         timeoutMs: config.gates.timeoutMs,
         retries: config.transaction.gateRetries,
-        wrapCommand: taskRunner.wrapGateCommand,
+        wrapCommand,
         diagnosticsDirectory: `${worktree.path}.diagnostics`,
       });
       gates.push(...gateRun.results);
@@ -338,7 +348,7 @@ function failed(
   gates: readonly GateResult[],
   baselineGraph: PreparationFreshGraphEvidence,
   failure: string,
-  audit: PreparationAuditReport,
+  audit: PreparationAuditReport | undefined,
   worktreePath: string | undefined,
   failedGate?: GateResult,
 ): PreparationSimulationResult {
@@ -348,7 +358,7 @@ function failed(
     operationsApplied,
     gates,
     baselineGraph,
-    audit,
+    ...(audit === undefined ? {} : { audit }),
     failure,
     ...(failedGate === undefined ? {} : { failedGate }),
     ...(worktreePath === undefined ? {} : { worktreePath }),

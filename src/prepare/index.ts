@@ -8,3 +8,4 @@ export * from "./apply.ts";
 export * from "./multi-build.ts";
 export * from "./generated-source-adoption.ts";
 export * from "./value-split.ts";
+export * from "./post-journal.ts";

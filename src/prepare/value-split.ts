@@ -77,6 +77,10 @@ export function compileValueSplit(input: CompileValueSplitInput): PreparationMan
     write(split.target, MISSING, "missing", targetContents),
   ].sort((left, right) => byCodeUnit(preparationOperationPaths(left)[0]!, preparationOperationPaths(right)[0]!));
   const policyAnchor = { sourcePath: split.source, targetPath: split.target, targetModuleSpecifier: split.targetModuleSpecifier };
+  const changedSourcePaths = operations.flatMap(preparationOperationPaths);
+  const postJournalPreparers = input.config.postJournalPreparers.filter((preparer) =>
+    preparer.triggers.length === 0 || changedSourcePaths.some((path) => preparer.triggers.some((pattern) => new RegExp(pattern).test(path))),
+  ).map((preparer) => ({ id: preparer.id, command: preparer.command, outputs: [...preparer.outputs].sort(byCodeUnit), ...(preparer.verify === undefined ? {} : { verify: preparer.verify }) }));
   const manifest = createPreparationManifest({
     schemaVersion: 1,
     createdAt: baseline.committedAt,
@@ -86,8 +90,9 @@ export function compileValueSplit(input: CompileValueSplitInput): PreparationMan
     policyAnchor,
     declarations: [],
     operations,
+    postJournalPreparers,
     compatibilityReexports: [],
-    changedFiles: operations.flatMap(preparationOperationPaths).sort(byCodeUnit),
+    changedFiles: [...changedSourcePaths, ...postJournalPreparers.flatMap((item) => item.outputs)].sort(byCodeUnit),
     commits: { prepare: input.rendering.commit },
     gates: {
       package: [...input.rendering.gates.package].sort(byCodeUnit),

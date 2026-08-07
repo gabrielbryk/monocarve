@@ -249,6 +249,13 @@ export interface PreparationManifest {
   };
   readonly declarations: readonly PreparationDeclarationGroupSelector[];
   readonly operations: readonly PreparationReplayOperation[];
+  /** Config-bound generators that must run after replay and before audit/gates. */
+  readonly postJournalPreparers?: readonly {
+    readonly id: string;
+    readonly command: string;
+    readonly outputs: readonly string[];
+    readonly verify?: string;
+  }[];
   readonly compatibilityReexports: readonly CompatibilityReexportIntent[];
   /** Exactly the workspace-relative paths the preparation replay may mutate. */
   readonly changedFiles: readonly string[];
