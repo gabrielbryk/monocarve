@@ -59,6 +59,11 @@ export function compileModulePromotion(input: CompileModulePromotionInput): Extr
   const importers = modulePromotionImporterEvidence({ graph: input.graph, context, source: promotion.source });
   const directTests = importers.filter((path) => context.isTest(path));
   const testPartition = partitionTests(context, [promotion.source], directTests, []);
+  const travellingTestRewrites = testPartition.travelling.flatMap((test) =>
+    context.moduleReferences(test)
+      .filter((reference) => reference.specifier !== null && reference.resolved === context.absolute(promotion.source))
+      .map((reference) => ({ file: test, specifier: reference.specifier!, package: promotion.targetPackage })),
+  );
   const scc: Scc = toSccs(appGraph.condensed).find((item) => item.members.includes(promotion.source))!;
   const candidate: PortfolioCandidate = {
     id: `promotion-${hashJson({ id: promotion.id, source: promotion.source, commit: input.graph.commit })}`,
@@ -67,7 +72,7 @@ export function compileModulePromotion(input: CompileModulePromotionInput): Extr
     files: [promotion.source], tests: directTests, assets: [], sccs: [scc], seed: scc,
     lineCount: node.lineCount, owners: [node.owner], domains: [node.domain], dependencies: [],
     consumers: [], consumerChurn: importers.length, coverage: testPartition.travelling.length > 0 ? 1 : 0,
-    score: 0, eligible: true, rejectionReasons: [], warnings: [], rewriteEscapes: [], classification: "extraction",
+    score: 0, eligible: true, rejectionReasons: [], warnings: [], rewriteEscapes: travellingTestRewrites, classification: "extraction",
   };
   const proof: NonNullable<ExtractionManifest["modulePromotion"]> = {
     id: promotion.id, source: promotion.source, targetModule: promotion.targetModule,

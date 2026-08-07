@@ -102,15 +102,19 @@ describe("module promotion", () => {
     expect(manifest.consumers.map((item) => item.file)).toContain(OTHER);
   });
 
-  test("moves only source-owned tests and rewrites another domain's service test as a consumer", () => {
+  test("moves only source-owned tests and rewrites another domain's service test as a consumer", async () => {
     const fixture = setup({ cycle: false, directTests: true });
     const manifest = compileModulePromotion({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, context: new WorkspaceContext(fixture.config, fixture.root), baselineCommit: fixture.baseline.commit, promotionId: "resource-contracts" });
 
     expect(manifest.source.tests).toEqual([OWNED_TEST]);
+    const ownedTestMove = manifest.operations.find((item) => item.kind === "move-with-rewrite" && item.source === OWNED_TEST);
+    expect(ownedTestMove?.rewrites).toEqual([{ donorlessSpecifier: "./schemas.ts", packageSpecifier: "@acme/resource-contracts" }]);
     expect(manifest.consumers.map((item) => item.file)).toEqual([OTHER, CONSUMER, TERRITORY_TEST]);
     expect(manifest.modulePromotion?.importerProof).toEqual([OTHER, OWNED_TEST, CONSUMER, TERRITORY_TEST]);
     expect(manifest.operations.some((item) => item.kind === "rewrite-import" && item.file === TERRITORY_TEST)).toBe(true);
     expect(validatePlan(manifest, { config: fixture.config, rootDir: fixture.root }).issues.filter((item) => item.rule === "module-promotion-importers")).toEqual([]);
+    await executeJournal({ config: fixture.config, treeRoot: fixture.root, manifest, useGitMv: false });
+    expect(auditPlanSync({ rootDir: fixture.root, config: fixture.config, manifest }).passed).toBe(true);
   });
 
   test("validation rejects importer evidence that omits a legitimately relocated test", () => {

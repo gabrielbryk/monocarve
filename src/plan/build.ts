@@ -117,6 +117,7 @@ function dependenciesFor(state: BuildState, sources: readonly string[], rewrites
   const dependencies = inferDependencies(state.context, state.graph, sources, state.packageName);
   addAutomaticJsxRuntime(state, sources, dependencies);
   for (const entries of rewrites.values()) for (const rewrite of entries) {
+    if (rewrite.packageSpecifier === state.packageName) continue;
     const owner = state.graph.workspace.packageNames.get(rewrite.packageSpecifier);
     if (!owner) throw new PlanningError(`rewrite target is not a workspace package: ${rewrite.packageSpecifier}`);
     if (!dependencies.dev[rewrite.packageSpecifier]) dependencies.runtime[rewrite.packageSpecifier] = "workspace:*";
