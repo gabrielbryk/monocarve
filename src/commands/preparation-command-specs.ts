@@ -10,6 +10,7 @@ interface PreparationHandlers {
   readonly prepareAudit: (args: ParsedArgs) => Promise<void>;
   readonly prepareApply: (args: ParsedArgs) => Promise<void>;
   readonly campaignResolve: (args: ParsedArgs) => Promise<void>;
+  readonly campaignOptimize: (args: ParsedArgs) => Promise<void>;
   readonly campaignInit: (args: ParsedArgs) => Promise<void>;
   readonly campaignShowStatus: (args: ParsedArgs) => Promise<void>;
   readonly campaignAdvance: (args: ParsedArgs) => Promise<void>;
@@ -34,17 +35,18 @@ export function preparationCommandSpecs(handlers: PreparationHandlers): Record<s
 function campaignSpec(handlers: PreparationHandlers): CommandSpec {
   return {
     summary: "initialize, inspect, advance, or record a campaign",
-    usage: "campaign resolve --targets <file> [--out <plan>] [--write]\n       campaign init --campaign <ledger> --id <id> --objective <text> --max-pairs <count> [--write]\n       campaign status --campaign <ledger>\n       campaign advance --campaign <ledger> [--next-plan <manifest> --pair <id>] [--write]\n       campaign record --campaign <ledger> --plan <manifest> --pair <id> [--write]",
-    details: "Resolve is the stable target workflow: its JSON file names an application and ordered {path, packageName} targets. Every invocation scans current HEAD, skips paths no longer application-owned, resolves one current candidate, and stops for review. Legacy pair-ledger actions remain readable for existing campaigns but new campaigns should use resolve.",
+    usage: "campaign optimize --app <name> [--limit <n>] [--out <targets>] [--write]\n       campaign resolve --targets <file> [--out <plan>] [--write]\n       campaign init --campaign <ledger> --id <id> --objective <text> --max-pairs <count> [--write]\n       campaign status --campaign <ledger>\n       campaign advance --campaign <ledger> [--next-plan <manifest> --pair <id>] [--write]\n       campaign record --campaign <ledger> --plan <manifest> --pair <id> [--write]",
+    details: "Optimize ranks stable extraction targets by LOC per review unit and reports preparation priorities. Resolve rescans current HEAD, skips paths no longer application-owned, resolves one current candidate, and stops for review.",
     run: async (args) => {
       const action = args.positionals[0];
       const nested = { ...args, positionals: args.positionals.slice(1) };
+      if (action === "optimize") return handlers.campaignOptimize(nested);
       if (action === "resolve") return handlers.campaignResolve(nested);
       if (action === "init") return handlers.campaignInit(nested);
       if (action === "status") return handlers.campaignShowStatus(nested);
       if (action === "advance") return handlers.campaignAdvance(nested);
       if (action === "record") return handlers.campaignRecord(nested);
-      throw new UsageError(`unknown campaign action ${JSON.stringify(action ?? "")}; expected resolve, init, status, advance, or record`);
+      throw new UsageError(`unknown campaign action ${JSON.stringify(action ?? "")}; expected optimize, resolve, init, status, advance, or record`);
     },
   };
 }

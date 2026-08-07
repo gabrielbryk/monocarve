@@ -15,7 +15,7 @@ export function recommendCandidate(
   config: MonocarveConfig,
   context: WorkspaceContext,
   graph: DependencyGraph,
-  candidate: Omit<PortfolioCandidate, "score" | "recommendation">,
+  candidate: Omit<PortfolioCandidate, "score" | "recommendation" | "effort">,
   shims: readonly CompatibilityShim[],
 ): CandidateRecommendation {
   const reasons: RecommendationReason[] = [];
@@ -60,7 +60,7 @@ export function recommendCandidate(
 }
 
 function targetRecommendations(
-  candidate: Omit<PortfolioCandidate, "score" | "recommendation">,
+  candidate: Omit<PortfolioCandidate, "score" | "recommendation" | "effort">,
   graph: DependencyGraph,
 ): TargetRecommendation[] {
   const existing = candidate.dependencies.filter((name) => graph.workspace.packageNames.has(name)).map((packageName) => ({

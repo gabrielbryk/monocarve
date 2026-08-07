@@ -1,5 +1,3 @@
-/** Commands for read-only seam proposals and declaration preparation plans. */
-
 import { readFileSync } from "node:fs";
 
 import { flagBool, flagNumber, flagString, flagStrings, type ParsedArgs } from "../cli/args.ts";
@@ -30,6 +28,7 @@ export { writeCampaignLedgerAtomically } from "./campaign-ledger-file.ts";
 import { boundaryCommandSpec } from "./preparation-boundary.ts";
 import { preparationCommandSpecs } from "./preparation-command-specs.ts";
 import { parseJsonObject, readWorkspaceText, relativeTypeSpecifier } from "./preparation-io.ts";
+import { campaignOptimize } from "./campaign-optimize.ts";
 export { readWorkspaceText } from "./preparation-io.ts";
 
 async function campaignInit(args: ParsedArgs): Promise<void> {
@@ -492,6 +491,7 @@ export const preparationCommands = preparationCommandSpecs({
   prepareAudit,
   prepareApply,
   campaignResolve,
+  campaignOptimize,
   campaignInit,
   campaignShowStatus,
   campaignAdvance,

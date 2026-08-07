@@ -6,3 +6,6 @@ export * from "./query.ts";
 export * from "./shims.ts";
 export * from "./recommendation.ts";
 export * from "./groups.ts";
+export * from "./effort.ts";
+export * from "./hotspots.ts";
+export * from "./lazy-registry.ts";

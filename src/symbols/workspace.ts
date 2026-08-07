@@ -102,7 +102,8 @@ export function analyzeWorkspaceSymbols(input: AnalyzeWorkspaceSymbolsInput): Wo
   };
 }
 
-function workspaceProgram(rootDir: string, tsconfigPath: string): ts.Program {
+/** Build the real application program for higher-level workspace analyses. */
+export function workspaceProgram(rootDir: string, tsconfigPath: string): ts.Program {
   const configPath = workspacePath(rootDir, relativeWorkspacePath(rootDir, tsconfigPath));
   const read = ts.readConfigFile(configPath, ts.sys.readFile);
   if (read.error) throw new SymbolAnalysisError(`cannot read TypeScript config ${tsconfigPath}`, [diagnostic(read.error)]);

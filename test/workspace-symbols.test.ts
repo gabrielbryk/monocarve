@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { analyzeWorkspaceSymbols, SymbolAnalysisError } from "../src/symbols/index.ts";
+import { analyzeCapabilityPartitions, analyzeWorkspaceSymbols, SymbolAnalysisError } from "../src/symbols/index.ts";
 import { stableStringify } from "../src/util/hash.ts";
 import { cleanupFixtures, scratchDirectory } from "./support/fixture-repo.ts";
 
@@ -80,4 +80,23 @@ test("refuses a target outside the configured TypeScript program", () => {
     sourcePath: "outside.ts",
     affinityForPath: () => "shared",
   })).toThrow(SymbolAnalysisError);
+});
+
+test("partitions broad context properties by real consumer affinity", () => {
+  const root = workspace();
+  write(root, "src/context.ts", "export interface Runtime { billing: string; crm: string; unused: string }\n");
+  write(root, "src/billing/runtime.ts", 'import type { Runtime } from "../context"; export const bill = (runtime: Runtime) => runtime.billing;\n');
+  write(root, "src/crm/runtime.ts", 'import type { Runtime } from "../context"; export const contact = (runtime: Runtime) => runtime.crm;\n');
+  const report = analyzeCapabilityPartitions({
+    rootDir: root,
+    tsconfigPath: "tsconfig.json",
+    sourcePath: "src/context.ts",
+    interfaceName: "Runtime",
+    affinityForPath: (path) => path.includes("/billing/") ? "billing" : path.includes("/crm/") ? "crm" : "shared",
+  });
+  expect(report.partitions).toEqual([
+    { affinities: ["billing"], properties: ["billing"], declarations: ["bill"] },
+    { affinities: ["crm"], properties: ["crm"], declarations: ["contact"] },
+  ]);
+  expect(report.unusedProperties).toEqual(["unused"]);
 });

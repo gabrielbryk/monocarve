@@ -12,6 +12,7 @@ import { preparationRecipe } from "./recipe.ts";
 import { groupEquivalentCandidates } from "./groups.ts";
 import { recommendCandidate } from "./recommendation.ts";
 import { detectCompatibilityShims } from "./shims.ts";
+import { estimateCandidateEffort } from "./effort.ts";
 import {
   assessCandidate,
   dedupeReasons,
@@ -147,7 +148,9 @@ function candidateFor(
     recipe: preparationRecipe(config, assessed.retainedBlockers),
   };
   const recommendation = recommendCandidate(config, context, graph, base, compatibilityShims);
-  return { ...base, recommendation, score: scoreCandidate(config, { ...base, recommendation }) };
+  const withRecommendation = { ...base, recommendation };
+  const effort = estimateCandidateEffort(withRecommendation);
+  return { ...withRecommendation, effort, score: scoreCandidate(config, { ...withRecommendation, effort }) };
 }
 
 function candidateSccs(ids: ReadonlySet<number>, components: readonly (readonly string[])[]): Scc[] {

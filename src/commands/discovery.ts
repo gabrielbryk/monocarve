@@ -13,6 +13,8 @@ import {
   buildPortfolio,
   eligibleCandidates,
   formatCandidateTable,
+  analyzeCouplingHotspots,
+  analyzeLazyRegistry,
   marginalBlockers,
   queryCandidates,
   serializeCandidateDetails,
@@ -21,9 +23,11 @@ import {
 import { parseManifest } from "../plan/build.ts";
 import { PlanningError } from "../plan/context.ts";
 import { analyzePlanConflicts, type CampaignPlan } from "../campaign/index.ts";
-import { analyzeTypeScriptSource, analyzeWorkspaceSymbols } from "../symbols/index.ts";
+import { analyzePreparationImpact } from "../impact/index.ts";
+import { analyzeCapabilityPartitions, analyzeTypeScriptSource, analyzeWorkspaceSymbols } from "../symbols/index.ts";
 import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
 import type { CommandSpec } from "./types.ts";
+import { loadPreparationManifest } from "./preparation.ts";
 import { graphDigest, load, loadGraph, print, printReport, systemReason, writeOutput, type LoadedGraph } from "./shared.ts";
 
 function portfolioFor(args: ParsedArgs, loaded: LoadedGraph) {
@@ -64,9 +68,13 @@ function portfolioView(result: ReturnType<typeof portfolioFor>, args: ParsedArgs
     throw new UsageError("--strategy must be one of cohesive, max-loc, low-risk, campaign, or preparation");
   }
   return grouped.sort((left, right) => {
-    if (strategy === "cohesive" || strategy === "campaign") {
+    if (strategy === "cohesive") {
       const order = { high: 0, medium: 1, low: 2 } as const;
       const delta = order[left.recommendation?.cohesion ?? "low"] - order[right.recommendation?.cohesion ?? "low"];
+      if (delta !== 0) return delta;
+    }
+    if (strategy === "campaign") {
+      const delta = (right.effort?.locPerReviewUnit ?? 0) - (left.effort?.locPerReviewUnit ?? 0);
       if (delta !== 0) return delta;
     }
     if (strategy === "preparation") {
@@ -232,6 +240,54 @@ async function backlog(args: ParsedArgs): Promise<void> {
   }, args);
 }
 
+async function hotspots(args: ParsedArgs): Promise<void> {
+  const loaded = await loadGraph(args);
+  const application = flagString(args, "app");
+  const ranked = analyzeCouplingHotspots(loaded.graph, portfolioFor(args, loaded), application);
+  const limit = flagNumber(args, "limit", 20);
+  printReport(loaded.rootDir, {
+    schema: "coupling-hotspots",
+    application: application ?? null,
+    limit,
+    truncated: ranked.length > limit,
+    top: ranked.slice(0, limit),
+  }, args);
+}
+
+async function capabilities(args: ParsedArgs): Promise<void> {
+  const loaded = await loadGraph(args);
+  const input = flagString(args, "file") ?? args.positionals[0];
+  const interfaceName = flagString(args, "type");
+  if (input === undefined || interfaceName === undefined) throw new UsageError("--file <path> and --type <interface> are required");
+  const sourcePath = relativeWorkspacePath(loaded.rootDir, input);
+  const node = loaded.graph.nodes.get(sourcePath);
+  if (!node?.application) throw new UsageError(`${sourcePath} is not in a configured application`);
+  const application = getApplication(loaded.config, node.application);
+  printReport(loaded.rootDir, analyzeCapabilityPartitions({
+    rootDir: loaded.rootDir,
+    tsconfigPath: application.tsconfig,
+    sourcePath,
+    interfaceName,
+    affinityForPath: (path) => loaded.graph.nodes.get(path)?.domain ?? domainFor(loaded.config, path),
+  }), args);
+}
+
+async function lazyRegistry(args: ParsedArgs): Promise<void> {
+  const loaded = await loadGraph(args);
+  const input = flagString(args, "file") ?? args.positionals[0];
+  if (input === undefined) throw new UsageError("--file <path> is required");
+  const sourcePath = relativeWorkspacePath(loaded.rootDir, input);
+  const targets = analyzeLazyRegistry(loaded.graph, portfolioFor(args, loaded), sourcePath);
+  printReport(loaded.rootDir, { schema: "lazy-registry", sourcePath, targets }, args);
+}
+
+async function impact(args: ParsedArgs): Promise<void> {
+  const { config, rootDir } = await load(args);
+  const { manifest } = loadPreparationManifest(args, rootDir);
+  const application = flagString(args, "app");
+  printReport(rootDir, await analyzePreparationImpact({ config, rootDir, manifest, ...(application ? { application } : {}) }), args);
+}
+
 export const discoveryCommands: Record<string, CommandSpec> = {
   scan: { summary: "build the dependency model", usage: "scan [--app <name>] [--no-cache] [--include-extracted] [--out <path>]", details: "Reads configured applications without changing the workspace. --include-extracted keeps already-extracted paths in the model.", run: scan },
   layers: { summary: "report domains, components, and dependency layers", usage: "layers [--app <name>] [--out <path>]", details: "Read-only architecture report derived from the current or captured graph.", run: layers },
@@ -241,6 +297,10 @@ export const discoveryCommands: Record<string, CommandSpec> = {
   candidates: { summary: "inspect and filter extraction candidates", usage: "candidates [--candidate <id> | --equivalence-group <id>] [--path <path>] [--eligibility <all|eligible|blocked>] [--app <name>] [--include-extracted] [--out <path>]", details: "Shows a compact table by default. --equivalence-group accepts either a group id or its representative candidate id and expands every variant. --json emits stable full details including the closure, SCCs, blockers, recommendation, shims, and target options.", run: candidates },
   conflicts: { summary: "compare same-baseline plan conflicts", usage: "conflicts --plan <candidate>=<manifest> [--plan <candidate>=<manifest> ...]", details: "Classifies hard and replan-mergeable path conflicts. Reported waves still require rescan and replan between applied children.", run: conflicts },
   backlog: { summary: "explain blocked candidates and edges", usage: "backlog [--app <name>] [--limit <n>] [--include-extracted] [--marginal] [--out <path>]", details: "--marginal reports a conservative one-blocker lower bound; it does not claim a full unlock simulation.", run: backlog },
+  hotspots: { summary: "rank modules that inflate extraction closures", usage: "hotspots [--app <name>] [--limit <n>] [--out <path>]", details: "Ranks high-inbound, high-fan-out, and cross-domain modules by the candidate LOC pressure they propagate. Suggested actions are diagnostic, never mutation authority.", run: hotspots },
+  capabilities: { summary: "suggest context capability partitions", usage: "capabilities --file <path> --type <interface> [--out <path>]", details: "Groups interface properties by the configured domain affinity of their real TypeScript consumers; read-only guidance for narrowing broad runtime contexts.", run: capabilities },
+  "lazy-registry": { summary: "map lazy feature entries to extraction targets", usage: "lazy-registry --file <path> [--app <name>] [--out <path>]", details: "Maps compiler-resolved dynamic imports to their current domains and eligible candidate closures without rewriting registry behavior.", run: lazyRegistry },
+  impact: { summary: "measure a preparation plan's exact extraction unlock", usage: "impact --plan <preparation-manifest> [--app <name>] [--out <path>]", details: "Runs the reviewed preparation and configured gates in isolation, rescans its disposable result, and compares before/after candidate and application-LOC metrics.", run: impact },
 };
 
 export { portfolioFor };

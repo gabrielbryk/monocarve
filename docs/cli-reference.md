@@ -33,6 +33,10 @@ where supported.
 | `explain` | `explain --plan <path> (--dependency <name> \| --artifact <path>) [--json]` — read persisted provenance for one dependency decision or the exact operation chain and final hash for one artifact. |
 | `symbols` | `symbols --file <path> [--out <path>]` — declaration graph, type/value spaces, merged groups, exact references, and SCCs for one file. |
 | `split-candidates` | `split-candidates --file <path> [--app <name>] [--out <path>]` — rank declaration SCCs using external consumers and domain affinity. |
+| `capabilities` | `capabilities --file <path> --type <interface> [--out <path>]` — group context properties by real TypeScript consumer affinity. |
+| `lazy-registry` | `lazy-registry --file <path> [--app <name>] [--out <path>]` — map resolved dynamic imports to domains and candidate targets. |
+| `hotspots` | `hotspots [--app <name>] [--limit <n>] [--out <path>]` — rank closure-inflating modules and preparation levers. |
+| `impact` | `impact --plan <preparation-manifest> [--app <name>] [--out <path>]` — gate and rescan a disposable counterfactual, then report exact deltas. |
 | `seams` | `seams --file <path> --candidate <id> [--target <path>] [--app <name>]` — propose one reviewed declaration seam and its safety blockers. |
 | `seams-multi` | `seams-multi --file <path> --file <path> [--app <name>]` — analyze exact symbol edges and SCCs across at least two explicit files. |
 | `conflicts` | `conflicts --plan <candidate>=<manifest> [--plan <candidate>=<manifest> ...]` — compare same-baseline path ownership. Every wave still requires replan between applied children. |
@@ -286,6 +290,7 @@ barrel-only plans refuse instead of emitting an unresolvable package-root import
 New campaigns use stable source identities rather than candidate IDs:
 
 ```sh
+monocarve campaign optimize --app storefront --out campaign.targets.json --write
 monocarve campaign resolve --targets campaign.targets.json
 ```
 
@@ -295,6 +300,8 @@ Resolve always scans current HEAD, skips targets no longer owned by the
 application, compiles at most one current candidate, and stops for review. It
 writes the plan only with `--write`. This lets candidate IDs change after each
 applied extraction without invalidating the campaign definition.
+`campaign optimize` orders these stable targets by extracted LOC per deterministic
+review unit and includes read-only coupling hotspots as preparation priorities.
 
 The commands below are retained only to finish existing schema-v1 pair ledgers:
 

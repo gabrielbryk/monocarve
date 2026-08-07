@@ -308,6 +308,10 @@ These are the main workflow commands, not the complete registry. Run
 | `config-doctor` | explain effective configuration and workspace integration without writing |
 | `symbols --file <path>` | read-only declaration graph with type/value edges and declaration SCCs |
 | `split-candidates --file <path>` | rank declaration SCCs using cross-file consumers and configured domain affinity |
+| `capabilities --file <path> --type <interface>` | partition broad contexts by real compiler-resolved property consumers |
+| `lazy-registry --file <path>` | map dynamic feature entries to current candidate closures and package targets |
+| `hotspots` | rank modules that inflate extraction closures and name the preparation lever |
+| `impact --plan <preparation>` | run a gated counterfactual and compare exact before/after extraction capacity |
 | `seams --file <path> --candidate <id>` | propose a declaration partition and report type-only preparation safety |
 | `seams-multi --file <path> --file <path>` | analyze exact declaration SCCs across multiple files |
 | `prepare-plan` | compile a reviewed, replayable type-only declaration preparation |
@@ -315,6 +319,7 @@ These are the main workflow commands, not the complete registry. Run
 | `prepare-apply` / `prepare-audit` | simulate or commit a preparation, then independently replay its proof |
 | `preparer-plan` / `preparer-simulate` / `preparer-apply` / `preparer-commit` | compile, prove, journal-apply, and explicitly commit configured declared-output ratchets |
 | `campaign resolve` | re-scan and resolve the next ordered `{path, packageName}` target; compile at most one plan and stop for review |
+| `campaign optimize` | emit ROI-ranked stable targets and coupling preparation priorities |
 | legacy `campaign init/status/advance/record` | finish an existing schema-v1 preparation/extraction pair ledger |
 | `portfolio` | grouped candidates with separate mechanical eligibility and architectural recommendation |
 | `scope` | resolve a stable source path to its current candidate and review an intentional target |

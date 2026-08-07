@@ -125,6 +125,22 @@ export interface CandidateRecommendation {
   readonly targetOptions: readonly TargetRecommendation[];
 }
 
+export interface CandidateEffort {
+  /** Relative review complexity, not a duration estimate. */
+  readonly reviewUnits: number;
+  readonly locPerReviewUnit: number;
+  readonly risk: "low" | "medium" | "high";
+  readonly drivers: {
+    readonly files: number;
+    readonly tests: number;
+    readonly assets: number;
+    readonly consumers: number;
+    readonly rewrites: number;
+    readonly warnings: number;
+    readonly blockers: number;
+  };
+}
+
 /**
  * One retained edge a candidate's closure crosses: an import that reaches a
  * `portfolio.retainedRoots` module. Distinguishing `"value"` from `"type"` at
@@ -207,6 +223,7 @@ export interface PortfolioCandidate {
   readonly rewriteEscapes: readonly RewriteEscape[];
   readonly compatibilityShims?: readonly CompatibilityShim[];
   readonly recommendation?: CandidateRecommendation;
+  readonly effort?: CandidateEffort;
 
   /**
    * `"extraction"` is an ordinary candidate. `"preparation"` is a candidate
