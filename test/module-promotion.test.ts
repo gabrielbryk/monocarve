@@ -68,7 +68,11 @@ describe("module promotion", () => {
     expect(manifest.modulePromotion?.importerProof).toEqual([OTHER, CONSUMER]);
     expect(manifest.modulePromotion?.cycleCut?.before).toEqual([SOURCE, CONSUMER]);
     expect(manifest.modulePromotion?.cycleCut?.after).toEqual([[CONSUMER]]);
-    expect(manifest.operations.find((item) => item.kind === "move")?.resultHash).toBe(manifest.sourceBlobs[SOURCE]);
+    const move = manifest.operations.find((item) => item.kind === "move");
+    expect(move?.resultHash).toBe(manifest.sourceBlobs[SOURCE]);
+    expect(move?.target).toBe("libs/resource-contracts/src/index.ts");
+    expect(manifest.target.publicModules?.[0]?.target).toBe("libs/resource-contracts/src/index.ts");
+    expect(manifest.operations.some((item) => item.kind === "write-file" && item.path === "libs/resource-contracts/src/index.ts")).toBe(false);
     expect(manifest.consumers.map((item) => item.specifiers[0]?.to)).toEqual(["@acme/resource-contracts", "@acme/resource-contracts"]);
   });
 
@@ -140,7 +144,7 @@ describe("module promotion", () => {
     expect(simulated.code).toBe(0);
     expect(JSON.parse(simulated.stdout).planId).toBe(manifest.planId);
     const applied = await runIn(fixture.root, "boundary", "apply", "--plan", planPath, "--json");
-    expect(applied.code).toBe(0);
+    expect(applied.code, applied.stderr).toBe(0);
     expect(JSON.parse(applied.stdout)).toMatchObject({ ok: true, planId: manifest.planId, rolledBack: false });
 
     const invalidPath = "resource-contracts-v3-invalid.json";
@@ -167,6 +171,15 @@ describe("module promotion", () => {
     const containmentCut = promotion.containmentCut!;
     const tampered = { ...manifest, modulePromotion: { ...promotion, containmentCut: { ...containmentCut, architecturalEdgesAfter: containmentCut.architecturalEdgesBefore } } };
     expect(validatePlan(tampered, { config: fixture.config, rootDir: fixture.root }).issues.some((item) => item.rule === "module-promotion-containment-cut")).toBe(true);
+  });
+
+  test("validation rejects a root promotion whose public target is not the byte-identical move", () => {
+    const fixture = setup({ cycle: false });
+    const manifest = compileModulePromotion({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, context: new WorkspaceContext(fixture.config, fixture.root), baselineCommit: fixture.baseline.commit, promotionId: "resource-contracts" });
+    const rootModule = manifest.target.publicModules![0]!;
+    const tampered = { ...manifest, target: { ...manifest.target, publicModules: [{ ...rootModule, target: "libs/resource-contracts/src/resources/schemas.ts" }] } };
+
+    expect(validatePlan(tampered, { config: fixture.config, rootDir: fixture.root }).issues.some((item) => item.rule === "target-subpaths")).toBe(true);
   });
 
   test("a compatibility re-export still lands the move as a pure R100 commit", async () => {

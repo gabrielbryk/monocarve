@@ -115,12 +115,22 @@ function publicExports(input: ScaffoldInput, exports: unknown, packageFile: stri
   const next = { ...packageExportsMap(exports, packageFile) };
   for (const module of input.publicModules) {
     const existing = next[module.exportKey];
-    if (existing !== undefined && existing !== module.exportTarget) {
+    if (existing !== undefined && !exportTargetMatches(existing, module.exportTarget)) {
       throw new PlanningError(`${packageFile} export ${module.exportKey} already targets ${JSON.stringify(existing)}, not ${JSON.stringify(module.exportTarget)}`);
     }
-    next[module.exportKey] = module.exportTarget;
+    if (existing === undefined) next[module.exportKey] = module.exportTarget;
   }
   return { exports: next };
+}
+
+/** A conditional export is equivalent when every selectable leaf reaches the
+ * same reviewed module. Preserve that repository-owned condition map instead
+ * of flattening it to the shorthand string form. */
+function exportTargetMatches(value: unknown, target: string): boolean {
+  if (typeof value === "string") return value === target;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const leaves = Object.values(value as Record<string, unknown>);
+  return leaves.length > 0 && leaves.every((leaf) => exportTargetMatches(leaf, target));
 }
 
 function packageExportsMap(value: unknown, packageFile: string): Record<string, unknown> {
@@ -144,6 +154,7 @@ function templateDevDependencies(input: ScaffoldInput, templates: ReturnType<typ
 
 function entrypointOperation(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>, scaffolding: boolean): PlanOperation | undefined {
   const path = `${input.packageRoot}/${templates.entrypoint}`;
+  if (input.publicModules?.some((module) => module.exportKey === "." && module.target === path)) return undefined;
   const barrel = input.context.exists(path) ? input.context.text(path) : "";
   const missing = input.production.map((source) => renderTemplate(templates.barrelExport, {
     ...templateVars(input, templates), specifier: barrelSpecifier(templates, input.context.targetRelativePath(source)),

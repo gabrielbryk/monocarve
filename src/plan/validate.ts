@@ -218,10 +218,11 @@ function validatePublicModuleShape(
   const publicKeys = new Set<string>();
   const publicSources = new Set<string>();
   for (const module of publicModules) {
-    if (!files.includes(module.source) || !module.target || !module.specifier.startsWith(`${packageName}/`)) {
+    const rootModule = module.exportKey === "." && module.specifier === packageName;
+    if (!files.includes(module.source) || !module.target || (!rootModule && !module.specifier.startsWith(`${packageName}/`))) {
       issues.add("target-subpaths", `invalid public module mapping for ${module.source}`, { path: module.source });
     }
-    if (!module.exportKey.startsWith("./") || !module.exportTarget.startsWith("./")) {
+    if ((module.exportKey !== "." && !module.exportKey.startsWith("./")) || !module.exportTarget.startsWith("./")) {
       issues.add("target-subpaths", `public module paths must be package-relative: ${module.exportKey}`, { path: module.source });
     }
     if (publicKeys.has(module.exportKey) || publicSources.has(module.source)) {

@@ -49,14 +49,15 @@ export function selectExtractionSources(args: {
   const tests = [...partition.travelling];
   const sources = [...production, ...tests];
   const targetOf = (source: string): string => `${args.packageRoot}/src/${args.context.targetRelativePath(source)}`;
-  const targets = sources.map(targetOf);
+  const entrypointPath = `${args.packageRoot}/${args.entrypoint}`;
+  const directEntrypointPromotion = args.targetModule === "index" && production.length === 1;
+  const targets = sources.map((source, index) => directEntrypointPromotion && index === 0 ? entrypointPath : targetOf(source));
   const assetTargets = assets.map(targetOf);
   const allTargets = [...targets, ...assetTargets];
   if (new Set(allTargets).size !== allTargets.length) {
     throw new PlanningError("two selected files would land on the same target path");
   }
-  const entrypointPath = `${args.packageRoot}/${args.entrypoint}`;
-  if (allTargets.includes(entrypointPath)) {
+  if (!directEntrypointPromotion && allTargets.includes(entrypointPath)) {
     throw new PlanningError(`barrel self-import: a moved file would land on the generated entrypoint ${entrypointPath}`);
   }
   const moduleSources = [...production, ...assets];
@@ -74,20 +75,26 @@ export function selectExtractionSources(args: {
     requiredExports: index < production.length ? sourceExportsFromFile(args.context.absolute(moduleSources[index]!), moduleSources[index]!) : [],
   }));
   if (args.targetModule !== undefined) {
-    if (publicModules.length === 0 && args.targetModule === "index") {
-      // Barrel-mode scaffolds already expose the selected module at the package
-      // root; the generated entrypoint is the reviewed `index` surface.
-    } else {
-    if (publicModules.length !== 1) throw new PlanningError("a module promotion must select exactly one production module");
-    const promoted = publicModules[0]!;
+    if (production.length !== 1) throw new PlanningError("a module promotion must select exactly one production module");
+    const promoted = publicModules.find((item) => item.source === production[0]) ?? {
+      source: production[0]!,
+      target: targets[0]!,
+      specifier: args.packageName,
+      exportKey: ".",
+      exportTarget: `./${args.entrypoint}`,
+      requiredExports: sourceExportsFromFile(args.context.absolute(production[0]!), production[0]!),
+    };
     const key = args.targetModule === "index" ? "." : `./${args.targetModule.replace(/^\.\//, "")}`;
-    publicModules[0] = {
+    const promotedModule = {
       ...promoted,
+      target: args.targetModule === "index" ? entrypointPath : promoted.target,
       specifier: key === "." ? args.packageName : `${args.packageName}/${key.slice(2)}`,
       exportKey: key,
       exportTarget: key === "." ? `./${args.entrypoint}` : promoted.exportTarget,
     };
-    }
+    const promotedIndex = publicModules.findIndex((item) => item.source === production[0]);
+    if (promotedIndex < 0) publicModules.unshift(promotedModule);
+    else publicModules[promotedIndex] = promotedModule;
   }
   return {
     production, assets, tests, sources, targets, assetTargets, entrypointPath, publicModules,

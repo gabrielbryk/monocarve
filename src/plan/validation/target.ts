@@ -24,7 +24,7 @@ export function validatePublicModules(
       : scaffoldFor(options.config, application);
     const actual = manifest.target.publicModules ?? [];
     const publicSurface = templates.publicSurface;
-    if (publicSurface.mode === "barrel") {
+    if (publicSurface.mode === "barrel" && manifest.modulePromotion === undefined) {
       if (actual.length > 0) issues.add("target-subpaths", "barrel surface config must not declare public modules");
       return;
     }
@@ -39,14 +39,15 @@ export function validatePublicModules(
       publicSurface,
       moduleSources.map((source) => context.targetRelativePath(source)),
     );
-    const expected = moduleSources.map((source, index) => {
-      const paths = rendered[index]!;
+    const expected = moduleSources.flatMap((source, index) => {
+      const paths = rendered[index];
+      if (paths === undefined) return [];
       const baseline = showBaseline(options.rootDir, manifest.baselineCommit, source);
       if (baseline === null) throw new Error(`baseline source does not exist: ${source}`);
       if (hashText(baseline) !== manifest.sourceBlobs[source]) {
         throw new Error(`baseline source does not match recorded source blob: ${source}`);
       }
-      return {
+      return [{
         source,
         target: moves.get(source),
         specifier: `${manifest.target.packageName}/${paths.exportKey.slice(2)}`,
@@ -55,8 +56,30 @@ export function validatePublicModules(
         requiredExports: index < manifest.source.files.length
           ? sourceExportsFromBaseline(options.rootDir, manifest.baselineCommit, source)
           : [],
-      };
+      }];
     });
+    if (manifest.modulePromotion !== undefined) {
+      const promotion = manifest.modulePromotion;
+      const sourceIndex = moduleSources.indexOf(promotion.source);
+      if (sourceIndex < 0) throw new Error(`promoted source is absent from source files: ${promotion.source}`);
+      const requiredExports = sourceExportsFromBaseline(options.rootDir, manifest.baselineCommit, promotion.source);
+      const key = promotion.targetModule === "index" ? "." : `./${promotion.targetModule.replace(/^\.\//, "")}`;
+      const expectedIndex = expected.findIndex((item) => item.source === promotion.source);
+      const configured = expectedIndex < 0 ? undefined : expected[expectedIndex];
+      if (promotion.targetModule !== "index" && configured === undefined) {
+        throw new Error(`promoted subpath has no configured public-module target: ${promotion.targetModule}`);
+      }
+      const promoted = {
+        source: promotion.source,
+        target: moves.get(promotion.source),
+        specifier: key === "." ? manifest.target.packageName : `${manifest.target.packageName}/${key.slice(2)}`,
+        exportKey: key,
+        exportTarget: key === "." ? `./${manifest.target.entrypoint}` : configured!.exportTarget,
+        requiredExports,
+      };
+      if (configured === undefined) expected.unshift(promoted);
+      else expected[expectedIndex] = promoted;
+    }
     const comparable = actual.map(({ source, target, specifier, exportKey, exportTarget, requiredExports }) => ({
       source,
       target,
