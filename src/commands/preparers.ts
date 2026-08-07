@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { flagBool, flagString, type ParsedArgs } from "../cli/args.ts";
 import type { MonocarveConfig } from "../config.ts";
 import { IoError, UsageError } from "../errors.ts";
-import { applyPreparerManifest, assertApprovedPreparerManifest, assertPreparerManifest, commitPreparerOutputs, compilePreparerManifest, serializePreparerManifest, simulatePreparerManifest, type PreparerManifest } from "../preparer/index.ts";
+import { applyPreparerManifest, assertApprovedPreparerManifest, assertPreparerManifest, commitPreparerOutputs, compilePreparerManifest, compileStandalonePreparerManifest, serializePreparerManifest, simulatePreparerManifest, type PreparerManifest } from "../preparer/index.ts";
 import { currentBranch } from "../util/git.ts";
 import { isGuardedBranch } from "../config.ts";
 import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
@@ -13,14 +13,11 @@ import { load, loadManifest, outputPath, print, systemReason, writeOutput } from
 
 async function preparerPlan(args: ParsedArgs): Promise<void> {
   const loaded = await load(args);
-  const { manifest: extraction } = await loadManifest(withPlan(args, required(args, "extraction")), loaded.rootDir);
-  const manifest = await compilePreparerManifest({
-    rootDir: loaded.rootDir,
-    config: loaded.config,
-    extraction,
-    preparerId: required(args, "preparer"),
-    sourcePath: relativeWorkspacePath(loaded.rootDir, required(args, "source")),
-  });
+  const extractionPath = flagString(args, "extraction");
+  const sourcePath = relativeWorkspacePath(loaded.rootDir, required(args, "source"));
+  const manifest = extractionPath === undefined
+    ? await compileStandalonePreparerManifest({ rootDir: loaded.rootDir, config: loaded.config, baselineCommit: "HEAD", preparerId: required(args, "preparer"), sourcePath })
+    : await compilePreparerManifest({ rootDir: loaded.rootDir, config: loaded.config, extraction: (await loadManifest(withPlan(args, extractionPath), loaded.rootDir)).manifest, preparerId: required(args, "preparer"), sourcePath });
   const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.preparer.json`);
   const written = flagBool(args, "write");
   if (written) writeOutput(loaded.rootDir, out, serializePreparerManifest(manifest), { exclusive: true });
@@ -81,8 +78,8 @@ function withPlan(args: ParsedArgs, path: string): ParsedArgs {
 export const preparerCommands: Record<string, CommandSpec> = {
   "preparer-plan": {
     summary: "compile a declared-output pre-extraction transaction",
-    usage: "preparer-plan --extraction <path> --preparer <id> --source <path> [--out <path>] [--write]",
-    details: "Runs the configured preparer only in a disposable baseline worktree, binds templates to one exact move destination, refuses undeclared repository-visible changes, and optionally writes a separately reviewable manifest. Ignored scratch writes are discarded with the worktree.",
+    usage: "preparer-plan [--extraction <path>] --preparer <id> --source <path> [--out <path>] [--write]",
+    details: "Runs the configured preparer only in a disposable baseline worktree. With --extraction it binds templates to one exact move destination; without it, --source is a repository policy anchor exposed as both sourcePath and targetPath. Refuses undeclared repository-visible changes and optionally writes a separately reviewable manifest.",
     run: preparerPlan,
   },
   "preparer-simulate": {

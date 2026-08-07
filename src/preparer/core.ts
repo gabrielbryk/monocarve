@@ -25,6 +25,15 @@ export interface CompilePreparerInput {
   readonly sourcePath: string;
 }
 
+export interface CompileStandalonePreparerInput {
+  readonly rootDir: string;
+  readonly config: MonocarveConfig;
+  readonly baselineCommit: string;
+  readonly preparerId: string;
+  /** Repository-owned policy anchor exposed as both sourcePath and targetPath. */
+  readonly sourcePath: string;
+}
+
 export async function compilePreparerManifest(input: CompilePreparerInput): Promise<PreparerManifest> {
   const policy = findPolicy(input.config, input.preparerId);
   const move = findMove(input.extraction, input.sourcePath);
@@ -69,6 +78,25 @@ export async function compilePreparerManifest(input: CompilePreparerInput): Prom
   } finally {
     await worktree.dispose();
   }
+}
+
+/** Compile a declared-output preparer that is not coupled to an extraction move. */
+export async function compileStandalonePreparerManifest(input: CompileStandalonePreparerInput): Promise<PreparerManifest> {
+  const resolved = resolveCommit(input.rootDir, input.baselineCommit);
+  const syntheticExtraction = {
+    planId: `standalone-${resolved.commit}`,
+    baselineCommit: resolved.commit,
+    application: "standalone",
+    target: { packageName: "standalone", packageRoot: "." },
+    operations: [{ kind: "move", source: input.sourcePath, target: input.sourcePath }],
+  } as unknown as ExtractionManifest;
+  return compilePreparerManifest({
+    rootDir: input.rootDir,
+    config: input.config,
+    extraction: syntheticExtraction,
+    preparerId: input.preparerId,
+    sourcePath: input.sourcePath,
+  });
 }
 
 export function serializePreparerManifest(manifest: PreparerManifest): string {

@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 
 import { parseConfig } from "../src/config.ts";
 import type { ExtractionManifest } from "../src/plan/manifest.ts";
-import { applyPreparerManifest, compilePreparerManifest, simulatePreparerManifest } from "../src/preparer/index.ts";
+import { applyPreparerManifest, compilePreparerManifest, compileStandalonePreparerManifest, simulatePreparerManifest } from "../src/preparer/index.ts";
 import { hashText } from "../src/util/hash.ts";
 import { cleanupFixtures, fixtureGit, fixtureRepo, scratchDirectory } from "./support/fixture-repo.ts";
 
@@ -69,6 +69,28 @@ describe("configured pre-extraction preparers", () => {
     const manifest = await compilePreparerManifest({ rootDir: root, config, extraction: extractionManifest(root), preparerId: configured.id, sourcePath: "apps/consumer/src/tabs/leads/view.ts" });
     expect(manifest.mutations.map((item) => item.path)).not.toContain("transient.scratch");
     expect(existsSync(`${root}/transient.scratch`)).toBe(false);
+  });
+
+  test("compiles a declared source rewrite without an unrelated extraction move", async () => {
+    const source = "apps/consumer/src/tabs/leads/view.ts";
+    const root = fixtureRepo({ [source]: "export const view = 1;\n" });
+    const configured = {
+      id: "quality-ratchet",
+      phase: "pre-extraction" as const,
+      command: "printf 'export const view = 2;\\n' > {sourcePath}",
+      outputs: ["{sourcePath}"],
+      verify: "grep -q 'view = 2' {sourcePath}",
+      commit: { subject: "refactor: rewrite {sourcePath}" },
+    };
+    const config = configuration(scratchDirectory(), [configured]);
+
+    const manifest = await compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source });
+
+    expect(manifest.binding).toMatchObject({ application: "standalone", sourcePath: source, targetPath: source });
+    expect(manifest.mutations.map((item) => item.path)).toEqual([source]);
+    await simulatePreparerManifest({ rootDir: root, config, manifest });
+    applyPreparerManifest({ rootDir: root, config, manifest });
+    expect(readFileSync(`${root}/${source}`, "utf8")).toBe("export const view = 2;\n");
   });
 });
 

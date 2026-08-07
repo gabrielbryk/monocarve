@@ -218,7 +218,7 @@ result — matching `prepare-apply`'s exact simulate-then-commit shape.
 
 | command | usage and boundary |
 | --- | --- |
-| `preparer-plan` | `preparer-plan --extraction <path> --preparer <id> --source <path> [--out <path>] [--write]` — run one configured preparer in a disposable baseline worktree and compile its declared outputs into a reviewable manifest. |
+| `preparer-plan` | `preparer-plan [--extraction <path>] --preparer <id> --source <path> [--out <path>] [--write]` — run one configured preparer in a disposable baseline worktree and compile its declared outputs into a reviewable manifest. Without an extraction, `source` is the standalone policy anchor. |
 | `preparer-simulate` | `preparer-simulate --plan <path>` — replay captured outputs and their configured verification without changing the checkout. |
 | `preparer-apply` | `preparer-apply --plan <path>` — require the exact manifest as the sole commit directly above its extraction baseline, simulate first, then journal-apply reviewed outputs with rollback; never commits the outputs. |
 | `preparer-commit` | `preparer-commit --plan <path>` — verify exact applied bytes and modes, refuse guarded branches or any extra dirty path, and commit only declared outputs with configured metadata. |

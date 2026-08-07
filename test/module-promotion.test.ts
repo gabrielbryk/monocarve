@@ -108,7 +108,7 @@ describe("module promotion", () => {
 
     expect(manifest.source.tests).toEqual([OWNED_TEST]);
     const ownedTestMove = manifest.operations.find((item) => item.kind === "move-with-rewrite" && item.source === OWNED_TEST);
-    expect(ownedTestMove?.rewrites).toEqual([{ donorlessSpecifier: "./schemas.ts", packageSpecifier: "@acme/resource-contracts" }]);
+    expect(ownedTestMove?.kind === "move-with-rewrite" ? ownedTestMove.rewrites : undefined).toEqual([{ donorlessSpecifier: "./schemas.ts", packageSpecifier: "@acme/resource-contracts" }]);
     expect(manifest.consumers.map((item) => item.file)).toEqual([OTHER, CONSUMER, TERRITORY_TEST]);
     expect(manifest.modulePromotion?.importerProof).toEqual([OTHER, OWNED_TEST, CONSUMER, TERRITORY_TEST]);
     expect(manifest.operations.some((item) => item.kind === "rewrite-import" && item.file === TERRITORY_TEST)).toBe(true);
