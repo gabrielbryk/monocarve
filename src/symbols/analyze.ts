@@ -22,6 +22,33 @@ const AMBIGUOUS_BINDING_DIAGNOSTICS = new Set([2300, 2323, 2393, 2395, 2428, 244
 export function analyzeTypeScriptSource(input: AnalyzeTypeScriptSourceInput): SymbolGraph {
   const sourcePath = normalizeSourcePath(input.sourcePath);
   const { sourceFile, checker, diagnostics } = createIsolatedProgram(sourcePath, input.sourceText);
+  return buildSymbolGraph(sourcePath, input.sourceText, sourceFile, checker, diagnostics);
+}
+
+/** Build a symbol graph from a source file in its real workspace program. */
+export function analyzeProgramSource(input: {
+  readonly sourcePath: string;
+  readonly sourceText: string;
+  readonly sourceFile: ts.SourceFile;
+  readonly checker: ts.TypeChecker;
+  readonly syntacticDiagnostics: readonly ts.Diagnostic[];
+  readonly semanticDiagnostics: readonly ts.Diagnostic[];
+}): SymbolGraph {
+  const sourcePath = normalizeSourcePath(input.sourcePath);
+  const diagnostics = [
+    ...input.syntacticDiagnostics.map((entry) => toDiagnostic(entry, "syntactic")),
+    ...input.semanticDiagnostics.map((entry) => toDiagnostic(entry, "semantic")),
+  ].sort(compareDiagnostics);
+  return buildSymbolGraph(sourcePath, input.sourceText, input.sourceFile, input.checker, diagnostics);
+}
+
+function buildSymbolGraph(
+  sourcePath: string,
+  sourceText: string,
+  sourceFile: ts.SourceFile,
+  checker: ts.TypeChecker,
+  diagnostics: readonly SymbolAnalysisDiagnostic[],
+): SymbolGraph {
   const fatalDiagnostics = diagnostics.filter(isFatalDiagnostic);
   if (fatalDiagnostics.length > 0) {
     throw new SymbolAnalysisError(
@@ -29,7 +56,7 @@ export function analyzeTypeScriptSource(input: AnalyzeTypeScriptSourceInput): Sy
       fatalDiagnostics,
     );
   }
-  const physical = collectDeclarations(sourceFile, checker, sourcePath, input.sourceText);
+  const physical = collectDeclarations(sourceFile, checker, sourcePath, sourceText);
   const exportedSymbols = collectExportedSymbols(sourceFile, checker);
   const declarations = physical.map(({ record, symbol }) => ({
     ...record,
@@ -40,11 +67,11 @@ export function analyzeTypeScriptSource(input: AnalyzeTypeScriptSourceInput): Sy
   const groups = buildGroups(sourcePath, declarations);
   const groupByName = new Map(groups.map((group) => [group.name, group]));
   const groupBySymbol = groupsForSymbols(declarations, physicalById, groupByName);
-  const edges = collectEdges(checker, input.sourceText, physicalById, recordById, groupByName, groupBySymbol);
+  const edges = collectEdges(checker, sourceText, physicalById, recordById, groupByName, groupBySymbol);
   return {
     schemaVersion: 1,
     sourcePath,
-    sourceHash: hashText(input.sourceText),
+    sourceHash: hashText(sourceText),
     diagnostics,
     declarations,
     groups,

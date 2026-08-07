@@ -5,7 +5,7 @@ import ts from "typescript";
 
 import { byCodeUnit, hashJson } from "../util/hash.ts";
 import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
-import { analyzeTypeScriptSource, referenceSpace, SymbolAnalysisError } from "./analyze.ts";
+import { analyzeProgramSource, referenceSpace, SymbolAnalysisError } from "./analyze.ts";
 import type {
   AnalyzeWorkspaceSymbolsInput,
   ExternalSymbolConsumer,
@@ -29,7 +29,6 @@ export function analyzeWorkspaceSymbols(input: AnalyzeWorkspaceSymbolsInput): Wo
   const sourcePath = relativeWorkspacePath(input.rootDir, input.sourcePath);
   const targetAbsolute = workspacePath(input.rootDir, sourcePath);
   const sourceText = readFileSync(targetAbsolute, "utf8");
-  const source = analyzeTypeScriptSource({ sourcePath, sourceText });
   const program = workspaceProgram(input.rootDir, input.tsconfigPath);
   const target = program.getSourceFile(targetAbsolute) ?? program.getSourceFiles().find(
     (file) => normalize(file.fileName) === normalize(targetAbsolute),
@@ -37,6 +36,14 @@ export function analyzeWorkspaceSymbols(input: AnalyzeWorkspaceSymbolsInput): Wo
   if (!target) throw new SymbolAnalysisError(`${sourcePath} is not included by ${input.tsconfigPath}`, []);
 
   const checker = program.getTypeChecker();
+  const source = analyzeProgramSource({
+    sourcePath,
+    sourceText,
+    sourceFile: target,
+    checker,
+    syntacticDiagnostics: program.getSyntacticDiagnostics(target),
+    semanticDiagnostics: program.getSemanticDiagnostics(target),
+  });
   const groupByName = new Map(source.groups.map((group) => [group.name, group]));
   const consumers = new Map<string, MutableConsumer>();
   for (const file of program.getSourceFiles()) {

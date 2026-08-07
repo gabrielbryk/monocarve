@@ -52,6 +52,23 @@ test("maps external type/value consumers to deterministic affinity-ranked declar
   const recursive = first.splitCandidates.find((candidate) => candidate.names.includes("alpha"));
   expect(recursive?.names).toEqual(["alpha", "beta"]);
   expect(recursive?.consumers).toEqual([]);
+  expect(first.source.diagnostics).toEqual([]);
+});
+
+test("reports unresolved imports from the workspace program without inventing resolution failures", () => {
+  const root = workspace();
+  write(root, "src/hub.ts", 'import type { Missing } from "./missing"; export interface Invoice { total: Missing }\n');
+  const analysis = analyzeWorkspaceSymbols({
+    rootDir: root,
+    tsconfigPath: "tsconfig.json",
+    sourcePath: "src/hub.ts",
+    affinityForPath: () => "shared",
+  });
+  expect(analysis.source.diagnostics).toContainEqual(expect.objectContaining({
+    phase: "semantic",
+    code: 2307,
+    category: "error",
+  }));
 });
 
 test("refuses a target outside the configured TypeScript program", () => {
