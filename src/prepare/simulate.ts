@@ -163,6 +163,7 @@ function writeOperation(file: PreparationFileMutation, contents: string): Prepar
  * carry the specifier the policy needs.
  */
 function policyAnchors(manifest: PreparationManifest): PreparationPolicyRenderInput[] {
+  if (manifest.policyAnchor !== undefined) return [manifest.policyAnchor];
   return manifest.operations.flatMap((operation): PreparationPolicyRenderInput[] => {
     if (operation.kind === "extract-type-declarations") {
       return [{
@@ -185,6 +186,7 @@ function policyAnchors(manifest: PreparationManifest): PreparationPolicyRenderIn
 
 /** Refuse a hand-edited manifest that omits or changes repository-owned gates. */
 export function assertPreparationPolicy(config: MonocarveConfig, manifest: PreparationManifest): void {
+  assertGeneratedSourceAdoptionPolicyAnchor(config, manifest);
   const anchors = policyAnchors(manifest);
   if (anchors.length === 0) {
     throw new PreparationSimulationError(
@@ -197,6 +199,22 @@ export function assertPreparationPolicy(config: MonocarveConfig, manifest: Prepa
   const union = (tier: "package" | "project" | "workspace") => [...new Set(policies.flatMap((policy) => policy.gates[tier]))].sort();
   const expected = { commit, gates: { package: union("package"), project: union("project"), workspace: union("workspace") } };
   if (hashJson(expected) !== hashJson({ commit: manifest.commits.prepare, gates: manifest.gates })) throw new PreparationSimulationError("preparation manifest policy differs from the exact gates or commit metadata rendered by the resolved configuration");
+}
+
+function assertGeneratedSourceAdoptionPolicyAnchor(config: MonocarveConfig, manifest: PreparationManifest): void {
+  const specifiers = [...new Set(manifest.operations
+    .filter((operation): operation is Extract<PreparationManifest["operations"][number], { kind: "adopt-generated-source" }> => operation.kind === "adopt-generated-source")
+    .map((operation) => operation.policySpecifier))];
+  if (specifiers.length === 0) return;
+  if (specifiers.length !== 1 || !specifiers[0]!.startsWith("adopt:")) throw new PreparationSimulationError("generated-source adoption operations must share one configured policy identity");
+  const id = specifiers[0]!.slice("adopt:".length);
+  const adoption = config.generatedSourceAdoptions.find((item) => item.id === id);
+  if (adoption === undefined) throw new PreparationSimulationError(`generated-source adoption policy refers to unknown configuration ${JSON.stringify(id)}`);
+  const sourcePath = adoption.policyAnchor ?? adoption.artifacts[0]!.path;
+  const expected = { sourcePath, targetPath: sourcePath, targetModuleSpecifier: specifiers[0]! };
+  if (manifest.policyAnchor === undefined || hashJson(manifest.policyAnchor) !== hashJson(expected)) {
+    throw new PreparationSimulationError("generated-source adoption policy anchor differs from the compiler-selected configured anchor");
+  }
 }
 
 export async function simulatePreparation(options: SimulatePreparationOptions): Promise<PreparationSimulationResult> {

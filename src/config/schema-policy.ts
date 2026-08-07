@@ -431,6 +431,8 @@ export type ModulePromotionsConfig = z.output<typeof modulePromotions>;
 /** Explicit adoption of orphaned generated output as durable source. */
 export const generatedSourceAdoptions = z.array(z.strictObject({
   id: kebabId,
+  /** Application-owned path used to render repository policy for package-only adoptions. */
+  policyAnchor: relativePath.optional(),
   artifacts: z.array(z.strictObject({
     path: relativePath,
     /** Must equal the missing source declared by the artifact header. */

@@ -14,9 +14,18 @@ export interface CompileGeneratedSourceAdoptionInput {
   readonly rendering: PreparationManifestRendering; readonly policySpecifier: string;
 }
 
+export function generatedSourceAdoptionPolicyAnchor(
+  adoption: { readonly id: string; readonly policyAnchor?: string | undefined; readonly artifacts: readonly { readonly path: string }[] },
+): { sourcePath: string; targetPath: string; targetModuleSpecifier: string } {
+  const sourcePath = adoption.policyAnchor ?? adoption.artifacts[0]!.path;
+  return { sourcePath, targetPath: sourcePath, targetModuleSpecifier: `adopt:${adoption.id}` };
+}
+
 export function compileGeneratedSourceAdoption(input: CompileGeneratedSourceAdoptionInput): PreparationManifest {
   const adoption = input.config.generatedSourceAdoptions.find((item) => item.id === input.adoptionId);
   if (!adoption) throw new PlanningError(`unknown generated-source adoption ${JSON.stringify(input.adoptionId)}`);
+  const policyAnchor = generatedSourceAdoptionPolicyAnchor(adoption);
+  if (policyAnchor.targetModuleSpecifier !== input.policySpecifier) throw new PlanningError("generated-source adoption policy specifier does not match its configured identity");
   const baseline = resolveCommit(input.rootDir, input.baselineCommit);
   if (input.graph.commit !== baseline.commit) throw new PlanningError("generated-source adoption requires a fresh graph at the exact baseline");
   const operations: PreparationReplayOperation[] = adoption.artifacts.map((artifact) => {
@@ -49,7 +58,7 @@ export function compileGeneratedSourceAdoption(input: CompileGeneratedSourceAdop
     operations.push({ kind: "delete-generated-source-generator", adoptedOutputs: surviving, file: { path: adoption.retireGenerator, preconditionHash: hashText(generatorText), preconditionMode: baselineFileMode(input.rootDir, baseline.commit, adoption.retireGenerator), resultHash: hashText(""), resultMode: 0 } });
   }
   const ordered = operations.sort((left, right) => byCodeUnit(preparationOperationPaths(left)[0]!, preparationOperationPaths(right)[0]!) || byCodeUnit(left.kind, right.kind));
-  const manifest = createPreparationManifest({ schemaVersion: 1, createdAt: baseline.committedAt, generator: { ...GENERATOR }, baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: hashJson(input.config) }, graphDigest: input.graphDigest, declarations: [], operations: ordered, compatibilityReexports: [], changedFiles: [...new Set(ordered.flatMap(preparationOperationPaths))].sort(byCodeUnit), commits: { prepare: input.rendering.commit }, gates: { package: [...input.rendering.gates.package].sort(byCodeUnit), project: [...input.rendering.gates.project].sort(byCodeUnit), workspace: [...input.rendering.gates.workspace].sort(byCodeUnit) } });
+  const manifest = createPreparationManifest({ schemaVersion: 1, createdAt: baseline.committedAt, generator: { ...GENERATOR }, baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: hashJson(input.config) }, graphDigest: input.graphDigest, policyAnchor, declarations: [], operations: ordered, compatibilityReexports: [], changedFiles: [...new Set(ordered.flatMap(preparationOperationPaths))].sort(byCodeUnit), commits: { prepare: input.rendering.commit }, gates: { package: [...input.rendering.gates.package].sort(byCodeUnit), project: [...input.rendering.gates.project].sort(byCodeUnit), workspace: [...input.rendering.gates.workspace].sort(byCodeUnit) } });
   assertPreparationManifestValid(manifest);
   return manifest;
 }

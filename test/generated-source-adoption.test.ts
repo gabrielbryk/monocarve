@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { buildDependencyGraph, type ScanReport } from "../src/graph/build.ts";
 import { compileGeneratedSourceAdoption } from "../src/prepare/generated-source-adoption.ts";
 import { auditPreparationSync } from "../src/prepare/audit.ts";
-import { preparationFilesystemOperations } from "../src/prepare/simulate.ts";
+import { assertPreparationPolicy, preparationFilesystemOperations, simulatePreparation } from "../src/prepare/simulate.ts";
 import { executePreparationJournal } from "../src/prepare/journal.ts";
 import { resolveCommit } from "../src/util/git.ts";
 import { hashText } from "../src/util/hash.ts";
@@ -65,5 +65,59 @@ describe("generated-source adoption", () => {
     const baseline = resolveCommit(fixture.root, "HEAD");
     const graph = { ...fixture.graph, commit: baseline.commit };
     expect(() => compileGeneratedSourceAdoption({ rootDir: fixture.root, config: fixture.config, graph, baselineCommit: baseline.commit, graphDigest: hashText("graph"), adoptionId: "contracts", policySpecifier: "adopt:contracts", rendering: { commit: { subject: "refactor: adopt generated contracts" }, gates: { package: [], project: [], workspace: ["true"] } } })).toThrow(/source still exists/);
+  });
+
+  test("simulates, applies, and audits exhaustive adoption across an application and package", async () => {
+    const packageArtifact = "libs/analytics-contracts/src/index.ts";
+    const packageSource = "spec/analytics.json";
+    const packageHeader = `// @generated - DO NOT EDIT\n// Source: ${packageSource}\n// Regenerate: bun ${GENERATOR}\n`;
+    const root = fixtureRepo({
+      "apps/api/tsconfig.json": JSON.stringify({ compilerOptions: { module: "ESNext" }, include: ["src"] }),
+      [ARTIFACT]: `${HEADER}export const Contract = 1;\n`,
+      [packageArtifact]: `${packageHeader}export const Analytics = 1;\n`,
+      "libs/analytics-contracts/package.json": JSON.stringify({ name: "@acme/analytics-contracts" }),
+      [GENERATOR]: "export {};\n",
+    });
+    const config = fixtureConfig(root, {
+      preparation: { gates: { workspace: ["true"] }, commit: { subject: "refactor: adopt generated contracts" } },
+      generatedSourceAdoptions: [{ id: "contracts", artifacts: [
+        { path: ARTIFACT, missingSource: SOURCE, removeHeaderLines: 3 },
+        { path: packageArtifact, missingSource: packageSource, removeHeaderLines: 3 },
+      ], retireGenerator: GENERATOR }],
+    });
+    const baseline = resolveCommit(root, "HEAD");
+    const graph = buildDependencyGraph({ config, rootDir: root, reports: { api: { modules: [{ source: ARTIFACT, dependencies: [] }, { source: GENERATOR, dependencies: [] }] } }, commit: baseline.commit });
+    const manifest = compileGeneratedSourceAdoption({ rootDir: root, config, graph, baselineCommit: baseline.commit, graphDigest: hashText("mixed-graph"), adoptionId: "contracts", policySpecifier: "adopt:contracts", rendering: { commit: { subject: "refactor: adopt generated contracts" }, gates: { package: [], project: [], workspace: ["true"] } } });
+
+    expect(manifest.policyAnchor?.sourcePath).toBe(ARTIFACT);
+    assertPreparationPolicy(config, manifest);
+    expect(() => assertPreparationPolicy(config, { ...manifest, policyAnchor: { sourcePath: packageArtifact, targetPath: packageArtifact, targetModuleSpecifier: "adopt:contracts" } })).toThrow(/differs from the compiler-selected/);
+    const simulation = await simulatePreparation({ config, rootDir: root, manifest, baselineGraphScanner: async ({ baselineCommit }) => ({ commit: baselineCommit, digest: manifest.graphDigest }) });
+    expect(simulation.ok).toBe(true);
+    expect(simulation.audit?.passed).toBe(true);
+    executePreparationJournal({ rootDir: root, operations: preparationFilesystemOperations(manifest) });
+    const audit = auditPreparationSync({ config, rootDir: root, manifest, freshGraph: { commit: baseline.commit, digest: manifest.graphDigest } });
+    expect(audit.passed).toBe(true);
+  });
+
+  test("supports package-only adoption through an explicit application policy anchor", () => {
+    const artifact = "libs/contracts/src/index.ts";
+    const root = fixtureRepo({
+      "apps/api/tsconfig.json": JSON.stringify({ compilerOptions: { module: "ESNext" }, include: ["src"] }),
+      "apps/api/src/policy-anchor.ts": "export {};\n",
+      [artifact]: `${HEADER}export const Contract = 1;\n`,
+      "libs/contracts/package.json": JSON.stringify({ name: "@acme/contracts" }),
+      [GENERATOR]: "export {};\n",
+    });
+    const config = fixtureConfig(root, {
+      preparation: { gates: { workspace: ["true"] }, commit: { subject: "refactor: adopt generated contracts" } },
+      generatedSourceAdoptions: [{ id: "contracts", policyAnchor: "apps/api/src/policy-anchor.ts", artifacts: [{ path: artifact, missingSource: SOURCE, removeHeaderLines: 3 }], retireGenerator: GENERATOR }],
+    });
+    const baseline = resolveCommit(root, "HEAD");
+    const graph = buildDependencyGraph({ config, rootDir: root, reports: { api: { modules: [{ source: "apps/api/src/policy-anchor.ts", dependencies: [] }, { source: GENERATOR, dependencies: [] }] } }, commit: baseline.commit });
+    const manifest = compileGeneratedSourceAdoption({ rootDir: root, config, graph, baselineCommit: baseline.commit, graphDigest: hashText("package-graph"), adoptionId: "contracts", policySpecifier: "adopt:contracts", rendering: { commit: { subject: "refactor: adopt generated contracts" }, gates: { package: [], project: [], workspace: ["true"] } } });
+
+    expect(manifest.policyAnchor?.sourcePath).toBe("apps/api/src/policy-anchor.ts");
+    expect(() => assertPreparationPolicy(config, manifest)).not.toThrow();
   });
 });
