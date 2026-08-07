@@ -39,7 +39,7 @@ function commitWiring(rootDir: string, manifest: ExtractionManifest): string | u
   if (wiring.length === 0) return undefined;
   git({ cwd: rootDir, quiet: true }, "add", "--", ...wiring);
   assertExactScope(
-    git({ cwd: rootDir }, "diff", "--cached", "--name-only", "--").split("\n").filter(Boolean),
+    git({ cwd: rootDir }, "diff", "--cached", "--name-only", "--no-renames", "--").split("\n").filter(Boolean),
     wiring,
     regeneratedArtifactPaths(manifest),
   );

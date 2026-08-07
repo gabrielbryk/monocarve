@@ -94,7 +94,7 @@ function proveMove(root: string, manifest: ExtractionManifest, parent: string, c
 function proveWiring(root: string, manifest: ExtractionManifest, parent: string, commit: string, failures: string[]): boolean {
   if (tryGit({ cwd: root }, "rev-parse", `${commit}^`) !== parent) failures.push("wiring commit is not directly atop the preceding boundary");
   if (tryGit({ cwd: root }, "log", "-1", "--format=%s", commit) !== manifest.commits.wiring.subject) failures.push("wiring subject does not match the manifest");
-  if (!same(lines(git({ cwd: root }, "diff-tree", "--no-commit-id", "--name-only", "-r", commit)), wiringPaths(manifest).map((path) => repoPath(root, path)))) failures.push("wiring paths do not match the manifest");
+  if (!same(lines(git({ cwd: root }, "diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-r", commit)), wiringPaths(manifest).map((path) => repoPath(root, path)))) failures.push("wiring paths do not match the manifest");
   const finalHashes = new Map<string, string>();
   for (const operation of manifest.operations) {
     if (operation.kind === "move") continue;
