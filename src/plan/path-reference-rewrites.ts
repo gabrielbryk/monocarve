@@ -220,11 +220,11 @@ function resolveReplacementCollisions(
   }
   const rewrites: PathReferenceRewriteMatch[] = [];
   for (const bucket of byReplacement.values()) {
-    if (bucket.length === 1) {
-      rewrites.push(bucket[0]!);
+    const donors = [...new Set(bucket.map((match) => match.donor))];
+    if (donors.length === 1) {
+      rewrites.push(...bucket);
       continue;
     }
-    const donors = bucket.map((match) => match.donor);
     for (const match of bucket) {
       ambiguities.push(ambiguityFor(file, match, donors, "would produce the same replacement token as another moved source in this file"));
     }

@@ -112,6 +112,26 @@ describe("scanPathReferenceRewrites / rewritePathReferenceText", () => {
     }
   });
 
+  test("case 4b: repeated references to one moved source are all rewritten", () => {
+    const text = [
+      "- apps/api/src/c.ts",
+      "- apps/api/src/c.ts",
+      "- apps/api/src/c.ts",
+      "",
+    ].join("\n");
+    const moves = [move("apps/api/src/c.ts", "libs/shared/dest.ts")];
+
+    const scan = scanPathReferenceRewrites(text, FILE, moves, settings());
+    expect(scan.skipped).toEqual([]);
+    expect(scan.rewrites).toHaveLength(3);
+    expect(rewritePathReferenceText(text, scan.rewrites)).toBe([
+      "- libs/shared/dest.ts",
+      "- libs/shared/dest.ts",
+      "- libs/shared/dest.ts",
+      "",
+    ].join("\n"));
+  });
+
   test("case 5: an absolute token matching a workspace-relative moved path keeps its absolute prefix untouched — the span is narrowed to the matched suffix, `to` holds only the suffix replacement", () => {
     const text = "/home/u/repo/apps/web/a.ts is referenced\n";
     const moves = [move("apps/web/a.ts", "libs/web/src/a.ts")];
