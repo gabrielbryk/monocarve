@@ -19,6 +19,7 @@ function setup(source: string) {
   const root = fixtureRepo({
     "apps/api/tsconfig.json": JSON.stringify({ compilerOptions: { module: "ESNext", moduleResolution: "Bundler" }, include: ["src"] }),
     [SOURCE]: source,
+    "apps/api/src/trim.ts": "export const trim = (value: string): string => value.trim();\n",
     "apps/api/src/consumer.ts": 'import { normalize } from "./mixed.js";\nexport const result = normalize(" value ");\n',
     "apps/api/ledger.txt": "baseline\n",
     "apps/api/stable-ledger.txt": "stable\n",
@@ -53,13 +54,27 @@ describe("value split", () => {
     expect(auditPreparationSync({ config: fixture.config, rootDir: fixture.root, manifest, freshGraph: { commit: fixture.baseline.commit, digest: manifest.graphDigest } }).passed).toBe(true);
   });
 
-  test("refuses a value with a retained declaration dependency", () => {
-    const fixture = setup('const suffix = "!";\nexport function normalize(value: string): string { return value.trim() + suffix; }\n');
-    expect(() => compileValueSplit({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, baselineCommit: fixture.baseline.commit, graphDigest: hashText("graph"), splitId: "normalize-value", rendering: fixture.rendering })).toThrow(/depends on retained declaration.*suffix/);
+  test("moves an exclusively owned local helper dependency", () => {
+    const fixture = setup('function trim(value: string): string { return value.trim(); }\nexport function normalize(value: string): string { return trim(value); }\n');
+    const manifest = compileValueSplit({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, baselineCommit: fixture.baseline.commit, graphDigest: hashText("graph"), splitId: "normalize-value", rendering: fixture.rendering });
+    const target = manifest.operations.find((item) => item.kind === "write-file" && item.file.path === TARGET);
+    expect(target?.kind === "write-file" ? target.contents : "").toContain("function trim");
   });
 
-  test("refuses a value with an imported binding dependency", () => {
+  test("refuses a helper dependency that retained code still uses", () => {
+    const fixture = setup('function trim(value: string): string { return value.trim(); }\nexport const retained = trim("x");\nexport function normalize(value: string): string { return trim(value); }\n');
+    expect(() => compileValueSplit({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, baselineCommit: fixture.baseline.commit, graphDigest: hashText("graph"), splitId: "normalize-value", rendering: fixture.rendering })).toThrow(/still used by retained declaration.*trim/);
+  });
+
+  test("copies and relocates a compiler-resolved relative import", () => {
     const fixture = setup('import { trim } from "./trim.js";\nexport function normalize(value: string): string { return trim(value); }\n');
-    expect(() => compileValueSplit({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, baselineCommit: fixture.baseline.commit, graphDigest: hashText("graph"), splitId: "normalize-value", rendering: fixture.rendering })).toThrow(/depends on imported binding.*trim/);
+    const manifest = compileValueSplit({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, baselineCommit: fixture.baseline.commit, graphDigest: hashText("graph"), splitId: "normalize-value", rendering: fixture.rendering });
+    const target = manifest.operations.find((item) => item.kind === "write-file" && item.file.path === TARGET);
+    expect(target?.kind === "write-file" ? target.contents : "").toContain('from "../trim.js"');
+  });
+
+  test("refuses effectful runtime initialization whose evaluation order would move", () => {
+    const fixture = setup('export const normalize = (() => (value: string): string => value.trim())();\n');
+    expect(() => compileValueSplit({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, baselineCommit: fixture.baseline.commit, graphDigest: hashText("graph"), splitId: "normalize-value", rendering: fixture.rendering })).toThrow(/top-level evaluation effects/);
   });
 });
