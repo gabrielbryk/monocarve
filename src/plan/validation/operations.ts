@@ -82,6 +82,10 @@ function workspacePackageNames(
     const donor = getApplication(options.config, manifest.integrationTestSuite.donorApplication);
     if (donor.packageName) packages.add(donor.packageName);
   }
+  // A move-with-rewrite may point a travelling test at the package this
+  // manifest creates. It is absent at baseline but present in the projected
+  // workspace by construction, so validate it as a legitimate target.
+  packages?.add(manifest.target.packageName);
   return packages;
 }
 

@@ -113,6 +113,7 @@ describe("module promotion", () => {
     expect(manifest.modulePromotion?.importerProof).toEqual([OTHER, OWNED_TEST, CONSUMER, TERRITORY_TEST]);
     expect(manifest.operations.some((item) => item.kind === "rewrite-import" && item.file === TERRITORY_TEST)).toBe(true);
     expect(validatePlan(manifest, { config: fixture.config, rootDir: fixture.root }).issues.filter((item) => item.rule === "module-promotion-importers")).toEqual([]);
+    expect(validatePlan(manifest, { config: fixture.config, rootDir: fixture.root }).issues.filter((item) => item.rule === "rewrite-target")).toEqual([]);
     await executeJournal({ config: fixture.config, treeRoot: fixture.root, manifest, useGitMv: false });
     expect(auditPlanSync({ rootDir: fixture.root, config: fixture.config, manifest }).passed).toBe(true);
   });
