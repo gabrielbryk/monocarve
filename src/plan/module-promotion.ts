@@ -1,7 +1,8 @@
 import { buildApplicationGraph, stronglyConnectedComponents, toSccs } from "../graph/components.ts";
 import type { Scc } from "../graph/model.ts";
 import type { PortfolioCandidate } from "../portfolio/types.ts";
-import { PlanningError } from "./context.ts";
+import { PlanningError, WorkspaceContext } from "./context.ts";
+import { partitionTests } from "./consumers.ts";
 import { buildPlanSync, type BuildPlanOptions } from "./build.ts";
 import type { ExtractionManifest } from "./manifest.ts";
 import { hashJson } from "../util/hash.ts";
@@ -44,7 +45,9 @@ export function compileModulePromotion(input: CompileModulePromotionInput): Extr
     .filter((path) => input.graph.nodes.get(path)?.zone === "application"))].sort();
   if (!cutsScc && containmentRemoved.length === 0) throw new PlanningError(`module promotion ${promotion.id} cuts neither a multi-module SCC nor an architectural containment edge at the baseline`);
   if (!cutsScc && introducedApplicationDependencies.length > 0) throw new PlanningError(`module promotion ${promotion.id} would introduce a package dependency on application modules: ${introducedApplicationDependencies.join(", ")}`);
+  const context = input.context ?? new WorkspaceContext(input.config, input.rootDir);
   const directTests = [...(input.graph.testImporters.get(promotion.source) ?? [])].sort();
+  const testPartition = partitionTests(context, [promotion.source], directTests, []);
   const importers = [...new Set([...(input.graph.incoming.get(promotion.source) ?? []), ...directTests])].sort();
   const scc: Scc = toSccs(appGraph.condensed).find((item) => item.members.includes(promotion.source))!;
   const candidate: PortfolioCandidate = {
@@ -53,7 +56,7 @@ export function compileModulePromotion(input: CompileModulePromotionInput): Extr
     suggestedPackageName: promotion.targetPackage,
     files: [promotion.source], tests: directTests, assets: [], sccs: [scc], seed: scc,
     lineCount: node.lineCount, owners: [node.owner], domains: [node.domain], dependencies: [],
-    consumers: [], consumerChurn: importers.length, coverage: directTests.length > 0 ? 1 : 0,
+    consumers: [], consumerChurn: importers.length, coverage: testPartition.travelling.length > 0 ? 1 : 0,
     score: 0, eligible: true, rejectionReasons: [], warnings: [], rewriteEscapes: [], classification: "extraction",
   };
   const proof: NonNullable<ExtractionManifest["modulePromotion"]> = {
@@ -63,8 +66,8 @@ export function compileModulePromotion(input: CompileModulePromotionInput): Extr
       ? { cycleCut: { before: [...component], after, removedEdges } }
       : { containmentCut: { architecturalEdgesBefore: architecturalEdges.length, architecturalEdgesAfter: architecturalEdges.length - containmentRemoved.length, removedEdges: containmentRemoved, introducedApplicationDependencies } }),
   };
-  const manifest = buildPlanSync({ ...input, candidate, packageName: promotion.targetPackage, modulePromotion: proof });
-  const compiledImporters = manifest.consumers.map((item) => item.file).sort();
+  const manifest = buildPlanSync({ ...input, context, candidate, packageName: promotion.targetPackage, modulePromotion: proof });
+  const compiledImporters = [...new Set([...manifest.consumers.map((item) => item.file), ...manifest.source.tests])].sort();
   if (hashJson(compiledImporters) !== hashJson(importers)) {
     throw new PlanningError(`module promotion importer proof differs from the compiler-derived consumer set`);
   }

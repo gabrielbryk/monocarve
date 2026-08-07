@@ -72,7 +72,8 @@ function validateModulePromotion(manifest: ExtractionManifest, consumers: Readon
   if (manifest.source.files.length !== 1 || manifest.source.files[0] !== promotion.source) issues.add("module-promotion", "module promotion must select exactly its configured source module");
   const importerProof = [...promotion.importerProof];
   if (new Set(importerProof).size !== importerProof.length || importerProof.some((path, index) => index > 0 && path <= importerProof[index - 1]!)) issues.add("module-promotion-importers", "module promotion importer proof must be sorted and unique");
-  if (importerProof.length !== consumers.size || importerProof.some((path) => !consumers.has(path))) issues.add("module-promotion-importers", "module promotion importer proof must exactly equal compiled consumers");
+  const coveredImporters = new Set([...consumers, ...manifest.source.tests]);
+  if (importerProof.length !== coveredImporters.size || importerProof.some((path) => !coveredImporters.has(path))) issues.add("module-promotion-importers", "module promotion importer proof must exactly equal rewritten consumers and relocated owned tests");
   if ((promotion.cycleCut === undefined) === (promotion.containmentCut === undefined)) issues.add("module-promotion-boundary-cut", "module promotion must carry exactly one SCC or containment-cut proof");
   if (promotion.cycleCut !== undefined) validatePromotionCycleCut(promotion.source, promotion.cycleCut, issues);
   if (promotion.containmentCut !== undefined) validatePromotionContainmentCut(promotion.source, promotion.containmentCut, issues);
