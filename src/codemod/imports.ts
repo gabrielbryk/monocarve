@@ -196,9 +196,17 @@ function resolveWithTypeScript(
 function matchesDonor(importerPath: string, specifier: string, donorPath: string, boundary?: string, extraSuffixes: readonly string[] = []): boolean {
   if (resolvedImport(importerPath, specifier, boundary, extraSuffixes) === resolve(donorPath)) return true;
   const base = resolve(dirname(importerPath), specifier.replace(/[?#].*$/u, ""));
+  // Preserve TypeScript's NodeNext extension substitution after the donor has
+  // moved. `resolvedImport` already treats a written `./x.js` as `./x.ts`
+  // while the file exists; replay must recognize the same former path once it
+  // no longer exists or a move-before-rewrite journal becomes order-sensitive.
+  const javascriptBase = JAVASCRIPT_SOURCE_EXTENSIONS.includes(extname(base) as typeof JAVASCRIPT_SOURCE_EXTENSIONS[number])
+    ? base.slice(0, -extname(base).length)
+    : base;
   return [
     base,
     ...SUFFIXES.map((suffix) => base + suffix),
+    ...SUFFIXES.map((suffix) => javascriptBase + suffix),
     ...SUFFIXES.map((suffix) => resolve(base, `index${suffix}`)),
   ].some((candidate) => candidate === resolve(donorPath));
 }

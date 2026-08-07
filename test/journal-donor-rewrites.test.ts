@@ -27,6 +27,7 @@ import {
   fixtureGit,
   fixtureRepo,
   read,
+  write,
 } from "./support/fixture-repo.ts";
 
 const ALPHA = "apps/api/src/alpha.ts";
@@ -142,6 +143,26 @@ describe("donor-specific journal rewrites", () => {
     expect(read(root, CONSUMER)).toBe(result);
     expect(result).toContain(`from "${ALPHA_PUBLIC}"`);
     expect(result).toContain(`from "${BETA_PUBLIC}"`);
+  });
+
+  test("rewrites a NodeNext .js specifier after its .ts donor moves first", async () => {
+    const root = fixtureRepo(files());
+    const config = fixtureConfig(root);
+    const source = CONSUMER_TEXT.replace("./alpha.ts", "./alpha.js");
+    write(root, CONSUMER, source);
+    fixtureGit(root, "add", "--", CONSUMER);
+    fixtureGit(root, "commit", "-qm", "test: seed NodeNext consumer");
+    const donorHash = hashText(read(root, ALPHA));
+    const rewrite = { from: "./alpha.js", to: ALPHA_PUBLIC, donor: ALPHA } as const;
+    const result = rewriteResolvedImportSpecifier(source, join(root, CONSUMER), join(root, ALPHA), ALPHA_PUBLIC, root);
+    const operations: PlanOperation[] = [
+      { kind: "move", source: ALPHA, target: "libs/values/src/alpha.ts", preconditionHash: donorHash, resultHash: donorHash },
+      rewriteOperation(root, [ALPHA], [rewrite], result),
+    ];
+
+    await expect(executeJournal({ config, treeRoot: root, manifest: manifest(root, operations) })).resolves.toMatchObject({ skipped: 0 });
+    expect(read(root, CONSUMER)).toBe(result);
+    expect(result).toContain(`from "${ALPHA_PUBLIC}"`);
   });
 
   test("refuses mixed donor-specific and legacy rewrites without changing the consumer", async () => {
