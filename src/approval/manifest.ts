@@ -5,13 +5,14 @@ import { isGuardedBranch, type MonocarveConfig } from "../config.ts";
 import { PreflightError } from "../errors.ts";
 import { serializeManifest } from "../plan/build.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
+import { serializePreparerManifest, type PreparerManifest } from "../preparer/index.ts";
 import { currentBranch, git, gitBytes, headCommit, repositoryPrefix, showBaseline } from "../util/git.ts";
 import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
 
 export interface ManifestApprovalOptions {
   readonly rootDir: string;
   readonly config: MonocarveConfig;
-  readonly manifest: ExtractionManifest;
+  readonly manifest: ExtractionManifest | PreparerManifest;
   /** Absolute or workspace-relative path of the manifest written by `plan`. */
   readonly manifestPath: string;
 }
@@ -35,25 +36,25 @@ export interface ManifestApprovalCommit extends ManifestApprovalEvidence {
 export function manifestApprovalEvidence(options: ManifestApprovalOptions): ManifestApprovalEvidence {
   const manifestPath = relativeWorkspacePath(options.rootDir, options.manifestPath);
   const absolutePath = workspacePath(options.rootDir, manifestPath);
-  const planCommit = options.manifest.commits.plan;
-  if (planCommit === undefined) throw new PreflightError("manifest does not declare a plan approval commit");
+  const subject = approvalSubject(options.manifest);
   if (!lstatSync(absolutePath, { throwIfNoEntry: false })?.isFile()) {
     throw new PreflightError(`manifest is not a regular file: ${manifestPath}`);
   }
   const actual = readFileSync(absolutePath, "utf8");
-  const expected = serializeManifest(options.manifest);
+  const expected = serializeApprovalManifest(options.manifest);
   if (actual !== expected) throw new PreflightError(`written manifest does not match the reviewed manifest: ${manifestPath}`);
 
   const current = headCommit(options.rootDir);
-  if (current !== options.manifest.baselineCommit) {
-    throw new PreflightError(`HEAD ${current} does not match manifest baseline ${options.manifest.baselineCommit}`);
+  const baselineCommit = approvalBaseline(options.manifest);
+  if (current !== baselineCommit) {
+    throw new PreflightError(`HEAD ${current} does not match manifest baseline ${baselineCommit}`);
   }
   const branch = currentBranch(options.rootDir);
   return {
     manifestPath,
     baselineCommit: current,
     branch,
-    subject: planCommit.subject,
+    subject,
     gitAdd: ["git", "add", "--", manifestPath],
   };
 }
@@ -70,9 +71,9 @@ export function commitManifestApproval(options: ManifestApprovalOptions): Manife
   git({ cwd: options.rootDir }, "add", "--", evidence.manifestPath);
   try {
     assertOnlyManifestDirty(options.rootDir, evidence.manifestPath, true);
-    const planCommit = options.manifest.commits.plan!;
-    const args = ["commit", "--only", "-m", planCommit.subject];
-    if (planCommit.body !== undefined && planCommit.body !== "") args.push("-m", planCommit.body);
+    const commitMessage = approvalCommitMessage(options.manifest);
+    const args = ["commit", "--only", "-m", commitMessage.subject];
+    if (commitMessage.body !== undefined && commitMessage.body !== "") args.push("-m", commitMessage.body);
     args.push("--", evidence.manifestPath);
     git({ cwd: options.rootDir }, ...args);
   } catch (error) {
@@ -91,15 +92,38 @@ export function commitManifestApproval(options: ManifestApprovalOptions): Manife
     if (changed.length !== 1 || changed[0] !== expectedPath) {
       throw new PreflightError(`manifest approval commit changed paths other than ${evidence.manifestPath}`);
     }
-    const expectedBytes = serializeManifest(options.manifest);
+    const expectedBytes = serializeApprovalManifest(options.manifest);
     if (showBaseline(options.rootDir, commit, evidence.manifestPath) !== expectedBytes) {
       throw new PreflightError(`commit hook changed the reviewed manifest: ${evidence.manifestPath}`);
     }
   } catch (error) {
-    rollbackApprovalCommit(options.rootDir, evidence, commit, serializeManifest(options.manifest));
+    rollbackApprovalCommit(options.rootDir, evidence, commit, serializeApprovalManifest(options.manifest));
     throw new PreflightError(`${(error as Error).message}; approval commit was rolled back`);
   }
   return { ...evidence, commit };
+}
+
+function isPreparerManifest(manifest: ExtractionManifest | PreparerManifest): manifest is PreparerManifest {
+  return "preparer" in manifest && "baseline" in manifest;
+}
+
+function approvalBaseline(manifest: ExtractionManifest | PreparerManifest): string {
+  return isPreparerManifest(manifest) ? manifest.baseline.commit : manifest.baselineCommit;
+}
+
+function approvalCommitMessage(manifest: ExtractionManifest | PreparerManifest): { readonly subject: string; readonly body?: string } {
+  if (isPreparerManifest(manifest)) return { subject: `chore(monocarve): approve ${manifest.preparer.id}` };
+  const planCommit = manifest.commits.plan;
+  if (planCommit === undefined) throw new PreflightError("manifest does not declare a plan approval commit");
+  return planCommit;
+}
+
+function approvalSubject(manifest: ExtractionManifest | PreparerManifest): string {
+  return approvalCommitMessage(manifest).subject;
+}
+
+function serializeApprovalManifest(manifest: ExtractionManifest | PreparerManifest): string {
+  return isPreparerManifest(manifest) ? serializePreparerManifest(manifest) : serializeManifest(manifest);
 }
 
 function rollbackApprovalCommit(rootDir: string, evidence: ManifestApprovalEvidence, commit: string, reviewedBytes: string): void {

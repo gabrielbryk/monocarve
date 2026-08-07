@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync } from "node:fs";
+import { chmodSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { commitManifestApproval, manifestApprovalEvidence } from "../src/approval/manifest.ts";
@@ -7,6 +7,8 @@ import { serializeManifest } from "../src/plan/build.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, write } from "./support/fixture-repo.ts";
 import { baseManifest, extractionFiles } from "./support/transaction-fixture.ts";
 import { runIn } from "./support/cli.ts";
+import { serializePreparerManifest, type PreparerManifest } from "../src/preparer/index.ts";
+import { hashJson } from "../src/util/hash.ts";
 
 describe("guided manifest approval", () => {
   afterEach(cleanupFixtures);
@@ -100,5 +102,29 @@ describe("guided manifest approval", () => {
     expect(committed.code).toBe(0);
     expect(JSON.parse(committed.stdout)).toMatchObject({ commit: expect.any(String) });
     expect(fixtureGit(fixture.rootDir, "show", "--format=", "--name-only", "HEAD")).toBe(fixture.manifestPath);
+  });
+
+  test("CLI approves a standalone preparer manifest", async () => {
+    const fixture = setup();
+    const preparer = {
+      schemaVersion: 1,
+      planId: "preparer-plan",
+      createdAt: "2026-08-07T00:00:00.000Z",
+      baseline: { commit: fixture.manifest.baselineCommit, configDigest: hashJson(fixture.config) },
+      extractionPlanId: `standalone-${fixture.manifest.baselineCommit}`,
+      preparer: { id: "rewrite-boundary", phase: "pre-extraction", command: "true", commit: { subject: "fix: rewrite boundary" } },
+      binding: { application: "standalone", packageName: "standalone", packageRoot: ".", sourcePath: "apps/api/src/index.ts", targetPath: "apps/api/src/index.ts" },
+      mutations: [],
+    } as unknown as PreparerManifest;
+    const path = "plans/preparer.json";
+    write(fixture.rootDir, path, serializePreparerManifest(preparer));
+    fixtureGit(fixture.rootDir, "reset", "--hard", fixture.manifest.baselineCommit);
+    rmSync(join(fixture.rootDir, fixture.manifestPath));
+    write(fixture.rootDir, path, serializePreparerManifest(preparer));
+
+    const committed = await runIn(fixture.rootDir, "approve", "--plan", path, "--commit");
+    expect(committed.code).toBe(0);
+    expect(fixtureGit(fixture.rootDir, "log", "-1", "--format=%s")).toBe("chore(monocarve): approve rewrite-boundary");
+    expect(fixtureGit(fixture.rootDir, "show", "--format=", "--name-only", "HEAD")).toBe(path);
   });
 });

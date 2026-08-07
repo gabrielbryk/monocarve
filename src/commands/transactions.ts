@@ -8,6 +8,7 @@ import { validatePlan } from "../plan/validate.ts";
 import { applyPlan, preflight } from "../transaction/apply.ts";
 import { auditPlanSync } from "../transaction/audit.ts";
 import { inspectGateEffects } from "../transaction/gate-inspection.ts";
+import { assertPreparerManifest, type PreparerManifest } from "../preparer/index.ts";
 import { simulatePlan } from "../transaction/simulate.ts";
 import { applyTransactionStatus, recoverApplyTransaction } from "../transaction/apply-state.ts";
 import type { CommandSpec } from "./types.ts";
@@ -46,7 +47,18 @@ async function applyRecover(args: ParsedArgs): Promise<void> {
 
 async function approve(args: ParsedArgs): Promise<void> {
   const { config, rootDir } = await load(args);
-  const { path, manifest } = await loadManifest(args, rootDir);
+  let path: string;
+  let manifest;
+  try {
+    ({ path, manifest } = await loadManifest(args, rootDir));
+  } catch (error) {
+    const requested = flagString(args, "plan");
+    if (requested === undefined) throw error;
+    path = requested;
+    const parsed = JSON.parse(await Bun.file(`${rootDir}/${requested}`).text()) as PreparerManifest;
+    assertPreparerManifest(config, parsed);
+    manifest = parsed;
+  }
   const options = { config, rootDir, manifest, manifestPath: path };
   print(flagBool(args, "commit") ? commitManifestApproval(options) : manifestApprovalEvidence(options), args);
 }
