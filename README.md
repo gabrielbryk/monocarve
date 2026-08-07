@@ -370,7 +370,7 @@ specific workspace is hardcoded anywhere in `src/`.
 
 | field | purpose |
 | --- | --- |
-| `applications[]` | `name`, `sourceRoot`, `tsconfig`, optional `packageName`, `project`, `compositionRoots`, `compilerProfile` (`lib`, `types`, `jsx`, `moduleResolution` — the external-consumer proof has to resolve the way the application itself does), per-app `scaffoldTemplates` |
+| `applications[]` | `name`, `sourceRoot`, `tsconfig`, optional `packageName`, `project`, `compositionRoots`, `compilerProfile` (`lib`, `types`, `jsx`, `moduleResolution`, `esModuleInterop`, `allowSyntheticDefaultImports` — the external-consumer proof has to compile the way the application itself does), per-app `scaffoldTemplates` |
 | `packageRoots[]` | where packages live (`libs/`, `packages/`), in preference order |
 | `packageScope` | scope prefix for generated names (`@acme/`) |
 | `packageManager` | selects the adapter: workspace membership + lockfile ops |

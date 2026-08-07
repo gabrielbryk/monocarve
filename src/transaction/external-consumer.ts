@@ -77,6 +77,8 @@ function compilerOptionsFor(
     noEmit: true,
     skipLibCheck: true,
     allowImportingTsExtensions: true,
+    esModuleInterop: profile.esModuleInterop,
+    allowSyntheticDefaultImports: profile.allowSyntheticDefaultImports,
     baseUrl: rootDir,
     typeRoots: typeRootsFor(config, manifest, installedRoot),
     allowJs: false,

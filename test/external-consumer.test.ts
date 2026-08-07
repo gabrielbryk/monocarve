@@ -52,7 +52,7 @@ function manifest(requiredExports: ExtractionManifest["target"]["requiredExports
   };
 }
 
-function config(moduleResolution: "nodenext" | "bundler" = "bundler", types: readonly string[] = ["ambient-only"]): MonocarveConfig {
+function config(moduleResolution: "nodenext" | "bundler" = "bundler", types: readonly string[] = ["ambient-only"], interop = false): MonocarveConfig {
   return parseConfig(
     {
       applications: [
@@ -62,7 +62,7 @@ function config(moduleResolution: "nodenext" | "bundler" = "bundler", types: rea
           tsconfig: "apps/donor/tsconfig.json",
           packageName: "@acme/donor",
           compositionRoots: [],
-          compilerProfile: { lib: ["lib.es2022.d.ts"], types: [...types], jsx: false, moduleResolution },
+          compilerProfile: { lib: ["lib.es2022.d.ts"], types: [...types], jsx: false, moduleResolution, esModuleInterop: interop, allowSyntheticDefaultImports: interop },
         },
       ],
       packageRoots: ["libs"],
@@ -85,7 +85,7 @@ function proofFixture(): { readonly root: string; readonly config: MonocarveConf
     "apps/donor/package.json": packageJson({
       name: "@acme/donor",
       private: true,
-      dependencies: { "legacy-typed": "1.0.0", "plain-runtime": "1.0.0" },
+      dependencies: { "legacy-default": "1.0.0", "legacy-typed": "1.0.0", "plain-runtime": "1.0.0" },
     }),
     "apps/donor/tsconfig.json": packageJson({ compilerOptions: {}, include: ["src"] }),
     "libs/carved/package.json": packageJson({
@@ -180,6 +180,22 @@ describe("external consumer compile proof", () => {
 
     expect(result.passed).toBe(false);
     expect(result.diagnostics.join("\n")).toContain("explicit file extensions");
+  });
+
+  test("reproduces the donor's configured CommonJS default-import interoperability", () => {
+    const fixture = proofFixture();
+    write(fixture.root, "libs/carved/src/index.ts", 'import legacyDefault from "legacy-default";\nexport const combined = legacyDefault.value;\n');
+    write(fixture.root, "apps/donor/node_modules/legacy-default/package.json", packageJson({ name: "legacy-default", main: "./index.js", types: "./index.d.ts" }));
+    write(fixture.root, "apps/donor/node_modules/legacy-default/index.js", "module.exports = { value: 1 };\n");
+    write(fixture.root, "apps/donor/node_modules/legacy-default/index.d.ts", "declare const legacyDefault: { value: number };\nexport = legacyDefault;\n");
+
+    const disabled = run(fixture.root, config("bundler", ["ambient-only"], false), fixture.manifest);
+    expect(disabled.passed).toBe(false);
+    expect(disabled.diagnostics.join("\n")).toContain("allowSyntheticDefaultImports");
+
+    const enabled = run(fixture.root, config("bundler", ["ambient-only"], true), fixture.manifest);
+    expect(enabled.passed).toBe(true);
+    expect(enabled.diagnostics).toEqual([]);
   });
 
   test("imports a required default export and rejects a surface that omits it", () => {

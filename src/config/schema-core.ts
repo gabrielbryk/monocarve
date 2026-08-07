@@ -79,6 +79,10 @@ export const application = z.strictObject({
        * every file the application itself compiles happily.
        */
       moduleResolution: z.enum(["nodenext", "bundler"]).default("nodenext"),
+      /** Match the application's TypeScript CommonJS default-import interop setting. */
+      esModuleInterop: z.boolean().default(false),
+      /** Match the application's acceptance of synthetic default imports from CommonJS declarations. */
+      allowSyntheticDefaultImports: z.boolean().default(false),
     })
     .prefault({}),
   /** Per-application scaffold overrides; unset keys fall back to the root templates. */
