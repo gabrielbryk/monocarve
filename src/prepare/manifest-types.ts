@@ -241,6 +241,12 @@ export interface PreparationManifest {
   readonly baseline: PreparationBaseline;
   /** Digest of the fresh workspace graph used to select this preparation. */
   readonly graphDigest: Sha256;
+  /** Exact compiler-selected input used to render repository preparation policy. */
+  readonly policyAnchor?: {
+    readonly sourcePath: string;
+    readonly targetPath: string;
+    readonly targetModuleSpecifier: string;
+  };
   readonly declarations: readonly PreparationDeclarationGroupSelector[];
   readonly operations: readonly PreparationReplayOperation[];
   readonly compatibilityReexports: readonly CompatibilityReexportIntent[];

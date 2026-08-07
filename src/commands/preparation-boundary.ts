@@ -19,7 +19,7 @@ import { serializeManifest } from "../plan/build.ts";
 import { applyPlan } from "../transaction/apply.ts";
 import { simulatePlan } from "../transaction/simulate.ts";
 import { compileBoundaryPreparationManifest } from "../prepare/build.ts";
-import { compileGeneratedSourceAdoption } from "../prepare/generated-source-adoption.ts";
+import { compileGeneratedSourceAdoption, generatedSourceAdoptionPolicyAnchor } from "../prepare/generated-source-adoption.ts";
 import { resolveBoundaries } from "../prepare/boundary-resolve.ts";
 import { simulatePreparation } from "../prepare/simulate.ts";
 import { serializePreparationManifest } from "../prepare/index.ts";
@@ -67,9 +67,9 @@ async function boundaryCompile(args: ParsedArgs): Promise<void> {
   }
   const adoption = loaded.config.generatedSourceAdoptions.find((item) => item.id === id);
   if (adoption) {
-    const sourcePath = adoption.artifacts[0]!.path;
-    const policySpecifier = `adopt:${id}`;
-    const rendering = renderPreparationPolicy(loaded.config, { sourcePath, targetPath: sourcePath, targetModuleSpecifier: policySpecifier });
+    const policyAnchor = generatedSourceAdoptionPolicyAnchor(adoption);
+    const policySpecifier = policyAnchor.targetModuleSpecifier;
+    const rendering = renderPreparationPolicy(loaded.config, policyAnchor);
     const manifest = compileGeneratedSourceAdoption({ rootDir: loaded.rootDir, config: loaded.config, graph: loaded.graph, baselineCommit: loaded.graph.commit ?? "HEAD", graphDigest: graphDigest(loaded.graph), adoptionId: id, rendering, policySpecifier });
     const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
     const written = flagBool(args, "write");

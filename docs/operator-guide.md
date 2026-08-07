@@ -191,6 +191,8 @@ R100, then restores and commits the compatibility file with the other wiring.
 ```ts
 generatedSourceAdoptions: [{
   id: "durable-contracts",
+  // Optional: required when every artifact is outside configured applications.
+  policyAnchor: "apps/api/src/adoption-policy.ts",
   artifacts: [{
     path: "apps/api/src/resources/schemas.ts",
     missingSource: "spec/resources.schema.json",
@@ -209,6 +211,13 @@ names that generator belongs to the same adoption. Simulation and audit replay
 the exact before/after bytes and prove both source absence and generator
 deletion. A later module-promotion plan is compiled only after this adoption
 lands, so orphaned generated output is never silently treated as source.
+
+The compiler records one application-owned policy anchor and simulation,
+apply, and audit reproduce policy from that exact configured choice. Artifacts
+may span applications and existing `packageRoots`; package files do not need
+fake `applications` entries. By default the first artifact is the anchor. For
+an all-package adoption, configure `policyAnchor` as a real application-owned
+path whose repository policy should govern the operation.
 
 ### Compiling and applying a boundary
 
