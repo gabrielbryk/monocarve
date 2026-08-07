@@ -54,11 +54,12 @@ interface ExistingPackageFixture {
  * single symbol is fully covered by the declared replacement — the ordinary,
  * fully-satisfiable case.
  */
-function existingPackageFixture(overrides: { readonly extraModules?: readonly ScanReport["modules"][number][]; readonly retire?: boolean } = {}): ExistingPackageFixture {
+function existingPackageFixture(overrides: { readonly extraModules?: readonly ScanReport["modules"][number][]; readonly extraFiles?: Readonly<Record<string, string>>; readonly retire?: boolean; readonly selective?: boolean } = {}): ExistingPackageFixture {
   const root = fixtureRepo({
     "apps/api/tsconfig.json": TSCONFIG,
     [RETAINED]: RETAINED_SOURCE,
     [IMPORTER]: IMPORTER_SOURCE,
+    ...(overrides.extraFiles ?? {}),
   });
   const config = fixtureConfig(root, {
     compositionBoundaries: [{
@@ -67,6 +68,7 @@ function existingPackageFixture(overrides: { readonly extraModules?: readonly Sc
       strategy: "existing-package",
       replacement: { specifier: "@acme/env", symbols: ["env"] },
       retire: overrides.retire ?? true,
+      selective: overrides.selective ?? false,
     }],
     preparation: {
       gates: { package: [], project: [], workspace: ["true"] },
@@ -182,6 +184,22 @@ describe("compileBoundaryPreparationManifest — existing-package strategy", () 
 
     expect(second.planId).toBe(first.planId);
     expect(stableStringify(second)).toBe(stableStringify(first));
+  });
+
+  test("selective mode rewrites fully covered importers and retains mixed consumers", () => {
+    const mixed = "apps/api/src/orders/mixed.ts";
+    const mixedSource = 'import { env, other } from "../config/env.ts";\nexport const values = [env, other];\n';
+    const { input } = existingPackageFixture({
+      retire: false,
+      selective: true,
+      extraFiles: { [mixed]: mixedSource },
+      extraModules: [{ source: mixed, dependencies: [{ module: "../config/env.ts", resolved: RETAINED }] }],
+    });
+
+    const manifest = compileBoundaryPreparationManifest(input);
+    expect(manifest.operations).toHaveLength(1);
+    expect(manifest.operations[0]?.kind).toBe("rewrite-module-specifier");
+    expect(manifest.changedFiles).toEqual([IMPORTER]);
   });
 
   test("orders a rewrite before a later-path shim deletion and rejects the inverse", () => {

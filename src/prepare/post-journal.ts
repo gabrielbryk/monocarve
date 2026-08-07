@@ -12,6 +12,12 @@ export interface PreparationPreparerReport {
   readonly failure?: string;
 }
 
+export function preparationPostJournalRecords(config: MonocarveConfig, changedPaths: readonly string[]) {
+  return config.postJournalPreparers.filter((preparer) =>
+    preparer.triggers.length === 0 || changedPaths.some((path) => preparer.triggers.some((pattern) => new RegExp(pattern).test(path))),
+  ).map((preparer) => ({ id: preparer.id, command: preparer.command, outputs: [...preparer.outputs].sort(), ...(preparer.verify === undefined ? {} : { verify: preparer.verify }) }));
+}
+
 /** Run exactly the config-bound preparers recorded by the preparation plan. */
 export function runPreparationPostJournalPreparers(config: MonocarveConfig, rootDir: string, manifest: PreparationManifest): PreparationPreparerReport {
   const records = manifest.postJournalPreparers ?? [];

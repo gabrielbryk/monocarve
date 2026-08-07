@@ -28,6 +28,7 @@ function boundary(overrides: Partial<ResolvedExistingPackageBoundary> = {}): Res
     replacementSpecifier: "@acme/env",
     replacementSymbols: ["env"],
     retire: false,
+    selective: false,
     ...overrides,
   };
 }

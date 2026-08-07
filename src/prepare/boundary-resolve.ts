@@ -34,6 +34,7 @@ export interface ResolvedExistingPackageBoundary {
   readonly replacementSpecifier: string;
   readonly replacementSymbols: readonly string[];
   readonly retire: boolean;
+  readonly selective: boolean;
 }
 
 export interface ResolvedPortBoundary {
@@ -94,6 +95,7 @@ function resolveCompositionBoundary(boundary: CompositionBoundariesConfig[number
       replacementSpecifier: boundary.replacement.specifier,
       replacementSymbols: [...boundary.replacement.symbols].sort(byCodeUnit),
       retire: boundary.retire,
+      selective: boundary.selective,
     };
   }
   if (!boundary.contract || !boundary.contractModule || !boundary.appAdapter || !boundary.packageImport || boundary.symbols.length === 0) {

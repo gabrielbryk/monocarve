@@ -146,6 +146,10 @@ describe("compositionBoundaries schema refusals", () => {
     ).toThrow(/compositionBoundaries id must be unique/);
   });
 
+  test("selective existing-package boundaries cannot retire mixed donors", () => {
+    expect(() => config({ compositionBoundaries: [{ id: "env-shim", retained: `${APP}/config/env.ts`, strategy: "existing-package", replacement: { specifier: "@acme/env", symbols: ["env"] }, selective: true, retire: true }] })).toThrow(/selective boundaries require existing-package strategy with retire false/);
+  });
+
   test("duplicate ids within portPromotions are rejected at config load", () => {
     expect(() =>
       config({
@@ -206,6 +210,7 @@ describe("resolveBoundaries", () => {
       replacementSpecifier: "@acme/env",
       replacementSymbols: ["envA", "envB"],
       retire: true,
+      selective: false,
     });
   });
 

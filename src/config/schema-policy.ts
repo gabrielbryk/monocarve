@@ -306,6 +306,8 @@ export const compositionBoundaries = z
          * surface other tooling still expects); deletion is opt-in per boundary.
          */
         retire: z.boolean().default(false),
+        /** Rewrite only importers whose complete named surface is covered by replacement.symbols. */
+        selective: z.boolean().default(false),
         /**
          * The five fields below are required together, and only for
          * `strategy: "port"`. `contract`/`contractModule` name the portable
@@ -337,6 +339,9 @@ export const compositionBoundaries = z
             path: ["replacement"],
             message: 'strategy "existing-package" requires a "replacement" specifier and symbol list',
           });
+        }
+        if (boundary.selective && (boundary.strategy !== "existing-package" || boundary.retire)) {
+          ctx.addIssue({ code: "custom", path: ["selective"], message: "selective boundaries require existing-package strategy with retire false" });
         }
         if (boundary.strategy === "port") {
           const required: readonly (keyof typeof boundary)[] = ["contract", "contractModule", "appAdapter", "packageImport"];

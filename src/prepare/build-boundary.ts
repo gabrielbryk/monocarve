@@ -24,6 +24,7 @@ import { planPortBoundary, type PortConsumerInput } from "./boundary-port.ts";
 import { resolveBoundaries, type ResolvedBoundary } from "./boundary-resolve.ts";
 import { createPreparationManifest, assertPreparationManifestValid, preparationOperationPaths } from "./manifest.ts";
 import type { PreparationManifest, PreparationReplayOperation } from "./manifest-types.ts";
+import { preparationPostJournalRecords } from "./post-journal.ts";
 import { preparationCompilerOptions } from "./compiler-policy.ts";
 import { baselineFileMode, type PreparationManifestRendering } from "./build.ts";
 
@@ -98,7 +99,9 @@ export function compileBoundaryPreparationManifest(input: CompileBoundaryPrepara
     ? planExistingPackageOperations(input, boundary, retainedText, retainedMode, bindings)
     : planPortOperations(input, boundary, baseline.commit, retainedText, compilerOptions, bindings);
   const ordered = [...operations].sort(boundaryOperationOrder);
-  const changedFiles = [...new Set(ordered.flatMap(preparationOperationPaths))].sort(byCodeUnit);
+  const operationPaths = [...new Set(ordered.flatMap(preparationOperationPaths))].sort(byCodeUnit);
+  const postJournalPreparers = preparationPostJournalRecords(input.config, operationPaths);
+  const changedFiles = [...new Set([...operationPaths, ...postJournalPreparers.flatMap((item) => item.outputs)])].sort(byCodeUnit);
   const manifest = createPreparationManifest({
     schemaVersion: 1,
     createdAt: baseline.committedAt,
@@ -112,6 +115,7 @@ export function compileBoundaryPreparationManifest(input: CompileBoundaryPrepara
     // own.
     declarations: [],
     operations: ordered,
+    postJournalPreparers,
     compatibilityReexports: [],
     changedFiles,
     commits: { prepare: input.rendering.commit },
@@ -141,7 +145,11 @@ function planExistingPackageOperations(
   retainedMode: number,
   bindings: readonly BoundaryImporterBinding[],
 ): readonly PreparationReplayOperation[] {
-  const importers: RetainedImporterInput[] = bindings.map((binding) => ({
+  const selectedBindings = boundary.selective
+    ? bindings.filter((binding) => binding.importedSymbols.length > 0 && binding.importedSymbols.every((symbol) => boundary.replacementSymbols.includes(symbol)))
+    : bindings;
+  if (boundary.selective && selectedBindings.length === 0) throw new PlanningError(`selective boundary ${boundary.id} found no fully-covered importers`);
+  const importers: RetainedImporterInput[] = selectedBindings.map((binding) => ({
     path: binding.path,
     preconditionHash: binding.preconditionHash,
     mode: binding.mode,

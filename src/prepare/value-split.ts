@@ -10,6 +10,7 @@ import { byCodeUnit, hashJson, hashText, MISSING, type Sha256 } from "../util/ha
 import { baselineFileMode, type PreparationManifestRendering } from "./build.ts";
 import { assertPreparationManifestValid, createPreparationManifest, preparationOperationPaths } from "./manifest.ts";
 import type { PreparationManifest, PreparationReplayOperation, PreparationWriteFileOperation } from "./manifest-types.ts";
+import { preparationPostJournalRecords } from "./post-journal.ts";
 
 export interface CompileValueSplitInput {
   readonly rootDir: string;
@@ -78,9 +79,7 @@ export function compileValueSplit(input: CompileValueSplitInput): PreparationMan
   ].sort((left, right) => byCodeUnit(preparationOperationPaths(left)[0]!, preparationOperationPaths(right)[0]!));
   const policyAnchor = { sourcePath: split.source, targetPath: split.target, targetModuleSpecifier: split.targetModuleSpecifier };
   const changedSourcePaths = operations.flatMap(preparationOperationPaths);
-  const postJournalPreparers = input.config.postJournalPreparers.filter((preparer) =>
-    preparer.triggers.length === 0 || changedSourcePaths.some((path) => preparer.triggers.some((pattern) => new RegExp(pattern).test(path))),
-  ).map((preparer) => ({ id: preparer.id, command: preparer.command, outputs: [...preparer.outputs].sort(byCodeUnit), ...(preparer.verify === undefined ? {} : { verify: preparer.verify }) }));
+  const postJournalPreparers = preparationPostJournalRecords(input.config, changedSourcePaths);
   const manifest = createPreparationManifest({
     schemaVersion: 1,
     createdAt: baseline.committedAt,
