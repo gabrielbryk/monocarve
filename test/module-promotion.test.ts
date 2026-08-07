@@ -16,7 +16,7 @@ const SOURCE = "apps/api/src/resources/schemas.ts";
 const CONSUMER = "apps/api/src/routes.ts";
 const OTHER = "apps/api/src/other.ts";
 
-function setup(options: { cycle?: boolean; hiddenConsumer?: boolean; retireSource?: boolean } = {}) {
+function setup(options: { cycle?: boolean; hiddenConsumer?: boolean; retireSource?: boolean; noGraphEdges?: boolean; sourceDependsOnApp?: boolean } = {}) {
   const root = fixtureRepo({
     "package.json": '{"name":"fixture","private":true}\n',
     "pnpm-workspace.yaml": "packages:\n  - 'apps/*'\n  - 'libs/*'\n",
@@ -29,11 +29,11 @@ function setup(options: { cycle?: boolean; hiddenConsumer?: boolean; retireSourc
   });
   const config = fixtureConfig(root, { modulePromotions: [{ id: "resource-contracts", source: SOURCE, targetPackage: "@acme/resource-contracts", targetModule: "index", retireSource: options.retireSource ?? true }] });
   const baseline = resolveCommit(root, "HEAD");
-  const dependencies: ScanReport["modules"][number]["dependencies"] = options.cycle === false ? [] : [{ module: "../routes.ts", resolved: CONSUMER }];
+  const dependencies: ScanReport["modules"][number]["dependencies"] = options.cycle === false && !options.sourceDependsOnApp ? [] : [{ module: "../routes.ts", resolved: CONSUMER }];
   const modules: ScanReport["modules"] = [
     { source: SOURCE, dependencies },
-    { source: CONSUMER, dependencies: [{ module: "./resources/schemas.ts", resolved: SOURCE }] },
-    ...(options.hiddenConsumer ? [] : [{ source: OTHER, dependencies: [{ module: "./resources/schemas.ts", resolved: SOURCE }] }]),
+    { source: CONSUMER, dependencies: options.noGraphEdges || options.sourceDependsOnApp ? [] : [{ module: "./resources/schemas.ts", resolved: SOURCE }] },
+    ...(options.hiddenConsumer ? [] : [{ source: OTHER, dependencies: options.noGraphEdges ? [] : [{ module: "./resources/schemas.ts", resolved: SOURCE }] }]),
   ];
   const graph = buildDependencyGraph({ config, rootDir: root, reports: { api: { modules } }, commit: baseline.commit });
   return { root, config, graph, baseline };
@@ -45,15 +45,28 @@ describe("module promotion", () => {
     const manifest = compileModulePromotion({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, context: new WorkspaceContext(fixture.config, fixture.root), baselineCommit: fixture.baseline.commit, promotionId: "resource-contracts" });
     expect(manifest.source.files).toEqual([SOURCE]);
     expect(manifest.modulePromotion?.importerProof).toEqual([OTHER, CONSUMER]);
-    expect(manifest.modulePromotion?.cycleCut.before).toEqual([SOURCE, CONSUMER]);
-    expect(manifest.modulePromotion?.cycleCut.after).toEqual([[CONSUMER]]);
+    expect(manifest.modulePromotion?.cycleCut?.before).toEqual([SOURCE, CONSUMER]);
+    expect(manifest.modulePromotion?.cycleCut?.after).toEqual([[CONSUMER]]);
     expect(manifest.operations.find((item) => item.kind === "move")?.resultHash).toBe(manifest.sourceBlobs[SOURCE]);
     expect(manifest.consumers.map((item) => item.specifiers[0]?.to)).toEqual(["@acme/resource-contracts", "@acme/resource-contracts"]);
   });
 
-  test("refuses a selection that does not cut a multi-module SCC", () => {
+  test("promotes a singleton module when incoming imports cut architectural containment edges", () => {
     const fixture = setup({ cycle: false });
-    expect(() => compileModulePromotion({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, context: new WorkspaceContext(fixture.config, fixture.root), baselineCommit: fixture.baseline.commit, promotionId: "resource-contracts" })).toThrow(/does not cut a multi-module SCC/);
+    const manifest = compileModulePromotion({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, context: new WorkspaceContext(fixture.config, fixture.root), baselineCommit: fixture.baseline.commit, promotionId: "resource-contracts" });
+    expect(manifest.modulePromotion?.cycleCut).toBeUndefined();
+    expect(manifest.modulePromotion?.containmentCut).toEqual({ architecturalEdgesBefore: 2, architecturalEdgesAfter: 0, removedEdges: [{ from: OTHER, to: SOURCE }, { from: CONSUMER, to: SOURCE }], introducedApplicationDependencies: [] });
+    expect(manifest.modulePromotion?.importerProof).toEqual([OTHER, CONSUMER]);
+  });
+
+  test("refuses a singleton selection that cuts no architectural containment edge", () => {
+    const fixture = setup({ cycle: false, noGraphEdges: true });
+    expect(() => compileModulePromotion({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, context: new WorkspaceContext(fixture.config, fixture.root), baselineCommit: fixture.baseline.commit, promotionId: "resource-contracts" })).toThrow(/neither a multi-module SCC nor an architectural containment edge/);
+  });
+
+  test("refuses a singleton promotion that would make the package depend on an application", () => {
+    const fixture = setup({ cycle: false, sourceDependsOnApp: true });
+    expect(() => compileModulePromotion({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, context: new WorkspaceContext(fixture.config, fixture.root), baselineCommit: fixture.baseline.commit, promotionId: "resource-contracts" })).toThrow(/package dependency on application modules.*routes/);
   });
 
   test("refuses when the graph-derived importer proof omits a real compiler consumer", () => {
@@ -65,8 +78,18 @@ describe("module promotion", () => {
     const fixture = setup();
     const manifest = compileModulePromotion({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, context: new WorkspaceContext(fixture.config, fixture.root), baselineCommit: fixture.baseline.commit, promotionId: "resource-contracts" });
     const promotion = manifest.modulePromotion!;
-    const tampered = { ...manifest, modulePromotion: { ...promotion, cycleCut: { ...promotion.cycleCut, after: [promotion.cycleCut.before] } } };
+    const cycleCut = promotion.cycleCut!;
+    const tampered = { ...manifest, modulePromotion: { ...promotion, cycleCut: { ...cycleCut, after: [cycleCut.before] } } };
     expect(validatePlan(tampered, { config: fixture.config, rootDir: fixture.root }).issues.some((item) => item.rule === "module-promotion-cycle-cut")).toBe(true);
+  });
+
+  test("validation rejects containment evidence whose architectural metric does not improve", () => {
+    const fixture = setup({ cycle: false });
+    const manifest = compileModulePromotion({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, context: new WorkspaceContext(fixture.config, fixture.root), baselineCommit: fixture.baseline.commit, promotionId: "resource-contracts" });
+    const promotion = manifest.modulePromotion!;
+    const containmentCut = promotion.containmentCut!;
+    const tampered = { ...manifest, modulePromotion: { ...promotion, containmentCut: { ...containmentCut, architecturalEdgesAfter: containmentCut.architecturalEdgesBefore } } };
+    expect(validatePlan(tampered, { config: fixture.config, rootDir: fixture.root }).issues.some((item) => item.rule === "module-promotion-containment-cut")).toBe(true);
   });
 
   test("a compatibility re-export still lands the move as a pure R100 commit", async () => {

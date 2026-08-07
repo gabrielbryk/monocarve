@@ -157,7 +157,7 @@ the promoted contract structurally, so nothing is rendered from a template.
 Both vocabularies share one `id` namespace: reusing the same `id` in both
 `compositionBoundaries` and `portPromotions` is refused.
 
-### Module promotion (cycle cuts)
+### Module promotion (architectural boundary cuts)
 
 ```ts
 modulePromotions: [{
@@ -174,10 +174,14 @@ The reviewer selects exactly one complete source module; compilation derives
 every importer from the fresh graph and the compiler's own reference index,
 then emits an ordinary extraction manifest. Package scaffolding, dependencies,
 exports, tests, path migrations, simulation, apply, and audit therefore use the
-same engine as any other extraction. The manifest additionally records the
-baseline SCC, every incident edge removed by the promotion, and the SCCs left
-after the cut. Compilation refuses a singleton/non-cycle selection, a partial
-importer inventory, or a cut that does not reduce the largest SCC.
+same engine as any other extraction. When the source belongs to a multi-file
+SCC, the manifest records the baseline SCC, every incident edge removed by the
+promotion, and the SCCs left after the cut; compilation still requires the
+largest SCC to shrink. A singleton source instead carries a containment-cut
+proof: at least one cross-domain or cross-application edge must disappear, the
+application containment-edge count must improve by that exact amount, and the
+new package may not depend on any application module. Both paths refuse a
+partial importer inventory.
 
 `targetModule: "index"` exposes the moved module at the package root. A
 subpath value uses the configured public-surface templates. `retireSource: true`
