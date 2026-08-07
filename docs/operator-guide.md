@@ -185,7 +185,10 @@ partial importer inventory. Direct test importers use the ordinary relocation
 policy: only self-contained, source-owned tests travel with the module; tests
 that reach another domain's application support remain in place and have their
 imports rewritten. The importer proof is the exact union of those relocated
-tests and retained consumers.
+tests and retained consumers. Review and compilation derive that inventory from
+the union of the fresh dependency graph and the compiler reference index, so
+imports under configured `consumerRoots` are visible even when the graph scan
+does not include those directories.
 
 `targetModule: "index"` exposes the moved module at the package root. A
 subpath value uses the configured public-surface templates. `retireSource: true`

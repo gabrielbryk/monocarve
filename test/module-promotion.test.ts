@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { buildDependencyGraph, type ScanReport } from "../src/graph/build.ts";
-import { compileModulePromotion } from "../src/plan/module-promotion.ts";
+import { compileModulePromotion, modulePromotionImporterEvidence } from "../src/plan/module-promotion.ts";
 import { validatePlan } from "../src/plan/validate.ts";
 import { resolveCommit } from "../src/util/git.ts";
 import { WorkspaceContext } from "../src/plan/context.ts";
@@ -18,8 +18,9 @@ const OTHER = "apps/api/src/other.ts";
 const OWNED_TEST = "apps/api/src/resources/schemas.test.ts";
 const TERRITORY_TEST = "apps/api/src/territory/service.test.ts";
 const TERRITORY_SERVICE = "apps/api/src/territory/service.ts";
+const CONSUMER_ROOT_TEST = "apps/api/tests/admin/helpers.test.ts";
 
-function setup(options: { cycle?: boolean; hiddenConsumer?: boolean; retireSource?: boolean; noGraphEdges?: boolean; sourceDependsOnApp?: boolean; directTests?: boolean } = {}) {
+function setup(options: { cycle?: boolean; hiddenConsumer?: boolean; retireSource?: boolean; noGraphEdges?: boolean; sourceDependsOnApp?: boolean; directTests?: boolean; consumerRootTest?: boolean } = {}) {
   const root = fixtureRepo({
     "package.json": '{"name":"fixture","private":true}\n',
     "pnpm-workspace.yaml": "packages:\n  - 'apps/*'\n  - 'libs/*'\n",
@@ -34,8 +35,13 @@ function setup(options: { cycle?: boolean; hiddenConsumer?: boolean; retireSourc
       [TERRITORY_SERVICE]: "export const territory = true;\n",
       [TERRITORY_TEST]: 'import { Contract } from "../resources/schemas.ts";\nimport { territory } from "./service.ts";\nvoid [Contract, territory];\n',
     } : {}),
+    ...(options.consumerRootTest ? { [CONSUMER_ROOT_TEST]: 'import { Contract } from "../../src/resources/schemas.ts";\nvoid Contract;\n' } : {}),
   });
-  const config = fixtureConfig(root, { testKinds: { unit: ["\\.test\\.ts$"], integration: [], e2e: [] }, modulePromotions: [{ id: "resource-contracts", source: SOURCE, targetPackage: "@acme/resource-contracts", targetModule: "index", retireSource: options.retireSource ?? true }] });
+  const config = fixtureConfig(root, {
+    applications: [{ name: "api", sourceRoot: "apps/api/src", consumerRoots: options.consumerRootTest ? ["apps/api/tests"] : [], tsconfig: "apps/api/tsconfig.json", packageName: "@acme/api", compositionRoots: [] }],
+    testKinds: { unit: ["\\.test\\.ts$"], integration: [], e2e: [] },
+    modulePromotions: [{ id: "resource-contracts", source: SOURCE, targetPackage: "@acme/resource-contracts", targetModule: "index", retireSource: options.retireSource ?? true }],
+  });
   const baseline = resolveCommit(root, "HEAD");
   const dependencies: ScanReport["modules"][number]["dependencies"] = options.cycle === false && !options.sourceDependsOnApp ? [] : [{ module: "../routes.ts", resolved: CONSUMER }];
   const modules: ScanReport["modules"] = [
@@ -82,9 +88,12 @@ describe("module promotion", () => {
     expect(() => compileModulePromotion({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, context: new WorkspaceContext(fixture.config, fixture.root), baselineCommit: fixture.baseline.commit, promotionId: "resource-contracts" })).toThrow(/package dependency on application modules.*routes/);
   });
 
-  test("refuses when the graph-derived importer proof omits a real compiler consumer", () => {
+  test("augments graph importer evidence from the compiler reference index", () => {
     const fixture = setup({ hiddenConsumer: true });
-    expect(() => compileModulePromotion({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, context: new WorkspaceContext(fixture.config, fixture.root), baselineCommit: fixture.baseline.commit, promotionId: "resource-contracts" })).toThrow(/importer proof differs/);
+    const manifest = compileModulePromotion({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, context: new WorkspaceContext(fixture.config, fixture.root), baselineCommit: fixture.baseline.commit, promotionId: "resource-contracts" });
+    expect(fixture.graph.incoming.get(SOURCE)).not.toContain(OTHER);
+    expect(manifest.modulePromotion?.importerProof).toContain(OTHER);
+    expect(manifest.consumers.map((item) => item.file)).toContain(OTHER);
   });
 
   test("moves only source-owned tests and rewrites another domain's service test as a consumer", () => {
@@ -105,6 +114,18 @@ describe("module promotion", () => {
     const tampered = { ...manifest, modulePromotion: { ...promotion, importerProof: promotion.importerProof.filter((path) => path !== OWNED_TEST) } };
 
     expect(validatePlan(tampered, { config: fixture.config, rootDir: fixture.root }).issues.some((item) => item.rule === "module-promotion-importers")).toBe(true);
+  });
+
+  test("reviews and rewrites a test importer from a configured consumer root", () => {
+    const fixture = setup({ cycle: false, consumerRootTest: true });
+    const context = new WorkspaceContext(fixture.config, fixture.root);
+    expect(modulePromotionImporterEvidence({ graph: fixture.graph, context, source: SOURCE })).toEqual([OTHER, CONSUMER, CONSUMER_ROOT_TEST]);
+
+    const manifest = compileModulePromotion({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, context, baselineCommit: fixture.baseline.commit, promotionId: "resource-contracts" });
+    expect(manifest.source.tests).toEqual([]);
+    expect(manifest.consumers.map((item) => item.file)).toEqual([OTHER, CONSUMER, CONSUMER_ROOT_TEST]);
+    expect(manifest.modulePromotion?.importerProof).toEqual([OTHER, CONSUMER, CONSUMER_ROOT_TEST]);
+    expect(manifest.operations.some((item) => item.kind === "rewrite-import" && item.file === CONSUMER_ROOT_TEST)).toBe(true);
   });
 
   test("validation rejects a manifest whose cycle-cut proof is made non-failing", () => {

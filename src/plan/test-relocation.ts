@@ -74,7 +74,7 @@ function classifyUnitTest(
   if (!selfContained && movedAssets.size > 0) {
     throw new PlanningError(`retained test ${test} imports moved asset ${[...movedAssets].sort(byCodeUnit).join(", ")}`);
   }
-  return selfContained ? "travelling" : "retained";
+  return context.isMovable(test) && selfContained ? "travelling" : "retained";
 }
 
 function testReferenceTravels(

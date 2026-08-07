@@ -11,6 +11,16 @@ export interface CompileModulePromotionInput extends Omit<BuildPlanOptions, "can
   readonly promotionId: string;
 }
 
+export function modulePromotionImporterEvidence(input: {
+  readonly graph: CompileModulePromotionInput["graph"];
+  readonly context: WorkspaceContext;
+  readonly source: string;
+}): string[] {
+  const graphImporters = [...(input.graph.incoming.get(input.source) ?? []), ...(input.graph.testImporters.get(input.source) ?? [])];
+  const compilerImporters = input.context.consumerIndex().get(input.context.absolute(input.source)) ?? [];
+  return [...new Set([...graphImporters, ...compilerImporters])].sort();
+}
+
 /** Compile a reviewed singleton selection through the ordinary extraction engine. */
 export function compileModulePromotion(input: CompileModulePromotionInput): ExtractionManifest {
   const promotion = input.config.modulePromotions.find((item) => item.id === input.promotionId);
@@ -46,9 +56,9 @@ export function compileModulePromotion(input: CompileModulePromotionInput): Extr
   if (!cutsScc && containmentRemoved.length === 0) throw new PlanningError(`module promotion ${promotion.id} cuts neither a multi-module SCC nor an architectural containment edge at the baseline`);
   if (!cutsScc && introducedApplicationDependencies.length > 0) throw new PlanningError(`module promotion ${promotion.id} would introduce a package dependency on application modules: ${introducedApplicationDependencies.join(", ")}`);
   const context = input.context ?? new WorkspaceContext(input.config, input.rootDir);
-  const directTests = [...(input.graph.testImporters.get(promotion.source) ?? [])].sort();
+  const importers = modulePromotionImporterEvidence({ graph: input.graph, context, source: promotion.source });
+  const directTests = importers.filter((path) => context.isTest(path));
   const testPartition = partitionTests(context, [promotion.source], directTests, []);
-  const importers = [...new Set([...(input.graph.incoming.get(promotion.source) ?? []), ...directTests])].sort();
   const scc: Scc = toSccs(appGraph.condensed).find((item) => item.members.includes(promotion.source))!;
   const candidate: PortfolioCandidate = {
     id: `promotion-${hashJson({ id: promotion.id, source: promotion.source, commit: input.graph.commit })}`,
