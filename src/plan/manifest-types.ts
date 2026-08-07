@@ -7,6 +7,17 @@ import type { ImportRewrite, PlanOperation } from "./manifest-operations.ts";
 export const LEGACY_PLAN_SCHEMA_VERSION = 2 as const;
 export const PLAN_SCHEMA_VERSION = 3 as const;
 
+export function isSupportedExtractionManifestVersion(value: unknown): value is typeof LEGACY_PLAN_SCHEMA_VERSION | typeof PLAN_SCHEMA_VERSION {
+  return value === LEGACY_PLAN_SCHEMA_VERSION || value === PLAN_SCHEMA_VERSION;
+}
+
+/** Structural routing only; full extraction validation remains authoritative. */
+export function isExtractionManifestLike(value: unknown): value is ExtractionManifest {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const candidate = value as { readonly schemaVersion?: unknown; readonly baselineCommit?: unknown };
+  return isSupportedExtractionManifestVersion(candidate.schemaVersion) || "baselineCommit" in candidate;
+}
+
 export interface CommitSpec { readonly subject: string; readonly body?: string }
 export interface ConsumerRewrite {
   readonly file: string;

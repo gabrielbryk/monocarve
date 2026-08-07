@@ -15,7 +15,8 @@ import { UsageError } from "../errors.ts";
 import { buildApplicationGraph } from "../graph/components.ts";
 import { applyPreparation } from "../prepare/apply.ts";
 import { compileModulePromotion, modulePromotionImporterEvidence } from "../plan/module-promotion.ts";
-import { serializeManifest } from "../plan/build.ts";
+import { parseManifest, serializeManifest } from "../plan/build.ts";
+import { isExtractionManifestLike } from "../plan/manifest.ts";
 import { applyPlan } from "../transaction/apply.ts";
 import { simulatePlan } from "../transaction/simulate.ts";
 import { compileBoundaryPreparationManifest } from "../prepare/build.ts";
@@ -151,12 +152,8 @@ async function boundaryApply(args: ParsedArgs): Promise<void> {
 function isExtractionPlan(args: ParsedArgs, rootDir: string): boolean {
   const path = flagString(args, "plan");
   if (path === undefined) return false;
-  try {
-    const parsed = JSON.parse(readWorkspaceText(rootDir, relativeWorkspacePath(rootDir, path), "boundary plan")) as { schemaVersion?: unknown };
-    return parsed.schemaVersion === 2;
-  } catch {
-    return false;
-  }
+  const relative = relativeWorkspacePath(rootDir, path);
+  return isExtractionManifestLike(parseManifest(readWorkspaceText(rootDir, relative, "boundary plan"), relative));
 }
 
 function findBoundary(loaded: LoadedGraph, boundaryId: string) {
