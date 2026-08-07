@@ -14,7 +14,7 @@ import { renderPreparationPolicy } from "../config.ts";
 import { UsageError } from "../errors.ts";
 import { buildApplicationGraph } from "../graph/components.ts";
 import { applyPreparation } from "../prepare/apply.ts";
-import { compileModulePromotion } from "../plan/module-promotion.ts";
+import { compileModulePromotion, modulePromotionImporterEvidence } from "../plan/module-promotion.ts";
 import { serializeManifest } from "../plan/build.ts";
 import { applyPlan } from "../transaction/apply.ts";
 import { simulatePlan } from "../transaction/simulate.ts";
@@ -34,7 +34,7 @@ async function boundaryReview(args: ParsedArgs): Promise<void> {
   const id = requiredFlag(args, "id");
   const promotion = loaded.config.modulePromotions.find((item) => item.id === id);
   if (promotion) {
-    const candidateImporters = [...new Set([...(loaded.graph.incoming.get(promotion.source) ?? []), ...(loaded.graph.testImporters.get(promotion.source) ?? [])])].sort();
+    const candidateImporters = modulePromotionImporterEvidence({ graph: loaded.graph, context: loaded.context, source: promotion.source });
     const application = loaded.graph.nodes.get(promotion.source)?.application;
     const appGraph = buildApplicationGraph(loaded.graph, application);
     const componentId = appGraph.condensed.componentByNode.get(promotion.source);
