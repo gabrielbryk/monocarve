@@ -92,6 +92,49 @@ describe("configured pre-extraction preparers", () => {
     applyPreparerManifest({ rootDir: root, config, manifest });
     expect(readFileSync(`${root}/${source}`, "utf8")).toBe("export const view = 2;\n");
   });
+
+  test("composes declarative replacements sequentially in one file", async () => {
+    const source = "apps/consumer/src/tabs/leads/view.ts";
+    const root = fixtureRepo({ [source]: "export const view = 1;\n" });
+    const configured = replacementPolicy(source, [
+      { before: "view = 1", after: "view = 2" },
+      { before: "view = 2", after: "view = 3" },
+    ]);
+    const config = configuration(scratchDirectory(), [configured]);
+
+    const manifest = await compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source });
+
+    expect(manifest.mutations[0]?.contents).toBe("export const view = 3;\n");
+    applyPreparerManifest({ rootDir: root, config, manifest });
+    expect(readFileSync(`${root}/${source}`, "utf8")).toBe("export const view = 3;\n");
+  });
+
+  test("treats already-applied declarative replacements as idempotent", async () => {
+    const source = "apps/consumer/src/tabs/leads/view.ts";
+    const contents = "export const view = 3;\n";
+    const root = fixtureRepo({ [source]: contents });
+    const configured = replacementPolicy(source, [
+      { before: "view = 1", after: "view = 2" },
+      { before: "view = 2", after: "view = 3" },
+    ]);
+    const config = configuration(scratchDirectory(), [configured]);
+
+    const manifest = await compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source });
+
+    expect(manifest.mutations[0]).toMatchObject({ preconditionHash: hashText(contents), resultHash: hashText(contents), contents });
+    applyPreparerManifest({ rootDir: root, config, manifest });
+    expect(readFileSync(`${root}/${source}`, "utf8")).toBe(contents);
+  });
+
+  test("reports the exact declarative replacement that matches neither state", async () => {
+    const source = "apps/consumer/src/tabs/leads/view.ts";
+    const root = fixtureRepo({ [source]: "export const view = 9;\n" });
+    const configured = replacementPolicy(source, [{ before: "view = 1", after: "view = 2" }]);
+    const config = configuration(scratchDirectory(), [configured]);
+
+    await expect(compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source }))
+      .rejects.toThrow(`text replacement 1 matched neither before nor after text in ${source}`);
+  });
 });
 
 function policy(command: string) {
@@ -105,7 +148,17 @@ function policy(command: string) {
   };
 }
 
-function configuration(worktreeRoot: string, preparers: ReturnType<typeof policy>[]) {
+function replacementPolicy(path: string, replacements: readonly { readonly before: string; readonly after: string }[]) {
+  return {
+    id: "source-rewrite",
+    phase: "pre-extraction" as const,
+    replacements: replacements.map((replacement) => ({ path, ...replacement })),
+    outputs: [path],
+    commit: { subject: "refactor: apply source rewrite" },
+  };
+}
+
+function configuration(worktreeRoot: string, preparers: (ReturnType<typeof policy> | ReturnType<typeof replacementPolicy>)[]) {
   return parseConfig({
     applications: [{ name: "consumer", sourceRoot: "apps/consumer/src", tsconfig: "apps/consumer/tsconfig.json" }],
     packageRoots: ["packages"],

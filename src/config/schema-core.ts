@@ -188,13 +188,22 @@ export type PreparationPolicyConfig = z.output<typeof preparationPolicy>;
 export const preparer = z.strictObject({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "must be a lowercase kebab-case identifier"),
   phase: z.literal("pre-extraction"),
-  command: z.string().min(1),
+  command: z.string().min(1).optional(),
+  replacements: z.array(z.strictObject({
+    path: z.string().min(1),
+    before: z.string().min(1),
+    after: z.string().min(1),
+  })).min(1).optional(),
   outputs: z.array(z.string().min(1)).min(1),
   verify: z.string().min(1).optional(),
   commit: z.strictObject({
     subject: z.string().min(1).refine((value) => !value.includes("\n"), { message: "commit subject must be a single line" }),
     body: z.string().optional(),
   }),
+}).superRefine((item, ctx) => {
+  if (item.command === undefined && item.replacements === undefined) {
+    ctx.addIssue({ code: "custom", message: "preparer must configure command or replacements" });
+  }
 });
 
 export const preparers = z.array(preparer).default([]).superRefine((items, ctx) => {

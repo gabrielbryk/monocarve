@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 
 import type { MonocarveConfig, PreparerConfig } from "../config.ts";
 import { MonocarveError } from "../errors.ts";
@@ -40,7 +40,14 @@ export async function compilePreparerManifest(input: CompilePreparerInput): Prom
   const resolved = resolveCommit(input.rootDir, input.extraction.baselineCommit);
   const vars = variables(input.extraction, move);
   const outputs = unique(policy.outputs.map((path) => renderTemplate(path, vars)).map((path) => validatedPath(input.rootDir, path)));
-  const command = renderTemplate(policy.command, vars);
+  const command = policy.command === undefined ? undefined : renderTemplate(policy.command, vars);
+  const replacements = policy.replacements?.map((replacement) => ({
+    path: validatedPath(input.rootDir, renderTemplate(replacement.path, vars)),
+    before: renderTemplate(replacement.before, vars),
+    after: renderTemplate(replacement.after, vars),
+  }));
+  const undeclaredReplacement = replacements?.find((replacement) => !outputs.includes(replacement.path));
+  if (undeclaredReplacement !== undefined) throw new PreparerError(`text replacement path is not a declared output: ${undeclaredReplacement.path}`);
   const verify = policy.verify === undefined ? undefined : renderTemplate(policy.verify, vars);
   const adapter = createPackageManagerAdapter(input.config);
   const worktree = await createWorktree({
@@ -53,7 +60,8 @@ export async function compilePreparerManifest(input: CompilePreparerInput): Prom
   });
   try {
     const before = Object.fromEntries(outputs.map((path) => [path, state(worktree.workspacePath, path)]));
-    run(command, worktree.workspacePath, input.config.gates.timeoutMs, "preparer");
+    if (replacements !== undefined) applyTextReplacements(worktree.workspacePath, replacements);
+    if (command !== undefined) run(command, worktree.workspacePath, input.config.gates.timeoutMs, "preparer");
     if (verify !== undefined) run(verify, worktree.workspacePath, input.config.gates.timeoutMs, "preparer verify");
     const changed = unique(statusEntries(worktree.workspacePath).flatMap((entry) => entry.paths)).sort(byCodeUnit);
     const undeclared = changed.filter((path) => !outputs.includes(path));
@@ -64,7 +72,7 @@ export async function compilePreparerManifest(input: CompilePreparerInput): Prom
       createdAt: resolved.committedAt,
       baseline: { commit: resolved.commit, configDigest: hashJson(input.config) },
       extractionPlanId: input.extraction.planId,
-      preparer: { id: policy.id, phase: policy.phase, command, ...(verify === undefined ? {} : { verify }), commit: renderCommit(policy, vars) },
+      preparer: { id: policy.id, phase: policy.phase, ...(command === undefined ? {} : { command }), ...(replacements === undefined ? {} : { replacements }), ...(verify === undefined ? {} : { verify }), commit: renderCommit(policy, vars) },
       binding: {
         application: input.extraction.application,
         packageName: input.extraction.target.packageName,
@@ -161,7 +169,9 @@ export function assertPreparerManifest(config: MonocarveConfig, value: unknown):
   if (manifest.schemaVersion !== PREPARER_MANIFEST_SCHEMA_VERSION) throw new PreparerError("unsupported preparer manifest schema");
   if (typeof manifest.planId !== "string" || typeof manifest.extractionPlanId !== "string") throw new PreparerError("preparer manifest identities must be strings");
   if (manifest.baseline === undefined || typeof manifest.baseline.commit !== "string" || typeof manifest.baseline.configDigest !== "string") throw new PreparerError("preparer manifest baseline is invalid");
-  if (manifest.preparer === undefined || typeof manifest.preparer.id !== "string" || typeof manifest.preparer.command !== "string") throw new PreparerError("preparer manifest policy is invalid");
+  if (manifest.preparer === undefined || typeof manifest.preparer.id !== "string") throw new PreparerError("preparer manifest policy is invalid");
+  if (manifest.preparer.command !== undefined && typeof manifest.preparer.command !== "string") throw new PreparerError("preparer manifest command is invalid");
+  if (manifest.preparer.replacements !== undefined && (!Array.isArray(manifest.preparer.replacements) || manifest.preparer.replacements.some((item) => item === null || typeof item !== "object" || typeof item.path !== "string" || typeof item.before !== "string" || typeof item.after !== "string"))) throw new PreparerError("preparer manifest replacements are invalid");
   if (manifest.preparer.commit === undefined || typeof manifest.preparer.commit.subject !== "string") throw new PreparerError("preparer manifest commit policy is invalid");
   if (manifest.binding === undefined || Object.values(manifest.binding).some((item) => typeof item !== "string")) throw new PreparerError("preparer manifest move binding is invalid");
   if (!Array.isArray(manifest.mutations) || manifest.mutations.some((item) => item === null || typeof item !== "object" || typeof item.path !== "string" || typeof item.contents !== "string")) throw new PreparerError("preparer manifest mutations are invalid");
@@ -178,10 +188,15 @@ export function assertPreparerManifest(config: MonocarveConfig, value: unknown):
     sourcePath: manifest.binding.sourcePath,
     targetPath: manifest.binding.targetPath,
   };
-  const expectedCommand = renderTemplate(policy.command, vars);
+  const expectedCommand = policy.command === undefined ? undefined : renderTemplate(policy.command, vars);
+  const expectedReplacements = policy.replacements?.map((replacement) => ({
+    path: renderTemplate(replacement.path, vars),
+    before: renderTemplate(replacement.before, vars),
+    after: renderTemplate(replacement.after, vars),
+  }));
   const expectedVerify = policy.verify === undefined ? undefined : renderTemplate(policy.verify, vars);
   const expectedCommit = renderCommit(policy, vars);
-  if (manifest.preparer.command !== expectedCommand || manifest.preparer.verify !== expectedVerify || hashJson(manifest.preparer.commit) !== hashJson(expectedCommit)) {
+  if (manifest.preparer.command !== expectedCommand || !sameOptionalPolicy(manifest.preparer.replacements, expectedReplacements) || manifest.preparer.verify !== expectedVerify || hashJson(manifest.preparer.commit) !== hashJson(expectedCommit)) {
     throw new PreparerError("preparer manifest commands differ from configuration");
   }
   const expectedOutputs = unique(policy.outputs.map((path) => renderTemplate(path, vars)));
@@ -269,6 +284,36 @@ function renderCommit(policy: PreparerConfig, vars: Readonly<Record<string, stri
 
 function validatedPath(root: string, path: string): string { workspacePath(root, path); return path.replaceAll("\\", "/"); }
 function unique(items: readonly string[]): string[] { return [...new Set(items)].sort(byCodeUnit); }
+
+function applyTextReplacements(root: string, replacements: readonly { readonly path: string; readonly before: string; readonly after: string }[]): void {
+  for (const [index, replacement] of replacements.entries()) {
+    const absolute = workspacePath(root, replacement.path);
+    if (!existsSync(absolute) || !statSync(absolute).isFile()) throw new PreparerError(`text replacement ${index + 1} path is not a file: ${replacement.path}`);
+    const contents = readFileSync(absolute, "utf8");
+    const first = contents.indexOf(replacement.before);
+    if (first >= 0) {
+      if (contents.indexOf(replacement.before, first + replacement.before.length) >= 0) throw new PreparerError(`text replacement ${index + 1} before text is ambiguous in ${replacement.path}`);
+      writeFileSync(absolute, `${contents.slice(0, first)}${replacement.after}${contents.slice(first + replacement.before.length)}`);
+      continue;
+    }
+    if (contents.includes(replacement.after) || contents.includes(terminalReplacementAfter(replacements, index))) continue;
+    throw new PreparerError(`text replacement ${index + 1} matched neither before nor after text in ${replacement.path}`);
+  }
+}
+
+function terminalReplacementAfter(replacements: readonly { readonly path: string; readonly before: string; readonly after: string }[], index: number): string {
+  const current = replacements[index]!;
+  let terminal = current.after;
+  for (const candidate of replacements.slice(index + 1)) {
+    if (candidate.path === current.path && candidate.before === terminal) terminal = candidate.after;
+  }
+  return terminal;
+}
+
+function sameOptionalPolicy(left: unknown, right: unknown): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  return hashJson(left) === hashJson(right);
+}
 
 function run(command: string, cwd: string, timeout: number, label: string): void {
   const result = Bun.spawnSync(["sh", "-c", command], { cwd, env: scrubbedGitEnv(), stdout: "pipe", stderr: "pipe", timeout });

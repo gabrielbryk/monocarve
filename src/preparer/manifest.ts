@@ -21,7 +21,12 @@ export interface PreparerManifest {
   readonly preparer: {
     readonly id: string;
     readonly phase: "pre-extraction";
-    readonly command: string;
+    readonly command?: string;
+    readonly replacements?: readonly {
+      readonly path: string;
+      readonly before: string;
+      readonly after: string;
+    }[];
     readonly verify?: string;
     readonly commit: { readonly subject: string; readonly body?: string };
   };
