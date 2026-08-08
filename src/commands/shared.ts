@@ -108,9 +108,9 @@ export interface LoadedGraph {
   readonly context: WorkspaceContext;
 }
 
-export async function loadGraph(args: ParsedArgs): Promise<LoadedGraph> {
+export async function loadGraph(args: ParsedArgs, options: { readonly allApplications?: boolean } = {}): Promise<LoadedGraph> {
   const { config, configPath, rootDir } = await load(args);
-  const application = flagString(args, "app");
+  const application = options.allApplications ? undefined : flagString(args, "app");
   const reports = suppliedReports(args, rootDir);
   const graph = await scanDependencyGraph({
     config,

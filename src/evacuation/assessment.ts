@@ -29,6 +29,7 @@ export interface AssessEvacuationOptions {
   readonly evacuation: EvacuationCandidate;
   readonly context?: WorkspaceContext;
   readonly pathReferences?: PathReferenceIndex;
+  readonly packageName?: string;
 }
 
 /** Apply ordinary portfolio safety and planning checks to an explicit bounded evacuation. */
@@ -69,7 +70,7 @@ export function assessEvacuationCandidate(options: AssessEvacuationOptions): Ass
   const base = {
     id: evacuation.id,
     application: evacuation.application,
-    suggestedPackageName: suggestedPackageName(config, evacuation.application, domains, evacuation.id),
+    suggestedPackageName: options.packageName ?? suggestedPackageName(config, evacuation.application, domains, evacuation.id),
     files: evacuation.files,
     tests,
     assets: assessment.assets,
