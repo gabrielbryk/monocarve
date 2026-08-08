@@ -173,6 +173,39 @@ test("references an exact-root dependency through its existing root tsconfig", (
   expect(JSON.parse(lib.contents).references).toEqual([{ path: "../../shared/tsconfig.json" }]);
 });
 
+test("omits a project reference for a non-composite exact-root dependency", () => {
+  const root = fixtureRepo({
+    "apps/api/src/Widget.tsx": "export const Widget = () => null;\n",
+    "pnpm-workspace.yaml": "packages:\n  - libs/*\n  - shared\n",
+    "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\n",
+    "shared/package.json": '{"name":"@acme/shared"}\n',
+    "shared/tsconfig.json": '{"compilerOptions":{"strict":true}}\n',
+  });
+  const config = fixtureConfig(root, {
+    firstPartyPackages: [{ root: "shared", name: "@acme/shared" }],
+    scaffoldTemplates: {
+      packageJson: { contents: '{"name":"{package}"}\n' },
+      extraFiles: {
+        "tsconfig.lib.json": { contents: '{"compilerOptions":{"jsx":"react-jsx"}}\n' },
+      },
+      projectReferences: { target: "tsconfig.lib.json", dependencyTarget: "tsconfig.lib.json" },
+    },
+  });
+
+  const operations = packageOperations({
+    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
+    packageManager: pnpmAdapter, taskRunner: noneTaskRunner, packageName: "@acme/new-package",
+    packageRoot: "libs/new-package", projectId: "new-package", production: ["apps/api/src/Widget.tsx"],
+    dependencies: { runtime: { "@acme/shared": "workspace:*" }, dev: {}, packageReferences: ["shared"] },
+  });
+  const lib = operations.find(
+    (operation) => operation.kind === "write-file" && operation.path === "libs/new-package/tsconfig.lib.json",
+  );
+  expect(lib?.kind).toBe("write-file");
+  if (lib?.kind !== "write-file") throw new Error("missing generated library tsconfig");
+  expect(JSON.parse(lib.contents).references).toBeUndefined();
+});
+
 test("adds conditional dev dependencies only when their trigger dependency is inferred", () => {
   const root = fixtureRepo({
     "pnpm-workspace.yaml": "packages:\n  - libs/*\n",

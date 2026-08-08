@@ -196,7 +196,7 @@ function rootTsconfigOperation(input: ScaffoldInput, templates: ReturnType<typeo
 }
 
 function projectReferences(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>): { path: string }[] {
-  return input.dependencies.packageReferences.map((reference) => {
+  return input.dependencies.packageReferences.flatMap((reference) => {
     const configuredTarget = templates.projectReferences.dependencyTarget;
     const configuredPath = configuredTarget === "tsconfig.json"
       ? `${reference}/tsconfig.json`
@@ -205,14 +205,23 @@ function projectReferences(input: ScaffoldInput, templates: ReturnType<typeof te
     // whose production project is its root tsconfig. Prefer the configured
     // library target when it exists, but do not synthesize a nonexistent
     // tsconfig.lib.json for that exact-root dependency.
-    const target = input.context.exists(configuredPath)
-      ? configuredPath
-      : input.context.exists(`${reference}/tsconfig.json`)
-        ? `${reference}/tsconfig.json`
-        : configuredTarget === "tsconfig.json"
-          ? reference
-          : configuredPath;
-    return { path: relativePosix(resolve("/", input.packageRoot), resolve("/", target)) };
+    let target: string;
+    if (input.context.exists(configuredPath)) {
+      target = configuredPath;
+    } else if (input.context.exists(`${reference}/tsconfig.json`)) {
+      const rootTarget = `${reference}/tsconfig.json`;
+      const rootConfig = parseJsonFile(input.context.text(rootTarget), rootTarget) as {
+        compilerOptions?: { composite?: unknown };
+      };
+      // A non-composite root tsconfig describes editor/typecheck ownership, not
+      // a project that `tsc --build` may reference. Keep the workspace package
+      // dependency but omit an invalid project reference.
+      if (rootConfig.compilerOptions?.composite !== true) return [];
+      target = rootTarget;
+    } else {
+      target = configuredTarget === "tsconfig.json" ? reference : configuredPath;
+    }
+    return [{ path: relativePosix(resolve("/", input.packageRoot), resolve("/", target)) }];
   });
 }
 
