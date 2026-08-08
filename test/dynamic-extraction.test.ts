@@ -21,6 +21,7 @@ import { buildPortfolio } from "../src/portfolio/rank.ts";
 import { applyPlan } from "../src/transaction/apply.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
 import { simulatePlan } from "../src/transaction/simulate.ts";
+import { regenerateArtifacts } from "../src/transaction/regenerate.ts";
 import { cleanupFixtures, fixtureGit, scratchDirectory, write } from "./support/fixture-repo.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -284,6 +285,14 @@ test("simulates a declared JSON runtime registry rewrite before external package
     resolveFrom: "apps/web/src",
     stripPrefix: "./",
   }];
+  raw.postJournalPreparers = [{
+    id: "route-stubs",
+    phase: "after-journal-before-gates",
+    command: "bun apps/web/scripts/route-stubs.ts",
+    outputs: ["apps/web/src/routes.ts"],
+    triggers: ["^apps/web/scripts/route-registry\\.json$"],
+    verify: "bun apps/web/scripts/route-stubs.ts --check",
+  }];
   writeFileSync(configPath, `${JSON.stringify(raw, null, 2)}\n`);
   write(root, "apps/web/scripts/route-registry.json", `${JSON.stringify({
     domains: [{ id: "chart", module: "./widgets/chart.ts", export: "renderChart" }],
@@ -295,6 +304,18 @@ test("simulates a declared JSON runtime registry rewrite before external package
     'export const inspect = () => Promise.all(registry.domains.map((domain) => import(join(SOURCE_ROOT, domain.module.slice(2)))));',
     "",
   ].join("\n"));
+  write(root, "apps/web/scripts/route-stubs.ts", [
+    'import { readFileSync, writeFileSync } from "node:fs";',
+    'const registryPath = "apps/web/scripts/route-registry.json";',
+    'const outputPath = "apps/web/src/routes.ts";',
+    'const registry = JSON.parse(readFileSync(registryPath, "utf8"));',
+    'const expected = registry.domains.map((domain: { module: string; export: string }) => `export { ${domain.export} } from ${JSON.stringify(domain.module)};`).join("\\n") + "\\n";',
+    'if (process.argv.includes("--check")) {',
+    '  if (readFileSync(outputPath, "utf8") !== expected) process.exit(1);',
+    '} else writeFileSync(outputPath, expected);',
+    "",
+  ].join("\n"));
+  write(root, "apps/web/src/routes.ts", 'export { renderChart } from "./widgets/chart.ts";\n');
   fixtureGit(root, "add", "-A");
   fixtureGit(root, "commit", "-qm", "test: add declared runtime module registry");
 
@@ -324,9 +345,27 @@ test("simulates a declared JSON runtime registry rewrite before external package
       : operation),
   };
   expect(validatePlan(tampered, { config, rootDir: root }).issues.map((issue) => issue.rule)).toContain("path-reference-target");
+  const generatedRoutes = manifest.generatedFiles.find((file) => file.path === "apps/web/src/routes.ts");
+  expect(generatedRoutes?.preparerId).toBe("route-stubs");
+  expect(generatedRoutes?.regenerate).toBe("bun apps/web/scripts/route-stubs.ts");
+  expect(generatedRoutes?.verify).toBe("bun apps/web/scripts/route-stubs.ts --check");
+  expect(manifest.generatedFiles.map((file) => file.path)).toEqual(
+    [...manifest.generatedFiles.map((file) => file.path)].sort(),
+  );
+  const missingGeneratorRecord = {
+    ...manifest,
+    generatedFiles: manifest.generatedFiles.filter((file) => file.path !== "apps/web/src/routes.ts"),
+  };
+  expect(regenerateArtifacts({ config, treeRoot: root, manifest: missingGeneratorRecord }).failure)
+    .toContain("configured post-journal preparer(s) missing from plan: route-stubs");
 
   const simulation = await simulatePlan({ config, rootDir: root, manifest });
   expect(simulation.ok, JSON.stringify(simulation, null, 2)).toBe(true);
+  expect(simulation.regeneration?.artifacts).toContainEqual(expect.objectContaining({
+    path: "apps/web/src/routes.ts",
+    changed: true,
+    exitCode: 0,
+  }));
 }, 300_000);
 
 test("continues to reject a genuinely computed module reference inside moved production code", async () => {

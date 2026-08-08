@@ -73,6 +73,13 @@ export function auditPlanSync(options: AuditOptions): AuditReport {
   }
   for (const operation of manifest.operations) {
     if (operation.kind !== "rewrite-import" && operation.kind !== "rewrite-fs-reference" && operation.kind !== "rewrite-path-reference") continue;
+    // A declared post-journal generator owns the final bytes. The operation's
+    // resultHash proves the intermediate journal state; regeneration then
+    // deliberately replaces it before audit. Requiring that intermediate hash
+    // here makes every generated consumer impossible to refresh. Its final
+    // state remains covered by generated-artifact provenance, verification,
+    // graph/consumer proofs, commit scope, and repository gates below.
+    if (manifest.generatedFiles.some((generated) => generated.path === operation.file && generated.regenerateOnApply)) continue;
     if (stateAt(rootDir, operation.file) !== operation.resultHash) {
       byteFailures.push(`rewritten consumer does not match its declared result: ${operation.file}`);
     }

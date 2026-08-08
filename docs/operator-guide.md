@@ -442,6 +442,26 @@ target is rendered with it, and replay re-proves the same strip-then-resolve
 semantics. This models consumers that remove a registry marker before `join`;
 it is not a general text-rewrite hook.
 
+If rewriting the registry invalidates generated source, compose the registry
+declaration with the existing post-journal generator lifecycle. Its trigger is
+the registry path, not the moved module path:
+
+```ts
+postJournalPreparers: [{
+  id: "route-stubs",
+  phase: "after-journal-before-gates",
+  command: "bun apps/api/scripts/route-stubs.ts",
+  outputs: ["apps/api/src/routes.ts"],
+  triggers: ["^apps/api/config/route-registry\\.json$"],
+  verify: "bun apps/api/scripts/route-stubs.ts --check",
+}]
+```
+
+The journal rewrites the registry first, then the generator runs once for its
+sorted declared output set, then its verification, audit, and repository gates
+see the regenerated tree. A current config that declares this trigger while an
+older manifest omits it is refused and must be replanned.
+
 ## Normal extraction loop
 
 Start with a clean feature branch and inspect the candidate selection:

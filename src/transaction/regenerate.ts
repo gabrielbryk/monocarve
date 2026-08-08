@@ -33,7 +33,7 @@
 
 import { resolve } from "node:path";
 
-import { triggeredArtifacts, type MonocarveConfig } from "../config.ts";
+import { triggeredArtifacts, triggeredPostJournalPreparers, type MonocarveConfig } from "../config.ts";
 import { fileState } from "../util/files.ts";
 import { scrubbedGitEnv } from "../util/git.ts";
 import { MISSING, type FileState } from "../util/hash.ts";
@@ -102,10 +102,12 @@ export function regenerateArtifacts(options: RegenerateOptions): RegenerationRep
     };
   }
   const declaredPreparerIds = new Set(records.flatMap((record) => record.preparerId === undefined ? [] : [record.preparerId]));
-  const missingPreparers = config.postJournalPreparers.filter((preparer) =>
-    (preparer.triggers.length === 0 || manifest.source.files.some((path) => preparer.triggers.some((pattern) => new RegExp(pattern).test(path)))) &&
-    !declaredPreparerIds.has(preparer.id),
-  ).map((preparer) => preparer.id);
+  const rewrittenDocuments = manifest.operations
+    .filter((operation) => operation.kind === "rewrite-path-reference")
+    .map((operation) => operation.file);
+  const missingPreparers = triggeredPostJournalPreparers(config, [...manifest.source.files, ...rewrittenDocuments])
+    .filter((preparer) => !declaredPreparerIds.has(preparer.id))
+    .map((preparer) => preparer.id);
   if (missingPreparers.length > 0) return { ok: false, artifacts: [], failure: `configured post-journal preparer(s) missing from plan: ${missingPreparers.join(", ")}; recompile the plan` };
 
   const artifacts: ArtifactRegeneration[] = [];

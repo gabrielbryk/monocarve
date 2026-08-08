@@ -168,6 +168,16 @@ export const postJournalPreparers = z.array(z.strictObject({
 });
 
 export type PostJournalPreparerConfig = z.output<typeof postJournalPreparers>[number];
+
+/** Configured post-journal generators invalidated by moved or rewritten paths. */
+export function triggeredPostJournalPreparers(
+  config: MonocarveConfig,
+  changedPaths: readonly string[],
+): readonly PostJournalPreparerConfig[] {
+  return config.postJournalPreparers.filter((preparer) =>
+    preparer.triggers.length === 0 || changedPaths.some((path) => preparer.triggers.some((pattern) => new RegExp(pattern).test(path))),
+  );
+}
 export type PathMigrationConfig = PathMigrationsConfig["artifacts"][number];
 
 export function triggeredPathMigrations(

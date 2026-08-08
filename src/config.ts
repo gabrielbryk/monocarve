@@ -5,7 +5,7 @@
  * the stable import path used by the engine and by workspace configuration.
  */
 
-export { triggeredArtifacts, triggeredPathMigrations } from "./config/schema-artifacts.ts";
+export { triggeredArtifacts, triggeredPathMigrations, triggeredPostJournalPreparers } from "./config/schema-artifacts.ts";
 export type {
   AssetEmissionProofConfig,
   GeneratedArtifactConfig,

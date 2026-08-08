@@ -2,7 +2,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { extname, resolve } from "node:path";
 
 import { applyEscapeRewrites } from "../codemod/imports.ts";
-import { applicationOwner, getApplication, triggeredArtifacts, triggeredPathMigrations, type MonocarveConfig } from "../config.ts";
+import { applicationOwner, getApplication, triggeredArtifacts, triggeredPathMigrations, triggeredPostJournalPreparers, type MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import { generatedProvenance } from "../graph/workspace.ts";
 import { resolveCommit, type ResolvedCommit } from "../util/git.ts";
@@ -59,9 +59,7 @@ export function generatedFilesFor(
   // defaults to empty so every existing config (which never passes it) keeps
   // testing triggers against `production` alone, byte-for-byte the old result.
   const triggerPaths = [...production, ...documents];
-  const postJournal = config.postJournalPreparers.filter((preparer) =>
-    preparer.triggers.length === 0 || triggerPaths.some((path) => preparer.triggers.some((pattern) => new RegExp(pattern).test(path))),
-  ).flatMap((preparer) => preparer.outputs.map((path): GeneratedFileRecord => ({
+  const postJournal = triggeredPostJournalPreparers(config, triggerPaths).flatMap((preparer) => preparer.outputs.map((path): GeneratedFileRecord => ({
     path, source: targets[0] ?? path, regenerate: preparer.command, regenerateOnApply: true,
     exemptReason: "declared post-journal preparer output: result is proven by simulation and immediate audit",
     preparerId: preparer.id, ...(preparer.verify === undefined ? {} : { verify: preparer.verify }),
