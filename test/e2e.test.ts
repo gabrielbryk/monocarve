@@ -161,7 +161,7 @@ describe("end to end", () => {
     expect(created.dependencies["@acme/format"]).toBe("workspace:*");
     expect(created.exports["./widgets/chart"]).toBe("./src/widgets/chart.ts");
     expect(created.exports["./types"]).toBe("./src/types.ts");
-    expect(readFileSync(join(root, "libs/chart/src/index.ts"), "utf8")).toContain('export * from "./widgets/chart.ts";');
+    expect(readFileSync(join(root, "libs/chart/src/index.ts"), "utf8")).toBe("");
     expect(JSON.parse(readFileSync(join(root, "libs/chart/tsconfig.json"), "utf8")).references).toEqual([
       { path: "../format" },
     ]);

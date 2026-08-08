@@ -496,8 +496,10 @@ scaffoldTemplates: {
 }
 ```
 
-The root barrel is retained for ordinary consumers. Each consumer is otherwise
-rewritten to the exact module subpath it used before the move, so a literal
+New subpaths-only packages receive an inert entrypoint instead of a barrel, so
+tools that inspect a package's legacy `main` field cannot eagerly evaluate
+browser-only or otherwise effectful modules. Each consumer is rewritten to the
+exact module subpath it used before the move, so a literal
 `import("./AdminPage.tsx")` remains lazy and becomes, for example,
 `import("@acme/admin/AdminPage")`. The manifest records the source, landed path,
 public specifier, export key, export target, and per-module export surface; audit

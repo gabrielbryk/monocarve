@@ -297,7 +297,7 @@ export const scaffoldTemplates = z.strictObject({
    * omits it; `js` is for packages that publish compiled output.
    */
   barrelSpecifier: z.enum(["extension", "extensionless", "js"]).default("extension"),
-  /** Root-barrel-only (legacy) or barrel plus module-preserving public subpaths. */
+  /** Root-barrel-only (legacy) or module-preserving public subpaths with an inert entrypoint. */
   publicSurface,
 });
 

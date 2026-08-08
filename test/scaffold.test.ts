@@ -49,6 +49,59 @@ function writtenPackageJson(operations: ReturnType<typeof existingPackageOperati
 describe("package scaffold", () => {
   afterAll(cleanupFixtures);
 
+  test("keeps a subpaths-only package entrypoint inert", () => {
+    const root = fixtureRepo({
+      "apps/api/src/browser.ts": "window.addEventListener('load', () => undefined);\n",
+      "pnpm-workspace.yaml": "packages:\n  - apps/*\n  - libs/*\n",
+      "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\n",
+    });
+    const config = fixtureConfig(root, {
+      scaffoldTemplates: {
+        packageJson: { contents: '{"name":"{package}"}\n' },
+        publicSurface: {
+          mode: "subpaths",
+          keyTemplate: "./{pathNoExtension}",
+          targetTemplate: "./src/{path}",
+        },
+      },
+    });
+    const operations = packageOperations({
+      context: new WorkspaceContext(config, root),
+      config,
+      application: config.applications[0]!,
+      packageManager: pnpmAdapter,
+      taskRunner: {
+        id: "fixture",
+        projectFileName: null,
+        projectRegistryFileName: null,
+        projectIdFor: (name) => name,
+        projectIdOf: () => "",
+        registerProject: () => ({ kind: "already-satisfied" }),
+        wrapGateCommand: (command) => ["sh", "-c", command],
+      },
+      packageName: "@acme/browser-ui",
+      packageRoot: "libs/browser-ui",
+      projectId: "browser-ui",
+      production: ["apps/api/src/browser.ts"],
+      dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+      publicModules: [{
+        source: "apps/api/src/browser.ts",
+        target: "libs/browser-ui/src/browser.ts",
+        specifier: "@acme/browser-ui/browser",
+        exportKey: "./browser",
+        exportTarget: "./src/browser.ts",
+        requiredExports: [],
+      }],
+    });
+
+    expect(operations).toContainEqual(expect.objectContaining({
+      kind: "write-file",
+      path: "libs/browser-ui/src/index.ts",
+      contents: "",
+      generator: "scaffold:entrypoint",
+    }));
+  });
+
   test("replaces a false side-effects claim when configured assets move", () => {
     const root = fixtureRepo({ "README.md": "fixture\n", "pnpm-workspace.yaml": "packages:\n  - libs/*\n", "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\n" });
     const config = fixtureConfig(root, {

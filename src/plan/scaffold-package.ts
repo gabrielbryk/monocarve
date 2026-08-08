@@ -161,6 +161,10 @@ function templateDevDependencies(input: ScaffoldInput, templates: ReturnType<typ
 
 function entrypointOperation(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>, scaffolding: boolean): PlanOperation | undefined {
   const path = `${input.packageRoot}/${templates.entrypoint}`;
+  if (templates.publicSurface.mode === "subpaths") {
+    if (!scaffolding || input.context.exists(path)) return undefined;
+    return writeOperation(input.context, path, "", "scaffold:entrypoint");
+  }
   if (input.publicModules?.some((module) => module.exportKey === "." && module.target === path)) return undefined;
   const barrel = input.context.exists(path) ? input.context.text(path) : "";
   const missing = input.production.map((source) => renderTemplate(templates.barrelExport, {
