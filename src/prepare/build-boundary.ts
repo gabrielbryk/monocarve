@@ -276,7 +276,7 @@ function planPortOperations(
   if (!input.contractTargetPath) throw new PlanningError(`boundary ${boundary.id} requires an explicit contract target path`);
   if (input.contractTargetPath === boundary.retained) throw new PlanningError(`boundary ${boundary.id} contract target path must differ from the retained module`);
   workspacePath(input.rootDir, input.contractTargetPath);
-  assertExistingPortTargetPackage(input, boundary, baselineCommit, input.contractTargetPath);
+  const targetPackage = assertExistingPortTargetPackage(input, boundary, baselineCommit, input.contractTargetPath);
   if (showBaseline(input.rootDir, baselineCommit, input.contractTargetPath) !== null) {
     throw new PlanningError(`boundary contract target already exists at baseline: ${input.contractTargetPath}`);
   }
@@ -300,7 +300,18 @@ function planPortOperations(
     ...(input.resolutionExtensions === undefined ? {} : { resolutionExtensions: input.resolutionExtensions }),
     ...(input.cssImportExtensions === undefined ? {} : { cssImportExtensions: input.cssImportExtensions }),
   });
-  return result.adapter === undefined ? [result.contract, ...result.rewrites] : [result.contract, result.adapter, ...result.rewrites];
+  const packageExport = boundary.source === "portPromotions"
+    ? planPortPackageExport(boundary, input.contractTargetPath, targetPackage)
+    : undefined;
+  return [result.contract, ...(result.adapter ? [result.adapter] : []), ...result.rewrites, ...(packageExport ? [packageExport] : [])];
+}
+
+interface ExistingPortTargetPackage {
+  readonly root: string;
+  readonly manifestPath: string;
+  readonly manifestText: string;
+  readonly manifest: Record<string, unknown>;
+  readonly mode: number;
 }
 
 function assertExistingPortTargetPackage(
@@ -308,7 +319,7 @@ function assertExistingPortTargetPackage(
   boundary: Extract<ResolvedBoundary, { strategy: "port" }>,
   baselineCommit: string,
   contractTargetPath: string,
-): void {
+): ExistingPortTargetPackage {
   const packageRoot = boundaryTargetRoot(input.config, contractTargetPath);
   if (!packageRoot) {
     throw new PlanningError(`boundary ${boundary.id} contract target ${contractTargetPath} is outside configured package roots; scaffold ${boundary.targetPackage} first with the standard package lifecycle`);
@@ -331,6 +342,63 @@ function assertExistingPortTargetPackage(
   if (name !== boundary.targetPackage) {
     throw new PlanningError(`boundary ${boundary.id} target path belongs to package ${JSON.stringify(name)}, not configured targetPackage ${JSON.stringify(boundary.targetPackage)}`);
   }
+  return { root: packageRoot, manifestPath, manifestText, manifest: manifest as Record<string, unknown>, mode: baselineFileMode(input.rootDir, baselineCommit, manifestPath) };
+}
+
+function planPortPackageExport(
+  boundary: Extract<ResolvedBoundary, { strategy: "port" }>,
+  contractTargetPath: string,
+  target: ExistingPortTargetPackage,
+): PreparationReplayOperation | undefined {
+  const module = boundary.contractModule.replace(/^\.\//, "").replace(/\.[cm]?[jt]sx?$/, "");
+  if (!module || module === "index" || module.split("/").some((part) => part === "" || part === "." || part === "..")) {
+    throw new PlanningError(`boundary ${boundary.id} contractModule must name a package subpath: ${JSON.stringify(boundary.contractModule)}`);
+  }
+  const expectedImport = `${boundary.targetPackage}/${module}`;
+  if (boundary.packageImport !== expectedImport) {
+    throw new PlanningError(`boundary ${boundary.id} packageImport ${JSON.stringify(boundary.packageImport)} must equal target package subpath ${JSON.stringify(expectedImport)}`);
+  }
+  const exportKey = `./${module}`;
+  const relativeTarget = posix.relative(target.root, contractTargetPath);
+  const exportTarget = `./${relativeTarget}`;
+  const exports = packageExportsMap(target.manifest.exports, target.manifestPath);
+  const existing = exports[exportKey];
+  if (existing !== undefined && !exportTargetMatches(existing, exportTarget)) {
+    throw new PlanningError(`${target.manifestPath} export ${exportKey} already targets ${JSON.stringify(existing)}, not ${JSON.stringify(exportTarget)}`);
+  }
+  if (existing !== undefined) return undefined;
+  const nextExports = Object.fromEntries([...Object.entries(exports), [exportKey, exportTarget]].sort(([left], [right]) => byCodeUnit(left, right)));
+  const contents = `${JSON.stringify({ ...target.manifest, exports: nextExports }, null, 2)}\n`;
+  return {
+    kind: "write-file",
+    purpose: "port-package-export",
+    file: {
+      path: target.manifestPath,
+      preconditionHash: hashText(target.manifestText),
+      preconditionMode: target.mode,
+      resultHash: hashText(contents),
+      resultMode: target.mode,
+    },
+    contents,
+  };
+}
+
+function packageExportsMap(value: unknown, packageFile: string): Record<string, unknown> {
+  if (value === undefined) return {};
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return { ".": value };
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record);
+  const subpaths = keys.filter((key) => key.startsWith("."));
+  if (subpaths.length === 0) return keys.length === 0 ? {} : { ".": record };
+  if (subpaths.length === keys.length) return record;
+  throw new PlanningError(`${packageFile} exports cannot mix package subpaths and root conditions`);
+}
+
+function exportTargetMatches(value: unknown, target: string): boolean {
+  if (typeof value === "string") return value === target;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const leaves = Object.values(value as Record<string, unknown>);
+  return leaves.length > 0 && leaves.every((leaf) => exportTargetMatches(leaf, target));
 }
 
 function boundaryTargetRoot(config: MonocarveConfig, targetPath: string): string | undefined {

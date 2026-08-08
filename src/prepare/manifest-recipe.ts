@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { posix } from "node:path";
 
 import { byCodeUnit, hashText, isSha256 } from "../util/hash.ts";
 import type {
@@ -7,6 +8,7 @@ import type {
   PreparationCheckerProvenTypeImport,
   PreparationFileMutation,
   PreparationReplayOperation,
+  PreparationWriteFileOperation,
   PreparationTargetImportProof,
   RewriteModuleSpecifierOperation,
 } from "./manifest-types.ts";
@@ -28,6 +30,46 @@ export function validateRewriteRecipe(operation: RewriteModuleSpecifierOperation
   validateSorted(operation.rewrites, rewriteKey, "rewrite-specifier-order", "rewrites must be deterministically ordered and unique", add);
   const bindings = collectSpecifierBindings(operation.file.path, operation.contents);
   for (const rewrite of operation.rewrites) validateRewriteEntry(operation.file.path, operation.contents, rewrite, bindings, add);
+}
+
+/** Bind each promoted contract write to the exact package subpath consumers use. */
+export function validatePortPackageExportRecipe(operations: readonly PreparationReplayOperation[], add: AddManifestIssue): void {
+  const packageWrites = operations.filter((operation): operation is PreparationWriteFileOperation => operation.kind === "write-file" && operation.purpose === "port-package-export");
+  const contracts = operations.filter((operation): operation is PreparationWriteFileOperation => operation.kind === "write-file" && operation.purpose === "port-contract");
+  const rewrites = operations.filter((operation): operation is RewriteModuleSpecifierOperation => operation.kind === "rewrite-module-specifier")
+    .flatMap((operation) => operation.rewrites);
+  for (const operation of packageWrites) {
+    let manifest: Record<string, unknown>;
+    try {
+      manifest = JSON.parse(operation.contents) as Record<string, unknown>;
+    } catch {
+      add("port-package-export", "port package export write must contain valid JSON", operation.file.path);
+      continue;
+    }
+    const name = typeof manifest.name === "string" ? manifest.name : undefined;
+    const exports = manifest.exports && typeof manifest.exports === "object" && !Array.isArray(manifest.exports)
+      ? manifest.exports as Record<string, unknown> : {};
+    const packageRoot = posix.dirname(operation.file.path);
+    const matches = contracts.flatMap((contract) => {
+      const target = `./${posix.relative(packageRoot, contract.file.path)}`;
+      return Object.entries(exports).filter(([, value]) => exportLeavesMatch(value, target)).map(([key]) => ({ key, contract }));
+    });
+    if (!name || matches.length !== 1) {
+      add("port-package-export", "port package export must bind exactly one promoted contract target", operation.file.path);
+      continue;
+    }
+    const specifier = `${name}${matches[0]!.key.slice(1)}`;
+    if (!rewrites.some((rewrite) => rewrite.to === specifier)) {
+      add("port-package-export", `port package export ${matches[0]!.key} has no consumer rewrite to ${specifier}`, operation.file.path);
+    }
+  }
+}
+
+function exportLeavesMatch(value: unknown, target: string): boolean {
+  if (typeof value === "string") return value === target;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const leaves = Object.values(value as Record<string, unknown>);
+  return leaves.length > 0 && leaves.every((leaf) => exportLeavesMatch(leaf, target));
 }
 
 /**

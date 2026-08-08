@@ -197,6 +197,12 @@ registration, solution references, lockfile importer, and public exports), so
 Monocarve refuses a missing target package instead of writing a misleading
 `src/*` fragment. Scaffold the package first through the configured standard
 package lifecycle, commit that prerequisite, then compile the boundary.
+For an existing `portPromotions.targetPackage`, boundary compilation adds the
+declared `contractModule` as one deterministic package export and rewrites
+consumers to `contractPackage`. An identical export is idempotent; an occupied
+subpath pointing elsewhere, a contract-package/subpath mismatch, or a manifest
+whose export no longer maps the promoted contract is refused by compilation
+and manifest validation.
 
 ### Module promotion (architectural boundary cuts)
 

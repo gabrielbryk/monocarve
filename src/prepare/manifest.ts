@@ -16,7 +16,7 @@ import {
   type PreparationValidationResult,
   type ValidatePreparationManifestOptions,
 } from "./manifest-types.ts";
-import { validateDeletionRecipe, validateReplayRecipe, validateRewriteRecipe } from "./manifest-recipe.ts";
+import { validateDeletionRecipe, validatePortPackageExportRecipe, validateReplayRecipe, validateRewriteRecipe } from "./manifest-recipe.ts";
 
 const COMMIT_HASH = /^[0-9a-f]{7,64}$/;
 const COMMIT_SUBJECT = /^(?:refactor|fix|feat|chore|test|docs|ci|build|perf|style)(?:\([^)\n]+\))?!?: [^\n]+$/;
@@ -215,6 +215,7 @@ function validateOperations(manifest: PreparationManifest, add: AddIssue): void 
     }
     validateExtractOperation(operation, groupById, includedGroups, add);
   }
+  validatePortPackageExportRecipe(manifest.operations, add);
   if (includedGroups.size !== groupById.size) add("operation-declarations", "operations must include every declared extraction group exactly once");
 }
 
