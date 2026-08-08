@@ -7,6 +7,7 @@ import type { AssessedEvacuation } from "./assessment.ts";
 import { buildEvacuationCandidate } from "./candidate.ts";
 import type { EvacuationBoundaryCut } from "./cuts.ts";
 import { resolveEvacuationSelectors } from "./selectors.ts";
+import { authorizeProtectedRoots } from "./protected-authorization.ts";
 
 export interface EvacuationAnalysisOptions {
   readonly config: MonocarveConfig;
@@ -15,6 +16,7 @@ export interface EvacuationAnalysisOptions {
   readonly application: string;
   readonly sources: readonly string[];
   readonly packageName: string;
+  readonly authorizedProtectedRoots?: readonly string[];
 }
 
 export interface EvacuationReport {
@@ -22,6 +24,7 @@ export interface EvacuationReport {
   readonly id: string;
   readonly application: string;
   readonly target: { readonly packageName: string };
+  readonly authorizedProtectedRoots: readonly string[];
   readonly requested: readonly string[];
   readonly moved: { readonly files: readonly string[]; readonly lineCount: number };
   readonly retainedComposition: readonly { readonly id: string; readonly members: readonly string[] }[];
@@ -48,17 +51,20 @@ export function prepareEvacuation(options: EvacuationAnalysisOptions): AssessedE
     throw new PlanningError(`package name ${JSON.stringify(options.packageName)} does not match the configured pattern`);
   }
   const selected = resolveEvacuationSelectors(options.graph, options.application, options.sources);
+  const authorizedProtectedRoots = authorizeProtectedRoots(options.config, options.graph, options.application, selected, options.authorizedProtectedRoots ?? []);
   const evacuation = buildEvacuationCandidate({
     config: options.config,
     graph: options.graph,
     application: options.application,
     selected,
+    authorizedProtectedRoots,
   });
   return assessEvacuationCandidate({
     config: options.config,
     graph: options.graph,
     evacuation,
     packageName: options.packageName,
+    authorizedProtectedRoots,
     ...(options.context ? { context: options.context } : {}),
   });
 }
@@ -70,6 +76,7 @@ export function evacuationReport(assessed: AssessedEvacuation, packageName: stri
     id: evacuation.id,
     application: evacuation.application,
     target: { packageName },
+    authorizedProtectedRoots: assessed.authorizedProtectedRoots,
     requested: evacuation.requested,
     moved: { files: evacuation.files, lineCount: evacuation.lineCount },
     retainedComposition: evacuation.retainedComposition,

@@ -38,6 +38,7 @@ describe("evacuate CLI", () => {
     expect(result.stdout).toContain("--app <name>");
     expect(result.stdout).toContain("--source <file|directory|glob>");
     expect(result.stdout).toContain("--package-name <name>");
+    expect(result.stdout).toContain("--authorize-protected <configured-root>");
     expect(result.stdout).toContain("Read-only");
   });
 

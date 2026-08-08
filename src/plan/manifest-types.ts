@@ -97,6 +97,13 @@ export interface PlanProvenance {
     readonly packageManager: PlanAdapterProvenance;
     readonly taskRunner: PlanAdapterProvenance;
   };
+  /** Present only for an explicit evacuation that authorizes configured protected roots. */
+  readonly evacuation?: {
+    readonly id: string;
+    readonly requested: readonly string[];
+    readonly retainedComposition: readonly string[];
+    readonly authorizedProtectedRoots: readonly string[];
+  };
 }
 export type EvaluationReach = "moved" | "generated" | "reached";
 export interface EvaluationModuleRecord {

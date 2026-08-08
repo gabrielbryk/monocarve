@@ -36,6 +36,7 @@ export interface EvacuationCandidateOptions {
   readonly application: string;
   /** Output of `resolveEvacuationSelectors`. */
   readonly selected: readonly string[];
+  readonly authorizedProtectedRoots?: readonly string[];
 }
 
 /** Build the bounded union of selected SCCs, absorbing peers but not outbound dependencies. */
@@ -74,7 +75,7 @@ export function buildEvacuationCandidate(options: EvacuationCandidateOptions): E
   const sccs = componentSccs(movedIds, components);
 
   return {
-    id: evacuationId(application, requested, files, retainedComposition),
+    id: evacuationId(application, requested, files, retainedComposition, options.authorizedProtectedRoots ?? []),
     application,
     requested,
     seedSccs,
@@ -101,13 +102,15 @@ function componentSccs(ids: ReadonlySet<number>, components: readonly (readonly 
     .sort((left, right) => byCodeUnit(left.id, right.id));
 }
 
-function evacuationId(
+export function evacuationId(
   application: string,
   requested: readonly string[],
   files: readonly string[],
   retained: readonly Scc[],
+  authorizedProtectedRoots: readonly string[] = [],
 ): string {
-  const identity = [application, ...requested, "--files--", ...files, "--retained--", ...retained.flatMap((scc) => scc.members)];
+  const retainedMembers = [...new Set(retained.flatMap((scc) => scc.members))].sort(byCodeUnit);
+  const identity = [application, ...requested, "--files--", ...files, "--retained--", ...retainedMembers, "--authorized-protected--", ...authorizedProtectedRoots];
   return `e-${hashText(identity.join("\n")).slice(0, 12)}`;
 }
 

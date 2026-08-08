@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 
 import { parseConfig } from "../src/config.ts";
-import { assessEvacuationCandidate, buildEvacuationCandidate } from "../src/evacuation/index.ts";
+import { analyzeEvacuation, assessEvacuationCandidate, buildEvacuationCandidate } from "../src/evacuation/index.ts";
 import { buildDependencyGraph, type ScanReport } from "../src/graph/build.ts";
 import { cleanupFixtures, fixtureRepo } from "./support/fixture-repo.ts";
 
@@ -123,5 +123,28 @@ describe("evacuation assessment", () => {
       detail: "1 movable path(s) are protected by portfolio.protectedPaths",
       edges: [service],
     });
+  });
+
+  test("authorizes only an exact configured protected root selected by this evacuation", () => {
+    const root = workspace();
+    const cfg = config([`${APP}/estimating`]);
+    const dependencyGraph = graph(root, cfg);
+    const report = analyzeEvacuation({
+      config: cfg,
+      graph: dependencyGraph,
+      application: "api",
+      sources: [`${APP}/estimating`],
+      packageName: "@acme/estimating",
+      authorizedProtectedRoots: [`${APP}/estimating`],
+    });
+    expect(report.authorizedProtectedRoots).toEqual([`${APP}/estimating`]);
+    expect(report.candidate.rejectionReasons.map(({ code }) => code)).not.toContain("protected-path");
+
+    expect(() => analyzeEvacuation({ ...({ config: cfg, graph: dependencyGraph, application: "api", sources: [service], packageName: "@acme/estimating" }), authorizedProtectedRoots: [APP] }))
+      .toThrow(/exactly name a configured/);
+    expect(() => analyzeEvacuation({ ...({ config: cfg, graph: dependencyGraph, application: "api", sources: [database], packageName: "@acme/estimating" }), authorizedProtectedRoots: [`${APP}/estimating`] }))
+      .toThrow(/outside the selected evacuation/);
+    expect(() => analyzeEvacuation({ ...({ config: cfg, graph: dependencyGraph, application: "api", sources: [service], packageName: "@acme/estimating" }), authorizedProtectedRoots: ["../estimating"] }))
+      .toThrow(/workspace-relative/);
   });
 });

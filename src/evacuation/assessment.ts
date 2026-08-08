@@ -21,6 +21,7 @@ export interface AssessedEvacuation {
   readonly evacuation: EvacuationCandidate;
   readonly candidate: PortfolioCandidate;
   readonly boundaryCuts: readonly EvacuationBoundaryCut[];
+  readonly authorizedProtectedRoots: readonly string[];
 }
 
 export interface AssessEvacuationOptions {
@@ -30,6 +31,7 @@ export interface AssessEvacuationOptions {
   readonly context?: WorkspaceContext;
   readonly pathReferences?: PathReferenceIndex;
   readonly packageName?: string;
+  readonly authorizedProtectedRoots?: readonly string[];
 }
 
 /** Apply ordinary portfolio safety and planning checks to an explicit bounded evacuation. */
@@ -62,7 +64,11 @@ export function assessEvacuationCandidate(options: AssessEvacuationOptions): Ass
     rejections.push({ code: "unplannable", detail: `test relocation: ${partitionFailure instanceof Error ? partitionFailure.message : String(partitionFailure)}`, edges: [] });
     tests = directTests;
   }
-  rejections.push(...protectedPathRejections(config, [...evacuation.files, ...tests, ...assessment.assets]));
+  const authorized = new Set(options.authorizedProtectedRoots ?? []);
+  const protectedMovable = [...evacuation.files, ...tests, ...assessment.assets].filter((path) =>
+    ![...authorized].some((root) => path === root || path.startsWith(`${root}/`)),
+  );
+  rejections.push(...protectedPathRejections(config, protectedMovable));
   rejections.push(...planabilityRejections(config, context, graph, evacuation.files, tests, evacuation.id));
 
   const rejectionReasons = dedupeReasons(rejections);
@@ -96,7 +102,12 @@ export function assessEvacuationCandidate(options: AssessEvacuationOptions): Ass
   const withRecommendation = { ...base, recommendation };
   const effort = estimateCandidateEffort(withRecommendation);
   const candidate: PortfolioCandidate = { ...withRecommendation, effort, score: scoreCandidate(config, { ...withRecommendation, effort }) };
-  return { evacuation, candidate, boundaryCuts: evacuationBoundaryCuts(config, context, graph, evacuation) };
+  return {
+    evacuation,
+    candidate,
+    boundaryCuts: evacuationBoundaryCuts(config, context, graph, evacuation),
+    authorizedProtectedRoots: [...(options.authorizedProtectedRoots ?? [])],
+  };
 }
 
 function aggregateReport(

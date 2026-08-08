@@ -19,6 +19,7 @@ import { readManifest } from "../graph/workspace.ts";
 import { LEGACY_PLAN_SCHEMA_VERSION, PREVIOUS_PLAN_SCHEMA_VERSION, PLAN_SCHEMA_VERSION, isSupportedExtractionManifestVersion, operationPaths, type ExtractionManifest } from "./manifest.ts";
 import { projectedArtifactEvidence } from "./projected-workspace.ts";
 import { buildPlanProvenance } from "./provenance.ts";
+import { evacuationId } from "../evacuation/candidate.ts";
 import { validateIntegrationTestSuite } from "./validation/integration.ts";
 import { validateDonorSurface, validateOperations } from "./validation/operations.ts";
 import { Issues, validationResult, type ValidatePlanOptions, type ValidationResult } from "./validation/shared.ts";
@@ -162,6 +163,45 @@ function validateProvenance(manifest: ExtractionManifest, options: ValidatePlanO
   if (actual.policyDigest !== expected.policyDigest) issues.add("policy-digest", "plan policy digest does not match the effective planning policy");
   if (stableStringify(actual.adapters) !== stableStringify(expected.adapters)) issues.add("adapter-provenance", "plan adapter provenance does not match the configured adapters");
   if (stableStringify(actual.compiler) !== stableStringify(expected.compiler)) issues.add("compiler-integrity", "plan compiler identity does not match this compiler");
+  validateEvacuationProvenance(manifest, options, issues);
+}
+
+function validateEvacuationProvenance(manifest: ExtractionManifest, options: ValidatePlanOptions, issues: Issues): void {
+  const evacuation = manifest.provenance?.evacuation;
+  if (evacuation === undefined) return;
+  const canonical = (values: readonly string[]): boolean =>
+    new Set(values).size === values.length && values.every((value, index) => index === 0 || value > values[index - 1]!);
+  if (!canonical(evacuation.requested) || !canonical(evacuation.retainedComposition) || !canonical(evacuation.authorizedProtectedRoots)) {
+    issues.add("evacuation-provenance", "evacuation provenance paths must be sorted and unique");
+    return;
+  }
+  const application = options.config.applications.find(({ name }) => name === manifest.application);
+  if (application === undefined) return;
+  for (const root of evacuation.authorizedProtectedRoots) {
+    if (!options.config.portfolio.protectedPaths.includes(root)) {
+      issues.add("protected-authorization", `authorized root is not an exact configured protected path: ${root}`);
+    }
+    if (!evacuation.requested.some((path) => path === root || path.startsWith(`${root}/`))) {
+      issues.add("protected-authorization", `authorized root is outside the selected evacuation: ${root}`);
+    }
+  }
+  const protectedSources = [...(manifest.source?.files ?? []), ...(manifest.source?.tests ?? []), ...(manifest.source?.assets ?? [])]
+    .filter((path) => options.config.portfolio.protectedPaths.some((root) => path === root || path.startsWith(`${root}/`)));
+  for (const path of protectedSources) {
+    if (!evacuation.authorizedProtectedRoots.some((root) => path === root || path.startsWith(`${root}/`))) {
+      issues.add("protected-authorization", `protected source is not covered by evacuation authorization: ${path}`, { path });
+    }
+  }
+  const expectedId = evacuationId(
+    manifest.application,
+    evacuation.requested,
+    manifest.source?.files ?? [],
+    evacuation.retainedComposition.length === 0 ? [] : [{ id: "provenance", members: evacuation.retainedComposition }],
+    evacuation.authorizedProtectedRoots,
+  );
+  if (evacuation.id !== expectedId || (manifest.planId !== expectedId && !manifest.planId.startsWith(`${expectedId}--`))) {
+    issues.add("evacuation-identity", "plan identity does not match canonical evacuation authorization provenance");
+  }
 }
 
 function validateSource(

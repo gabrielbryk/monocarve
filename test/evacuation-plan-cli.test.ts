@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import { parseConfig } from "../src/config.ts";
 import { parseManifest } from "../src/plan/build.ts";
+import { validatePlan } from "../src/plan/validate.ts";
 import { simulatePlan } from "../src/transaction/simulate.ts";
 import { cleanupFixtures, fixtureGit, write } from "./support/fixture-repo.ts";
 import { committedWorkspace, existsSync, ROOT, runIn, writeFileSync } from "./support/cli.ts";
@@ -79,6 +80,33 @@ function configuredWorkspace(): string {
 afterAll(cleanupFixtures);
 
 describe("evacuation immutable plan lifecycle", () => {
+  test("records protected authorization in report, identity, and tamper-checked manifest provenance", async () => {
+    const root = configuredWorkspace();
+    const configPath = join(root, "monocarve.config.json");
+    const raw = JSON.parse(readFileSync(configPath, "utf8")) as { portfolio: Record<string, unknown> };
+    raw.portfolio = { ...raw.portfolio, protectedPaths: ["apps/api/src/estimating"] };
+    writeFileSync(configPath, `${JSON.stringify(raw, null, 2)}\n`);
+    fixtureGit(root, "add", "--", "monocarve.config.json");
+    fixtureGit(root, "commit", "-qm", "test: protect evacuation fixture");
+
+    const denied = await runIn(root, "evacuate", "--app", "api", "--source", "apps/api/src/estimating", "--source", "apps/api/src/db/client.ts", "--package-name", "@acme/format", "--json");
+    expect((JSON.parse(denied.stdout) as { candidate: { eligible: boolean } }).candidate.eligible).toBe(false);
+
+    const allowed = await runIn(root, "evacuate", "--app", "api", "--source", "apps/api/src/estimating", "--source", "apps/api/src/db/client.ts", "--authorize-protected", "apps/api/src/estimating", "--package-name", "@acme/format", "--package-root", "libs/format", "--json");
+    expect(allowed.code).toBe(0);
+    const response = JSON.parse(allowed.stdout) as { id: string; authorizedProtectedRoots: string[]; manifest: ReturnType<typeof parseManifest> };
+    expect(response.authorizedProtectedRoots).toEqual(["apps/api/src/estimating"]);
+    expect(response.manifest.provenance?.evacuation).toMatchObject({ id: response.id, authorizedProtectedRoots: ["apps/api/src/estimating"] });
+
+    const cfg = parseConfig(raw, configPath);
+    const tampered = structuredClone(response.manifest);
+    (tampered.provenance!.evacuation!.authorizedProtectedRoots as string[])[0] = "apps/api/src/db";
+    const validation = validatePlan(tampered, { config: cfg, rootDir: root });
+    expect(validation.ok).toBe(false);
+    expect(validation.issues.map(({ rule }) => rule)).toContain("protected-authorization");
+    expect(validation.issues.map(({ rule }) => rule)).toContain("evacuation-identity");
+  }, 240_000);
+
   test("writes one ordinary plan for multiple SCCs into an existing package", async () => {
     const root = configuredWorkspace();
     const output = ".monocarve/estimating-evacuation.json";

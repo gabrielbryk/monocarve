@@ -18,6 +18,7 @@ async function evacuate(args: ParsedArgs): Promise<void> {
   const application = flagString(args, "app");
   const packageName = flagString(args, "package-name");
   const sources = flagStrings(args, "source");
+  const authorizedProtectedRoots = flagStrings(args, "authorize-protected");
   if (application === undefined) throw new UsageError("--app <name> is required");
   if (packageName === undefined) throw new UsageError("--package-name <name> is required; evacuate never infers architectural ownership");
   if (sources.length === 0) throw new UsageError("at least one --source <file|directory|glob> is required");
@@ -29,6 +30,7 @@ async function evacuate(args: ParsedArgs): Promise<void> {
     application,
     sources,
     packageName,
+    authorizedProtectedRoots,
   });
   const report = evacuationReport(assessed, packageName);
   const unresolved = assessed.boundaryCuts.filter((cut) => cut.remedy.kind === "unconfigured");
@@ -52,6 +54,12 @@ async function evacuate(args: ParsedArgs): Promise<void> {
     candidate: assessed.candidate,
     baselineCommit: loaded.graph.commit ?? "HEAD",
     packageName,
+    evacuationProvenance: {
+      id: assessed.evacuation.id,
+      requested: assessed.evacuation.requested,
+      retainedComposition: assessed.evacuation.retainedComposition.flatMap((scc) => scc.members).sort(),
+      authorizedProtectedRoots: assessed.authorizedProtectedRoots,
+    },
     ...(packageRoot ? { packageRoot } : {}),
   });
   const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
@@ -76,8 +84,8 @@ function formatCuts(report: { readonly boundaryCuts: readonly { readonly from: s
 export const evacuationCommands: Record<string, CommandSpec> = {
   evacuate: {
     summary: "scope one bounded domain evacuation",
-    usage: "evacuate --app <name> --source <file|directory|glob> [--source <...>] --package-name <name> [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]",
-    details: "Read-only by default. Selectors are workspace-relative and production-only. Compiles the ordinary immutable plan only after eligibility passes and every boundary cut names a configured remedy; --write exclusively creates that one manifest and never edits source files.",
+    usage: "evacuate --app <name> --source <file|directory|glob> [--source <...>] --package-name <name> [--authorize-protected <configured-root>] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]",
+    details: "Read-only by default. Selectors are workspace-relative and production-only. --authorize-protected is repeatable, evacuation-only, and must exactly name a configured protected root inside the selected evacuation. Compiles the ordinary immutable plan only after eligibility passes and every boundary cut names a configured remedy; --write exclusively creates that one manifest and never edits source files.",
     run: evacuate,
   },
 };
