@@ -31,11 +31,16 @@ async function evacuate(args: ParsedArgs): Promise<void> {
     packageName,
   });
   const report = evacuationReport(assessed, packageName);
-  if (!assessed.candidate.eligible) {
-    throw new UsageError(`evacuation ${assessed.evacuation.id} is not eligible: ${assessed.candidate.rejectionReasons.map(({ detail }) => detail).join("; ")}; cuts: ${formatCuts(report)}`);
-  }
   const unresolved = assessed.boundaryCuts.filter((cut) => cut.remedy.kind === "unconfigured");
-  if (unresolved.length > 0) {
+  const planningRequested = flagBool(args, "write") || args.flags.has("out") || flagBool(args, "verify-lockfile") || args.flags.has("package-root");
+  if (!assessed.candidate.eligible || unresolved.length > 0) {
+    if (!planningRequested) {
+      print(flagBool(args, "json") ? report : formatEvacuationReport(report), args);
+      return;
+    }
+    if (!assessed.candidate.eligible) {
+      throw new UsageError(`evacuation ${assessed.evacuation.id} is not eligible: ${assessed.candidate.rejectionReasons.map(({ detail }) => detail).join("; ")}; cuts: ${formatCuts(report)}`);
+    }
     throw new UsageError(`evacuation ${assessed.evacuation.id} has unconfigured boundary cuts: ${formatCuts({ ...report, boundaryCuts: unresolved })}`);
   }
   const packageRoot = flagString(args, "package-root");

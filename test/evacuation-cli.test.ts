@@ -81,6 +81,19 @@ describe("evacuate CLI", () => {
   test("refuses blocked analysis without writing and renders eligible human review", async () => {
     const blockedPlan = join(FIXTURE, ".monocarve/blocked.json");
     expect(existsSync(blockedPlan)).toBe(false);
+    const analysis = await run("evacuate", ...required, "--source", "apps/web/src/widgets/chart.ts", "--json");
+    expect(analysis.code).toBe(0);
+    expect(analysis.stderr).toBe("");
+    const blockedReport = JSON.parse(analysis.stdout) as EvacuationJson & { readonly manifest?: unknown };
+    expect(blockedReport.candidate.eligible).toBe(false);
+    expect(blockedReport.boundaryCuts).toContainEqual(expect.objectContaining({
+      target: "apps/web/src/types.ts",
+      reason: "outside-evacuation",
+      remedy: { kind: "unconfigured" },
+    }));
+    expect(blockedReport.manifest).toBeUndefined();
+    expect(existsSync(blockedPlan)).toBe(false);
+
     const blocked = await run("evacuate", ...required, "--source", "apps/web/src/widgets/chart.ts", "--out", ".monocarve/blocked.json", "--write");
     expect(blocked.code).toBe(64);
     expect(blocked.stderr).toContain("is not eligible");
