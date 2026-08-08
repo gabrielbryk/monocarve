@@ -181,9 +181,11 @@ function tsconfigOperations(input: ScaffoldInput, templates: ReturnType<typeof t
 }
 
 function solutionReferences(input: ScaffoldInput): { path: string }[] {
-  return input.dependencies.packageReferences.map((reference) => ({
-    path: relativePosix(resolve("/", input.packageRoot), resolve("/", reference)),
-  }));
+  return input.dependencies.packageReferences.flatMap((reference) => {
+    const rootTarget = `${reference}/tsconfig.json`;
+    if (input.context.exists(rootTarget) && !isBuildReferenceableTsconfig(input, rootTarget)) return [];
+    return [{ path: relativePosix(resolve("/", input.packageRoot), resolve("/", reference)) }];
+  });
 }
 
 function rootTsconfigOperation(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>, references: readonly { path: string }[]): PlanOperation | undefined {
@@ -210,19 +212,24 @@ function projectReferences(input: ScaffoldInput, templates: ReturnType<typeof te
       target = configuredPath;
     } else if (input.context.exists(`${reference}/tsconfig.json`)) {
       const rootTarget = `${reference}/tsconfig.json`;
-      const rootConfig = parseJsonFile(input.context.text(rootTarget), rootTarget) as {
-        compilerOptions?: { composite?: unknown };
-      };
       // A non-composite root tsconfig describes editor/typecheck ownership, not
       // a project that `tsc --build` may reference. Keep the workspace package
       // dependency but omit an invalid project reference.
-      if (rootConfig.compilerOptions?.composite !== true) return [];
+      if (!isBuildReferenceableTsconfig(input, rootTarget)) return [];
       target = rootTarget;
     } else {
       target = configuredTarget === "tsconfig.json" ? reference : configuredPath;
     }
     return [{ path: relativePosix(resolve("/", input.packageRoot), resolve("/", target)) }];
   });
+}
+
+function isBuildReferenceableTsconfig(input: ScaffoldInput, path: string): boolean {
+  const config = parseJsonFile(input.context.text(path), path) as {
+    compilerOptions?: { composite?: unknown };
+    references?: unknown;
+  };
+  return config.compilerOptions?.composite === true || (Array.isArray(config.references) && config.references.length > 0);
 }
 
 function projectReferenceOperation(

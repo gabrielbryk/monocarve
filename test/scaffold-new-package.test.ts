@@ -152,6 +152,7 @@ test("references an exact-root dependency through its existing root tsconfig", (
     firstPartyPackages: [{ root: "shared", name: "@acme/shared" }],
     scaffoldTemplates: {
       packageJson: { contents: '{"name":"{package}"}\n' },
+      tsconfig: { contents: '{"files":[],"references":[{"path":"./tsconfig.lib.json"}]}\n' },
       extraFiles: {
         "tsconfig.lib.json": { contents: '{"compilerOptions":{"jsx":"react-jsx"}}\n' },
       },
@@ -185,6 +186,7 @@ test("omits a project reference for a non-composite exact-root dependency", () =
     firstPartyPackages: [{ root: "shared", name: "@acme/shared" }],
     scaffoldTemplates: {
       packageJson: { contents: '{"name":"{package}"}\n' },
+      tsconfig: { contents: '{"files":[],"references":[{"path":"./tsconfig.lib.json"}]}\n' },
       extraFiles: {
         "tsconfig.lib.json": { contents: '{"compilerOptions":{"jsx":"react-jsx"}}\n' },
       },
@@ -204,6 +206,11 @@ test("omits a project reference for a non-composite exact-root dependency", () =
   expect(lib?.kind).toBe("write-file");
   if (lib?.kind !== "write-file") throw new Error("missing generated library tsconfig");
   expect(JSON.parse(lib.contents).references).toBeUndefined();
+  const solution = operations.find(
+    (operation) => operation.kind === "write-file" && operation.path === "libs/new-package/tsconfig.json",
+  );
+  if (solution?.kind !== "write-file") throw new Error("missing generated solution tsconfig");
+  expect(JSON.parse(solution.contents).references).toEqual([{ path: "./tsconfig.lib.json" }]);
 });
 
 test("adds conditional dev dependencies only when their trigger dependency is inferred", () => {
