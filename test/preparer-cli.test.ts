@@ -146,6 +146,8 @@ test("preparer-plan keeps noisy successful disposable installs out of JSON stdou
     "set -euo pipefail",
     "bash -c 'sleep 0.15; awk \"BEGIN { for (i = 0; i < 300000; i++) printf \\\"nested gate output %06d\\\\n\\\", i }\"'",
     "test -s libs/chart/src/contract.ts",
+    "(sleep 2; printf 'late inherited-pipe output\\n') &",
+    "exit 0",
     "",
   ].join("\n"));
   chmodSync(verifyScript, 0o755);
@@ -173,10 +175,13 @@ test("preparer-plan keeps noisy successful disposable installs out of JSON stdou
   ]);
 
   expect(code, `${stderr}\n${stdout}`).toBe(0);
-  expect(Date.now() - started).toBeGreaterThanOrEqual(100);
+  const duration = Date.now() - started;
+  expect(duration).toBeGreaterThanOrEqual(100);
+  expect(duration).toBeLessThan(1_500);
   expect(stderr).toBe("");
   expect(stdout).not.toContain("NOISY_INSTALL_OUTPUT");
   expect(stdout).not.toContain("nested gate output");
+  expect(stdout).not.toContain("late inherited-pipe output");
   const report = JSON.parse(stdout) as { output: string; written: boolean };
   expect(report).toMatchObject({ output, written: true });
   expect(existsSync(join(root, output))).toBe(true);

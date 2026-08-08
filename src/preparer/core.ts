@@ -415,15 +415,28 @@ async function run(command: string, cwd: string, timeout: number, label: string)
     stderr: "pipe",
   });
   let timedOut = false;
-  const timer = setTimeout(() => {
+  const timeoutTimer = setTimeout(() => {
     timedOut = true;
     child.kill();
   }, timeout);
-  const [exitCode, stdout, stderr] = await Promise.all([
-    child.exited,
-    captureProcessStream(child.stdout),
-    captureProcessStream(child.stderr),
-  ]).finally(() => clearTimeout(timer));
+  const stdoutCapture = captureProcessStream(child.stdout);
+  const stderrCapture = captureProcessStream(child.stderr);
+  // A pending pipe read alone does not keep Bun alive after the direct child
+  // exits. A descendant may still own the inherited descriptor, so retain one
+  // explicit event-loop handle until bounded post-exit finalization completes.
+  const keepAlive = setInterval(() => undefined, 1_000);
+  let exitCode: number;
+  let stdout: string;
+  let stderr: string;
+  try {
+    exitCode = await child.exited;
+    clearTimeout(timeoutTimer);
+    await drainAfterExit([stdoutCapture, stderrCapture], 250);
+    [stdout, stderr] = await Promise.all([stdoutCapture.result, stderrCapture.result]);
+  } finally {
+    clearTimeout(timeoutTimer);
+    clearInterval(keepAlive);
+  }
   if (exitCode !== 0 || timedOut) {
     const output = failedGateOutput({ stdout, stderr }).trim();
     const reason = timedOut ? `timed out after ${timeout}ms` : `failed (exit ${exitCode})`;
@@ -431,21 +444,39 @@ async function run(command: string, cwd: string, timeout: number, label: string)
   }
 }
 
-/** Drain a child stream completely while retaining only bounded diagnostics. */
-async function captureProcessStream(stream: ReadableStream<Uint8Array>): Promise<string> {
+interface ProcessStreamCapture {
+  readonly result: Promise<string>;
+  cancel(): Promise<void>;
+}
+
+/** Drain a child stream while retaining only bounded diagnostics. */
+function captureProcessStream(stream: ReadableStream<Uint8Array>): ProcessStreamCapture {
   const limit = 16_000;
   const marker = "\n… process output omitted …\n";
   const head = 4_000;
   const tail = limit - head - marker.length;
   const reader = stream.getReader();
   const decoder = new TextDecoder();
-  let output = "";
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    output += decoder.decode(value, { stream: true });
-    if (output.length > limit) output = `${output.slice(0, head)}${marker}${output.slice(-tail)}`;
-  }
-  output += decoder.decode();
-  return output.length <= limit ? output : `${output.slice(0, head)}${marker}${output.slice(-tail)}`;
+  const result = (async (): Promise<string> => {
+    let output = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      output += decoder.decode(value, { stream: true });
+      if (output.length > limit) output = `${output.slice(0, head)}${marker}${output.slice(-tail)}`;
+    }
+    output += decoder.decode();
+    return output.length <= limit ? output : `${output.slice(0, head)}${marker}${output.slice(-tail)}`;
+  })();
+  return { result, cancel: async () => { await reader.cancel(); } };
+}
+
+async function drainAfterExit(captures: readonly ProcessStreamCapture[], graceMs: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    Promise.all(captures.map((capture) => capture.result)).then(() => undefined),
+    new Promise<void>((resolve) => { timer = setTimeout(resolve, graceMs); }),
+  ]);
+  if (timer !== undefined) clearTimeout(timer);
+  await Promise.all(captures.map((capture) => capture.cancel()));
 }
