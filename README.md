@@ -416,6 +416,7 @@ specific workspace is hardcoded anywhere in `src/`.
 | `packageNamePattern` | what a generated package name must look like; defaults from `packageScope` |
 | `generatedArtifacts` | provenance-header patterns, plus artifacts a move invalidates (`path`, `source`, `regenerate`, `triggers`, `exemptReason`) and the per-command `timeoutMs` their regeneration gets — its own budget, because a codegen command is not a gate tier |
 | `postJournalPreparers` | declared-output commands run after moves and before audit/gates, for ratchets that require destination files to exist |
+| `preparers` | pre-extraction declared-output policies: optional ordered, context-anchored text `replacements`, an optional repository command, optional verification, and exact commit metadata |
 | `dependencyPruning` | `mode: "report"` (default) records possible donor dependency orphans; `apply` removes reviewed candidates. Configured tests and tsconfig `types` count as consumers; `keep` retains irreducible tool/runtime dependencies by repository policy. |
 | `graph` | `tsPreCompilationDeps`, extra cruiser config, `exclude`, `cache` |
 | `transaction` | `allowDirtyPaths`, `worktreeRoot`, `nodeModules` strategy, cleanup policy, gate retries, and simulation behavior |
@@ -429,6 +430,42 @@ A working example lives at `fixtures/basic-monorepo/monocarve.config.json`.
 
 Validation is **zod** rather than typebox: the config is human-authored and read
 once per run, so path-precise error messages matter more than validation speed.
+
+### Declarative preparer replacements
+
+`preparers[].replacements` handles small deterministic source edits without a
+repository-owned helper script. Replacements run in array order, so later items
+see earlier results. Every item names a declared `outputs` path and provides
+`before`, `after`, and at least one non-empty `prefix` or `suffix` anchor:
+
+```ts
+preparers: [{
+  id: "tighten-widget-limit",
+  phase: "pre-extraction",
+  replacements: [{
+    path: "{sourcePath}",
+    prefix: "export const widget = { ",
+    before: "limit: 10",
+    after: "limit: 20",
+    suffix: " };",
+  }],
+  outputs: ["{sourcePath}"],
+  commit: { subject: "refactor: tighten widget limit" },
+}]
+```
+
+The writable state is exactly `prefix + before + suffix`. It must occur once;
+multiple matches are refused. A rerun is idempotent only when the corresponding
+anchored after-state occurs exactly once, or when an ordered chain for the same
+path and anchors is already at its terminal after-state. An unanchored `after`
+token elsewhere in the file is not evidence that the edit landed.
+
+Every replacement path must appear in `outputs`, and planning refuses any other
+repository-visible write. A preparer may configure `replacements`, `command`,
+or both. When both exist, replacements run first, the command runs second, and
+the optional `verify` command runs last in the disposable planning worktree.
+The manifest captures the rendered replacement policy and final output bytes;
+real-checkout application replays those reviewed bytes through the journal.
 
 ### Scaffold templates are workspace policy
 

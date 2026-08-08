@@ -229,9 +229,10 @@ result — matching `prepare-apply`'s exact simulate-then-commit shape.
 | `preparer-apply` | `preparer-apply --plan <path>` — require the exact manifest as the sole commit directly above its extraction baseline, simulate first, then journal-apply reviewed outputs with rollback; never commits the outputs. |
 | `preparer-commit` | `preparer-commit --plan <path>` — verify exact applied bytes and modes, refuse guarded branches or any extra dirty path, and commit only declared outputs with configured metadata. |
 
-Preparers are generic repository-owned pre-extraction commands. Each config
-entry declares an `id`, `phase: "pre-extraction"`, `command`, output path
-templates, optional `verify` command, and commit metadata. Templates may use `{app}`,
+Preparers are generic repository-owned pre-extraction policies. Each config
+entry declares an `id`, `phase: "pre-extraction"`, one or both of `replacements`
+and `command`, output path templates, an optional `verify` command, and commit
+metadata. Templates may use `{app}`,
 `{package}`, `{packageRoot}`, `{planId}`, `{sourcePath}`, and `{targetPath}`;
 the last two come from one exact byte-identical move in the extraction
 manifest. Planning refuses undeclared writes and non-UTF-8 output files.
@@ -247,8 +248,42 @@ preparers: [{
 }]
 ```
 
+For a source edit that does not need a repository helper, declare ordered text
+replacements instead:
+
+```ts
+preparers: [{
+  id: "tighten-widget-limit",
+  phase: "pre-extraction",
+  replacements: [{
+    path: "{sourcePath}",
+    prefix: "export const widget = { ",
+    before: "limit: 10",
+    after: "limit: 20",
+    suffix: " };",
+  }],
+  outputs: ["{sourcePath}"],
+  commit: { subject: "refactor: tighten widget limit" },
+}]
+```
+
+Replacement entries execute in array order and later entries read the bytes
+produced by earlier ones. Each requires `path`, `before`, `after`, and at least
+one of `prefix` or `suffix`. The exact framed before-state (`prefix + before +
+suffix`) must occur once; zero matches proceed only when the exact framed
+after-state occurs once. An ordered chain on the same path and with the same
+anchors is also idempotent at its terminal after-state when each preceding
+`after` exactly names the next `before`. Ambiguous before-states and unrelated,
+unanchored after text are refusals rather than guesses.
+
+Every replacement `path` must also be named by `outputs`. Replacements and a
+`command` may coexist: replacements run first, the command second, and `verify`
+last. Planning still rejects every repository-visible changed path outside
+`outputs`, then captures the rendered policy and final UTF-8 bytes in the
+reviewable preparer manifest.
+
 The preparer manifest is separate from the extraction manifest so its exact
-hashes, modes, rendered commands, and destination binding can be reviewed on
+hashes, modes, rendered commands or replacements, and destination binding can be reviewed on
 their own. Commit that manifest alone directly above the extraction baseline
 before application; no approval subject is prescribed. No output commit subject
 is inferred: commit the applied outputs yourself according to repository
