@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { buildDependencyGraph, type ScanReport } from "../src/graph/build.ts";
+import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../src/adapters/registry.ts";
 import { compileModulePromotion, modulePromotionImporterEvidence } from "../src/plan/module-promotion.ts";
+import { packageOperations } from "../src/plan/scaffold.ts";
 import { serializeManifest } from "../src/plan/build.ts";
 import { validatePlan } from "../src/plan/validate.ts";
 import { resolveCommit } from "../src/util/git.ts";
@@ -22,7 +24,7 @@ const TERRITORY_TEST = "apps/api/src/territory/service.test.ts";
 const TERRITORY_SERVICE = "apps/api/src/territory/service.ts";
 const CONSUMER_ROOT_TEST = "apps/api/tests/admin/helpers.test.ts";
 
-function setup(options: { cycle?: boolean; hiddenConsumer?: boolean; retireSource?: boolean; noGraphEdges?: boolean; sourceDependsOnApp?: boolean; directTests?: boolean; consumerRootTest?: boolean } = {}) {
+function setup(options: { cycle?: boolean; hiddenConsumer?: boolean; retireSource?: boolean; noGraphEdges?: boolean; sourceDependsOnApp?: boolean; directTests?: boolean; consumerRootTest?: boolean; subpathSurface?: boolean } = {}) {
   const root = fixtureRepo({
     "package.json": '{"name":"fixture","private":true}\n',
     "pnpm-workspace.yaml": "packages:\n  - 'apps/*'\n  - 'libs/*'\n",
@@ -42,6 +44,11 @@ function setup(options: { cycle?: boolean; hiddenConsumer?: boolean; retireSourc
   const config = fixtureConfig(root, {
     applications: [{ name: "api", sourceRoot: "apps/api/src", consumerRoots: options.consumerRootTest ? ["apps/api/tests"] : [], tsconfig: "apps/api/tsconfig.json", packageName: "@acme/api", compositionRoots: [] }],
     testKinds: { unit: ["\\.test\\.ts$"], integration: [], e2e: [] },
+    ...(options.subpathSurface ? { scaffoldTemplates: {
+      entrypoint: "src/index.ts",
+      publicSurface: { mode: "subpaths", keyTemplate: "./{pathNoExtension}", targetTemplate: "./src/{path}" },
+      packageJson: { contents: `${JSON.stringify({ name: "{package}", version: "0.1.0", private: true, type: "module", exports: { ".": "./src/index.ts" } }, null, 2)}\n` },
+    } } : {}),
     modulePromotions: [{ id: "resource-contracts", source: SOURCE, targetPackage: "@acme/resource-contracts", targetModule: "index", retireSource: options.retireSource ?? true }],
   });
   const baseline = resolveCommit(root, "HEAD");
@@ -140,7 +147,7 @@ describe("module promotion", () => {
   });
 
   test("boundary simulate and non-committing apply route a schema-v3 promotion as extraction", async () => {
-    const fixture = setup({ cycle: false });
+    const fixture = setup({ cycle: false, subpathSurface: true });
     const manifest = compileModulePromotion({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, context: new WorkspaceContext(fixture.config, fixture.root), baselineCommit: fixture.baseline.commit, promotionId: "resource-contracts" });
     const planPath = "resource-contracts-v3.json";
     write(fixture.root, planPath, serializeManifest(manifest));
@@ -158,6 +165,10 @@ describe("module promotion", () => {
     expect(invalid.code).toBe(1);
     expect(invalid.stderr).toContain("module promotion importer proof");
     expect(invalid.stderr).not.toContain("groups.length");
+
+    await executeJournal({ config: fixture.config, treeRoot: fixture.root, manifest, useGitMv: false });
+    expect(read(fixture.root, "libs/resource-contracts/src/index.ts")).toBe("export const Contract = { id: 1 };\nexport type Contract = typeof Contract;\n");
+    expect(auditPlanSync({ rootDir: fixture.root, config: fixture.config, manifest }).passed).toBe(true);
   }, 30_000);
 
   test("validation rejects a manifest whose cycle-cut proof is made non-failing", () => {
@@ -185,6 +196,25 @@ describe("module promotion", () => {
     const tampered = { ...manifest, target: { ...manifest.target, publicModules: [{ ...rootModule, target: "libs/resource-contracts/src/resources/schemas.ts" }] } };
 
     expect(validatePlan(tampered, { config: fixture.config, rootDir: fixture.root }).issues.some((item) => item.rule === "target-subpaths")).toBe(true);
+  });
+
+  test("validation refuses two production owners of the package entrypoint", () => {
+    const fixture = setup({ cycle: false, subpathSurface: true });
+    const manifest = compileModulePromotion({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, context: new WorkspaceContext(fixture.config, fixture.root), baselineCommit: fixture.baseline.commit, promotionId: "resource-contracts" });
+    const rootModule = manifest.target.publicModules![0]!;
+    expect(() => packageOperations({
+      context: new WorkspaceContext(fixture.config, fixture.root),
+      config: fixture.config,
+      application: fixture.config.applications[0]!,
+      packageManager: createPackageManagerAdapter(fixture.config),
+      taskRunner: createTaskRunnerAdapter(fixture.config),
+      packageName: manifest.target.packageName,
+      packageRoot: manifest.target.packageRoot,
+      projectId: "resource-contracts",
+      production: [SOURCE, CONSUMER], tests: [], assets: [],
+      publicModules: [rootModule, { ...rootModule, source: CONSUMER }],
+      dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+    })).toThrow(/multiple production modules claim package entrypoint/);
   });
 
   test("a compatibility re-export still lands the move as a pure R100 commit", async () => {

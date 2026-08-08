@@ -161,11 +161,19 @@ function templateDevDependencies(input: ScaffoldInput, templates: ReturnType<typ
 
 function entrypointOperation(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>, scaffolding: boolean): PlanOperation | undefined {
   const path = `${input.packageRoot}/${templates.entrypoint}`;
+  const entrypointOwners = input.publicModules?.filter((module) => module.target === path) ?? [];
+  if (entrypointOwners.length > 1) {
+    throw new PlanningError(`multiple production modules claim package entrypoint ${path}: ${entrypointOwners.map((module) => module.source).join(", ")}`);
+  }
+  // A selected production module is the sole owner of this output. In
+  // particular, an index module promotion moves its source directly here, so
+  // emitting the otherwise useful empty new-package scaffold would create a
+  // second mutation with a false "missing" precondition.
+  if (entrypointOwners.length === 1) return undefined;
   if (templates.publicSurface.mode === "subpaths") {
     if (!scaffolding || input.context.exists(path)) return undefined;
     return writeOperation(input.context, path, "", "scaffold:entrypoint");
   }
-  if (input.publicModules?.some((module) => module.exportKey === "." && module.target === path)) return undefined;
   const barrel = input.context.exists(path) ? input.context.text(path) : "";
   const missing = input.production.map((source) => renderTemplate(templates.barrelExport, {
     ...templateVars(input, templates), specifier: barrelSpecifier(templates, input.context.targetRelativePath(source)),
