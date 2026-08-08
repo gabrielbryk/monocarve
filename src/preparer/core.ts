@@ -196,7 +196,11 @@ export function commitPreparerOutputs(rootDir: string, config: MonocarveConfig, 
   assertApprovedPreparerManifest(rootDir, path, manifest);
   const branch = currentBranch(rootDir);
   if (isGuardedBranch(config, branch)) throw new PreparerError(`refusing to commit preparer outputs on guarded branch ${branch}`);
-  const declared = manifest.mutations.map((item) => item.path).sort(byCodeUnit);
+  const declared = manifest.mutations
+    .filter((item) => item.preconditionHash !== item.resultHash || item.preconditionMode !== item.resultMode)
+    .map((item) => item.path)
+    .sort(byCodeUnit);
+  if (declared.length === 0) throw new PreparerError("preparer output commit has no effective mutations");
   for (const item of manifest.mutations) {
     const actual = state(rootDir, item.path);
     if (actual.hash !== item.resultHash || actual.mode !== item.resultMode) throw new PreparerError(`applied preparer output differs from reviewed result: ${item.path}`);

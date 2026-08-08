@@ -17,7 +17,10 @@ test("preparer CLI compiles, simulates, and explicitly journal-applies a nested 
     id: "quality-ratchet",
     phase: "pre-extraction",
     command: "mkdir -p libs/chart/src/widgets && printf '{\"limit\":1}\\n' > {targetPath}.baseline.json",
-    outputs: ["{targetPath}.baseline.json"],
+    // The source output is intentionally already satisfied. Commit must stage
+    // only the effective baseline mutation, not demand every declared output
+    // appear dirty.
+    outputs: ["{targetPath}.baseline.json", "{sourcePath}"],
     verify: "test -s {targetPath}.baseline.json",
     commit: { subject: "chore: update quality ratchet" },
   }];
