@@ -187,7 +187,7 @@ test("does not guess that an unindexed computed dynamic import consumes this can
   expect(findConsumers(context, [CHART], "@acme/chart").some((consumer) => consumer.file === LAZY)).toBe(false);
 });
 
-test("allows computed artifact imports only in configured test consumers across planning and portfolio", async () => {
+test("rewrites a proven production consumer edge alongside an unrelated computed import", async () => {
   const testConsumer = "apps/web/src/lazy-chart.test.ts";
   const testRoot = workspace();
   write(testRoot, testConsumer, COMPUTED_CONSUMER_SOURCE);
@@ -216,14 +216,76 @@ test("allows computed artifact imports only in configured test consumers across 
 
   expect(productionContext.isTest(LAZY)).toBe(false);
   expect(productionContext.hasUnsupportedReference(LAZY)).toBe(true);
-  expect(() => findConsumers(productionContext, [CHART], "@acme/chart")).toThrow(
-    `unsupported module reference in consumer ${LAZY}`,
-  );
-  expect(productionCandidate?.rejectionReasons).toContainEqual(
+  expect(findConsumers(productionContext, [CHART], "@acme/chart")).toContainEqual(
     expect.objectContaining({
-      code: "unplannable",
-      detail: expect.stringContaining(`unsupported module reference in consumer ${LAZY}`),
+      file: LAZY,
+      rewrites: [{ from: "./widgets/chart.ts", to: "@acme/chart" }],
+      donors: [CHART],
     }),
   );
-  expect(productionCandidate?.eligible).toBe(false);
+  expect(productionCandidate?.rejectionReasons.some((reason) => reason.code === "unplannable")).toBe(false);
+  expect(productionCandidate?.eligible).toBe(true);
+});
+
+test("applies and audits a route-introspection-shaped consumer while retaining its computed registry load", async () => {
+  const source = [
+    'import { renderChart } from "./widgets/chart.ts";',
+    'import type { ChartOptions } from "./widgets/chart.ts";',
+    'const ROOT = "/runtime";',
+    'export async function introspect(domain: { module: string }, options: ChartOptions) {',
+    '  const modulePath = `${ROOT}/${domain.module.slice(2)}`;',
+    '  const loaded = await import(modulePath);',
+    '  return [renderChart(options), loaded];',
+    '}',
+    '',
+  ].join("\n");
+  const root = workspace(source, true);
+  const { config } = await loadConfig({ cwd: root });
+  const graph = await scanDependencyGraph({ config, rootDir: root, noCache: true });
+  const candidate = buildPortfolio({ config, graph }).candidates.find(
+    (entry) => entry.eligible && entry.files.includes(CHART),
+  );
+  expect(candidate).toBeDefined();
+
+  const manifest = buildPlanSync({
+    config,
+    rootDir: root,
+    graph,
+    candidate: candidate!,
+    baselineCommit: graph.commit!,
+    packageName: "@acme/chart",
+  });
+  expect(manifest.consumers.find((consumer) => consumer.file === LAZY)?.specifiers).toEqual([
+    { from: "./widgets/chart.ts", to: "@acme/chart/widgets/chart", donor: CHART },
+  ]);
+
+  const manifestPath = "plans/route-introspection-chart.json";
+  write(root, manifestPath, serializeManifest(manifest));
+  fixtureGit(root, "add", "--", manifestPath);
+  fixtureGit(root, "commit", "-qm", manifest.commits.plan!.subject);
+  const applied = await applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true });
+  expect(applied.ok).toBe(true);
+
+  const landed = readFileSync(join(root, LAZY), "utf8");
+  expect(landed.match(/@acme\/chart\/widgets\/chart/g)).toHaveLength(2);
+  expect(landed).toContain("await import(modulePath)");
+  expect(auditPlanSync({ config, rootDir: root, manifest }).passed).toBe(true);
+}, 300_000);
+
+test("continues to reject a genuinely computed module reference inside moved production code", async () => {
+  const root = workspace();
+  write(
+    root,
+    CHART,
+    'const modulePath = `./renderers/${name}.ts`;\nexport const renderChart = () => import(modulePath);\n',
+  );
+  const { config } = await loadConfig({ cwd: root });
+  const graph = await scanDependencyGraph({ config, rootDir: root, noCache: true });
+  const candidate = buildPortfolio({ config, graph }).candidates.find((entry) => entry.files.includes(CHART));
+
+  expect(candidate?.rejectionReasons).toContainEqual(expect.objectContaining({
+    code: "unsupported-module-reference",
+    edges: expect.arrayContaining([CHART]),
+  }));
+  expect(candidate?.eligible).toBe(false);
 });

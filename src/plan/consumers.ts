@@ -11,7 +11,6 @@ import { byCodeUnit } from "../util/hash.ts";
 import { applicationOwner } from "../config/helpers.ts";
 import type { ConsumerDependencySection } from "../adapters/types.ts";
 import type { WorkspaceContext } from "./context.ts";
-import { PlanningError } from "./context.ts";
 export { partitionTests } from "./test-relocation.ts";
 
 export interface Consumer {
@@ -54,11 +53,15 @@ export interface TestRelocationPartition {
 /**
  * Every file outside `donors` that imports one of them.
  *
- * Throws when a production consumer contains a computed specifier: such a file
- * cannot be rewritten deterministically, and a plan that silently skipped it
- * would leave a dangling import behind. Computed references in configured test
- * files are allowed because they commonly target built or deployed artifacts;
- * their resolved donor references are still inventoried and rewritten below.
+ * Consumer membership is established only by a resolved, statically rewritable
+ * reference to a donor. A separate computed reference in the same file does not
+ * make that proven edge ambiguous: the journal rewrites the exact declaration
+ * span below and audit replays that same splice against the baseline blob.
+ *
+ * Computed references remain fail-closed in files that move (see the portfolio
+ * assessment). They are not guessed into this index: a consumer reachable only
+ * through `import(variable)` has no resolved donor edge and is therefore never
+ * silently treated as rewritable.
  */
 export function findConsumers(
   context: WorkspaceContext,
@@ -79,9 +82,6 @@ export function findConsumers(
         .moduleReferences(file)
         .filter((reference) => reference.specifier && reference.resolved && absoluteDonors.includes(reference.resolved));
       if (references.length === 0) return [];
-      if (!context.isTest(file) && context.hasUnsupportedReference(file)) {
-        throw new PlanningError(`unsupported module reference in consumer ${file}`);
-      }
       // Insertion-ordered, so `expectedImporter` stays the first specifier the
       // file declares and the rewrite list reads in source order.
       const specifiers = [...new Set(references.map((reference) => reference.specifier!))];
