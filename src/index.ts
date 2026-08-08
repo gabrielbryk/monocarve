@@ -17,3 +17,4 @@ export * from "./transaction/index.ts";
 export * from "./adapters/index.ts";
 export * from "./campaign/index.ts";
 export * from "./approval/index.ts";
+export * from "./evacuation/index.ts";
