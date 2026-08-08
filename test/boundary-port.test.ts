@@ -41,6 +41,7 @@ function boundary(overrides: Partial<ResolvedPortBoundary> = {}): ResolvedPortBo
     declarationName: "Widget",
     contractName: "Widget",
     contractPackage: "@acme/ports/widget",
+    targetPackage: "@acme/ports/widget",
     contractModule: "widget",
     packageImport: "@acme/ports/widget",
     symbols: ["Widget"],

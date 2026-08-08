@@ -189,6 +189,15 @@ contract specifier while non-promoted bindings keep importing the donor. The
 manifest records both sides of that split, so validation refuses an omitted or
 invented retained binding.
 
+A port boundary may add a contract module only to a package that already
+exists at the plan baseline and whose `package.json` name matches the declared
+target package. Boundary preparation manifests do not carry the extraction
+planner's complete package-scaffold lifecycle (workspace membership, task
+registration, solution references, lockfile importer, and public exports), so
+Monocarve refuses a missing target package instead of writing a misleading
+`src/*` fragment. Scaffold the package first through the configured standard
+package lifecycle, commit that prerequisite, then compile the boundary.
+
 ### Module promotion (architectural boundary cuts)
 
 ```ts

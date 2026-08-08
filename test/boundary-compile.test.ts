@@ -120,11 +120,12 @@ interface PortFixture {
   readonly input: CompileBoundaryPreparationManifestInput;
 }
 
-function portFixture(overrides: { readonly retainedSource?: string; readonly consumerSource?: string } = {}): PortFixture {
+function portFixture(overrides: { readonly retainedSource?: string; readonly consumerSource?: string; readonly packageName?: string | null } = {}): PortFixture {
   const root = fixtureRepo({
     "apps/api/tsconfig.json": TSCONFIG,
     [PORT_RETAINED]: overrides.retainedSource ?? PORT_RETAINED_SOURCE,
     [PORT_CONSUMER]: overrides.consumerSource ?? PORT_CONSUMER_SOURCE,
+    ...(overrides.packageName === null ? {} : { "libs/ports/package.json": JSON.stringify({ name: overrides.packageName ?? "@acme/ports/widget" }) }),
   });
   const config = fixtureConfig(root, {
     compositionBoundaries: [{
@@ -368,6 +369,20 @@ describe("compileBoundaryPreparationManifest — existing-package strategy", () 
 });
 
 describe("compileBoundaryPreparationManifest — port strategy", () => {
+  test("fails closed instead of emitting a partial new target package", () => {
+    const { input } = portFixture({ packageName: null });
+    expect(() => compileBoundaryPreparationManifest(input)).toThrow(
+      /target package @acme\/ports\/widget does not exist at libs\/ports; boundary preparation cannot emit a partial package, so scaffold it first/,
+    );
+  });
+
+  test("refuses a contract target owned by a differently named package", () => {
+    const { input } = portFixture({ packageName: "@acme/collision" });
+    expect(() => compileBoundaryPreparationManifest(input)).toThrow(
+      /target path belongs to package "@acme\/collision", not configured targetPackage "@acme\/ports\/widget"/,
+    );
+  });
+
   test("ignores a graph importer that binds only retained donor symbols", () => {
     const retainedSource = "export interface Widget { amount: number }\nexport const makeWidget = (): Widget => ({ amount: 0 });\n";
     const consumerSource = 'import { makeWidget } from "../widget.ts";\nexport const value = makeWidget();\n';

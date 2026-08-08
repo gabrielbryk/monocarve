@@ -84,6 +84,7 @@ function portBoundary(): { readonly root: string; readonly config: ReturnType<ty
     "apps/api/tsconfig.json": TSCONFIG,
     [PORT_RETAINED]: PORT_RETAINED_SOURCE,
     [PORT_CONSUMER]: PORT_CONSUMER_SOURCE,
+    "libs/ports/package.json": JSON.stringify({ name: "@acme/ports/widget" }),
   });
   const config = fixtureConfig(root, {
     compositionBoundaries: [{

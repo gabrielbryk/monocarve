@@ -8,7 +8,7 @@
  * and `baselineFileMode`, which this module borrows for boundary compilation.
  */
 import { readdirSync, statSync } from "node:fs";
-import { extname, relative, resolve } from "node:path";
+import { extname, posix, relative, resolve } from "node:path";
 
 import ts from "typescript";
 
@@ -276,6 +276,7 @@ function planPortOperations(
   if (!input.contractTargetPath) throw new PlanningError(`boundary ${boundary.id} requires an explicit contract target path`);
   if (input.contractTargetPath === boundary.retained) throw new PlanningError(`boundary ${boundary.id} contract target path must differ from the retained module`);
   workspacePath(input.rootDir, input.contractTargetPath);
+  assertExistingPortTargetPackage(input, boundary, baselineCommit, input.contractTargetPath);
   if (showBaseline(input.rootDir, baselineCommit, input.contractTargetPath) !== null) {
     throw new PlanningError(`boundary contract target already exists at baseline: ${input.contractTargetPath}`);
   }
@@ -300,6 +301,49 @@ function planPortOperations(
     ...(input.cssImportExtensions === undefined ? {} : { cssImportExtensions: input.cssImportExtensions }),
   });
   return result.adapter === undefined ? [result.contract, ...result.rewrites] : [result.contract, result.adapter, ...result.rewrites];
+}
+
+function assertExistingPortTargetPackage(
+  input: CompileBoundaryPreparationManifestInput,
+  boundary: Extract<ResolvedBoundary, { strategy: "port" }>,
+  baselineCommit: string,
+  contractTargetPath: string,
+): void {
+  const packageRoot = boundaryTargetRoot(input.config, contractTargetPath);
+  if (!packageRoot) {
+    throw new PlanningError(`boundary ${boundary.id} contract target ${contractTargetPath} is outside configured package roots; scaffold ${boundary.targetPackage} first with the standard package lifecycle`);
+  }
+  const manifestPath = `${packageRoot}/package.json`;
+  const manifestText = showBaseline(input.rootDir, baselineCommit, manifestPath);
+  if (manifestText === null) {
+    throw new PlanningError(
+      `boundary ${boundary.id} target package ${boundary.targetPackage} does not exist at ${packageRoot}; ` +
+        "boundary preparation cannot emit a partial package, so scaffold it first with the configured standard package lifecycle",
+    );
+  }
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(manifestText);
+  } catch {
+    throw new PlanningError(`boundary ${boundary.id} target package manifest is not valid JSON: ${manifestPath}`);
+  }
+  const name = typeof manifest === "object" && manifest !== null && "name" in manifest ? (manifest as { name?: unknown }).name : undefined;
+  if (name !== boundary.targetPackage) {
+    throw new PlanningError(`boundary ${boundary.id} target path belongs to package ${JSON.stringify(name)}, not configured targetPackage ${JSON.stringify(boundary.targetPackage)}`);
+  }
+}
+
+function boundaryTargetRoot(config: MonocarveConfig, targetPath: string): string | undefined {
+  const exact = config.firstPartyPackages
+    .filter((item) => targetPath === item.root || targetPath.startsWith(`${item.root}/`))
+    .sort((left, right) => right.root.length - left.root.length)[0];
+  if (exact) return exact.root;
+  for (const root of [...config.packageRoots].sort((left, right) => right.length - left.length)) {
+    if (!targetPath.startsWith(`${root}/`)) continue;
+    const child = targetPath.slice(root.length + 1).split("/")[0];
+    if (child) return posix.join(root, child);
+  }
+  return undefined;
 }
 
 /** Deterministic operation order: by mutated path, then kind, matching multi-build.ts. */

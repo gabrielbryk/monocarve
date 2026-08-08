@@ -51,6 +51,8 @@ export interface ResolvedPortBoundary {
   readonly atomicDeclarationGroup?: boolean;
   /** Declared package identity the contract specifier resolves through; not a filesystem path. */
   readonly contractPackage: string;
+  /** Workspace package that must already own the promoted contract target. */
+  readonly targetPackage: string;
   /** Declared module identity within `contractPackage`; not a filesystem path. */
   readonly contractModule: string;
   /** Exact specifier a portable importer is rewritten to use. */
@@ -117,6 +119,7 @@ function resolveCompositionBoundary(boundary: CompositionBoundariesConfig[number
     // bare specifier a consumer imports doubles as both the specifier and
     // the package identity in this vocabulary.
     contractPackage: boundary.packageImport,
+    targetPackage: boundary.packageImport,
     contractModule: boundary.contractModule,
     packageImport: boundary.packageImport,
     symbols: [...boundary.symbols].sort(byCodeUnit),
@@ -161,6 +164,7 @@ function resolvePortPromotion(promotion: PortPromotionsConfig[number]): Resolved
     contractName: declarationNames[0]!,
     ...(promotion.appConcreteTypes ? { atomicDeclarationGroup: true } : {}),
     contractPackage: promotion.contractPackage,
+    targetPackage: promotion.targetPackage,
     contractModule: promotion.contractModule,
     packageImport: promotion.contractPackage,
     symbols,
