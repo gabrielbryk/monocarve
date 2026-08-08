@@ -400,6 +400,30 @@ describe("compileBoundaryPreparationManifest — port strategy", () => {
     expect(() => assertPreparationManifestValid(tampered)).toThrow(/still reference the retired specifier|retain undeclared symbols/);
   });
 
+  test("rewrites only the selected declaration when retained values use a separate donor import", () => {
+    const retainedSource = "export interface Widget { amount: number }\nexport class WidgetError extends Error {}\n";
+    const consumerSource = 'import type { Widget as Input } from "../widget.ts";\nimport { WidgetError } from "../widget.ts";\nexport type Value = Input;\nexport const error = new WidgetError();\n';
+    const manifest = compileBoundaryPreparationManifest(portFixture({ retainedSource, consumerSource }).input);
+    const rewrite = manifest.operations.find((operation) => operation.kind === "rewrite-module-specifier");
+
+    expect(() => assertPreparationManifestValid(manifest)).not.toThrow();
+    if (rewrite?.kind !== "rewrite-module-specifier") throw new Error("expected selective consumer rewrite");
+    expect(rewrite.contents).toContain('import type { Widget as Input } from "@acme/ports/widget";');
+    expect(rewrite.contents).toContain('import { WidgetError } from "../widget.ts";');
+    expect(rewrite.rewrites).toEqual([{
+      from: "../widget.ts", to: "@acme/ports/widget", symbols: ["Widget"], retainedSymbols: ["WidgetError"],
+    }]);
+
+    const forgedContents = rewrite.contents.replace("Widget as Input }", "Widget as Input, WidgetError }");
+    const forgedRewrite = { ...rewrite, file: { ...rewrite.file, resultHash: hashText(forgedContents) }, contents: forgedContents };
+    const { planId: _planId, ...draft } = manifest;
+    const forged = createPreparationManifest({
+      ...draft,
+      operations: manifest.operations.map((operation) => operation === rewrite ? forgedRewrite : operation),
+    });
+    expect(() => assertPreparationManifestValid(forged)).toThrow(/bind undeclared symbols from @acme\/ports\/widget/);
+  });
+
   test("compiles a complete, VALID PreparationManifest end to end, emitting contract and adapter write-file operations", () => {
     const { input } = portFixture();
 

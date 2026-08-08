@@ -107,6 +107,9 @@ function validateRewriteEntry(
     return;
   }
   for (const symbol of rewrite.symbols) if (!bound.has(symbol)) add("rewrite-symbols", `rewritten contents do not bind ${symbol} from ${rewrite.to}`, path);
+  if ([...bound].some((symbol) => !rewrite.symbols.includes(symbol))) {
+    add("rewrite-symbols", `rewritten contents bind undeclared symbols from ${rewrite.to}`, path);
+  }
   const retainedSymbols = rewrite.retainedSymbols ?? [];
   validateSortedStrings(retainedSymbols, "rewrite-symbols", "retained rewrite symbols", add);
   const retained = bindings.get(rewrite.from);

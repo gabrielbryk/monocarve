@@ -209,4 +209,44 @@ describe("planPortBoundary", () => {
       boundary: boundary({ appAdapter: undefined, template: undefined }),
     }))).toThrow(/uses Widget in value space/);
   });
+
+  test("rewrites only selected import declarations when one file imports promoted types and retained values separately", () => {
+    const retainedSourceText = [
+      "export interface DownloadedObject { body: Uint8Array }",
+      "export interface ObjectStorage { get(): Promise<DownloadedObject> }",
+      "export class ObjectStorageError extends Error {}",
+      "",
+    ].join("\n");
+    const consumerText = [
+      'import type { DownloadedObject, ObjectStorage as Store } from "../widget.ts";',
+      'import { ObjectStorageError } from "../widget.ts";',
+      "export type Result = DownloadedObject | Store;",
+      "export const error = new ObjectStorageError();",
+      "",
+    ].join("\n");
+    const result = planPortBoundary(baseInput(repo(), {
+      retainedSourceText,
+      consumers: [consumer({ text: consumerText, preconditionHash: hashText(consumerText) })],
+      boundary: boundary({
+        source: "portPromotions", atomicDeclarationGroup: true,
+        declarationName: "ObjectStorage", contractName: "ObjectStorage",
+        symbols: ["DownloadedObject", "ObjectStorage"], appAdapter: undefined, template: undefined,
+      }),
+    }));
+
+    expect(result.rewrites[0]?.contents).toContain('import type { DownloadedObject, ObjectStorage as Store } from "@acme/ports/widget";');
+    expect(result.rewrites[0]?.contents).toContain('import { ObjectStorageError } from "../widget.ts";');
+    expect(result.rewrites[0]?.rewrites).toEqual([{
+      from: "../widget.ts", to: "@acme/ports/widget",
+      symbols: ["DownloadedObject", "ObjectStorage"], retainedSymbols: ["ObjectStorageError"],
+    }]);
+  });
+
+  test("refuses an unprovable side-effect import beside a selected declaration", () => {
+    const consumerText = 'import type { Widget } from "../widget.ts";\nimport "../widget.ts";\nexport type Input = Widget;\n';
+    expect(() => planPortBoundary(baseInput(repo(), {
+      consumers: [consumer({ text: consumerText, preconditionHash: hashText(consumerText) })],
+      boundary: boundary({ appAdapter: undefined, template: undefined }),
+    }))).toThrow(/side-effect import.*cannot prove its retained binding identity/);
+  });
 });
