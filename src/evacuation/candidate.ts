@@ -1,5 +1,5 @@
 import { applicationFor, ownerFor, type MonocarveConfig } from "../config.ts";
-import { buildApplicationGraph, sccId, transitive } from "../graph/components.ts";
+import { buildApplicationGraph, sccId } from "../graph/components.ts";
 import { isCompositionRoot } from "../graph/layers.ts";
 import type { DependencyGraph, Scc } from "../graph/model.ts";
 import { byCodeUnit, hashText } from "../util/hash.ts";
@@ -14,8 +14,10 @@ export interface EvacuationCandidate {
   readonly requested: readonly string[];
   /** Whole SCCs intersecting `requested`, including retained composition SCCs. */
   readonly seedSccs: readonly Scc[];
-  /** Production files pulled in by dependency closure rather than selected directly. */
-  readonly absorbedDependencies: readonly string[];
+  /** Unselected production files absorbed solely to preserve a selected SCC. */
+  readonly absorbedSccPeers: readonly string[];
+  /** Direct application dependencies outside the bounded evacuation. */
+  readonly unselectedDependencies: readonly string[];
   /** Production files that move, partitioned without splitting SCCs. */
   readonly files: readonly string[];
   readonly sccs: readonly Scc[];
@@ -36,7 +38,7 @@ export interface EvacuationCandidateOptions {
   readonly selected: readonly string[];
 }
 
-/** Build the union of every selected SCC's complete in-application dependency closure. */
+/** Build the bounded union of selected SCCs, absorbing peers but not outbound dependencies. */
 export function buildEvacuationCandidate(options: EvacuationCandidateOptions): EvacuationCandidate {
   const { config, graph, application } = options;
   const requested = [...new Set(options.selected)].sort(byCodeUnit);
@@ -51,18 +53,22 @@ export function buildEvacuationCandidate(options: EvacuationCandidateOptions): E
     }
   }
 
-  const { components, componentByNode, outgoing } = applicationGraph.condensed;
+  const { components, componentByNode } = applicationGraph.condensed;
   const seedIds = new Set(requested.map((path) => componentByNode.get(path)!));
-  const closureIds = new Set(seedIds);
-  for (const seed of seedIds) for (const dependency of transitive(seed, outgoing)) closureIds.add(dependency);
 
   const retainedIds = new Set(
-    [...closureIds].filter((id) => (components[id] ?? []).some((path) => isCompositionRoot(config, path))),
+    [...seedIds].filter((id) => (components[id] ?? []).some((path) => isCompositionRoot(config, path))),
   );
-  const movedIds = new Set([...closureIds].filter((id) => !retainedIds.has(id)));
+  const movedIds = new Set([...seedIds].filter((id) => !retainedIds.has(id)));
   const files = componentPaths(movedIds, components);
   const requestedSet = new Set(requested);
-  const absorbedDependencies = files.filter((path) => !requestedSet.has(path));
+  const absorbedSccPeers = files.filter((path) => !requestedSet.has(path));
+  const movedSet = new Set(files);
+  const unselectedDependencies = [...new Set(graph.edges
+    .filter((edge) => movedSet.has(edge.from) && !movedSet.has(edge.to))
+    .map((edge) => edge.to)
+    .filter((path) => graph.nodes.get(path)?.zone === "application"))]
+    .sort(byCodeUnit);
   const retainedComposition = componentSccs(retainedIds, components);
   const seedSccs = componentSccs(seedIds, components);
   const sccs = componentSccs(movedIds, components);
@@ -72,7 +78,8 @@ export function buildEvacuationCandidate(options: EvacuationCandidateOptions): E
     application,
     requested,
     seedSccs,
-    absorbedDependencies,
+    absorbedSccPeers,
+    unselectedDependencies,
     files,
     sccs,
     retainedComposition,

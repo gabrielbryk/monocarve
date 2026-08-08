@@ -80,7 +80,7 @@ function graph(paths: readonly string[], edges: readonly ModuleEdge[], tests: Re
 }
 
 describe("evacuation candidate unions", () => {
-  test("deduplicates overlapping closures and aggregates package and consumer provenance", () => {
+  test("deduplicates selected SCCs and aggregates package and consumer provenance", () => {
     const testPath = `${APP}/alpha.test.ts`;
     const dependencyGraph = graph(
       [alpha, beta, shared, cycleA, cycleB, consumer, pkg],
@@ -88,10 +88,16 @@ describe("evacuation candidate unions", () => {
       new Map([[alpha, new Set([testPath])]]),
     );
 
-    const candidate = buildEvacuationCandidate({ config, graph: dependencyGraph, application: "api", selected: [beta, alpha, alpha] });
+    const candidate = buildEvacuationCandidate({
+      config,
+      graph: dependencyGraph,
+      application: "api",
+      selected: [beta, cycleA, shared, alpha, alpha],
+    });
 
     expect(candidate.files).toEqual([alpha, beta, cycleA, cycleB, shared]);
-    expect(candidate.absorbedDependencies).toEqual([cycleA, cycleB, shared]);
+    expect(candidate.absorbedSccPeers).toEqual([cycleB]);
+    expect(candidate.unselectedDependencies).toEqual([]);
     expect(candidate.sccs.find((scc) => scc.members.includes(cycleA))?.members).toEqual([cycleA, cycleB]);
     expect(candidate.dependencies).toEqual(["@acme/runtime"]);
     expect(candidate.consumers).toEqual([
@@ -106,7 +112,7 @@ describe("evacuation candidate unions", () => {
     const second = buildEvacuationCandidate({ config, graph: dependencyGraph, application: "api", selected: [cycleB, cycleB] });
 
     expect(first.files).toEqual([cycleA, cycleB]);
-    expect(first.absorbedDependencies).toEqual([cycleA]);
+    expect(first.absorbedSccPeers).toEqual([cycleA]);
     expect(first.seedSccs).toEqual(first.sccs);
     expect(first.id).toMatch(/^e-[a-f0-9]{12}$/);
     expect(second).toEqual(first);
@@ -118,15 +124,31 @@ describe("evacuation candidate unions", () => {
       [route, routePeer, shared],
       [edge(route, routePeer), edge(routePeer, route), edge(route, shared)],
     );
-    const candidate = buildEvacuationCandidate({ config, graph: dependencyGraph, application: "api", selected: [route] });
+    const candidate = buildEvacuationCandidate({ config, graph: dependencyGraph, application: "api", selected: [route, shared] });
 
     expect(candidate.files).toEqual([shared]);
-    expect(candidate.absorbedDependencies).toEqual([shared]);
+    expect(candidate.absorbedSccPeers).toEqual([]);
     expect(candidate.retainedComposition).toHaveLength(1);
     expect(candidate.retainedComposition[0]?.members).toEqual([routePeer, route]);
-    expect(candidate.seedSccs).toEqual(candidate.retainedComposition);
+    expect(candidate.seedSccs).toContainEqual(candidate.retainedComposition[0]!);
     expect(candidate.consumers).toEqual([
       { file: route, owner: "apps/api", specifiers: ["./shared.ts"], external: false },
     ]);
+  });
+
+  test("does not absorb unselected application dependencies", () => {
+    const service = path("estimating/service");
+    const database = path("db/client");
+    const infrastructure = path("infra/secrets");
+    const dependencyGraph = graph(
+      [service, database, infrastructure],
+      [edge(service, database, "../../db/client.ts"), edge(service, infrastructure, "../../infra/secrets.ts")],
+    );
+
+    const candidate = buildEvacuationCandidate({ config, graph: dependencyGraph, application: "api", selected: [service] });
+
+    expect(candidate.files).toEqual([service]);
+    expect(candidate.absorbedSccPeers).toEqual([]);
+    expect(candidate.unselectedDependencies).toEqual([database, infrastructure]);
   });
 });
