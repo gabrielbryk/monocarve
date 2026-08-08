@@ -200,15 +200,20 @@ export const preparer = z.strictObject({
       ctx.addIssue({ code: "custom", message: "text replacement must configure prefix or suffix context" });
     }
   })).min(1).optional(),
-  outputs: z.array(z.string().min(1)).min(1),
+  creates: z.array(z.strictObject({
+    path: z.string().min(1),
+    contents: z.string(),
+    mode: z.union([z.literal(0o644), z.literal(0o755)]).optional(),
+  })).min(1).optional(),
+  outputs: z.array(z.string().min(1)).default([]),
   verify: z.string().min(1).optional(),
   commit: z.strictObject({
     subject: z.string().min(1).refine((value) => !value.includes("\n"), { message: "commit subject must be a single line" }),
     body: z.string().optional(),
   }),
 }).superRefine((item, ctx) => {
-  if (item.command === undefined && item.replacements === undefined) {
-    ctx.addIssue({ code: "custom", message: "preparer must configure command or replacements" });
+  if (item.command === undefined && item.replacements === undefined && item.creates === undefined) {
+    ctx.addIssue({ code: "custom", message: "preparer must configure command, replacements, or creates" });
   }
 });
 

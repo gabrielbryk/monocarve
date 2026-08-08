@@ -29,6 +29,11 @@ export interface PreparerManifest {
       readonly prefix?: string;
       readonly suffix?: string;
     }[];
+    readonly creates?: readonly {
+      readonly path: string;
+      readonly contents: string;
+      readonly mode: 0o644 | 0o755;
+    }[];
     readonly verify?: string;
     readonly commit: { readonly subject: string; readonly body?: string };
   };

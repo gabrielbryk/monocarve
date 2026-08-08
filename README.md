@@ -416,7 +416,7 @@ specific workspace is hardcoded anywhere in `src/`.
 | `packageNamePattern` | what a generated package name must look like; defaults from `packageScope` |
 | `generatedArtifacts` | provenance-header patterns, plus artifacts a move invalidates (`path`, `source`, `regenerate`, `triggers`, `exemptReason`) and the per-command `timeoutMs` their regeneration gets — its own budget, because a codegen command is not a gate tier |
 | `postJournalPreparers` | declared-output commands run after moves and before audit/gates, for ratchets that require destination files to exist |
-| `preparers` | pre-extraction declared-output policies: optional ordered, context-anchored text `replacements`, an optional repository command, optional verification, and exact commit metadata |
+| `preparers` | pre-extraction declared-output policies: optional ordered text `replacements`, declarative file `creates`, an optional repository command and verification, and exact commit metadata |
 | `dependencyPruning` | `mode: "report"` (default) records possible donor dependency orphans; `apply` removes reviewed candidates. Configured tests and tsconfig `types` count as consumers; `keep` retains irreducible tool/runtime dependencies by repository policy. |
 | `graph` | `tsPreCompilationDeps`, extra cruiser config, `exclude`, `cache` |
 | `transaction` | `allowDirtyPaths`, `worktreeRoot`, `nodeModules` strategy, cleanup policy, gate retries, and simulation behavior |
@@ -469,6 +469,17 @@ Only the replacement `path` is template-rendered. The `before`, `after`,
 as JSX braces is preserved exactly. The manifest captures that resolved path,
 literal replacement policy, and final output bytes; real-checkout application
 replays those reviewed bytes through the journal.
+
+`preparers[].creates` declares exact new UTF-8 files without a helper command.
+Paths use binding templates and automatically become outputs; contents remain
+literal, and mode is `0o644` by default or explicitly `0o755`. Planning accepts
+only a missing path or an already-created exact byte-and-mode match, and rejects
+duplicates (including repeating its automatic output), replacement/create
+overlap, different existing state, and workspace
+escape. When operations coexist, their order is replacements, creates, optional
+command, then optional verification. The manifest and journal preserve the exact
+absence-or-file precondition, result hash, contents, and mode for simulation,
+application, rollback, commit proof, and replay validation.
 
 ### Scaffold templates are workspace policy
 

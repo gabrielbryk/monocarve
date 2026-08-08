@@ -231,8 +231,8 @@ result — matching `prepare-apply`'s exact simulate-then-commit shape.
 | `preparer-commit` | `preparer-commit --plan <path>` — verify exact applied bytes and modes, refuse guarded branches or any extra dirty path, and commit only declared outputs with configured metadata. |
 
 Preparers are generic repository-owned pre-extraction policies. Each config
-entry declares an `id`, `phase: "pre-extraction"`, one or both of `replacements`
-and `command`, output path templates, an optional `verify` command, and commit
+entry declares an `id`, `phase: "pre-extraction"`, one or more of `replacements`,
+`creates`, and `command`, output path templates, an optional `verify` command, and commit
 metadata. Templates may use `{app}`,
 `{package}`, `{packageRoot}`, `{planId}`, `{sourcePath}`, and `{targetPath}`;
 the last two come from one exact byte-identical move in the extraction
@@ -281,9 +281,33 @@ The replacement `path` is template-rendered using the preparer's binding. The
 `before`, `after`, `prefix`, and `suffix` fields are literal source text and are
 never template-rendered, so braces in JSX and similar syntax remain exact.
 
-Every replacement `path` must also be named by `outputs`. Replacements and a
-`command` may coexist: replacements run first, the command second, and `verify`
-last. Planning still rejects every repository-visible changed path outside
+New UTF-8 files can be declared without a helper command. Create paths are
+automatically included in the output set; `contents` is literal, while `path`
+uses the same binding templates as replacements. Mode defaults to `0o644` and
+may be `0o755`:
+
+```ts
+preparers: [{
+  id: "add-widget-contract",
+  phase: "pre-extraction",
+  creates: [{
+    path: "{packageRoot}/src/widget-contract.ts",
+    contents: "export interface WidgetContract {}\n",
+  }],
+  commit: { subject: "refactor: add widget contract" },
+}]
+```
+
+Planning requires each create path to be absent, or already be a regular file
+with the exact declared bytes and mode. Different existing state, duplicate
+create paths, explicitly repeating an automatic create output,
+replacement/create overlap, and paths outside the workspace are refused. The
+manifest records the missing-or-existing precondition and exact
+result bytes, hash, and mode.
+
+Every replacement `path` must also be named by `outputs`. Operations execute in
+the explicit order replacements, creates, optional command, then `verify`.
+Planning still rejects every repository-visible changed path outside
 `outputs`, then captures the rendered policy and final UTF-8 bytes in the
 reviewable preparer manifest.
 

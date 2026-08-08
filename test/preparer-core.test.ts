@@ -3,8 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 
 import { parseConfig } from "../src/config.ts";
 import type { ExtractionManifest } from "../src/plan/manifest.ts";
-import { applyPreparerManifest, compilePreparerManifest, compileStandalonePreparerManifest, simulatePreparerManifest } from "../src/preparer/index.ts";
-import { hashText } from "../src/util/hash.ts";
+import { applyPreparerManifest, assertPreparerManifest, compilePreparerManifest, compileStandalonePreparerManifest, simulatePreparerManifest } from "../src/preparer/index.ts";
+import { hashJson, hashText } from "../src/util/hash.ts";
 import { cleanupFixtures, fixtureGit, fixtureRepo, scratchDirectory } from "./support/fixture-repo.ts";
 
 afterAll(cleanupFixtures);
@@ -107,6 +107,76 @@ describe("configured pre-extraction preparers", () => {
     expect(manifest.mutations[0]?.contents).toBe("export const view = 3;\n");
     applyPreparerManifest({ rootDir: root, config, manifest });
     expect(readFileSync(`${root}/${source}`, "utf8")).toBe("export const view = 3;\n");
+  });
+
+  test("creates a templated declared output without a command and replays idempotently", async () => {
+    const source = "apps/consumer/src/tabs/leads/view.ts";
+    const root = fixtureRepo({ [source]: "export const view = 1;\n" });
+    const configured = createPolicy("{targetPath}.contract.ts", "export const contract = 1;\n", 0o755);
+    const config = configuration(scratchDirectory(), [configured]);
+
+    const manifest = await compilePreparerManifest({ rootDir: root, config, extraction: extractionManifest(root), preparerId: configured.id, sourcePath: source });
+
+    expect(manifest.preparer.creates).toEqual([{ path: "packages/leads/src/tabs/leads/view.ts.contract.ts", contents: "export const contract = 1;\n", mode: 0o755 }]);
+    expect(manifest.mutations[0]).toMatchObject({ path: "packages/leads/src/tabs/leads/view.ts.contract.ts", preconditionHash: "missing", preconditionMode: "missing", resultMode: 0o755, contents: "export const contract = 1;\n" });
+    await simulatePreparerManifest({ rootDir: root, config, manifest });
+    applyPreparerManifest({ rootDir: root, config, manifest });
+    expect(readFileSync(`${root}/packages/leads/src/tabs/leads/view.ts.contract.ts`, "utf8")).toBe("export const contract = 1;\n");
+    fixtureGit(root, "add", ".");
+    fixtureGit(root, "commit", "-qm", "test: apply declarative create");
+    const idempotent = await compilePreparerManifest({ rootDir: root, config, extraction: extractionManifest(root), preparerId: configured.id, sourcePath: source });
+    expect(idempotent.mutations[0]).toMatchObject({ preconditionHash: manifest.mutations[0]!.resultHash, resultHash: manifest.mutations[0]!.resultHash, preconditionMode: 0o755, resultMode: 0o755 });
+  });
+
+  test("refuses a declarative create when different bytes already exist", async () => {
+    const source = "apps/consumer/src/tabs/leads/view.ts";
+    const created = "apps/consumer/src/tabs/leads/contract.ts";
+    const root = fixtureRepo({ [source]: "export const view = 1;\n", [created]: "different\n" });
+    const configured = createPolicy(created, "expected\n");
+    const config = configuration(scratchDirectory(), [configured]);
+
+    await expect(compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source }))
+      .rejects.toThrow(`file create 1 found different existing content or mode: ${created}`);
+  });
+
+  test("refuses duplicate create paths, replacement overlap, and workspace escape", async () => {
+    const source = "apps/consumer/src/tabs/leads/view.ts";
+    const root = fixtureRepo({ [source]: "export const view = 1;\n" });
+    const duplicate = { ...createPolicy("contract.ts", "one\n"), creates: [{ path: "contract.ts", contents: "one\n" }, { path: "contract.ts", contents: "two\n" }] };
+    await expect(compileStandalonePreparerManifest({ rootDir: root, config: configuration(scratchDirectory(), [duplicate]), baselineCommit: "HEAD", preparerId: duplicate.id, sourcePath: source }))
+      .rejects.toThrow("duplicate preparer create path: contract.ts");
+
+    const overlap = { ...createPolicy(source, "created\n"), replacements: [{ path: source, prefix: "export const ", before: "view = 1", after: "view = 2" }] };
+    await expect(compileStandalonePreparerManifest({ rootDir: root, config: configuration(scratchDirectory(), [overlap]), baselineCommit: "HEAD", preparerId: overlap.id, sourcePath: source }))
+      .rejects.toThrow(`preparer path cannot be both replaced and created: ${source}`);
+
+    const redundantOutput = { ...createPolicy("contract.ts", "created\n"), outputs: ["contract.ts"] };
+    await expect(compileStandalonePreparerManifest({ rootDir: root, config: configuration(scratchDirectory(), [redundantOutput]), baselineCommit: "HEAD", preparerId: redundantOutput.id, sourcePath: source }))
+      .rejects.toThrow("created path is automatically an output and must not be declared twice: contract.ts");
+
+    const escape = createPolicy("../contract.ts", "escaped\n");
+    await expect(compileStandalonePreparerManifest({ rootDir: root, config: configuration(scratchDirectory(), [escape]), baselineCommit: "HEAD", preparerId: escape.id, sourcePath: source }))
+      .rejects.toThrow("path is not workspace-relative");
+  });
+
+  test("manifest validation detects tampered declarative create policy", async () => {
+    const source = "apps/consumer/src/tabs/leads/view.ts";
+    const root = fixtureRepo({ [source]: "export const view = 1;\n" });
+    const configured = createPolicy("contract.ts", "expected\n");
+    const config = configuration(scratchDirectory(), [configured]);
+    const manifest = await compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source });
+    const tampered = structuredClone(manifest);
+    (tampered.preparer.creates![0] as { contents: string }).contents = "tampered\n";
+    const { planId: _policyPlanId, ...policyDraft } = tampered;
+    (tampered as { planId: string }).planId = hashJson(policyDraft);
+
+    expect(() => assertPreparerManifest(config, tampered)).toThrow("preparer manifest commands differ from configuration");
+
+    const tamperedMutation = structuredClone(manifest);
+    (tamperedMutation.mutations[0] as { contents: string }).contents = "tampered\n";
+    const { planId: _mutationPlanId, ...mutationDraft } = tamperedMutation;
+    (tamperedMutation as { planId: string }).planId = hashJson(mutationDraft);
+    expect(() => assertPreparerManifest(config, tamperedMutation)).toThrow("preparer manifest create result differs from policy");
   });
 
   test("deletes anchored text and recognizes the deleted terminal state", async () => {
@@ -235,7 +305,16 @@ function replacementPolicy(path: string, replacements: readonly { readonly befor
   };
 }
 
-function configuration(worktreeRoot: string, preparers: (ReturnType<typeof policy> | ReturnType<typeof replacementPolicy>)[]) {
+function createPolicy(path: string, contents: string, mode?: 0o644 | 0o755) {
+  return {
+    id: "create-contract",
+    phase: "pre-extraction" as const,
+    creates: [{ path, contents, ...(mode === undefined ? {} : { mode }) }],
+    commit: { subject: "refactor: create contract" },
+  };
+}
+
+function configuration(worktreeRoot: string, preparers: unknown[]) {
   return parseConfig({
     applications: [{ name: "consumer", sourceRoot: "apps/consumer/src", tsconfig: "apps/consumer/tsconfig.json" }],
     packageRoots: ["packages"],

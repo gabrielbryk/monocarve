@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 
 import type { MonocarveConfig, PreparerConfig } from "../config.ts";
 import { MonocarveError } from "../errors.ts";
@@ -39,7 +40,7 @@ export async function compilePreparerManifest(input: CompilePreparerInput): Prom
   const move = findMove(input.extraction, input.sourcePath);
   const resolved = resolveCommit(input.rootDir, input.extraction.baselineCommit);
   const vars = variables(input.extraction, move);
-  const outputs = unique(policy.outputs.map((path) => renderTemplate(path, vars)).map((path) => validatedPath(input.rootDir, path)));
+  const declaredOutputs = policy.outputs.map((path) => renderTemplate(path, vars)).map((path) => validatedPath(input.rootDir, path));
   const command = policy.command === undefined ? undefined : renderTemplate(policy.command, vars);
   const replacements = policy.replacements?.map((replacement) => ({
     path: validatedPath(input.rootDir, renderTemplate(replacement.path, vars)),
@@ -48,6 +49,19 @@ export async function compilePreparerManifest(input: CompilePreparerInput): Prom
     ...(replacement.prefix === undefined ? {} : { prefix: replacement.prefix }),
     ...(replacement.suffix === undefined ? {} : { suffix: replacement.suffix }),
   }));
+  const creates = policy.creates?.map((create) => ({
+    path: validatedPath(input.rootDir, renderTemplate(create.path, vars)),
+    contents: create.contents,
+    mode: create.mode ?? 0o644,
+  }));
+  assertDistinctCreates(creates);
+  const createPaths = creates?.map((create) => create.path) ?? [];
+  assertNoDuplicatePaths(declaredOutputs, "duplicate declared preparer output path");
+  const declaredCreate = createPaths.find((path) => declaredOutputs.includes(path));
+  if (declaredCreate !== undefined) throw new PreparerError(`created path is automatically an output and must not be declared twice: ${declaredCreate}`);
+  const overlap = replacements?.find((replacement) => createPaths.includes(replacement.path));
+  if (overlap !== undefined) throw new PreparerError(`preparer path cannot be both replaced and created: ${overlap.path}`);
+  const outputs = unique([...declaredOutputs, ...createPaths]);
   const undeclaredReplacement = replacements?.find((replacement) => !outputs.includes(replacement.path));
   if (undeclaredReplacement !== undefined) throw new PreparerError(`text replacement path is not a declared output: ${undeclaredReplacement.path}`);
   const verify = policy.verify === undefined ? undefined : renderTemplate(policy.verify, vars);
@@ -63,6 +77,7 @@ export async function compilePreparerManifest(input: CompilePreparerInput): Prom
   try {
     const before = Object.fromEntries(outputs.map((path) => [path, state(worktree.workspacePath, path)]));
     if (replacements !== undefined) applyTextReplacements(worktree.workspacePath, replacements);
+    if (creates !== undefined) applyFileCreates(worktree.workspacePath, creates);
     if (command !== undefined) run(command, worktree.workspacePath, input.config.gates.timeoutMs, "preparer");
     if (verify !== undefined) run(verify, worktree.workspacePath, input.config.gates.timeoutMs, "preparer verify");
     const changed = unique(statusEntries(worktree.workspacePath).flatMap((entry) => entry.paths)).sort(byCodeUnit);
@@ -74,7 +89,7 @@ export async function compilePreparerManifest(input: CompilePreparerInput): Prom
       createdAt: resolved.committedAt,
       baseline: { commit: resolved.commit, configDigest: hashJson(input.config) },
       extractionPlanId: input.extraction.planId,
-      preparer: { id: policy.id, phase: policy.phase, ...(command === undefined ? {} : { command }), ...(replacements === undefined ? {} : { replacements }), ...(verify === undefined ? {} : { verify }), commit: renderCommit(policy, vars) },
+      preparer: { id: policy.id, phase: policy.phase, ...(command === undefined ? {} : { command }), ...(replacements === undefined ? {} : { replacements }), ...(creates === undefined ? {} : { creates }), ...(verify === undefined ? {} : { verify }), commit: renderCommit(policy, vars) },
       binding: {
         application: input.extraction.application,
         packageName: input.extraction.target.packageName,
@@ -174,6 +189,7 @@ export function assertPreparerManifest(config: MonocarveConfig, value: unknown):
   if (manifest.preparer === undefined || typeof manifest.preparer.id !== "string") throw new PreparerError("preparer manifest policy is invalid");
   if (manifest.preparer.command !== undefined && typeof manifest.preparer.command !== "string") throw new PreparerError("preparer manifest command is invalid");
   if (manifest.preparer.replacements !== undefined && (!Array.isArray(manifest.preparer.replacements) || manifest.preparer.replacements.some((item) => item === null || typeof item !== "object" || typeof item.path !== "string" || typeof item.before !== "string" || typeof item.after !== "string" || (item.prefix !== undefined && typeof item.prefix !== "string") || (item.suffix !== undefined && typeof item.suffix !== "string")))) throw new PreparerError("preparer manifest replacements are invalid");
+  if (manifest.preparer.creates !== undefined && (!Array.isArray(manifest.preparer.creates) || manifest.preparer.creates.some((item) => item === null || typeof item !== "object" || typeof item.path !== "string" || typeof item.contents !== "string" || (item.mode !== 0o644 && item.mode !== 0o755)))) throw new PreparerError("preparer manifest creates are invalid");
   if (manifest.preparer.commit === undefined || typeof manifest.preparer.commit.subject !== "string") throw new PreparerError("preparer manifest commit policy is invalid");
   if (manifest.binding === undefined || Object.values(manifest.binding).some((item) => typeof item !== "string")) throw new PreparerError("preparer manifest move binding is invalid");
   if (!Array.isArray(manifest.mutations) || manifest.mutations.some((item) => item === null || typeof item !== "object" || typeof item.path !== "string" || typeof item.contents !== "string")) throw new PreparerError("preparer manifest mutations are invalid");
@@ -198,15 +214,33 @@ export function assertPreparerManifest(config: MonocarveConfig, value: unknown):
     ...(replacement.prefix === undefined ? {} : { prefix: replacement.prefix }),
     ...(replacement.suffix === undefined ? {} : { suffix: replacement.suffix }),
   }));
+  const expectedCreates = policy.creates?.map((create) => ({
+    path: validatedPath(".", renderTemplate(create.path, vars)),
+    contents: create.contents,
+    mode: create.mode ?? 0o644,
+  }));
+  const renderedOutputs = policy.outputs.map((path) => validatedPath(".", renderTemplate(path, vars)));
+  assertNoDuplicatePaths(renderedOutputs, "duplicate declared preparer output path");
+  const redundantCreateOutput = expectedCreates?.find((create) => renderedOutputs.includes(create.path));
+  if (redundantCreateOutput !== undefined) throw new PreparerError(`created path is automatically an output and must not be declared twice: ${redundantCreateOutput.path}`);
   const expectedVerify = policy.verify === undefined ? undefined : renderTemplate(policy.verify, vars);
   const expectedCommit = renderCommit(policy, vars);
-  if (manifest.preparer.command !== expectedCommand || !sameOptionalPolicy(manifest.preparer.replacements, expectedReplacements) || manifest.preparer.verify !== expectedVerify || hashJson(manifest.preparer.commit) !== hashJson(expectedCommit)) {
+  if (manifest.preparer.command !== expectedCommand || !sameOptionalPolicy(manifest.preparer.replacements, expectedReplacements) || !sameOptionalPolicy(manifest.preparer.creates, expectedCreates) || manifest.preparer.verify !== expectedVerify || hashJson(manifest.preparer.commit) !== hashJson(expectedCommit)) {
     throw new PreparerError("preparer manifest commands differ from configuration");
   }
-  const expectedOutputs = unique(policy.outputs.map((path) => renderTemplate(path, vars)));
+  const expectedOutputs = unique([...renderedOutputs, ...(expectedCreates?.map((create) => create.path) ?? [])]);
   const actualOutputs = manifest.mutations.map((item) => item.path).sort(byCodeUnit);
   if (expectedOutputs.length !== actualOutputs.length || expectedOutputs.some((path, index) => path !== actualOutputs[index])) {
     throw new PreparerError("preparer manifest outputs differ from configuration");
+  }
+  for (const create of manifest.preparer.creates ?? []) {
+    const mutation = manifest.mutations.find((item) => item.path === create.path);
+    if (mutation === undefined || mutation.contents !== create.contents || mutation.resultHash !== hashText(create.contents) || mutation.resultMode !== create.mode) {
+      throw new PreparerError(`preparer manifest create result differs from policy: ${create.path}`);
+    }
+    const absent = mutation.preconditionHash === MISSING && mutation.preconditionMode === MISSING;
+    const alreadyCreated = mutation.preconditionHash === mutation.resultHash && mutation.preconditionMode === mutation.resultMode;
+    if (!absent && !alreadyCreated) throw new PreparerError(`preparer manifest create precondition is neither missing nor exact: ${create.path}`);
   }
 }
 
@@ -290,6 +324,42 @@ function validatedPath(root: string, path: string): string { workspacePath(root,
 function unique(items: readonly string[]): string[] { return [...new Set(items)].sort(byCodeUnit); }
 
 type TextReplacement = { readonly path: string; readonly before: string; readonly after: string; readonly prefix?: string; readonly suffix?: string };
+type FileCreate = { readonly path: string; readonly contents: string; readonly mode: 0o644 | 0o755 };
+
+function assertDistinctCreates(creates: readonly FileCreate[] | undefined): void {
+  if (creates === undefined) return;
+  const seen = new Set<string>();
+  for (const create of creates) {
+    if (seen.has(create.path)) throw new PreparerError(`duplicate preparer create path: ${create.path}`);
+    seen.add(create.path);
+  }
+}
+
+function assertNoDuplicatePaths(paths: readonly string[], message: string): void {
+  const seen = new Set<string>();
+  for (const path of paths) {
+    if (seen.has(path)) throw new PreparerError(`${message}: ${path}`);
+    seen.add(path);
+  }
+}
+
+function applyFileCreates(root: string, creates: readonly FileCreate[]): void {
+  for (const [index, create] of creates.entries()) {
+    const absolute = workspacePath(root, create.path);
+    if (existsSync(absolute)) {
+      if (!statSync(absolute).isFile()) throw new PreparerError(`file create ${index + 1} path is not a file: ${create.path}`);
+      const bytes = readFileSync(absolute);
+      const mode = canonicalMode(statSync(absolute).mode);
+      if (hashBytes(bytes) !== hashText(create.contents) || mode !== create.mode) {
+        throw new PreparerError(`file create ${index + 1} found different existing content or mode: ${create.path}`);
+      }
+      continue;
+    }
+    mkdirSync(dirname(absolute), { recursive: true });
+    writeFileSync(absolute, create.contents, { mode: create.mode });
+    chmodSync(absolute, create.mode);
+  }
+}
 
 function applyTextReplacements(root: string, replacements: readonly TextReplacement[]): void {
   for (const [index, replacement] of replacements.entries()) {

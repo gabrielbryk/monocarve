@@ -101,6 +101,29 @@ test("preparer apply refuses bytes changed after manifest approval", async () =>
   expect(existsSync(join(root, "libs/chart/ratchet.txt"))).toBe(false);
 }, 30_000);
 
+test("preparer CLI plans and simulates a command-free declarative create", async () => {
+  const root = committedWorkspace();
+  const configPath = join(root, "monocarve.config.json");
+  const config = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
+  config.preparers = [{
+    id: "create-contract",
+    phase: "pre-extraction",
+    creates: [{ path: "{packageRoot}/src/contract.ts", contents: "export interface Contract {}\n", mode: 420 }],
+    commit: { subject: "refactor: add contract" },
+  }];
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+  fixtureGit(root, "add", "--", "monocarve.config.json");
+  fixtureGit(root, "commit", "-qm", "test: configure declarative create");
+  const extractionPath = ".monocarve/plans/extraction.json";
+  mkdirSync(join(root, ".monocarve/plans"), { recursive: true });
+  writeFileSync(join(root, extractionPath), `${stableStringify(extractionManifest(root), 2)}\n`);
+
+  const planned = await runJsonIn<{ output: string; mutations: { path: string; preconditionHash: string; resultMode: number }[] }>(root, "preparer-plan", "--extraction", extractionPath, "--preparer", "create-contract", "--source", "apps/web/src/widgets/chart.ts", "--write");
+  expect(planned.mutations).toEqual([expect.objectContaining({ path: "libs/chart/src/contract.ts", preconditionHash: "missing", resultMode: 0o644 })]);
+  expect(await runJsonIn(root, "preparer-simulate", "--plan", planned.output)).toMatchObject({ ok: true });
+  expect(existsSync(join(root, "libs/chart/src/contract.ts"))).toBe(false);
+}, 30_000);
+
 function extractionManifest(root: string): ExtractionManifest {
   const source = "apps/web/src/widgets/chart.ts";
   const target = "libs/chart/src/widgets/chart.ts";
