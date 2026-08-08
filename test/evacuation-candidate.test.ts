@@ -136,6 +136,26 @@ describe("evacuation candidate unions", () => {
     ]);
   });
 
+  test("explicitly includes a selected composition root's whole SCC", () => {
+    const routePeer = path("route-peer");
+    const dependencyGraph = graph(
+      [route, routePeer, shared],
+      [edge(route, routePeer), edge(routePeer, route), edge(route, shared)],
+    );
+    const candidate = buildEvacuationCandidate({
+      config,
+      graph: dependencyGraph,
+      application: "api",
+      selected: [route, shared],
+      includedCompositionRoots: [route],
+    });
+
+    expect(candidate.files).toEqual([routePeer, route, shared]);
+    expect(candidate.retainedComposition).toEqual([]);
+    expect(candidate.absorbedSccPeers).toEqual([routePeer]);
+    expect(candidate.unselectedDependencies).toEqual([]);
+  });
+
   test("does not absorb unselected application dependencies", () => {
     const service = path("estimating/service");
     const database = path("db/client");

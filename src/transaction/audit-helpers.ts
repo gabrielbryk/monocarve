@@ -8,6 +8,8 @@ import { LEGACY_PLAN_SCHEMA_VERSION, PREVIOUS_PLAN_SCHEMA_VERSION, PLAN_SCHEMA_V
 import type { MonocarveConfig } from "../config.ts";
 import { showBaseline } from "../util/git.ts";
 import type { AuditReport, ProofResult } from "./audit-types.ts";
+import { evacuationId } from "../evacuation/candidate.ts";
+import { isCompositionRoot } from "../graph/layers.ts";
 
 export function stateAt(root: string, path: string): string {
   return fileState(resolve(root, path));
@@ -75,6 +77,32 @@ export function unauditableManifest(config: MonocarveConfig, manifest: Extractio
   require("expectedDynamicImportDelta", isRecord("expectedDynamicImportDelta"), "an object");
   if (isRecord("expectedDynamicImportDelta")) { const delta = value["expectedDynamicImportDelta"] as Record<string, unknown>; require("expectedDynamicImportDelta.added", Array.isArray(delta["added"]), "an array"); require("expectedDynamicImportDelta.removed", Array.isArray(delta["removed"]), "an array"); }
   if (!config.applications.some((app) => app.name === value["application"])) failures.push(`[application] manifest application ${JSON.stringify(value["application"] ?? null)} is not configured`);
+  const evacuation = manifest.provenance?.evacuation;
+  if (evacuation !== undefined) {
+    const sourceFiles = isRecord("source") && Array.isArray((value["source"] as Record<string, unknown>)["files"])
+      ? (value["source"] as { files: string[] }).files
+      : [];
+    const included = evacuation.includedCompositionRoots ?? [];
+    const application = config.applications.find((entry) => entry.name === manifest.application);
+    const canonical = (paths: readonly string[]): boolean => new Set(paths).size === paths.length
+      && paths.every((path, index) => index === 0 || path > paths[index - 1]!);
+    if (!canonical(included)) failures.push("[composition-inclusion] included composition roots must be sorted and unique");
+    for (const root of included) {
+      if (!isCompositionRoot(config, root)) failures.push(`[composition-inclusion] included path is not an exact configured composition root: ${root}`);
+      if (application !== undefined && root !== application.sourceRoot && !root.startsWith(`${application.sourceRoot}/`)) failures.push(`[composition-inclusion] included composition root crosses application ${JSON.stringify(manifest.application)}: ${root}`);
+      if (!evacuation.requested.includes(root)) failures.push(`[composition-inclusion] included composition root is outside the selected evacuation: ${root}`);
+      if (!sourceFiles.includes(root)) failures.push(`[composition-inclusion] included composition root is absent from moved source: ${root}`);
+    }
+    const expected = evacuationId(
+      manifest.application,
+      evacuation.requested,
+      sourceFiles,
+      evacuation.retainedComposition.length === 0 ? [] : [{ id: "provenance", members: evacuation.retainedComposition }],
+      evacuation.authorizedProtectedRoots,
+      included,
+    );
+    if (evacuation.id !== expected || (manifest.planId !== expected && !manifest.planId.startsWith(`${expected}--`))) failures.push("[evacuation-identity] plan identity does not match canonical evacuation provenance");
+  }
   return failures;
 }
 

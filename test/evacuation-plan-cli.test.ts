@@ -6,6 +6,7 @@ import { parseConfig } from "../src/config.ts";
 import { parseManifest } from "../src/plan/build.ts";
 import { validatePlan } from "../src/plan/validate.ts";
 import { simulatePlan } from "../src/transaction/simulate.ts";
+import { auditPlanSync } from "../src/transaction/audit.ts";
 import { cleanupFixtures, fixtureGit, write } from "./support/fixture-repo.ts";
 import { committedWorkspace, existsSync, ROOT, runIn, writeFileSync } from "./support/cli.ts";
 
@@ -29,6 +30,7 @@ function configuredWorkspace(): string {
     targetPackage: "@acme/format",
   }];
   const api = config.applications.find((application) => application.name === "api")!;
+  api.compositionRoots = ["apps/api/src/routes-estimating.ts", "apps/api/src/wiring-estimating.ts"];
   api.scaffoldTemplates = {
     tsconfig: { contents: `${JSON.stringify({
       compilerOptions: { composite: true }, files: [], include: [],
@@ -72,6 +74,11 @@ function configuredWorkspace(): string {
     "export const estimatingRoute = handle;",
     "",
   ].join("\n"));
+  write(root, "apps/api/src/wiring-estimating.ts", [
+    'import { handle } from "./estimating/handler.ts";',
+    "export const estimatingWiring = { handle };",
+    "",
+  ].join("\n"));
   fixtureGit(root, "add", "-A");
   fixtureGit(root, "commit", "-qm", "test: add evacuation fixture");
   return root;
@@ -80,6 +87,37 @@ function configuredWorkspace(): string {
 afterAll(cleanupFixtures);
 
 describe("evacuation immutable plan lifecycle", () => {
+  test("moves an explicitly included selected composition root and tamper-checks provenance", async () => {
+    const root = configuredWorkspace();
+    const result = await runIn(root, "evacuate", "--app", "api", "--source", "apps/api/src/estimating", "--source", "apps/api/src/db/client.ts", "--source", "apps/api/src/routes-estimating.ts", "--source", "apps/api/src/wiring-estimating.ts", "--include-composition", "apps/api/src/wiring-estimating.ts", "--include-composition", "apps/api/src/routes-estimating.ts", "--package-name", "@acme/format", "--package-root", "libs/format", "--json");
+    expect(result.code, result.stderr).toBe(0);
+    const response = JSON.parse(result.stdout) as { id: string; includedCompositionRoots: string[]; retainedComposition: unknown[]; manifest: ReturnType<typeof parseManifest> };
+    expect(response.includedCompositionRoots).toEqual(["apps/api/src/routes-estimating.ts", "apps/api/src/wiring-estimating.ts"]);
+    expect(response.retainedComposition).toEqual([]);
+    expect(response.manifest.source.files).toContain("apps/api/src/routes-estimating.ts");
+    expect(response.manifest.source.files).toContain("apps/api/src/wiring-estimating.ts");
+    expect(response.manifest.provenance?.evacuation?.includedCompositionRoots).toEqual(["apps/api/src/routes-estimating.ts", "apps/api/src/wiring-estimating.ts"]);
+
+    const raw = JSON.parse(readFileSync(join(root, "monocarve.config.json"), "utf8"));
+    const tampered = structuredClone(response.manifest);
+    (tampered.provenance!.evacuation as { includedCompositionRoots?: readonly string[] }).includedCompositionRoots = ["apps/api/src/estimating/service.ts"];
+    const validation = validatePlan(tampered, { config: parseConfig(raw, join(root, "monocarve.config.json")), rootDir: root });
+    expect(validation.ok).toBe(false);
+    expect(validation.issues.map(({ rule }) => rule)).toContain("composition-inclusion");
+    expect(validation.issues.map(({ rule }) => rule)).toContain("evacuation-identity");
+    const audit = auditPlanSync({ config: parseConfig(raw, join(root, "monocarve.config.json")), rootDir: root, manifest: tampered, skipCompileProof: true });
+    expect(audit.passed).toBe(false);
+    expect(audit.unauditable).toContainEqual(expect.stringContaining("[composition-inclusion]"));
+    expect(audit.unauditable).toContainEqual(expect.stringContaining("[evacuation-identity]"));
+  }, 240_000);
+
+  test("refuses composition inclusion that was not selected", async () => {
+    const root = configuredWorkspace();
+    const result = await runIn(root, "evacuate", "--app", "api", "--source", "apps/api/src/estimating", "--include-composition", "apps/api/src/routes-estimating.ts", "--package-name", "@acme/format", "--json");
+    expect(result.code, result.stderr).toBe(1);
+    expect(result.stderr).toContain("outside the selected evacuation");
+  }, 240_000);
+
   test("records protected authorization in report, identity, and tamper-checked manifest provenance", async () => {
     const root = configuredWorkspace();
     const configPath = join(root, "monocarve.config.json");

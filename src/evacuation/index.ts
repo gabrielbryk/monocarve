@@ -4,3 +4,4 @@ export * from "./cuts.ts";
 export * from "./assessment.ts";
 export * from "./orchestration.ts";
 export * from "./protected-authorization.ts";
+export * from "./composition-inclusion.ts";

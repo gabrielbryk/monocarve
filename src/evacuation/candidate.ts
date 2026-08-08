@@ -37,6 +37,7 @@ export interface EvacuationCandidateOptions {
   /** Output of `resolveEvacuationSelectors`. */
   readonly selected: readonly string[];
   readonly authorizedProtectedRoots?: readonly string[];
+  readonly includedCompositionRoots?: readonly string[];
 }
 
 /** Build the bounded union of selected SCCs, absorbing peers but not outbound dependencies. */
@@ -57,9 +58,11 @@ export function buildEvacuationCandidate(options: EvacuationCandidateOptions): E
   const { components, componentByNode } = applicationGraph.condensed;
   const seedIds = new Set(requested.map((path) => componentByNode.get(path)!));
 
-  const retainedIds = new Set(
-    [...seedIds].filter((id) => (components[id] ?? []).some((path) => isCompositionRoot(config, path))),
-  );
+  const includedComposition = new Set(options.includedCompositionRoots ?? []);
+  const retainedIds = new Set([...seedIds].filter((id) =>
+    (components[id] ?? []).some((path) => isCompositionRoot(config, path))
+    && !(components[id] ?? []).some((path) => includedComposition.has(path)),
+  ));
   const movedIds = new Set([...seedIds].filter((id) => !retainedIds.has(id)));
   const files = componentPaths(movedIds, components);
   const requestedSet = new Set(requested);
@@ -75,7 +78,7 @@ export function buildEvacuationCandidate(options: EvacuationCandidateOptions): E
   const sccs = componentSccs(movedIds, components);
 
   return {
-    id: evacuationId(application, requested, files, retainedComposition, options.authorizedProtectedRoots ?? []),
+    id: evacuationId(application, requested, files, retainedComposition, options.authorizedProtectedRoots ?? [], options.includedCompositionRoots ?? []),
     application,
     requested,
     seedSccs,
@@ -108,9 +111,11 @@ export function evacuationId(
   files: readonly string[],
   retained: readonly Scc[],
   authorizedProtectedRoots: readonly string[] = [],
+  includedCompositionRoots: readonly string[] = [],
 ): string {
   const retainedMembers = [...new Set(retained.flatMap((scc) => scc.members))].sort(byCodeUnit);
   const identity = [application, ...requested, "--files--", ...files, "--retained--", ...retainedMembers, "--authorized-protected--", ...authorizedProtectedRoots];
+  if (includedCompositionRoots.length > 0) identity.push("--included-composition--", ...includedCompositionRoots);
   return `e-${hashText(identity.join("\n")).slice(0, 12)}`;
 }
 

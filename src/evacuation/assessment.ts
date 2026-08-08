@@ -1,6 +1,6 @@
 import { domainFor, type MonocarveConfig } from "../config.ts";
 import { buildApplicationGraph } from "../graph/components.ts";
-import { componentReports, type ComponentReport } from "../graph/layers.ts";
+import { componentReports, isCompositionRoot, type ComponentReport } from "../graph/layers.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import { partitionTests } from "../plan/consumers.ts";
 import { WorkspaceContext } from "../plan/context.ts";
@@ -22,6 +22,7 @@ export interface AssessedEvacuation {
   readonly candidate: PortfolioCandidate;
   readonly boundaryCuts: readonly EvacuationBoundaryCut[];
   readonly authorizedProtectedRoots: readonly string[];
+  readonly includedCompositionRoots: readonly string[];
 }
 
 export interface AssessEvacuationOptions {
@@ -32,6 +33,7 @@ export interface AssessEvacuationOptions {
   readonly pathReferences?: PathReferenceIndex;
   readonly packageName?: string;
   readonly authorizedProtectedRoots?: readonly string[];
+  readonly includedCompositionRoots?: readonly string[];
 }
 
 /** Apply ordinary portfolio safety and planning checks to an explicit bounded evacuation. */
@@ -59,7 +61,13 @@ export function assessEvacuationCandidate(options: AssessEvacuationOptions): Ass
   const assessment = partitionFailure === undefined
     ? assessCandidate(config, context, pathReferences, graph, aggregate, evacuation.files, closureReports, owners, domains, tests)
     : firstAssessment;
-  const rejections = [...assessment.rejections];
+  const includedComposition = new Set(options.includedCompositionRoots ?? []);
+  const allCompositionRootsIncluded = includedComposition.size > 0 && evacuation.files
+    .filter((path) => isCompositionRoot(config, path))
+    .every((path) => includedComposition.has(path));
+  const rejections = assessment.rejections.filter((reason) =>
+    reason.code !== "composition-root" || !allCompositionRootsIncluded,
+  );
   if (partitionFailure !== undefined) {
     rejections.push({ code: "unplannable", detail: `test relocation: ${partitionFailure instanceof Error ? partitionFailure.message : String(partitionFailure)}`, edges: [] });
     tests = directTests;
@@ -107,6 +115,7 @@ export function assessEvacuationCandidate(options: AssessEvacuationOptions): Ass
     candidate,
     boundaryCuts: evacuationBoundaryCuts(config, context, graph, evacuation),
     authorizedProtectedRoots: [...(options.authorizedProtectedRoots ?? [])],
+    includedCompositionRoots: [...(options.includedCompositionRoots ?? [])],
   };
 }
 

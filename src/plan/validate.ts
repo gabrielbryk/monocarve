@@ -11,6 +11,7 @@ import { existsSync, readFileSync } from "node:fs";
 
 import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapters/registry.ts";
 import { getApplication, isFirstPartyPackageOwner, isPackageOwner, packageNameMatcher, resolveExtractionProfile, testKindOf } from "../config.ts";
+import { isCompositionRoot } from "../graph/layers.ts";
 import { PlanValidationError } from "../errors.ts";
 import { isSourceModulePath } from "../util/files.ts";
 import { isSha256, stableStringify } from "../util/hash.ts";
@@ -169,9 +170,10 @@ function validateProvenance(manifest: ExtractionManifest, options: ValidatePlanO
 function validateEvacuationProvenance(manifest: ExtractionManifest, options: ValidatePlanOptions, issues: Issues): void {
   const evacuation = manifest.provenance?.evacuation;
   if (evacuation === undefined) return;
+  const includedCompositionRoots = evacuation.includedCompositionRoots ?? [];
   const canonical = (values: readonly string[]): boolean =>
     new Set(values).size === values.length && values.every((value, index) => index === 0 || value > values[index - 1]!);
-  if (!canonical(evacuation.requested) || !canonical(evacuation.retainedComposition) || !canonical(evacuation.authorizedProtectedRoots)) {
+  if (!canonical(evacuation.requested) || !canonical(evacuation.retainedComposition) || !canonical(evacuation.authorizedProtectedRoots) || !canonical(includedCompositionRoots)) {
     issues.add("evacuation-provenance", "evacuation provenance paths must be sorted and unique");
     return;
   }
@@ -183,6 +185,20 @@ function validateEvacuationProvenance(manifest: ExtractionManifest, options: Val
     }
     if (!evacuation.requested.some((path) => path === root || path.startsWith(`${root}/`))) {
       issues.add("protected-authorization", `authorized root is outside the selected evacuation: ${root}`);
+    }
+  }
+  for (const root of includedCompositionRoots) {
+    if (!isCompositionRoot(options.config, root)) {
+      issues.add("composition-inclusion", `included path is not an exact configured composition root: ${root}`);
+    }
+    if (root !== application.sourceRoot && !root.startsWith(`${application.sourceRoot}/`)) {
+      issues.add("composition-inclusion", `included composition root crosses application ${JSON.stringify(manifest.application)}: ${root}`);
+    }
+    if (!evacuation.requested.includes(root)) {
+      issues.add("composition-inclusion", `included composition root is outside the selected evacuation: ${root}`);
+    }
+    if (!(manifest.source?.files ?? []).includes(root)) {
+      issues.add("composition-inclusion", `included composition root is absent from moved source: ${root}`, { path: root });
     }
   }
   const protectedSources = [...(manifest.source?.files ?? []), ...(manifest.source?.tests ?? []), ...(manifest.source?.assets ?? [])]
@@ -198,6 +214,7 @@ function validateEvacuationProvenance(manifest: ExtractionManifest, options: Val
     manifest.source?.files ?? [],
     evacuation.retainedComposition.length === 0 ? [] : [{ id: "provenance", members: evacuation.retainedComposition }],
     evacuation.authorizedProtectedRoots,
+    includedCompositionRoots,
   );
   if (evacuation.id !== expectedId || (manifest.planId !== expectedId && !manifest.planId.startsWith(`${expectedId}--`))) {
     issues.add("evacuation-identity", "plan identity does not match canonical evacuation authorization provenance");

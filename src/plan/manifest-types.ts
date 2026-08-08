@@ -103,6 +103,7 @@ export interface PlanProvenance {
     readonly requested: readonly string[];
     readonly retainedComposition: readonly string[];
     readonly authorizedProtectedRoots: readonly string[];
+    readonly includedCompositionRoots?: readonly string[];
   };
 }
 export type EvaluationReach = "moved" | "generated" | "reached";

@@ -8,6 +8,7 @@ import { buildEvacuationCandidate } from "./candidate.ts";
 import type { EvacuationBoundaryCut } from "./cuts.ts";
 import { resolveEvacuationSelectors } from "./selectors.ts";
 import { authorizeProtectedRoots } from "./protected-authorization.ts";
+import { includeCompositionRoots } from "./composition-inclusion.ts";
 
 export interface EvacuationAnalysisOptions {
   readonly config: MonocarveConfig;
@@ -17,6 +18,7 @@ export interface EvacuationAnalysisOptions {
   readonly sources: readonly string[];
   readonly packageName: string;
   readonly authorizedProtectedRoots?: readonly string[];
+  readonly includedCompositionRoots?: readonly string[];
 }
 
 export interface EvacuationReport {
@@ -25,6 +27,7 @@ export interface EvacuationReport {
   readonly application: string;
   readonly target: { readonly packageName: string };
   readonly authorizedProtectedRoots: readonly string[];
+  readonly includedCompositionRoots: readonly string[];
   readonly requested: readonly string[];
   readonly moved: { readonly files: readonly string[]; readonly lineCount: number };
   readonly retainedComposition: readonly { readonly id: string; readonly members: readonly string[] }[];
@@ -52,12 +55,14 @@ export function prepareEvacuation(options: EvacuationAnalysisOptions): AssessedE
   }
   const selected = resolveEvacuationSelectors(options.graph, options.application, options.sources);
   const authorizedProtectedRoots = authorizeProtectedRoots(options.config, options.graph, options.application, selected, options.authorizedProtectedRoots ?? []);
+  const includedCompositionRoots = includeCompositionRoots(options.config, options.graph, options.application, selected, options.includedCompositionRoots ?? []);
   const evacuation = buildEvacuationCandidate({
     config: options.config,
     graph: options.graph,
     application: options.application,
     selected,
     authorizedProtectedRoots,
+    includedCompositionRoots,
   });
   return assessEvacuationCandidate({
     config: options.config,
@@ -65,6 +70,7 @@ export function prepareEvacuation(options: EvacuationAnalysisOptions): AssessedE
     evacuation,
     packageName: options.packageName,
     authorizedProtectedRoots,
+    includedCompositionRoots,
     ...(options.context ? { context: options.context } : {}),
   });
 }
@@ -77,6 +83,7 @@ export function evacuationReport(assessed: AssessedEvacuation, packageName: stri
     application: evacuation.application,
     target: { packageName },
     authorizedProtectedRoots: assessed.authorizedProtectedRoots,
+    includedCompositionRoots: assessed.includedCompositionRoots,
     requested: evacuation.requested,
     moved: { files: evacuation.files, lineCount: evacuation.lineCount },
     retainedComposition: evacuation.retainedComposition,
@@ -107,6 +114,7 @@ export function formatEvacuationReport(report: EvacuationReport): string {
     `Requested: ${report.requested.length}`,
     `Moved: ${report.moved.files.length} files / ${report.moved.lineCount} LOC`,
     `Retained composition: ${report.retainedComposition.flatMap((scc) => scc.members).length}`,
+    `Included composition roots: ${report.includedCompositionRoots.length}`,
     `Absorbed SCC peers: ${report.absorbedSccPeers.length}`,
     `Unselected dependencies: ${report.unselectedDependencies.length}`,
     `Eligible: ${report.candidate.eligible ? "yes" : "no"}`,
