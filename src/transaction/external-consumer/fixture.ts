@@ -31,15 +31,15 @@ function importAssertion(
 ): string[] {
   const alias = `__externalConsumerExport${suffix}`;
   const packageName = JSON.stringify(specifier);
-  if (entry.name === "default") return defaultAssertion(packageName, alias, entry.typeOnly, suffix);
+  if (entry.name === "default") return defaultAssertion(packageName, alias, entry.typeOnly);
   const statement = `{ ${JSON.stringify(entry.name)} as ${alias} }`;
   return entry.typeOnly
-    ? [`import type ${statement} from ${packageName};`, `type __externalConsumerTypeUse${suffix} = ${alias};`]
+    ? [`import type ${statement} from ${packageName};`]
     : [`import ${statement} from ${packageName};`, `void ${alias};`];
 }
 
-function defaultAssertion(packageName: string, alias: string, typeOnly: boolean, suffix: string): string[] {
+function defaultAssertion(packageName: string, alias: string, typeOnly: boolean): string[] {
   return typeOnly
-    ? [`import type ${alias} from ${packageName};`, `type __externalConsumerTypeUse${suffix} = ${alias};`]
+    ? [`import type ${alias} from ${packageName};`]
     : [`import ${alias} from ${packageName};`, `void ${alias};`];
 }

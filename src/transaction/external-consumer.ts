@@ -51,11 +51,46 @@ export function compileExternalConsumer(options: CompileExternalConsumerOptions)
       ...compilerOptions,
       ...(declaredTypes.types.length > 0 ? { types: declaredTypes.types } : {}),
     });
-    const diagnostics = ts.getPreEmitDiagnostics(program).map(formatDiagnostic);
+    const diagnostics = [
+      ...ts.getPreEmitDiagnostics(program).map(formatDiagnostic),
+      ...typeOnlyImportDiagnostics(program, fixture),
+    ];
     return { passed: diagnostics.length === 0, fixture, diagnostics };
   } finally {
     rmSync(fixtureRoot, { recursive: true, force: true });
   }
+}
+
+/**
+ * A type-only import is enough to prove a generic type can be resolved, but
+ * TypeScript also permits `import type` to name a value when that binding is
+ * never used. Inspect the resolved aliases so the fixture can remain generic-
+ * arity agnostic without weakening the type-vs-value surface proof.
+ */
+function typeOnlyImportDiagnostics(program: ts.Program, fixture: string): string[] {
+  const source = program.getSourceFile(fixture);
+  if (source === undefined) return [];
+  const checker = program.getTypeChecker();
+  const diagnostics: string[] = [];
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || statement.importClause?.isTypeOnly !== true) continue;
+    const bindings = statement.importClause.namedBindings;
+    const names = [
+      ...(statement.importClause.name === undefined ? [] : [statement.importClause.name]),
+      ...(bindings !== undefined && ts.isNamedImports(bindings) ? bindings.elements.map((element) => element.name) : []),
+    ];
+    for (const name of names) {
+      const alias = checker.getSymbolAtLocation(name);
+      if (alias === undefined) continue;
+      const target = alias.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(alias) : alias;
+      if ((target.flags & ts.SymbolFlags.Type) !== 0) continue;
+      const position = source.getLineAndCharacterOfPosition(name.getStart(source));
+      diagnostics.push(
+        `${fixture}(${position.line + 1},${position.character + 1}): TS2749: '${name.text}' refers to a value, but is being used as a type here.`,
+      );
+    }
+  }
+  return diagnostics;
 }
 
 function formatDiagnostic(diagnostic: ts.Diagnostic): string {

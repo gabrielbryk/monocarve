@@ -257,6 +257,21 @@ describe("external consumer compile proof", () => {
     expect(missing.diagnostics.join("\n")).toContain("has no default export");
   });
 
+  test("proves generic type exports without guessing their type-parameter arity", () => {
+    const fixture = proofFixture();
+    const required = [{ name: "combined", typeOnly: false }, { name: "GenericResult", typeOnly: true }] as const;
+
+    write(
+      fixture.root,
+      "libs/carved/src/index.ts",
+      `${targetSource()}export interface GenericResult<T, TError = Error> { value: T; error?: TError }\n`,
+    );
+
+    const result = run(fixture.root, fixture.config, manifest(required));
+    expect(result.passed).toBe(true);
+    expect(result.diagnostics).toEqual([]);
+  });
+
   test("rejects a value where a string-named type export is required", () => {
     const fixture = proofFixture();
     const required = [{ name: "combined", typeOnly: false }, { name: "string-type", typeOnly: true }] as const;
