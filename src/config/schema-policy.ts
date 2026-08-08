@@ -408,10 +408,14 @@ export const portPromotions = z
       contractPackage: z.string().min(1),
       /** Module within `contractPackage` that exports the port. */
       contractModule: z.string().min(1),
-      /** The app's current concrete type, as `"path/to/file.ts#TypeName"`. */
-      appConcreteType: concreteTypeReference,
-      /** Name of the port interface the library depends on instead. */
-      libraryPort: z.string().min(1),
+      /** Legacy singleton form of the app's current concrete type. */
+      appConcreteType: concreteTypeReference.optional(),
+      /** Atomic declaration-group form; every declaration must come from one file. */
+      appConcreteTypes: z.array(concreteTypeReference).min(1).optional(),
+      /** Legacy singleton name of the port interface. */
+      libraryPort: z.string().min(1).optional(),
+      /** Names paired with appConcreteTypes; declarations are never renamed. */
+      libraryPorts: z.array(z.string().min(1)).min(1).optional(),
       /** Package the port declaration is promoted into. */
       targetPackage: z.string().min(1),
     }),
@@ -422,6 +426,17 @@ export const portPromotions = z
     for (const [index, promotion] of promotions.entries()) {
       if (seen.has(promotion.id)) ctx.addIssue({ code: "custom", path: [index, "id"], message: "portPromotions id must be unique" });
       seen.add(promotion.id);
+      const singleton = promotion.appConcreteType !== undefined || promotion.libraryPort !== undefined;
+      const group = promotion.appConcreteTypes !== undefined || promotion.libraryPorts !== undefined;
+      if (singleton === group) {
+        ctx.addIssue({ code: "custom", path: [index], message: "portPromotions requires exactly one of appConcreteType/libraryPort or appConcreteTypes/libraryPorts" });
+      } else if (singleton && (promotion.appConcreteType === undefined || promotion.libraryPort === undefined)) {
+        ctx.addIssue({ code: "custom", path: [index], message: "appConcreteType and libraryPort must be declared together" });
+      } else if (group && (promotion.appConcreteTypes === undefined || promotion.libraryPorts === undefined)) {
+        ctx.addIssue({ code: "custom", path: [index], message: "appConcreteTypes and libraryPorts must be declared together" });
+      } else if (promotion.appConcreteTypes && promotion.libraryPorts && promotion.appConcreteTypes.length !== promotion.libraryPorts.length) {
+        ctx.addIssue({ code: "custom", path: [index, "libraryPorts"], message: "libraryPorts must have the same length as appConcreteTypes" });
+      }
     }
   });
 

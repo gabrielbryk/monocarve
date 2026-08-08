@@ -163,6 +163,25 @@ describe("compositionBoundaries schema refusals", () => {
 });
 
 describe("portPromotions schema refusals", () => {
+  test("accepts an atomic concrete declaration group and rejects mixed singleton/group forms", () => {
+    expect(config({ portPromotions: [portPromotion({
+      appConcreteType: undefined,
+      libraryPort: undefined,
+      appConcreteTypes: [`${APP}/db/client.ts#DownloadedObject`, `${APP}/db/client.ts#ObjectStorage`],
+      libraryPorts: ["DownloadedObject", "ObjectStorage"],
+    })] }).portPromotions[0]?.appConcreteTypes).toHaveLength(2);
+
+    expect(() => config({ portPromotions: [portPromotion({ appConcreteTypes: [`${APP}/db/client.ts#Other`], libraryPorts: ["Other"] })] }))
+      .toThrow(/exactly one of appConcreteType\/libraryPort or appConcreteTypes\/libraryPorts/);
+  });
+
+  test("rejects incomplete and differently-sized declaration groups", () => {
+    expect(() => config({ portPromotions: [portPromotion({ appConcreteType: undefined, libraryPort: undefined, appConcreteTypes: [`${APP}/db/client.ts#Client`] })] }))
+      .toThrow(/appConcreteTypes and libraryPorts must be declared together/);
+    expect(() => config({ portPromotions: [portPromotion({ appConcreteType: undefined, libraryPort: undefined, appConcreteTypes: [`${APP}/db/client.ts#Client`], libraryPorts: ["Client", "Other"] })] }))
+      .toThrow(/same length/);
+  });
+
   test("appConcreteType not in \"path/file.ts#TypeName\" form is rejected at config load", () => {
     expect(() =>
       config({
@@ -281,7 +300,35 @@ describe("resolveBoundaries", () => {
       portPromotions: [portPromotion({ libraryPort: "DifferentName" })],
     });
 
-    expect(() => resolveBoundaries(cfg)).toThrow(/libraryPort \(DifferentName\) must name the same declaration as appConcreteType \(Client\)/);
+    expect(() => resolveBoundaries(cfg)).toThrow(/library port \(DifferentName\) must name the same declaration as app concrete type \(Client\)/);
+  });
+
+  test("resolves an atomic declaration group with deterministic symbols and one donor", () => {
+    const cfg = config({ portPromotions: [portPromotion({
+      appConcreteType: undefined, libraryPort: undefined,
+      appConcreteTypes: [`${APP}/db/client.ts#ObjectStorage`, `${APP}/db/client.ts#DownloadedObject`],
+      libraryPorts: ["ObjectStorage", "DownloadedObject"],
+    })] });
+    const [resolved] = resolveBoundaries(cfg);
+    expect(resolved).toMatchObject({
+      retained: `${APP}/db/client.ts`,
+      declarationName: "ObjectStorage",
+      atomicDeclarationGroup: true,
+      symbols: ["DownloadedObject", "ObjectStorage"],
+    });
+  });
+
+  test("rejects declaration groups spanning files or renaming a member", () => {
+    const spanning = config({ portPromotions: [portPromotion({
+      appConcreteType: undefined, libraryPort: undefined,
+      appConcreteTypes: [`${APP}/db/client.ts#Client`, `${APP}/db/other.ts#Other`], libraryPorts: ["Client", "Other"],
+    })] });
+    expect(() => resolveBoundaries(spanning)).toThrow(/same retained file/);
+    const renamed = config({ portPromotions: [portPromotion({
+      appConcreteType: undefined, libraryPort: undefined,
+      appConcreteTypes: [`${APP}/db/client.ts#Client`, `${APP}/db/client.ts#Other`], libraryPorts: ["Client", "Renamed"],
+    })] });
+    expect(() => resolveBoundaries(renamed)).toThrow(/does not synthesize renames/);
   });
 
   test("produces a deterministic byCodeUnit order across both origins", () => {

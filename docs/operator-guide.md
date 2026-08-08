@@ -157,6 +157,33 @@ the promoted contract structurally, so nothing is rendered from a template.
 Both vocabularies share one `id` namespace: reusing the same `id` in both
 `compositionBoundaries` and `portPromotions` is refused.
 
+When one port declaration depends on another declaration in the same donor,
+declare the complete atomic group instead of relying on implicit widening:
+
+```ts
+portPromotions: [{
+  id: "object-storage-port",
+  retainedRoots: ["apps/scheduler/src/storage"],
+  contractPackage: "@acme/storage-contracts",
+  contractModule: "object-storage",
+  appConcreteTypes: [
+    "apps/scheduler/src/storage/object-storage.ts#DownloadedObject",
+    "apps/scheduler/src/storage/object-storage.ts#ObjectStorage",
+  ],
+  libraryPorts: ["DownloadedObject", "ObjectStorage"],
+  targetPackage: "@acme/storage-contracts",
+}]
+```
+
+`appConcreteTypes`/`libraryPorts` is mutually exclusive with the legacy
+singleton `appConcreteType`/`libraryPort` form. The arrays must be non-empty,
+paired in equal lengths, name declarations without renaming them, and point to
+one donor file. Monocarve computes the local declaration dependency closure
+and accepts the group only when the configured declarations equal that closure
+exactly. Value-space dependencies and omitted type dependencies are refusals.
+Contract declarations are emitted in donor source order, and each importer is
+rewritten with only the promoted bindings it actually imports.
+
 ### Module promotion (architectural boundary cuts)
 
 ```ts
@@ -266,9 +293,9 @@ Boundary compilation and its post-apply audit refuse, rather than repair:
 - a specifier rewrite that resolves to nothing (no effect);
 - `retire: true` on a shim the importer graph has no evidence for, or whose
   rewritten importer set the graph cannot prove is exhaustive;
-- a `"port"` declaration selecting anything but exactly one self-contained,
-  type-only declaration (a wider type-dependency closure or merge group is
-  refused, not partially promoted);
+- a `"port"` declaration or explicitly declared atomic group that is not a
+  complete, closed type-only unit (an omitted dependency is refused, not
+  silently added);
 - a relative type import inside the promoted declaration (there is no proof
   for where it resolves from the new contract location);
 - any consumer whose use of the promoted symbol strays into value space;

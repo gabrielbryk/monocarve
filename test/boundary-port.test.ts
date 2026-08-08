@@ -135,4 +135,39 @@ describe("planPortBoundary", () => {
 
     expect(result.adapter).toBeUndefined();
   });
+
+  test("promotes an explicitly closed dependent declaration group atomically in source order", () => {
+    const retainedSourceText = [
+      "export interface DownloadedObject { body: Uint8Array }",
+      "export interface ObjectStorage { get(): Promise<DownloadedObject> }",
+      "",
+    ].join("\n");
+    const consumerText = 'import type { ObjectStorage } from "../widget.ts";\nexport type Store = ObjectStorage;\n';
+    const result = planPortBoundary(baseInput(repo(), {
+      boundary: boundary({ source: "portPromotions", declarationName: "ObjectStorage", contractName: "ObjectStorage", atomicDeclarationGroup: true, symbols: ["DownloadedObject", "ObjectStorage"], appAdapter: undefined, template: undefined }),
+      retainedSourceText,
+      consumers: [consumer({ text: consumerText, preconditionHash: hashText(consumerText) })],
+    }));
+
+    expect(result.contract.contents).toBe(
+      "export interface DownloadedObject { body: Uint8Array }\n\nexport interface ObjectStorage { get(): Promise<DownloadedObject> }\n",
+    );
+    expect(result.rewrites[0]?.rewrites).toEqual([{ from: "../widget.ts", to: "@acme/ports/widget", symbols: ["ObjectStorage"] }]);
+  });
+
+  test("refuses an omitted declaration dependency instead of widening the reviewed group", () => {
+    const retainedSourceText = "export interface DownloadedObject { body: Uint8Array }\nexport interface ObjectStorage { get(): Promise<DownloadedObject> }\n";
+    expect(() => planPortBoundary(baseInput(repo(), {
+      boundary: boundary({ source: "portPromotions", declarationName: "ObjectStorage", contractName: "ObjectStorage", atomicDeclarationGroup: true, symbols: ["ObjectStorage"], appAdapter: undefined, template: undefined }),
+      retainedSourceText,
+    }))).toThrow(/omitted declarations are required/);
+  });
+
+  test("refuses a value-space dependency in an otherwise selected group", () => {
+    const retainedSourceText = "export const token = Symbol();\nexport interface ObjectStorage { token: typeof token }\n";
+    expect(() => planPortBoundary(baseInput(repo(), {
+      boundary: boundary({ source: "portPromotions", declarationName: "ObjectStorage", contractName: "ObjectStorage", atomicDeclarationGroup: true, symbols: ["ObjectStorage"], appAdapter: undefined, template: undefined }),
+      retainedSourceText,
+    }))).toThrow(/value dependency|unsafe/);
+  });
 });

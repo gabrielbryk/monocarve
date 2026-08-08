@@ -59,10 +59,11 @@ function step(config: MonocarveConfig, blocker: RetainedBlocker): RecipeStep {
 
   const promotion = matchingPromotion(config.portPromotions, blocker.target);
   if (promotion) {
+    const ports = promotion.libraryPorts ?? (promotion.libraryPort ? [promotion.libraryPort] : []);
     return {
       blocker,
       remedy: { kind: "port-promotion", id: promotion.id },
-      detail: `portPromotions "${promotion.id}" (promotes ${promotion.libraryPort} into ${promotion.targetPackage}) already covers ${edge}`,
+      detail: `portPromotions "${promotion.id}" (promotes ${ports.join(", ")} into ${promotion.targetPackage}) already covers ${edge}`,
     };
   }
 

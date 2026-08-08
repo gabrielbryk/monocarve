@@ -52,7 +52,7 @@ export interface ConfigDoctorReport {
       retainedExists: boolean; referencedByRetainedRoots: boolean;
     }[];
     readonly portPromotions: readonly {
-      id: string; appConcreteType: string; appConcreteTypeFileExists: boolean;
+      id: string; appConcreteTypes: readonly string[]; appConcreteTypeMissingFiles: readonly string[];
       referencedByRetainedRoots: boolean;
     }[];
   };
@@ -144,8 +144,8 @@ function boundaryReport(config: MonocarveConfig, rootDir: string): ConfigDoctorR
     })),
     portPromotions: config.portPromotions.map((promotion) => ({
       id: promotion.id,
-      appConcreteType: promotion.appConcreteType,
-      appConcreteTypeFileExists: existsSync(join(rootDir, concreteTypeFile(promotion.appConcreteType))),
+      appConcreteTypes: concreteTypeReferences(promotion),
+      appConcreteTypeMissingFiles: concreteTypeReferences(promotion).map(concreteTypeFile).filter((path) => !existsSync(join(rootDir, path))),
       referencedByRetainedRoots: promotion.retainedRoots.some((root) => underAnyRetainedRoot(root, config.portfolio.retainedRoots)),
     })),
   };
@@ -159,6 +159,10 @@ function concreteTypeFile(appConcreteType: string): string {
   return appConcreteType.slice(0, appConcreteType.indexOf("#"));
 }
 
+function concreteTypeReferences(promotion: MonocarveConfig["portPromotions"][number]): readonly string[] {
+  return promotion.appConcreteTypes ?? (promotion.appConcreteType ? [promotion.appConcreteType] : []);
+}
+
 function boundaryIssues(config: MonocarveConfig, boundaries: ConfigDoctorReport["boundaries"]): ConfigDoctorReport["semanticIssues"] {
   const issues: { severity: "error"; context: string; detail: string }[] = [];
   for (const boundary of boundaries.compositionBoundaries) {
@@ -170,8 +174,8 @@ function boundaryIssues(config: MonocarveConfig, boundaries: ConfigDoctorReport[
     }
   }
   for (const promotion of boundaries.portPromotions) {
-    if (!promotion.appConcreteTypeFileExists) {
-      issues.push({ severity: "error", context: "portPromotions", detail: `promotion "${promotion.id}" appConcreteType names a file that does not exist: "${concreteTypeFile(promotion.appConcreteType)}"` });
+    if (promotion.appConcreteTypeMissingFiles.length > 0) {
+      issues.push({ severity: "error", context: "portPromotions", detail: `promotion "${promotion.id}" app concrete types name files that do not exist: ${promotion.appConcreteTypeMissingFiles.map((path) => JSON.stringify(path)).join(", ")}` });
     }
     if (!promotion.referencedByRetainedRoots) {
       issues.push({ severity: "error", context: "portPromotions", detail: `promotion "${promotion.id}" is declared but no portfolio.retainedRoots entry overlaps its retainedRoots; it can never be offered as a preparation recipe` });

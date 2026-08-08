@@ -7,8 +7,8 @@
  * own declaration span, and the adapter is rendered only from a
  * config-reviewed template, never synthesized ad hoc.
  *
- * What this module refuses: promoting a declaration `selectors.ts` cannot
- * prove is a complete, type-only, single-declaration unit; a relative type
+ * What this module refuses: promoting a declaration group `selectors.ts`
+ * cannot prove is complete and type-only; a relative type
  * import inside the promoted declaration (no caller-supplied rewrite proof
  * exists for where it resolves from the new contract location, so this is a
  * stop, not a guess); a consumer whose use of the promoted symbol strays
@@ -69,13 +69,20 @@ export interface PlanPortBoundaryResult {
 /** Compile the full operation set for one "port" boundary. */
 export function planPortBoundary(input: PlanPortBoundaryInput): PlanPortBoundaryResult {
   const { boundary } = input;
+  const atomicGroup = boundary.atomicDeclarationGroup === true;
   const selection = selectTypeOnlyDeclarations({
     sourcePath: boundary.retained,
     sourceText: input.retainedSourceText,
-    names: [boundary.declarationName],
+    names: boundary.source === "portPromotions" ? boundary.symbols : [boundary.declarationName],
     compilerOptions: input.compilerOptions,
   });
-  if (selection.declarations.length !== 1 || selection.closureGroupIds.length !== 1) {
+  if (atomicGroup && selection.closureGroupIds.length !== selection.requestedGroupIds.length) {
+    throw new BoundaryPortError(
+      `port boundary ${boundary.id} requires a closed type-only declaration group; ` +
+        "one or more omitted declarations are required by the selected group",
+    );
+  }
+  if (!atomicGroup && (selection.declarations.length !== 1 || selection.closureGroupIds.length !== 1)) {
     throw new BoundaryPortError(
       `port boundary ${boundary.id} requires exactly one self-contained declaration named ${boundary.declarationName}; ` +
         "it has a type-dependency closure or merge group larger than one",
@@ -84,10 +91,10 @@ export function planPortBoundary(input: PlanPortBoundaryInput): PlanPortBoundary
   if (selection.imports.some((item) => item.moduleSpecifier.startsWith("."))) {
     throw new BoundaryPortError(`port boundary ${boundary.id} cannot promote ${boundary.declarationName}: it has a relative type import, which this builder does not rewrite`);
   }
-  const declaration = selection.declarations[0]!;
-  const contract = writeOperation(input.contractTargetPath, renderContractModule(declaration, input.retainedSourceText, selection.imports), "port-contract");
+  const contract = writeOperation(input.contractTargetPath, renderContractModule(selection.declarations, input.retainedSourceText, selection.imports), "port-contract");
 
-  assertTypeOnlyPromotion(input.consumers.map((consumer) => ({ path: consumer.path, text: consumer.text, localName: boundary.contractName })));
+  assertTypeOnlyPromotion(input.consumers.flatMap((consumer) => importedPromotedSymbols(consumer, boundary.symbols)
+    .map((localName) => ({ path: consumer.path, text: consumer.text, localName }))));
   const rewrites = [...input.consumers]
     .sort((left, right) => byCodeUnit(left.path, right.path))
     .map((consumer) => planConsumerRewrite(input, consumer));
@@ -95,12 +102,14 @@ export function planPortBoundary(input: PlanPortBoundaryInput): PlanPortBoundary
 }
 
 function renderContractModule(
-  declaration: SelectedTypeDeclaration,
+  declarations: readonly SelectedTypeDeclaration[],
   sourceText: string,
   imports: readonly RequiredImportBinding[],
 ): string {
-  const body = sourceText.slice(declaration.declaration.start, declaration.declaration.end);
-  const exported = declaration.originallyExported ? body : `export ${body}`;
+  const exported = declarations.map((declaration) => {
+    const body = sourceText.slice(declaration.declaration.start, declaration.declaration.end);
+    return declaration.originallyExported ? body : `export ${body}`;
+  }).join("\n\n");
   const importText = imports.map(renderImportLine).join("\n");
   return importText.length === 0 ? `${exported}\n` : `${importText}\n\n${exported}\n`;
 }
@@ -152,9 +161,27 @@ function planConsumerRewrite(input: PlanPortBoundaryInput, consumer: PortConsume
   return {
     kind: "rewrite-module-specifier",
     file,
-    rewrites: [{ from: consumer.specifier, to: boundary.packageImport, symbols: [boundary.contractName] }],
+    rewrites: [{ from: consumer.specifier, to: boundary.packageImport, symbols: importedPromotedSymbols(consumer, boundary.symbols) }],
     contents,
   };
+}
+
+function importedPromotedSymbols(consumer: PortConsumerInput, promoted: readonly string[]): string[] {
+  const source = ts.createSourceFile(consumer.path, consumer.text, ts.ScriptTarget.Latest, true, consumer.path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const allowed = new Set(promoted);
+  const result = new Set<string>();
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || statement.moduleSpecifier.text !== consumer.specifier) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const element of bindings.elements) {
+      const imported = element.propertyName?.text ?? element.name.text;
+      if (allowed.has(imported)) result.add(element.name.text);
+    }
+  }
+  const symbols = [...result].sort(byCodeUnit);
+  if (symbols.length === 0) throw new BoundaryPortError(`${consumer.path} imports none of the promoted declarations from ${consumer.specifier}`);
+  return symbols;
 }
 
 function writeOperation(path: string, contents: string, purpose: "port-contract" | "app-adapter"): PreparationWriteFileOperation {

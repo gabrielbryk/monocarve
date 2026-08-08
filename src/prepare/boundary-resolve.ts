@@ -47,6 +47,8 @@ export interface ResolvedPortBoundary {
   readonly declarationName: string;
   /** Exact name the promoted declaration is published as (equals `declarationName`: no rename). */
   readonly contractName: string;
+  /** True only for the explicit appConcreteTypes/libraryPorts config form. */
+  readonly atomicDeclarationGroup?: boolean;
   /** Declared package identity the contract specifier resolves through; not a filesystem path. */
   readonly contractPackage: string;
   /** Declared module identity within `contractPackage`; not a filesystem path. */
@@ -126,26 +128,42 @@ function resolveCompositionBoundary(boundary: CompositionBoundariesConfig[number
 }
 
 function resolvePortPromotion(promotion: PortPromotionsConfig[number]): ResolvedPortBoundary {
-  const hashIndex = promotion.appConcreteType.indexOf("#");
-  const retained = promotion.appConcreteType.slice(0, hashIndex);
-  const declarationName = promotion.appConcreteType.slice(hashIndex + 1);
-  if (promotion.libraryPort !== declarationName) {
+  const references = promotion.appConcreteTypes ?? (promotion.appConcreteType ? [promotion.appConcreteType] : []);
+  const ports = promotion.libraryPorts ?? (promotion.libraryPort ? [promotion.libraryPort] : []);
+  if (references.length === 0 || references.length !== ports.length) {
+    throw new BoundaryConfigError(`boundary ${promotion.id}: concrete declarations and library ports must be a non-empty paired group`);
+  }
+  const parsed = references.map((reference) => {
+    const hashIndex = reference.indexOf("#");
+    return { retained: reference.slice(0, hashIndex), name: reference.slice(hashIndex + 1) };
+  });
+  const retained = parsed[0]!.retained;
+  if (parsed.some((item) => item.retained !== retained)) {
+    throw new BoundaryConfigError(`boundary ${promotion.id}: every appConcreteTypes declaration must come from the same retained file`);
+  }
+  const declarationNames = parsed.map((item) => item.name);
+  const mismatch = declarationNames.findIndex((name, index) => ports[index] !== name);
+  if (mismatch !== -1) {
     throw new BoundaryConfigError(
-      `boundary ${promotion.id}: libraryPort (${promotion.libraryPort}) must name the same declaration as appConcreteType ` +
-        `(${declarationName}) — the preparation engine moves a declaration's bytes verbatim and does not synthesize a rename`,
+      `boundary ${promotion.id}: library port (${ports[mismatch]}) must name the same declaration as app concrete type ` +
+        `(${declarationNames[mismatch]}) — the preparation engine moves declaration bytes verbatim and does not synthesize renames`,
     );
   }
+  const duplicate = declarationNames.find((name, index) => declarationNames.indexOf(name) !== index);
+  if (duplicate) throw new BoundaryConfigError(`boundary ${promotion.id}: duplicate concrete declaration ${duplicate}`);
+  const symbols = [...declarationNames].sort(byCodeUnit);
   return {
     id: promotion.id,
     source: "portPromotions",
     strategy: "port",
     retained,
-    declarationName,
-    contractName: declarationName,
+    declarationName: declarationNames[0]!,
+    contractName: declarationNames[0]!,
+    ...(promotion.appConcreteTypes ? { atomicDeclarationGroup: true } : {}),
     contractPackage: promotion.contractPackage,
     contractModule: promotion.contractModule,
     packageImport: promotion.contractPackage,
-    symbols: [promotion.libraryPort],
+    symbols,
     // portPromotions never authors a new adapter file: the app's existing
     // concrete type stays in place and is expected to already satisfy the
     // promoted port structurally.
