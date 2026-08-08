@@ -14,7 +14,7 @@ import { executeJournal, preflightJournal, snapshotPaths } from "./journal.ts";
 import { regenerateArtifacts } from "./regenerate.ts";
 import { rollback } from "./rollback.ts";
 import { simulatePlan, type SimulationResult } from "./simulate.ts";
-import { installWorkspaceDependencies } from "./worktree.ts";
+import { installWorkspaceDependencies, linkPlannedPackage } from "./worktree.ts";
 import { beginApplyTransaction } from "./apply-state.ts";
 import { auditRepositoryPostconditions, repositoryPostconditionPaths } from "./postconditions.ts";
 import { inspectCommitChain } from "./commit-evidence.ts";
@@ -103,11 +103,12 @@ async function applyCommittedPlan(options: ApplyOptions, state: ApplyState, tran
   };
   try {
     await executeJournal({ config, treeRoot: rootDir, manifest, useGitMv: true });
+    const dependencyRefresh = refreshCommittedDependencies(config, rootDir);
+    if (config.transaction.nodeModules === "symlink") linkPlannedPackage(rootDir, manifest);
     const regeneration = regenerateArtifacts({ config, treeRoot: rootDir, manifest });
     if (!regeneration.ok) throw new ApplyError(regeneration.failure ?? "regeneration failed");
     const commits = commitAppliedPlan(rootDir, manifest, state, (commit) => transaction?.update("move-committed", commit));
     if (commits.wiringCommit !== undefined) transaction?.update("wiring-committed");
-    const dependencyRefresh = refreshCommittedDependencies(config, rootDir);
     options.testHooks?.beforeRepositoryPostconditions?.();
     const repositoryPostconditions = await auditRepositoryPostconditions({
       rootDir,

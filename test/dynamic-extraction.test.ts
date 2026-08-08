@@ -7,7 +7,7 @@
  */
 
 import { afterAll, expect, test } from "bun:test";
-import { cpSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -293,7 +293,24 @@ test("simulates a declared JSON runtime registry rewrite before external package
     triggers: ["^apps/web/scripts/route-registry\\.json$"],
     verify: "bun apps/web/scripts/route-stubs.ts --check",
   }];
+  raw.transaction = { nodeModules: "symlink", cleanup: true, simulateGates: true };
   writeFileSync(configPath, `${JSON.stringify(raw, null, 2)}\n`);
+  const webPackagePath = join(root, "apps/web/package.json");
+  const webPackage = JSON.parse(readFileSync(webPackagePath, "utf8")) as { dependencies: Record<string, string> };
+  webPackage.dependencies.zod = "1.0.0";
+  writeFileSync(webPackagePath, `${JSON.stringify(webPackage, null, 2)}\n`);
+  const lockfilePath = join(root, "pnpm-lock.yaml");
+  writeFileSync(lockfilePath, readFileSync(lockfilePath, "utf8").replace(
+    "      '@acme/logger':\n        specifier: workspace:*\n        version: link:../../libs/logger\n\n  libs/format:",
+    "      '@acme/logger':\n        specifier: workspace:*\n        version: link:../../libs/logger\n      zod:\n        specifier: 1.0.0\n        version: 1.0.0\n\n  libs/format:",
+  ));
+  const chartPath = join(root, CHART);
+  writeFileSync(chartPath, `import { z } from "zod";\n${readFileSync(chartPath, "utf8")}\nvoid z;\n`);
+  write(root, "apps/web/node_modules/zod/package.json", '{"name":"zod","version":"1.0.0","type":"module","exports":"./index.js","types":"./index.d.ts"}\n');
+  write(root, "apps/web/node_modules/zod/index.js", "export const z = {};\n");
+  write(root, "apps/web/node_modules/zod/index.d.ts", "export declare const z: {};\n");
+  mkdirSync(join(root, "apps/web/node_modules/@acme"), { recursive: true });
+  symlinkSync(resolve(root, "libs/format"), join(root, "apps/web/node_modules/@acme/format"), "dir");
   write(root, "apps/web/scripts/route-registry.json", `${JSON.stringify({
     domains: [{ id: "chart", module: "./widgets/chart.ts", export: "renderChart" }],
   }, null, 2)}\n`);
@@ -312,7 +329,10 @@ test("simulates a declared JSON runtime registry rewrite before external package
     'const expected = registry.domains.map((domain: { module: string; export: string }) => `export { ${domain.export} } from ${JSON.stringify(domain.module)};`).join("\\n") + "\\n";',
     'if (process.argv.includes("--check")) {',
     '  if (readFileSync(outputPath, "utf8") !== expected) process.exit(1);',
-    '} else writeFileSync(outputPath, expected);',
+    '} else {',
+    '  writeFileSync(outputPath, expected);',
+    '  await import(new URL("../src/routes.ts", import.meta.url).href);',
+    '}',
     "",
   ].join("\n"));
   write(root, "apps/web/src/routes.ts", 'export { renderChart } from "./widgets/chart.ts";\n');

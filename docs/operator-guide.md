@@ -457,10 +457,12 @@ postJournalPreparers: [{
 }]
 ```
 
-The journal rewrites the registry first, then the generator runs once for its
-sorted declared output set, then its verification, audit, and repository gates
-see the regenerated tree. A current config that declares this trigger while an
-older manifest omits it is refused and must be replanned.
+The journal rewrites the registry and scaffolds package/dependency state first.
+The projected tree then installs or links those dependencies and verifies its
+lockfile before the generator runs once for its sorted declared output set.
+Its verification, audit, external compilation, and repository gates all see
+that same regenerated tree. A current config that declares this trigger while
+an older manifest omits it is refused and must be replanned.
 
 ## Normal extraction loop
 

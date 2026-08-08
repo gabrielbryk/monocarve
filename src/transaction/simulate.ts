@@ -144,11 +144,31 @@ export async function simulatePlan(options: SimulateOptions): Promise<Simulation
     // are still audited against their declared post-journal provenance below.
     commitSimulatedExtraction(worktree.workspacePath, manifest);
 
-    // Before the audit, and therefore before the gates: from here down every
-    // reader sees the tree an apply would produce, generated files included. A
-    // registry regenerated after the audit would make the audit's verdict about
-    // a tree that never exists, and a gate that checks generated output would
-    // fail on staleness this step exists to remove.
+    // The baseline install cannot see the package/importer the journal creates;
+    // install again against the landed plan, or materialize equivalent links,
+    // before a post-journal generator imports the newly created package.
+    if (config.transaction.nodeModules === "install") {
+      installWorkspaceDependencies(worktree.workspacePath, packageManager.installCommand());
+    } else if (config.transaction.nodeModules === "symlink") {
+      unlinked = linkPlannedPackage(worktree.workspacePath, manifest);
+    }
+
+    const lockfileVerification = maybeVerifyLockfile(options, worktree.workspacePath, packageManager);
+    if (lockfileVerification && !lockfileVerification.ok) {
+      keep = !config.transaction.cleanup;
+      return {
+        ok: false, planId: manifest.planId,
+        ...(keep ? { worktreePath: worktree.path } : {}),
+        operationsApplied: journal.entries.length, gates, lockfileVerification,
+        failure: `${lockfileVerification.lockfile} is not what \`${lockfileVerification.command}\` produces: ${(
+          lockfileVerification.differences ?? []
+        ).join("\n")}`,
+      };
+    }
+
+    // Before the audit, and therefore before the gates: generators run only
+    // after package installation/linking and lockfile proof, so their imports
+    // observe the same projected dependency graph as later compilation.
     const regeneration = regenerateArtifacts({ config, treeRoot: worktree.workspacePath, manifest });
     if (!regeneration.ok) {
       keep = !config.transaction.cleanup;
@@ -159,16 +179,9 @@ export async function simulatePlan(options: SimulateOptions): Promise<Simulation
         operationsApplied: journal.entries.length,
         gates,
         regeneration,
+        ...(lockfileVerification === undefined ? {} : { lockfileVerification }),
         failure: regeneration.failure ?? "regeneration failed",
       };
-    }
-
-    // The baseline install cannot see the package/importer the journal creates;
-    // install again against the landed plan, or materialize equivalent links.
-    if (config.transaction.nodeModules === "install") {
-      installWorkspaceDependencies(worktree.workspacePath, packageManager.installCommand());
-    } else if (config.transaction.nodeModules === "symlink") {
-      unlinked = linkPlannedPackage(worktree.workspacePath, manifest);
     }
 
     const audit = auditPlanSync({
@@ -211,19 +224,6 @@ export async function simulatePlan(options: SimulateOptions): Promise<Simulation
         failure: `repository postconditions failed: ${repositoryPostconditions.failures.join("; ")}`,
       };
     }
-    const lockfileVerification = maybeVerifyLockfile(options, worktree.workspacePath, packageManager);
-    if (lockfileVerification && !lockfileVerification.ok) {
-      keep = !config.transaction.cleanup;
-      return {
-        ok: false, planId: manifest.planId,
-        ...(keep ? { worktreePath: worktree.path } : {}),
-        operationsApplied: journal.entries.length, gates, regeneration, lockfileVerification,
-        failure: `${lockfileVerification.lockfile} is not what \`${lockfileVerification.command}\` produces: ${(
-          lockfileVerification.differences ?? []
-        ).join("\n")}`,
-      };
-    }
-
     let assetEmission: AssetEmissionReport | undefined;
     if (config.assetEmissionProofs.length > 0) {
       commitSimulatedExtraction(worktree.workspacePath, manifest);

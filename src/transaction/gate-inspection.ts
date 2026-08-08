@@ -43,13 +43,13 @@ async function inspectOne(options: { config: MonocarveConfig; rootDir: string; m
   try {
     preflightJournal(config, manifest, worktree.workspacePath);
     await executeJournal({ config, treeRoot: worktree.workspacePath, manifest });
+    if (config.transaction.nodeModules === "install") installWorkspaceDependencies(worktree.workspacePath, packageManager.installCommand());
+    else if (config.transaction.nodeModules === "symlink") linkPlannedPackage(worktree.workspacePath, manifest);
     const regeneration = regenerateArtifacts({ config, treeRoot: worktree.workspacePath, manifest });
     if (!regeneration.ok) throw new Error(regeneration.failure ?? "artifact regeneration failed");
-    if (config.transaction.nodeModules === "install") installWorkspaceDependencies(worktree.workspacePath, packageManager.installCommand());
     const audit = auditPlanSync({ config, rootDir: worktree.workspacePath, manifest, installedRoot: config.transaction.nodeModules === "install" ? worktree.workspacePath : rootDir, regeneratedArtifacts: Object.fromEntries(regeneration.artifacts.map((item) => [item.path, item.hash])) });
     if (!audit.passed) throw new Error(`inspection setup audit failed: ${audit.failures.join("; ")}`);
     commitSimulatedExtraction(worktree.workspacePath, manifest);
-    linkPlannedPackage(worktree.workspacePath, manifest);
     const declared = new Set(manifest.generatedFiles.map((item) => item.path));
     const run = await runGateTiers({ gates: { package: tier === "package" ? [command] : [], project: tier === "project" ? [command] : [], workspace: tier === "workspace" ? [command] : [] }, maxConcurrency: 1, cwd: worktree.workspacePath, timeoutMs: config.gates.timeoutMs, retries: config.transaction.gateRetries, wrapCommand: taskRunner.wrapGateCommand, diagnosticsDirectory: `${worktree.path}.diagnostics` });
     const result = run.results[0]!; const changedPaths = [...new Set(statusEntries(worktree.workspacePath).flatMap((entry) => entry.paths))].sort(byCodeUnit); const undeclaredPaths = changedPaths.filter((path) => !declared.has(path));
