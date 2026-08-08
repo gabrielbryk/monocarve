@@ -197,9 +197,21 @@ function rootTsconfigOperation(input: ScaffoldInput, templates: ReturnType<typeo
 
 function projectReferences(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>): { path: string }[] {
   return input.dependencies.packageReferences.map((reference) => {
-    const target = templates.projectReferences.dependencyTarget === "tsconfig.json"
-      ? reference
-      : `${reference}/${templates.projectReferences.dependencyTarget}`;
+    const configuredTarget = templates.projectReferences.dependencyTarget;
+    const configuredPath = configuredTarget === "tsconfig.json"
+      ? `${reference}/tsconfig.json`
+      : `${reference}/${configuredTarget}`;
+    // A workspace can mix solution-style libraries with an exact-root package
+    // whose production project is its root tsconfig. Prefer the configured
+    // library target when it exists, but do not synthesize a nonexistent
+    // tsconfig.lib.json for that exact-root dependency.
+    const target = input.context.exists(configuredPath)
+      ? configuredPath
+      : input.context.exists(`${reference}/tsconfig.json`)
+        ? `${reference}/tsconfig.json`
+        : configuredTarget === "tsconfig.json"
+          ? reference
+          : configuredPath;
     return { path: relativePosix(resolve("/", input.packageRoot), resolve("/", target)) };
   });
 }
