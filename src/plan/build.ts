@@ -1,7 +1,7 @@
 /** Deterministic compilation of one eligible portfolio candidate. */
 import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapters/registry.ts";
 import { GENERATOR } from "../branding.ts";
-import { applicationOwner, getApplication, packageNameMatcher, renderExtractionProfile, resolveExtractionProfile, type MonocarveConfig } from "../config.ts";
+import { applicationOwner, getApplication, packageNameMatcher, renderExtractionProfile, resolveExtractionProfile, triggeredPostJournalPreparers, type MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import type { PortfolioCandidate } from "../portfolio/types.ts";
 import { byCodeUnit, hashText, stableStringify, type Sha256 } from "../util/hash.ts";
@@ -69,8 +69,6 @@ function buildJournal(state: BuildState, selection: ReturnType<typeof selectExtr
     const contents = `export * from ${JSON.stringify(specifier)};\n`;
     operations.push({ kind: "write-file", path: promotion.source, contents, preconditionHash: "missing", resultHash: hashText(contents), generator: "module-promotion:compatibility-reexport" });
   }
-  const { consumers } = appendConsumerOperations({ context: state.context, sources: [...selection.sources, ...selection.assets], packageName: state.packageName, publicSpecifierFor: selection.publicSpecifierFor, operations });
-  appendStaticFsReferenceOperations({ context: state.context, donorTargets: donorTargetsOf(selection), operations });
   // Documents must be rewritten before any preparer or artifact regeneration
   // runs, because a post-journal preparer may itself read the rewritten
   // document (its trigger can match on the document path — `buildManifest`
@@ -81,6 +79,9 @@ function buildJournal(state: BuildState, selection: ReturnType<typeof selectExtr
   // `migrate-path-keys` (emitted last), guarantees the doc's on-disk bytes
   // are already correct by the time anything downstream depends on them.
   operations.push(...pathReferenceRewriteOperations(state.config, state.context, operations));
+  const generatedOwners = generatorOwnedOutputs(state.config, selection.production, operations);
+  const { consumers } = appendConsumerOperations({ context: state.context, sources: [...selection.sources, ...selection.assets], packageName: state.packageName, publicSpecifierFor: selection.publicSpecifierFor, operations, excludedFiles: generatedOwners });
+  appendStaticFsReferenceOperations({ context: state.context, donorTargets: donorTargetsOf(selection), operations, excludedFiles: generatedOwners });
   const dependencies = dependenciesFor(state, selection.sources, rewrites);
   const input = { context: state.context, config: state.config, application: state.application, packageManager: state.packageManager, taskRunner: state.taskRunner, packageName: state.packageName, packageRoot: state.packageRoot, projectId: state.projectId, templates: state.templates, production: selection.production, tests: selection.tests, assets: selection.assets, dependencies, publicModules: selection.publicModules };
   const packageWiring = packageOperations(input);
@@ -142,8 +143,10 @@ function addAutomaticJsxRuntime(state: BuildState, sources: readonly string[], d
 
 function buildManifest(state: BuildState, selection: ReturnType<typeof selectExtractionSources>, rewrites: ReadonlyMap<string, readonly EscapeRewrite[]>, operations: PlanOperation[]): ExtractionManifest {
   const consumerSources = [...selection.sources, ...selection.assets];
-  const consumers = appendConsumerOperations({ context: state.context, sources: consumerSources, packageName: state.packageName, publicSpecifierFor: selection.publicSpecifierFor, operations: [] }).consumers;
-  const dynamicImportDelta = appendConsumerOperations({ context: state.context, sources: consumerSources, packageName: state.packageName, publicSpecifierFor: selection.publicSpecifierFor, operations: [] }).dynamicImportDelta;
+  const generatorOwned = generatorOwnedOutputs(state.config, selection.production, operations);
+  const consumerAnalysis = appendConsumerOperations({ context: state.context, sources: consumerSources, packageName: state.packageName, publicSpecifierFor: selection.publicSpecifierFor, operations: [], excludedFiles: generatorOwned });
+  const consumers = consumerAnalysis.consumers;
+  const dynamicImportDelta = consumerAnalysis.dynamicImportDelta;
   const dependencies = dependenciesFor(state, selection.sources, rewrites);
   const pruningCandidates = donorDependencyPruningCandidates({ context: state.context, donorRoot: applicationOwner(state.application), movedSources: selection.sources, dependencies });
   const dependencyDecisions = dependencyDecisionsFor(state, selection.sources, dependencies, pruningCandidates);
@@ -176,6 +179,13 @@ function buildManifest(state: BuildState, selection: ReturnType<typeof selectExt
     consumers: consumers.map((consumer) => ({ file: consumer.file, owner: consumer.package, expectedImporter: consumer.expectedImporter, specifiers: consumer.rewrites, external: state.graph.nodes.get(consumer.file)?.application !== state.candidate.application, dependencySection: sections.get(consumer.package) ?? "runtime" })), generatedFiles,
     changedFiles: [...new Set([...operations.flatMap(operationPathsOf), ...generatedFiles.filter((generated) => generated.regenerateOnApply).map((generated) => generated.path)])].sort(), ...(lockOperation ? { lockfileImporter: { packageRoot: state.packageRoot, hash: hashText(lockOperation.block) } } : currentLockHash ? { lockfileImporter: { packageRoot: state.packageRoot, hash: currentLockHash } } : {}),
     expectedDynamicImportDelta: { added: dynamicImportDelta.added.sort(byCodeUnit), removed: dynamicImportDelta.removed.sort(byCodeUnit) }, evaluationEffects: evaluationEffectsFor({ config: state.config, context: state.context, graph: state.graph, production: selection.production, targets: selection.targets, rewrites, packageWiring, entrypointPath: selection.entrypointPath }), metrics: { movedFiles: selection.sources.length + selection.assets.length, movedLines, applicationLinesBefore: applicationLines, applicationLinesAfter: Math.max(0, applicationLines - movedLines), consumers: consumers.length }, commits: { plan: { subject: renderTemplate(state.config.commitTemplates.plan, commitVars), ...trailer(state.config, commitVars) }, move: { subject: renderTemplate(state.config.commitTemplates.move, commitVars), ...trailer(state.config, commitVars) }, wiring: { subject: renderTemplate(state.config.commitTemplates.wiring, commitVars), ...trailer(state.config, commitVars) } }, gates: renderGates(state.config, state.profile.gates, { ...commitVars, consumerOwners, taskRunner: state.taskRunner, rootDir: state.options.rootDir }) };
+}
+
+function generatorOwnedOutputs(config: MonocarveConfig, production: readonly string[], operations: readonly PlanOperation[]): ReadonlySet<string> {
+  const documents = operations
+    .filter((operation): operation is Extract<PlanOperation, { kind: "rewrite-path-reference" }> => operation.kind === "rewrite-path-reference")
+    .map((operation) => operation.file);
+  return new Set(triggeredPostJournalPreparers(config, [...production, ...documents]).flatMap((preparer) => preparer.outputs));
 }
 function dependencyDecisionsFor(state: BuildState, sources: readonly string[], dependencies: ReturnType<typeof dependenciesFor>, pruning: readonly { name: string }[]) {
   const evidence = collectDependencyEvidence(state.context, state.graph, sources, state.packageName);

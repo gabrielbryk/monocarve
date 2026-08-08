@@ -464,6 +464,14 @@ Its verification, audit, external compilation, and repository gates all see
 that same regenerated tree. A current config that declares this trigger while
 an older manifest omits it is refused and must be replanned.
 
+A triggered preparer is the sole writer of every declared output. If an output
+currently imports a donor, the compiler deliberately omits the ordinary
+consumer rewrite and dependency wiring for that file; otherwise the journal
+and generator would claim two incompatible final byte states. The regenerated
+file is rediscovered by the post-journal graph audit. A generator that leaves
+its old donor import stale fails audit rather than being hidden by the ownership
+exemption.
+
 ## Normal extraction loop
 
 Start with a clean feature branch and inspect the candidate selection:

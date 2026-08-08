@@ -11,7 +11,7 @@ import { cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } f
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { loadConfig } from "../src/config.ts";
+import { loadConfig, parseConfig } from "../src/config.ts";
 import { scanDependencyGraph } from "../src/graph/cruiser.ts";
 import { buildPlanSync, serializeManifest } from "../src/plan/build.ts";
 import { validatePlan } from "../src/plan/validate.ts";
@@ -369,6 +369,10 @@ test("simulates a declared JSON runtime registry rewrite before external package
   expect(generatedRoutes?.preparerId).toBe("route-stubs");
   expect(generatedRoutes?.regenerate).toBe("bun apps/web/scripts/route-stubs.ts");
   expect(generatedRoutes?.verify).toBe("bun apps/web/scripts/route-stubs.ts --check");
+  expect(manifest.operations.some((operation) =>
+    (operation.kind === "rewrite-import" || operation.kind === "rewrite-fs-reference") && operation.file === "apps/web/src/routes.ts"
+  )).toBe(false);
+  expect(manifest.consumers.some((consumer) => consumer.file === "apps/web/src/routes.ts")).toBe(false);
   expect(manifest.generatedFiles.map((file) => file.path)).toEqual(
     [...manifest.generatedFiles.map((file) => file.path)].sort(),
   );
@@ -378,6 +382,21 @@ test("simulates a declared JSON runtime registry rewrite before external package
   };
   expect(regenerateArtifacts({ config, treeRoot: root, manifest: missingGeneratorRecord }).failure)
     .toContain("configured post-journal preparer(s) missing from plan: route-stubs");
+
+  const staleConfig = parseConfig({
+    ...raw,
+    postJournalPreparers: [{
+      id: "route-stubs",
+      phase: "after-journal-before-gates",
+      command: "true",
+      outputs: ["apps/web/src/routes.ts"],
+      triggers: ["^apps/web/scripts/route-registry\\.json$"],
+    }],
+  }, "<stale-route-generator>");
+  const staleManifest = buildPlanSync({ config: staleConfig, rootDir: root, graph, candidate: candidate!, baselineCommit: graph.commit!, packageName: "@acme/chart" });
+  const staleSimulation = await simulatePlan({ config: staleConfig, rootDir: root, manifest: staleManifest });
+  expect(staleSimulation.ok).toBe(false);
+  expect(staleSimulation.failure).toContain("audit failed");
 
   const simulation = await simulatePlan({ config, rootDir: root, manifest });
   expect(simulation.ok, JSON.stringify(simulation, null, 2)).toBe(true);

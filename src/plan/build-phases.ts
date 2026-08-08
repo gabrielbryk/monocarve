@@ -118,10 +118,11 @@ export function appendConsumerOperations(args: {
   readonly packageName: string;
   readonly publicSpecifierFor: ReadonlyMap<string, string>;
   readonly operations: PlanOperation[];
+  readonly excludedFiles?: ReadonlySet<string>;
 }): { readonly consumers: Consumer[]; readonly dynamicImportDelta: { readonly added: string[]; readonly removed: string[] } } {
-  const consumers = findConsumers(args.context, args.sources, args.packageName, args.publicSpecifierFor).map((consumer) =>
-    args.context.isTest(consumer.file) ? { ...consumer, dependencySection: "dev" as const } : consumer,
-  );
+  const consumers = findConsumers(args.context, args.sources, args.packageName, args.publicSpecifierFor)
+    .filter((consumer) => !args.excludedFiles?.has(consumer.file))
+    .map((consumer) => args.context.isTest(consumer.file) ? { ...consumer, dependencySection: "dev" as const } : consumer);
   for (const consumer of consumers) for (const donor of consumer.donors) {
     if (isAssetPath(args.context.config, donor) && !args.publicSpecifierFor.has(donor)) {
       throw new PlanningError(`retained asset consumer ${consumer.file} requires a configured public subpath for ${donor}`);
@@ -157,10 +158,12 @@ export function appendStaticFsReferenceOperations(args: {
   readonly context: WorkspaceContext;
   readonly donorTargets: ReadonlyMap<string, string>;
   readonly operations: PlanOperation[];
+  readonly excludedFiles?: ReadonlySet<string>;
 }): { readonly consumers: StaticFsConsumer[] } {
   const consumers: StaticFsConsumer[] = [];
   for (const file of args.context.repositorySources()) {
     if (args.donorTargets.has(file)) continue;
+    if (args.excludedFiles?.has(file)) continue;
     const rewrites = staticFsRewritesFor(args.context, file, args.donorTargets);
     if (rewrites.length === 0) continue;
     consumers.push({ file, rewrites });
