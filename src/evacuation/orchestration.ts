@@ -3,6 +3,7 @@ import type { DependencyGraph } from "../graph/model.ts";
 import { PlanningError, type WorkspaceContext } from "../plan/context.ts";
 import type { CandidateRecommendation, RejectionReason } from "../portfolio/types.ts";
 import { assessEvacuationCandidate } from "./assessment.ts";
+import type { AssessedEvacuation } from "./assessment.ts";
 import { buildEvacuationCandidate } from "./candidate.ts";
 import type { EvacuationBoundaryCut } from "./cuts.ts";
 import { resolveEvacuationSelectors } from "./selectors.ts";
@@ -38,6 +39,11 @@ export interface EvacuationReport {
 
 /** Run the complete read-only bounded evacuation analysis. */
 export function analyzeEvacuation(options: EvacuationAnalysisOptions): EvacuationReport {
+  return evacuationReport(prepareEvacuation(options), options.packageName);
+}
+
+/** Resolve, union, and assess once for report or immutable plan compilation. */
+export function prepareEvacuation(options: EvacuationAnalysisOptions): AssessedEvacuation {
   if (!packageNameMatcher(options.config).test(options.packageName)) {
     throw new PlanningError(`package name ${JSON.stringify(options.packageName)} does not match the configured pattern`);
   }
@@ -48,18 +54,22 @@ export function analyzeEvacuation(options: EvacuationAnalysisOptions): Evacuatio
     application: options.application,
     selected,
   });
-  const assessed = assessEvacuationCandidate({
+  return assessEvacuationCandidate({
     config: options.config,
     graph: options.graph,
     evacuation,
     packageName: options.packageName,
     ...(options.context ? { context: options.context } : {}),
   });
+}
+
+export function evacuationReport(assessed: AssessedEvacuation, packageName: string): EvacuationReport {
+  const evacuation = assessed.evacuation;
   return {
     schema: "evacuation",
     id: evacuation.id,
     application: evacuation.application,
-    target: { packageName: options.packageName },
+    target: { packageName },
     requested: evacuation.requested,
     moved: { files: evacuation.files, lineCount: evacuation.lineCount },
     retainedComposition: evacuation.retainedComposition,

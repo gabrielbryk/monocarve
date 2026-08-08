@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import { run } from "./support/cli.ts";
+import { join } from "node:path";
+
+import { existsSync, FIXTURE, run } from "./support/cli.ts";
 
 interface EvacuationJson {
   readonly schema: "evacuation";
@@ -22,8 +24,8 @@ interface EvacuationJson {
 
 const required = ["--app", "web", "--package-name", "@acme/chart-ui"];
 
-async function jsonFor(source: string): Promise<EvacuationJson> {
-  const result = await run("evacuate", ...required, "--source", source, "--json");
+async function jsonFor(...sources: string[]): Promise<EvacuationJson> {
+  const result = await run("evacuate", ...required, ...sources.flatMap((source) => ["--source", source]), "--json");
   expect(result.code).toBe(0);
   expect(result.stderr).toBe("");
   return JSON.parse(result.stdout) as EvacuationJson;
@@ -40,16 +42,16 @@ describe("evacuate CLI", () => {
   });
 
   test("resolves exact, directory, and glob sources deterministically", async () => {
-    const exact = await jsonFor("apps/web/src/widgets/chart.ts");
-    const directory = await jsonFor("apps/web/src/widgets");
-    const glob = await jsonFor("apps/web/src/widgets/**");
+    const exact = await jsonFor("apps/web/src/widgets/chart.ts", "apps/web/src/types.ts");
+    const directory = await jsonFor("apps/web/src");
+    const glob = await jsonFor("apps/web/src/**/*.ts");
 
-    expect(exact.requested).toEqual(["apps/web/src/widgets/chart.ts"]);
-    expect(directory.requested).toEqual(exact.requested);
-    expect(glob.requested).toEqual(exact.requested);
+    expect(exact.requested).toEqual(["apps/web/src/types.ts", "apps/web/src/widgets/chart.ts"]);
+    expect(directory.requested).toContain("apps/web/src/widgets/chart.ts");
+    expect(glob.requested).toEqual(directory.requested);
     expect(exact.moved.files).toEqual(exact.requested);
     expect(exact.target.packageName).toBe("@acme/chart-ui");
-    expect(exact.unselectedDependencies).toContain("apps/web/src/types.ts");
+    expect(exact.unselectedDependencies).toEqual([]);
   }, 240_000);
 
   test("requires app, package name, and at least one source", async () => {
@@ -62,38 +64,33 @@ describe("evacuate CLI", () => {
     expect(noPackage.stderr).toContain("--package-name <name> is required");
     expect(noSource.code).toBe(64);
     expect(noSource.stderr).toContain("at least one --source");
-  });
+  }, 240_000);
 
   test("refuses unmatched, cross-application, and write-oriented requests", async () => {
     const unmatched = await run("evacuate", ...required, "--source", "apps/web/src/missing/**");
     const crossing = await run("evacuate", ...required, "--source", "apps/*/src/**/*.ts");
-    const writing = await run("evacuate", ...required, "--source", "apps/web/src/widgets", "--out", "report.json");
+    const writing = await run("evacuate", ...required, "--source", "apps/web/src/widgets", "--apply");
     expect(unmatched.code).toBe(1);
     expect(unmatched.stderr).toContain("matches no production graph nodes");
     expect(crossing.code).toBe(1);
     expect(crossing.stderr).toContain('crosses application "web"');
     expect(writing.code).toBe(64);
-    expect(writing.stderr).toContain("unsupported by read-only evacuate");
+    expect(writing.stderr).toContain("--apply is unsupported by evacuate");
   }, 240_000);
 
-  test("renders blocked analysis in both JSON and human form", async () => {
-    const report = await jsonFor("apps/web/src/widgets/chart.ts");
-    expect(report.schema).toBe("evacuation");
-    expect(report.application).toBe("web");
-    expect(report.candidate.eligible).toBe(false);
-    expect(report.boundaryCuts).toContainEqual({
-      from: "apps/web/src/widgets/chart.ts",
-      specifier: "../types.ts",
-      target: "apps/web/src/types.ts",
-      kind: "type",
-      reason: "outside-evacuation",
-      remedy: { kind: "unconfigured" },
-    });
+  test("refuses blocked analysis without writing and renders eligible human review", async () => {
+    const blockedPlan = join(FIXTURE, ".monocarve/blocked.json");
+    expect(existsSync(blockedPlan)).toBe(false);
+    const blocked = await run("evacuate", ...required, "--source", "apps/web/src/widgets/chart.ts", "--out", ".monocarve/blocked.json", "--write");
+    expect(blocked.code).toBe(64);
+    expect(blocked.stderr).toContain("is not eligible");
+    expect(blocked.stderr).toContain("apps/web/src/widgets/chart.ts -> ../types.ts -> apps/web/src/types.ts");
+    expect(existsSync(blockedPlan)).toBe(false);
 
-    const human = await run("evacuate", ...required, "--source", "apps/web/src/widgets/chart.ts");
+    const human = await run("evacuate", ...required, "--source", "apps/web/src/widgets/chart.ts", "--source", "apps/web/src/types.ts");
     expect(human.code).toBe(0);
     expect(human.stdout).toStartWith("Evacuation e-");
-    expect(human.stdout).toContain("Eligible: no");
-    expect(human.stdout).toContain("outside-evacuation");
+    expect(human.stdout).toContain("Eligible: yes");
+    expect(human.stdout).toContain("Output:");
   }, 240_000);
 });

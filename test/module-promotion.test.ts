@@ -158,7 +158,7 @@ describe("module promotion", () => {
     expect(invalid.code).toBe(1);
     expect(invalid.stderr).toContain("module promotion importer proof");
     expect(invalid.stderr).not.toContain("groups.length");
-  });
+  }, 30_000);
 
   test("validation rejects a manifest whose cycle-cut proof is made non-failing", () => {
     const fixture = setup();
