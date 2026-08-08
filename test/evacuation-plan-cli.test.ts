@@ -2,14 +2,18 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { parseConfig } from "../src/config.ts";
 import { parseManifest } from "../src/plan/build.ts";
+import { simulatePlan } from "../src/transaction/simulate.ts";
 import { cleanupFixtures, fixtureGit, write } from "./support/fixture-repo.ts";
-import { committedWorkspace, existsSync, runIn, writeFileSync } from "./support/cli.ts";
+import { committedWorkspace, existsSync, ROOT, runIn, writeFileSync } from "./support/cli.ts";
 
 function configuredWorkspace(): string {
   const root = committedWorkspace();
   const configPath = join(root, "monocarve.config.json");
   const config = JSON.parse(readFileSync(configPath, "utf8")) as {
+    applications: Array<Record<string, unknown>>;
+    gates: Record<string, unknown>;
     portfolio: Record<string, unknown>;
     portPromotions?: unknown[];
   };
@@ -23,6 +27,33 @@ function configuredWorkspace(): string {
     libraryPort: "DatabasePort",
     targetPackage: "@acme/format",
   }];
+  const api = config.applications.find((application) => application.name === "api")!;
+  api.scaffoldTemplates = {
+    tsconfig: { contents: `${JSON.stringify({
+      compilerOptions: { composite: true }, files: [], include: [],
+      references: [{ path: "./tsconfig.lib.json" }, { path: "./tsconfig.spec.json" }],
+    }, null, 2)}\n` },
+    extraFiles: {
+      "tsconfig.lib.json": { contents: `${JSON.stringify({
+        compilerOptions: {
+          composite: true, declaration: true, emitDeclarationOnly: true, rootDir: "src", outDir: "dist",
+          module: "NodeNext", moduleResolution: "NodeNext", target: "ES2022", strict: true,
+          allowImportingTsExtensions: true,
+        },
+        include: ["src/**/*.ts"], exclude: ["src/**/*.test.ts"],
+      }, null, 2)}\n` },
+      "tsconfig.spec.json": { contents: `${JSON.stringify({
+        extends: "./tsconfig.lib.json", compilerOptions: { rootDir: ".", outDir: "dist/test" },
+        include: ["src/**/*.test.ts"], references: [{ path: "./tsconfig.lib.json" }],
+      }, null, 2)}\n` },
+    },
+    projectReferences: { target: "tsconfig.lib.json", dependencyTarget: "tsconfig.lib.json" },
+  };
+  config.gates = {
+    package: [`bun ${join(ROOT, "node_modules/typescript/bin/tsc")} -b {packageRoot}/tsconfig.json --pretty false`],
+    project: [],
+    workspace: [],
+  };
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
   write(root, "apps/api/src/db/client.ts", "export interface Database { readonly id: string }\n");
   write(root, "apps/api/src/estimating/service.ts", [
@@ -111,5 +142,38 @@ describe("evacuation immutable plan lifecycle", () => {
     expect(result.stderr).toContain("is not eligible");
     expect(result.stderr).toContain("apps/api/src/db/client.ts");
     expect(existsSync(join(root, output))).toBe(false);
+  }, 240_000);
+
+  test("new-package evacuation emits and typechecks a complete solution config", async () => {
+    const root = configuredWorkspace();
+    const result = await runIn(
+      root,
+      "evacuate",
+      "--app", "api",
+      "--source", "apps/api/src/estimating",
+      "--source", "apps/api/src/db/client.ts",
+      "--package-name", "@acme/estimating-evacuated",
+      "--json",
+    );
+
+    expect(result.code).toBe(0);
+    const response = JSON.parse(result.stdout) as { manifest: ReturnType<typeof parseManifest> };
+    const writes = response.manifest.operations
+      .filter((operation) => operation.kind === "write-file")
+      .map((operation) => operation.path);
+    expect(writes).toContain("libs/estimating-evacuated/tsconfig.json");
+    expect(writes).toContain("libs/estimating-evacuated/tsconfig.lib.json");
+    expect(writes).toContain("libs/estimating-evacuated/tsconfig.spec.json");
+    expect(response.manifest.operations.filter((operation) =>
+      operation.kind === "write-file" && operation.path === "libs/estimating-evacuated/tsconfig.json"
+    )).toHaveLength(1);
+    const simulation = await simulatePlan({
+      config: parseConfig(JSON.parse(readFileSync(join(root, "monocarve.config.json"), "utf8")), join(root, "monocarve.config.json")),
+      rootDir: root,
+      manifest: response.manifest,
+      verifyLockfile: true,
+    });
+    expect(simulation.ok, JSON.stringify(simulation, null, 2)).toBe(true);
+    expect(simulation.gates).toContainEqual(expect.objectContaining({ tier: "package", exitCode: 0 }));
   }, 240_000);
 });

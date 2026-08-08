@@ -194,13 +194,14 @@ function solutionReferences(input: ScaffoldInput): { path: string }[] {
 
 function rootTsconfigOperation(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>, references: readonly { path: string }[]): PlanOperation | undefined {
   const path = `${input.packageRoot}/tsconfig.json`;
-  if (!input.context.exists(path) && !templates.tsconfig) return undefined;
-  const current = input.context.exists(path) ? input.context.text(path) : render(input, templates.tsconfig!);
+  const exists = input.context.exists(path);
+  if (!exists && !templates.tsconfig) return undefined;
+  const current = exists ? input.context.text(path) : render(input, templates.tsconfig!);
   const rendered = parseJsonFile(current, path) as { references?: readonly { path?: string }[] };
   const existing = rendered.references ?? [];
   const merged = [...existing, ...references.filter((entry) => !existing.some((item) => item.path === entry.path))];
   const contents = stringifyJson(merged.length > 0 ? { ...rendered, references: merged } : rendered);
-  return contents === current ? undefined : writeOperation(input.context, path, contents, "scaffold:tsconfig");
+  return exists && contents === current ? undefined : writeOperation(input.context, path, contents, "scaffold:tsconfig");
 }
 
 function projectReferences(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>): { path: string }[] {

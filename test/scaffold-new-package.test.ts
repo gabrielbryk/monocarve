@@ -117,6 +117,46 @@ test("puts inferred workspace references in a configured library project", () =>
   });
 });
 
+test("writes a new solution tsconfig even when its rendered bytes are already canonical", () => {
+  const root = fixtureRepo({
+    "pnpm-workspace.yaml": "packages:\n  - libs/*\n",
+    "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\n",
+  });
+  const solution = `${JSON.stringify({
+    compilerOptions: { composite: true },
+    files: [],
+    references: [{ path: "./tsconfig.lib.json" }, { path: "./tsconfig.spec.json" }],
+  }, null, 2)}\n`;
+  const config = fixtureConfig(root, {
+    scaffoldTemplates: {
+      packageJson: { contents: '{"name":"{package}"}\n' },
+      tsconfig: { contents: solution },
+      extraFiles: {
+        "tsconfig.lib.json": { contents: '{"compilerOptions":{"composite":true},"include":["src/**/*.ts"]}\n' },
+        "tsconfig.spec.json": { contents: '{"extends":"./tsconfig.lib.json","include":["src/**/*.test.ts"]}\n' },
+      },
+      projectReferences: { target: "tsconfig.lib.json", dependencyTarget: "tsconfig.lib.json" },
+    },
+  });
+  const operations = packageOperations({
+    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
+    packageManager: pnpmAdapter, taskRunner: noneTaskRunner, packageName: "@acme/new-package",
+    packageRoot: "libs/new-package", projectId: "new-package", production: [],
+    dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+  });
+  const configs = operations
+    .flatMap((operation) => operation.kind === "write-file" && operation.path.startsWith("libs/new-package/tsconfig") ? [operation.path] : [])
+    .sort();
+
+  expect(configs).toEqual([
+    "libs/new-package/tsconfig.json",
+    "libs/new-package/tsconfig.lib.json",
+    "libs/new-package/tsconfig.spec.json",
+  ]);
+  const rootConfig = operations.find((operation) => operation.kind === "write-file" && operation.path === "libs/new-package/tsconfig.json");
+  expect(rootConfig).toMatchObject({ contents: solution, preconditionHash: "missing" });
+});
+
 test("refuses a configured reference target without a scaffold template", () => {
   const root = fixtureRepo({ "README.md": "fixture\n" });
   const config = fixtureConfig(root, {
