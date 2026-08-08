@@ -43,10 +43,10 @@ export async function compilePreparerManifest(input: CompilePreparerInput): Prom
   const command = policy.command === undefined ? undefined : renderTemplate(policy.command, vars);
   const replacements = policy.replacements?.map((replacement) => ({
     path: validatedPath(input.rootDir, renderTemplate(replacement.path, vars)),
-    before: renderTemplate(replacement.before, vars),
-    after: renderTemplate(replacement.after, vars),
-    ...(replacement.prefix === undefined ? {} : { prefix: renderTemplate(replacement.prefix, vars) }),
-    ...(replacement.suffix === undefined ? {} : { suffix: renderTemplate(replacement.suffix, vars) }),
+    before: replacement.before,
+    after: replacement.after,
+    ...(replacement.prefix === undefined ? {} : { prefix: replacement.prefix }),
+    ...(replacement.suffix === undefined ? {} : { suffix: replacement.suffix }),
   }));
   const undeclaredReplacement = replacements?.find((replacement) => !outputs.includes(replacement.path));
   if (undeclaredReplacement !== undefined) throw new PreparerError(`text replacement path is not a declared output: ${undeclaredReplacement.path}`);
@@ -193,10 +193,10 @@ export function assertPreparerManifest(config: MonocarveConfig, value: unknown):
   const expectedCommand = policy.command === undefined ? undefined : renderTemplate(policy.command, vars);
   const expectedReplacements = policy.replacements?.map((replacement) => ({
     path: renderTemplate(replacement.path, vars),
-    before: renderTemplate(replacement.before, vars),
-    after: renderTemplate(replacement.after, vars),
-    ...(replacement.prefix === undefined ? {} : { prefix: renderTemplate(replacement.prefix, vars) }),
-    ...(replacement.suffix === undefined ? {} : { suffix: renderTemplate(replacement.suffix, vars) }),
+    before: replacement.before,
+    after: replacement.after,
+    ...(replacement.prefix === undefined ? {} : { prefix: replacement.prefix }),
+    ...(replacement.suffix === undefined ? {} : { suffix: replacement.suffix }),
   }));
   const expectedVerify = policy.verify === undefined ? undefined : renderTemplate(policy.verify, vars);
   const expectedCommit = renderCommit(policy, vars);

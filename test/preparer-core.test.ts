@@ -109,6 +109,40 @@ describe("configured pre-extraction preparers", () => {
     expect(readFileSync(`${root}/${source}`, "utf8")).toBe("export const view = 3;\n");
   });
 
+  test("keeps replacement source text literal while rendering its path", async () => {
+    const source = "apps/consumer/src/tabs/leads/view.ts";
+    const root = fixtureRepo({ [source]: "const card = <Widget description={description} />;\n" });
+    const configured = replacementPolicy("{sourcePath}", [{
+      prefix: "const card = <Widget ",
+      before: "description={description}",
+      after: "description={summary}",
+      suffix: " />;",
+    }]);
+    const config = configuration(scratchDirectory(), [configured]);
+
+    const manifest = await compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source });
+
+    expect(manifest.preparer.replacements).toEqual([{
+      path: source,
+      prefix: "const card = <Widget ",
+      before: "description={description}",
+      after: "description={summary}",
+      suffix: " />;",
+    }]);
+    expect(manifest.mutations[0]?.contents).toBe("const card = <Widget description={summary} />;\n");
+    await simulatePreparerManifest({ rootDir: root, config, manifest });
+  });
+
+  test("still refuses unknown placeholders in replacement paths", async () => {
+    const source = "apps/consumer/src/tabs/leads/view.ts";
+    const root = fixtureRepo({ [source]: "export const view = 1;\n" });
+    const configured = replacementPolicy("{unknownPath}", [{ before: "view = 1", after: "view = 2" }]);
+    const config = configuration(scratchDirectory(), [configured]);
+
+    await expect(compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source }))
+      .rejects.toThrow("unknown placeholder {unknownPath}");
+  });
+
   test("treats already-applied declarative replacements as idempotent", async () => {
     const source = "apps/consumer/src/tabs/leads/view.ts";
     const contents = "export const view = 3;\n";
@@ -168,11 +202,11 @@ function policy(command: string) {
   };
 }
 
-function replacementPolicy(path: string, replacements: readonly { readonly before: string; readonly after: string }[]) {
+function replacementPolicy(path: string, replacements: readonly { readonly before: string; readonly after: string; readonly prefix?: string; readonly suffix?: string }[]) {
   return {
     id: "source-rewrite",
     phase: "pre-extraction" as const,
-    replacements: replacements.map((replacement) => ({ path, prefix: "export const ", ...replacement })),
+    replacements: replacements.map((replacement) => ({ path, ...(replacement.prefix === undefined && replacement.suffix === undefined ? { prefix: "export const " } : {}), ...replacement })),
     outputs: [path],
     commit: { subject: "refactor: apply source rewrite" },
   };

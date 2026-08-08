@@ -276,6 +276,10 @@ anchors is also idempotent at its terminal after-state when each preceding
 `after` exactly names the next `before`. Ambiguous before-states and unrelated,
 unanchored after text are refusals rather than guesses.
 
+The replacement `path` is template-rendered using the preparer's binding. The
+`before`, `after`, `prefix`, and `suffix` fields are literal source text and are
+never template-rendered, so braces in JSX and similar syntax remain exact.
+
 Every replacement `path` must also be named by `outputs`. Replacements and a
 `command` may coexist: replacements run first, the command second, and `verify`
 last. Planning still rejects every repository-visible changed path outside
@@ -283,7 +287,8 @@ last. Planning still rejects every repository-visible changed path outside
 reviewable preparer manifest.
 
 The preparer manifest is separate from the extraction manifest so its exact
-hashes, modes, rendered commands or replacements, and destination binding can be reviewed on
+hashes, modes, rendered commands, resolved replacement paths, literal
+replacement bodies, and destination binding can be reviewed on
 their own. Commit that manifest alone directly above the extraction baseline
 before application; no approval subject is prescribed. No output commit subject
 is inferred: commit the applied outputs yourself according to repository

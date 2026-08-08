@@ -464,8 +464,11 @@ Every replacement path must appear in `outputs`, and planning refuses any other
 repository-visible write. A preparer may configure `replacements`, `command`,
 or both. When both exist, replacements run first, the command runs second, and
 the optional `verify` command runs last in the disposable planning worktree.
-The manifest captures the rendered replacement policy and final output bytes;
-real-checkout application replays those reviewed bytes through the journal.
+Only the replacement `path` is template-rendered. The `before`, `after`,
+`prefix`, and `suffix` fields are literal source text, so ordinary syntax such
+as JSX braces is preserved exactly. The manifest captures that resolved path,
+literal replacement policy, and final output bytes; real-checkout application
+replays those reviewed bytes through the journal.
 
 ### Scaffold templates are workspace policy
 
