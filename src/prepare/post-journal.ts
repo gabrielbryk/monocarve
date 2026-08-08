@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 
 import type { MonocarveConfig } from "../config.ts";
+import { failedGateOutput } from "../transaction/gate-diagnostics.ts";
 import { fileState } from "../util/files.ts";
 import { scrubbedGitEnv } from "../util/git.ts";
 import { hashJson, MISSING } from "../util/hash.ts";
@@ -47,5 +48,5 @@ export function runPreparationPostJournalPreparers(config: MonocarveConfig, root
 
 function run(command: string, cwd: string, timeout: number): { status: number | null; output: string } {
   const result = spawnSync("bash", ["-lc", command], { cwd, env: scrubbedGitEnv(), encoding: "utf8", timeout, maxBuffer: 10 * 1024 * 1024 });
-  return { status: result.status, output: `${result.stdout ?? ""}${result.stderr ?? ""}`.slice(-4000) };
+  return { status: result.status, output: failedGateOutput({ stdout: result.stdout ?? "", stderr: result.stderr ?? "" }).trimEnd() };
 }

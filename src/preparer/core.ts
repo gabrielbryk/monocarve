@@ -7,6 +7,7 @@ import type { ExtractionManifest, MoveOperation } from "../plan/manifest.ts";
 import { executePreparationJournal, finalizeCompletedPreparationJournal, rollbackCompletedPreparationJournal } from "../prepare/journal.ts";
 import { createPackageManagerAdapter } from "../adapters/registry.ts";
 import { createWorktree } from "../transaction/worktree.ts";
+import { failedGateOutput } from "../transaction/gate-diagnostics.ts";
 import { fileState } from "../util/files.ts";
 import { currentBranch, git, headCommit, repositoryPrefix, resolveCommit, scrubbedGitEnv, showBaseline, statusEntries } from "../util/git.ts";
 import { isGuardedBranch } from "../config.ts";
@@ -402,5 +403,8 @@ function sameOptionalPolicy(left: unknown, right: unknown): boolean {
 
 function run(command: string, cwd: string, timeout: number, label: string): void {
   const result = Bun.spawnSync(["sh", "-c", command], { cwd, env: scrubbedGitEnv(), stdout: "pipe", stderr: "pipe", timeout });
-  if (result.exitCode !== 0) throw new PreparerError(`${label} command failed (exit ${result.exitCode ?? 1}): ${`${result.stdout}${result.stderr}`.trim().slice(-2000)}`);
+  if (result.exitCode !== 0) {
+    const output = failedGateOutput({ stdout: result.stdout.toString(), stderr: result.stderr.toString() }).trim();
+    throw new PreparerError(`${label} command failed (exit ${result.exitCode ?? 1})${output ? `:\n${output}` : ""}`);
+  }
 }

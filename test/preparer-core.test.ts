@@ -62,6 +62,28 @@ describe("configured pre-extraction preparers", () => {
     expect(existsSync(`${root}/verify-mutated.txt`)).toBe(false);
   });
 
+  test("a failed verify preserves an early diagnostic through bounded noisy output", async () => {
+    const source = "apps/consumer/src/tabs/leads/view.ts";
+    const root = fixtureRepo({ [source]: "export const view = 1;\n" });
+    const diagnostic = "complexity ratchet: packages/leads/src/view.ts score 47 exceeds 32";
+    const configured = {
+      ...replacementPolicy(source, [{ before: "view = 1", after: "view = 2" }]),
+      verify: `printf '${diagnostic}\\n'; yes 'unrelated gate noise' | head -n 900; printf 'gate summary failed\\n' >&2; exit 23`,
+    };
+    const config = configuration(scratchDirectory(), [configured]);
+    let message = "";
+    try {
+      await compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+
+    expect(message).toContain(diagnostic);
+    expect(message).toContain("gate summary failed");
+    expect(message).toContain("exit 23");
+    expect(message.length).toBeLessThanOrEqual(8_200);
+  });
+
   test("ignored scratch writes are discarded and never captured as outputs", async () => {
     const root = fixtureRepo({ ".gitignore": "*.scratch\n", "apps/consumer/src/tabs/leads/view.ts": "export const view = 1;\n" });
     const configured = policy("printf ok > {targetPath}.baseline.json && printf scratch > transient.scratch");
