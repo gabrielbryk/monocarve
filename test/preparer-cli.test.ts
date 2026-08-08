@@ -135,11 +135,21 @@ test("preparer-plan keeps noisy successful disposable installs out of JSON stdou
     outputs: ["apps/web/src/types.ts"],
     replacements: [{ path: "apps/web/src/types.ts", before: "export interface Point {", after: "export interface Coordinate {", suffix: "\n  x: number;" }],
     creates: [{ path: "libs/chart/src/contract.ts", contents: "export interface Contract {}\n" }],
-    verify: "echo NOISY_VERIFY_OUTPUT; test -s libs/chart/src/contract.ts",
+    verify: "bash scripts/noisy-verify.sh",
     commit: { subject: "refactor: prepare boundary" },
   }];
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
-  fixtureGit(root, "add", "--", "monocarve.config.json");
+  mkdirSync(join(root, "scripts"), { recursive: true });
+  const verifyScript = join(root, "scripts/noisy-verify.sh");
+  writeFileSync(verifyScript, [
+    "#!/usr/bin/env bash",
+    "set -euo pipefail",
+    "bash -c 'sleep 0.15; awk \"BEGIN { for (i = 0; i < 300000; i++) printf \\\"nested gate output %06d\\\\n\\\", i }\"'",
+    "test -s libs/chart/src/contract.ts",
+    "",
+  ].join("\n"));
+  chmodSync(verifyScript, 0o755);
+  fixtureGit(root, "add", "--", "monocarve.config.json", "scripts/noisy-verify.sh");
   fixtureGit(root, "commit", "-qm", "test: configure noisy install preparer");
 
   const bin = join(root, "test-bin");
@@ -148,6 +158,7 @@ test("preparer-plan keeps noisy successful disposable installs out of JSON stdou
   writeFileSync(fakePnpm, "#!/bin/sh\necho NOISY_INSTALL_OUTPUT\nexit 0\n");
   chmodSync(fakePnpm, 0o755);
   const output = ".monocarve/plans/noisy.preparer.json";
+  const started = Date.now();
   const child = Bun.spawn([
     "bun", CLI, "--cwd", root, "preparer-plan", "--preparer", "declarative-boundary",
     "--source", "apps/web/src/types.ts", "--out", output, "--write", "--json",
@@ -162,9 +173,10 @@ test("preparer-plan keeps noisy successful disposable installs out of JSON stdou
   ]);
 
   expect(code, `${stderr}\n${stdout}`).toBe(0);
+  expect(Date.now() - started).toBeGreaterThanOrEqual(100);
   expect(stderr).toBe("");
   expect(stdout).not.toContain("NOISY_INSTALL_OUTPUT");
-  expect(stdout).not.toContain("\nNOISY_VERIFY_OUTPUT\n");
+  expect(stdout).not.toContain("nested gate output");
   const report = JSON.parse(stdout) as { output: string; written: boolean };
   expect(report).toMatchObject({ output, written: true });
   expect(existsSync(join(root, output))).toBe(true);

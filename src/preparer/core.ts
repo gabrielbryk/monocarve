@@ -79,8 +79,8 @@ export async function compilePreparerManifest(input: CompilePreparerInput): Prom
     const before = Object.fromEntries(outputs.map((path) => [path, state(worktree.workspacePath, path)]));
     if (replacements !== undefined) applyTextReplacements(worktree.workspacePath, replacements);
     if (creates !== undefined) applyFileCreates(worktree.workspacePath, creates);
-    if (command !== undefined) run(command, worktree.workspacePath, input.config.gates.timeoutMs, "preparer");
-    if (verify !== undefined) run(verify, worktree.workspacePath, input.config.gates.timeoutMs, "preparer verify");
+    if (command !== undefined) await run(command, worktree.workspacePath, input.config.gates.timeoutMs, "preparer");
+    if (verify !== undefined) await run(verify, worktree.workspacePath, input.config.gates.timeoutMs, "preparer verify");
     const changed = unique(statusEntries(worktree.workspacePath).flatMap((entry) => entry.paths)).sort(byCodeUnit);
     const undeclared = changed.filter((path) => !outputs.includes(path));
     if (undeclared.length > 0) throw new PreparerError(`preparer wrote undeclared repository-visible path(s): ${undeclared.join(", ")}`);
@@ -152,18 +152,18 @@ export function assertApprovedPreparerManifest(rootDir: string, path: string, ma
 }
 
 /** Safely replay captured bytes; a failed verify restores every output. */
-export function applyPreparerManifest(options: {
+export async function applyPreparerManifest(options: {
   readonly rootDir: string;
   readonly config: MonocarveConfig;
   readonly manifest: PreparerManifest;
   readonly verify?: boolean;
-}): void {
+}): Promise<void> {
   assertPreparerManifest(options.config, options.manifest);
   const operations = options.manifest.mutations.map((item) => ({ kind: "write" as const, ...item }));
   const journal = executePreparationJournal({ rootDir: options.rootDir, operations });
   try {
     if (options.verify === true && options.manifest.preparer.verify !== undefined) {
-      run(options.manifest.preparer.verify, options.rootDir, options.config.gates.timeoutMs, "preparer verify");
+      await run(options.manifest.preparer.verify, options.rootDir, options.config.gates.timeoutMs, "preparer verify");
     }
     finalizeCompletedPreparationJournal(journal.recovery);
   } catch (error) {
@@ -177,7 +177,7 @@ export async function simulatePreparerManifest(options: { readonly rootDir: stri
   assertPreparerManifest(options.config, options.manifest);
   const adapter = createPackageManagerAdapter(options.config);
   const worktree = await createWorktree({ rootDir: options.rootDir, commit: options.manifest.baseline.commit, worktreeRoot: options.config.transaction.worktreeRoot, nodeModules: options.config.transaction.nodeModules, installCommand: adapter.installCommand(), label: options.manifest.planId });
-  try { applyPreparerManifest({ rootDir: worktree.workspacePath, config: options.config, manifest: options.manifest, verify: true }); }
+  try { await applyPreparerManifest({ rootDir: worktree.workspacePath, config: options.config, manifest: options.manifest, verify: true }); }
   finally { await worktree.dispose(); }
 }
 
@@ -401,10 +401,51 @@ function sameOptionalPolicy(left: unknown, right: unknown): boolean {
   return hashJson(left) === hashJson(right);
 }
 
-function run(command: string, cwd: string, timeout: number, label: string): void {
-  const result = Bun.spawnSync(["sh", "-c", command], { cwd, env: scrubbedGitEnv(), stdout: "pipe", stderr: "pipe", timeout });
-  if (result.exitCode !== 0) {
-    const output = failedGateOutput({ stdout: result.stdout.toString(), stderr: result.stderr.toString() }).trim();
-    throw new PreparerError(`${label} command failed (exit ${result.exitCode ?? 1})${output ? `:\n${output}` : ""}`);
+async function run(command: string, cwd: string, timeout: number, label: string): Promise<void> {
+  // Drain both streams while the process tree runs. Bun.spawnSync's buffered
+  // pipes can terminate the invoking CLI without returning to JavaScript when
+  // a nested repository gate produces sustained output. The async boundary is
+  // also explicit about stdin: repository verification is non-interactive and
+  // must never consume the operator CLI's input stream.
+  const child = Bun.spawn(["sh", "-c", command], {
+    cwd,
+    env: scrubbedGitEnv(),
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    child.kill();
+  }, timeout);
+  const [exitCode, stdout, stderr] = await Promise.all([
+    child.exited,
+    captureProcessStream(child.stdout),
+    captureProcessStream(child.stderr),
+  ]).finally(() => clearTimeout(timer));
+  if (exitCode !== 0 || timedOut) {
+    const output = failedGateOutput({ stdout, stderr }).trim();
+    const reason = timedOut ? `timed out after ${timeout}ms` : `failed (exit ${exitCode})`;
+    throw new PreparerError(`${label} command ${reason}${output ? `:\n${output}` : ""}`);
   }
+}
+
+/** Drain a child stream completely while retaining only bounded diagnostics. */
+async function captureProcessStream(stream: ReadableStream<Uint8Array>): Promise<string> {
+  const limit = 16_000;
+  const marker = "\n… process output omitted …\n";
+  const head = 4_000;
+  const tail = limit - head - marker.length;
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let output = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    output += decoder.decode(value, { stream: true });
+    if (output.length > limit) output = `${output.slice(0, head)}${marker}${output.slice(-tail)}`;
+  }
+  output += decoder.decode();
+  return output.length <= limit ? output : `${output.slice(0, head)}${marker}${output.slice(-tail)}`;
 }

@@ -28,7 +28,7 @@ describe("configured pre-extraction preparers", () => {
     expect(manifest.mutations[0]?.preconditionHash).toBe("missing");
     expect(existsSync(`${root}/packages/leads/src/tabs/leads/view.ts.baseline.json`)).toBe(false);
     await simulatePreparerManifest({ rootDir: root, config, manifest });
-    applyPreparerManifest({ rootDir: root, config, manifest });
+    await applyPreparerManifest({ rootDir: root, config, manifest });
     expect(readFileSync(`${root}/packages/leads/src/tabs/leads/view.ts.baseline.json`, "utf8")).toBe('{"limit":1}\n');
   });
 
@@ -111,7 +111,7 @@ describe("configured pre-extraction preparers", () => {
     expect(manifest.binding).toMatchObject({ application: "standalone", sourcePath: source, targetPath: source });
     expect(manifest.mutations.map((item) => item.path)).toEqual([source]);
     await simulatePreparerManifest({ rootDir: root, config, manifest });
-    applyPreparerManifest({ rootDir: root, config, manifest });
+    await applyPreparerManifest({ rootDir: root, config, manifest });
     expect(readFileSync(`${root}/${source}`, "utf8")).toBe("export const view = 2;\n");
   });
 
@@ -127,7 +127,7 @@ describe("configured pre-extraction preparers", () => {
     const manifest = await compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source });
 
     expect(manifest.mutations[0]?.contents).toBe("export const view = 3;\n");
-    applyPreparerManifest({ rootDir: root, config, manifest });
+    await applyPreparerManifest({ rootDir: root, config, manifest });
     expect(readFileSync(`${root}/${source}`, "utf8")).toBe("export const view = 3;\n");
   });
 
@@ -142,7 +142,7 @@ describe("configured pre-extraction preparers", () => {
     expect(manifest.preparer.creates).toEqual([{ path: "packages/leads/src/tabs/leads/view.ts.contract.ts", contents: "export const contract = 1;\n", mode: 0o755 }]);
     expect(manifest.mutations[0]).toMatchObject({ path: "packages/leads/src/tabs/leads/view.ts.contract.ts", preconditionHash: "missing", preconditionMode: "missing", resultMode: 0o755, contents: "export const contract = 1;\n" });
     await simulatePreparerManifest({ rootDir: root, config, manifest });
-    applyPreparerManifest({ rootDir: root, config, manifest });
+    await applyPreparerManifest({ rootDir: root, config, manifest });
     expect(readFileSync(`${root}/packages/leads/src/tabs/leads/view.ts.contract.ts`, "utf8")).toBe("export const contract = 1;\n");
     fixtureGit(root, "add", ".");
     fixtureGit(root, "commit", "-qm", "test: apply declarative create");
@@ -215,7 +215,7 @@ describe("configured pre-extraction preparers", () => {
 
     const manifest = await compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source });
     expect(manifest.mutations[0]?.contents).toBe(after);
-    applyPreparerManifest({ rootDir: root, config, manifest });
+    await applyPreparerManifest({ rootDir: root, config, manifest });
     expect(readFileSync(`${root}/${source}`, "utf8")).toBe(after);
 
     const appliedRoot = fixtureRepo({ [source]: after });
@@ -271,7 +271,7 @@ describe("configured pre-extraction preparers", () => {
     const manifest = await compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source });
 
     expect(manifest.mutations[0]).toMatchObject({ preconditionHash: hashText(contents), resultHash: hashText(contents), contents });
-    applyPreparerManifest({ rootDir: root, config, manifest });
+    await applyPreparerManifest({ rootDir: root, config, manifest });
     expect(readFileSync(`${root}/${source}`, "utf8")).toBe(contents);
   });
 

@@ -40,7 +40,7 @@ async function preparerApply(args: ParsedArgs): Promise<void> {
   await simulatePreparerManifest({ rootDir: loaded.rootDir, config: loaded.config, manifest });
   // Verification already passed in the disposable simulation. Never execute a
   // repository-owned command in the real checkout during journal replay.
-  applyPreparerManifest({ rootDir: loaded.rootDir, config: loaded.config, manifest, verify: false });
+  await applyPreparerManifest({ rootDir: loaded.rootDir, config: loaded.config, manifest, verify: false });
   print({ schema: "preparer-application", planId: manifest.planId, manifest: path, ok: true, committed: false, next: ["preparer-commit", "--plan", path] }, args);
 }
 
