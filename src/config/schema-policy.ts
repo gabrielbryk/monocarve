@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { protectedPath, regexSource, relativePath } from "./primitives.ts";
-export { generatedSourceAdoptions, graph, type GeneratedSourceAdoptionsConfig, type GraphConfig } from "./schema-extensions.ts";
+export { generatedSourceAdoptions, graph, runtimeModuleRegistries, type GeneratedSourceAdoptionsConfig, type GraphConfig, type RuntimeModuleRegistriesConfig } from "./schema-extensions.ts";
 
 const domain = z.strictObject({
   name: z.string().min(1),

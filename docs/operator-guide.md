@@ -419,6 +419,23 @@ A workspace often uses all three: path-reference warnings identify all found
 literals; rewrite-fs-reference handles code; path migrations handle structured
 artifacts; path-reference rewrites handle documentation and configuration.
 
+JSON registries that store module paths relative to a runtime resolver root
+need stronger semantics than an ordinary path token. Declare the exact registry,
+JSON-pointer pattern, and resolver root; `*` selects array or object entries:
+
+```ts
+runtimeModuleRegistries: [{
+  file: "apps/api/config/route-registry.json",
+  pointer: "/domains/*/module",
+  resolveFrom: "apps/api/src",
+}]
+```
+
+Only string values selected by that pointer are eligible. The plan records the
+resolved concrete JSON pointer, line, column, resolver root, donor, replacement,
+and before/after hashes. A selected value whose raw JSON occurrence is not
+byte-unique refuses planning instead of guessing which occurrence to edit.
+
 ## Normal extraction loop
 
 Start with a clean feature branch and inspect the candidate selection:

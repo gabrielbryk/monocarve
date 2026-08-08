@@ -42,6 +42,8 @@ export interface PathReferenceRewrite {
   readonly donor: string;
   readonly line: number;
   readonly column: number;
+  readonly jsonPointer?: string;
+  readonly resolutionBase?: string;
 }
 
 export interface PathReferenceRewriteSettings {

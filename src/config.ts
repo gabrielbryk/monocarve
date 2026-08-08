@@ -69,6 +69,7 @@ export type {
   ModulePromotionsConfig,
   ValueSplitsConfig,
   PathReferencesConfig,
+  RuntimeModuleRegistriesConfig,
   PortfolioConfig,
   TestKind,
   TestKindsConfig,

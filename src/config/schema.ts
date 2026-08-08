@@ -3,7 +3,7 @@ import { z } from "zod";
 import { SCRATCH_DIRNAME } from "../branding.ts";
 import { assetEmissionProofs, generatedArtifacts, pathMigrations, postJournalPreparers, transaction } from "./schema-artifacts.ts";
 import { application, commitTemplates, extractionProfiles, firstPartyPackage, gates, preparationPolicy, preparers, scaffoldTemplates } from "./schema-core.ts";
-import { compositionBoundaries, generatedSourceAdoptions, graph, integrationTestSuites, modulePromotions, pathReferences, pathReferenceRewrites, portfolio, portPromotions, testKinds, testRelocation, valueSplits } from "./schema-policy.ts";
+import { compositionBoundaries, generatedSourceAdoptions, graph, integrationTestSuites, modulePromotions, pathReferences, pathReferenceRewrites, portfolio, portPromotions, runtimeModuleRegistries, testKinds, testRelocation, valueSplits } from "./schema-policy.ts";
 import { regexSource, relativePath } from "./primitives.ts";
 import { validateExtractionProfiles } from "./profiles.ts";
 import { validateFirstPartyPackages, validateIntegrationTestSuites, validateTestKinds } from "./validation.ts";
@@ -108,6 +108,7 @@ export const monocarveConfigSchema = z.strictObject({
   graph: graph.prefault({}),
   pathReferences: pathReferences.prefault({}),
   pathReferenceRewrites: pathReferenceRewrites.prefault({}),
+  runtimeModuleRegistries,
   /**
    * Frontend vocabulary for boundary preparation: replace an app shim with a
    * real package, or split a retained module into a portable contract plus an

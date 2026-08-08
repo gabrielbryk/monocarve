@@ -62,7 +62,7 @@ const EFFECTIVE_KEYS = [
   "root", "packageRoots", "packageScope", "firstPartyRoots", "firstPartyPackages", "packageNamePattern",
   "packageManager", "taskRunner", "testPathPatterns", "moduleSpecifierCalls",
   "assetExtensions", "cssImportExtensions", "assetEmissionProofs", "postJournalPreparers",
-  "guardedBranches", "gates", "graph", "pathReferences", "transaction", "extractionProfiles", "planDir", "campaignDir",
+  "guardedBranches", "gates", "graph", "pathReferences", "pathReferenceRewrites", "runtimeModuleRegistries", "transaction", "extractionProfiles", "planDir", "campaignDir",
 ] as const;
 
 /** Build a deterministic, read-only account of the configuration and workspace it resolves. */

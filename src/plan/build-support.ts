@@ -9,10 +9,11 @@ import { resolveCommit, type ResolvedCommit } from "../util/git.ts";
 import { byCodeUnit, hashJson, hashText, type Sha256 } from "../util/hash.ts";
 import { renderTemplate } from "../util/template.ts";
 import { readUtf8Artifact, runPathMigrationCommand } from "../transaction/path-migrations.ts";
-import { documentKindFor, rewritePathReferenceText, scanPathReferenceRewrites } from "./path-reference-rewrites.ts";
+import { documentKindFor, rewritePathReferenceText, scanPathReferenceRewrites, type PathReferenceRewriteMatch } from "./path-reference-rewrites.ts";
 import { PlanningError, WorkspaceContext } from "./context.ts";
 import type { BuildPlanOptions } from "./build.ts";
 import type { EscapeRewrite, ExtractionManifest, GeneratedFileRecord, MigratePathKeysOperation, PathMove, PlanOperation, RewritePathReferenceOperation } from "./manifest.ts";
+import { scanRuntimeModuleRegistry } from "./runtime-module-registries.ts";
 
 export function baselineOf(options: BuildPlanOptions): ResolvedCommit {
   try { return resolveCommit(options.rootDir, options.baselineCommit); }
@@ -109,7 +110,7 @@ export function pathReferenceRewriteOperations(
   operations: readonly PlanOperation[],
 ): RewritePathReferenceOperation[] {
   const settings = config.pathReferenceRewrites;
-  if (!settings.enabled || settings.roots.length === 0) return [];
+  if ((!settings.enabled || settings.roots.length === 0) && config.runtimeModuleRegistries.length === 0) return [];
 
   const moves: PathMove[] = operations.filter((operation) => operation.kind === "move" || operation.kind === "move-with-rewrite")
     .map((operation) => ({ source: operation.source, target: operation.target }))
@@ -117,8 +118,8 @@ export function pathReferenceRewriteOperations(
   if (moves.length === 0) return [];
 
   const scanSettings = { onAmbiguousMatch: settings.onAmbiguousMatch, matchExtensionless: settings.matchExtensionless, minSegments: settings.minSegments };
-  const results: RewritePathReferenceOperation[] = [];
-  for (const scanRoot of settings.roots) {
+  const byFile = new Map<string, { readonly text: string; readonly rewrites: PathReferenceRewriteMatch[] }>();
+  for (const scanRoot of settings.enabled ? settings.roots : []) {
     for (const absolute of pathReferenceRewriteFiles(resolve(context.rootDir, scanRoot.root), scanRoot.extensions).sort()) {
       if ((statSync(absolute, { throwIfNoEntry: false })?.size ?? 0) > settings.maxBytes) continue;
       const file = context.relative(absolute);
@@ -127,19 +128,21 @@ export function pathReferenceRewriteOperations(
       const text = context.text(file);
       const scan = scanPathReferenceRewrites(text, file, moves, scanSettings);
       if (scan.rewrites.length === 0) continue;
-      const resultHash = hashText(rewritePathReferenceText(text, scan.rewrites));
-      if (resultHash === preconditionHash) throw new PlanningError(`path reference rewrite for ${file} did not change the document`);
-      results.push({
-        kind: "rewrite-path-reference",
-        file,
-        documentKind: documentKindFor(file),
-        rewrites: scan.rewrites.map((match) => ({ from: match.from, to: match.to, donor: match.donor, line: match.line, column: match.column })),
-        preconditionHash,
-        resultHash,
-      });
+      byFile.set(file, { text, rewrites: [...(byFile.get(file)?.rewrites ?? []), ...scan.rewrites] });
     }
   }
-  return results.sort((left, right) => byCodeUnit(left.file, right.file));
+  for (const registry of config.runtimeModuleRegistries) {
+    const text = context.text(registry.file);
+    const rewrites = scanRuntimeModuleRegistry(text, registry, moves);
+    if (rewrites.length > 0) byFile.set(registry.file, { text, rewrites: [...(byFile.get(registry.file)?.rewrites ?? []), ...rewrites] });
+  }
+  return [...byFile.entries()].map(([file, entry]) => {
+    const rewrites = [...entry.rewrites].sort((left, right) => left.line - right.line || left.column - right.column || byCodeUnit(left.donor, right.donor));
+    const preconditionHash = context.state(file);
+    const resultHash = hashText(rewritePathReferenceText(entry.text, rewrites));
+    if (resultHash === preconditionHash) throw new PlanningError(`path reference rewrite for ${file} did not change the document`);
+    return { kind: "rewrite-path-reference" as const, file, documentKind: documentKindFor(file), rewrites: rewrites.map(({ span: _span, ...rewrite }) => rewrite), preconditionHash, resultHash };
+  }).sort((left, right) => byCodeUnit(left.file, right.file));
 }
 
 export function graphDigest(graph: DependencyGraph): Sha256 {

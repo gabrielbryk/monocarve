@@ -2,6 +2,7 @@
 import { byCodeUnit, isFileState, isSha256 } from "../../util/hash.ts";
 import type { PlanOperation } from "../manifest.ts";
 import { documentKindFor, expectedPathReferenceTarget } from "../path-reference-rewrites.ts";
+import { expectedRuntimeModuleRegistryTarget } from "../runtime-module-registries.ts";
 import { Issues } from "./shared.ts";
 
 export function validatePathReferenceRewrite(
@@ -59,7 +60,12 @@ function validateRewrites(
       // against anything reconstructed from `to` itself — so a forged target
       // that would otherwise validate against its own say-so is rejected
       // here, before it ever reaches apply.
-      const expected = expectedPathReferenceTarget(rewrite.from, move.source, move.target);
+      const expected = rewrite.resolutionBase === undefined
+        ? expectedPathReferenceTarget(rewrite.from, move.source, move.target)
+        : expectedRuntimeModuleRegistryTarget(rewrite.resolutionBase, move.target);
+      if ((rewrite.jsonPointer === undefined) !== (rewrite.resolutionBase === undefined)) {
+        issues.add("path-reference-registry-identity", `structured registry rewrite must record both jsonPointer and resolutionBase: ${operation.file}`, at);
+      }
       if (expected === null || expected !== rewrite.to) {
         issues.add(
           "path-reference-target",

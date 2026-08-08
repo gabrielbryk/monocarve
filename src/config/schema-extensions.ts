@@ -28,6 +28,15 @@ export const generatedSourceAdoptions = z.array(z.strictObject({
 
 export type GeneratedSourceAdoptionsConfig = z.output<typeof generatedSourceAdoptions>;
 
+/** Exact JSON-pointer fields whose module paths resolve from a declared root. */
+export const runtimeModuleRegistries = z.array(z.strictObject({
+  file: relativePath,
+  pointer: z.string().regex(/^\/(?:[^/]+\/)*[^/]+$/, "must be an absolute JSON pointer pattern"),
+  resolveFrom: relativePath,
+})).default([]);
+
+export type RuntimeModuleRegistriesConfig = z.output<typeof runtimeModuleRegistries>;
+
 export const graph = z.strictObject({
   /** Resolve type-only imports so containment checks see type edges too. */
   tsPreCompilationDeps: z.boolean().default(true),

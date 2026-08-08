@@ -19,6 +19,7 @@ import { WorkspaceContext } from "../src/plan/context.ts";
 import { buildPortfolio } from "../src/portfolio/rank.ts";
 import { applyPlan } from "../src/transaction/apply.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
+import { simulatePlan } from "../src/transaction/simulate.ts";
 import { cleanupFixtures, fixtureGit, scratchDirectory, write } from "./support/fixture-repo.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -270,6 +271,50 @@ test("applies and audits a route-introspection-shaped consumer while retaining i
   expect(landed.match(/@acme\/chart\/widgets\/chart/g)).toHaveLength(2);
   expect(landed).toContain("await import(modulePath)");
   expect(auditPlanSync({ config, rootDir: root, manifest }).passed).toBe(true);
+}, 300_000);
+
+test("simulates a declared JSON runtime registry rewrite before external package compilation", async () => {
+  const root = workspace(undefined, true);
+  const configPath = join(root, "monocarve.config.json");
+  const raw = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
+  raw.runtimeModuleRegistries = [{
+    file: "apps/web/scripts/route-registry.json",
+    pointer: "/domains/*/module",
+    resolveFrom: "apps/web/src",
+  }];
+  writeFileSync(configPath, `${JSON.stringify(raw, null, 2)}\n`);
+  write(root, "apps/web/scripts/route-registry.json", `${JSON.stringify({
+    domains: [{ id: "chart", module: "./widgets/chart.ts", export: "renderChart" }],
+  }, null, 2)}\n`);
+  write(root, "apps/web/scripts/route-introspection.ts", [
+    'import registry from "./route-registry.json";',
+    'const SOURCE_ROOT = new URL("../src/", import.meta.url);',
+    'export const inspect = () => Promise.all(registry.domains.map((domain) => import(new URL(domain.module, SOURCE_ROOT).href)));',
+    "",
+  ].join("\n"));
+  fixtureGit(root, "add", "-A");
+  fixtureGit(root, "commit", "-qm", "test: add declared runtime module registry");
+
+  const { config } = await loadConfig({ cwd: root });
+  const graph = await scanDependencyGraph({ config, rootDir: root, noCache: true });
+  const candidate = buildPortfolio({ config, graph }).candidates.find((entry) => entry.eligible && entry.files.includes(CHART));
+  expect(candidate).toBeDefined();
+  const manifest = buildPlanSync({ config, rootDir: root, graph, candidate: candidate!, baselineCommit: graph.commit!, packageName: "@acme/chart" });
+  const registryRewrite = manifest.operations.find((operation) => operation.kind === "rewrite-path-reference" && operation.file === "apps/web/scripts/route-registry.json");
+  expect(registryRewrite?.kind).toBe("rewrite-path-reference");
+  if (registryRewrite?.kind !== "rewrite-path-reference") throw new Error("expected registry rewrite");
+  expect(registryRewrite.rewrites).toEqual([{
+    from: "./widgets/chart.ts",
+    to: "../../../libs/chart/src/widgets/chart.ts",
+    donor: "apps/web/src/widgets/chart.ts",
+    line: 5,
+    column: 18,
+    jsonPointer: "/domains/0/module",
+    resolutionBase: "apps/web/src",
+  }]);
+
+  const simulation = await simulatePlan({ config, rootDir: root, manifest });
+  expect(simulation.ok, JSON.stringify(simulation, null, 2)).toBe(true);
 }, 300_000);
 
 test("continues to reject a genuinely computed module reference inside moved production code", async () => {

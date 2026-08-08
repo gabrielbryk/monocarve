@@ -53,6 +53,10 @@ export interface PathReferenceRewrite {
   readonly line: number;
   /** 1-based column number in the document. */
   readonly column: number;
+  /** Structured-registry identity; absent for ordinary path-token rewrites. */
+  readonly jsonPointer?: string;
+  /** Workspace-relative root from which the registry value resolves. */
+  readonly resolutionBase?: string;
 }
 
 export interface RewritePathReferenceOperation {
