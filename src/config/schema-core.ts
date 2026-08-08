@@ -193,6 +193,12 @@ export const preparer = z.strictObject({
     path: z.string().min(1),
     before: z.string().min(1),
     after: z.string().min(1),
+    prefix: z.string().min(1).optional(),
+    suffix: z.string().min(1).optional(),
+  }).superRefine((replacement, ctx) => {
+    if (replacement.prefix === undefined && replacement.suffix === undefined) {
+      ctx.addIssue({ code: "custom", message: "text replacement must configure prefix or suffix context" });
+    }
   })).min(1).optional(),
   outputs: z.array(z.string().min(1)).min(1),
   verify: z.string().min(1).optional(),

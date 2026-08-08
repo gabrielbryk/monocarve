@@ -26,6 +26,8 @@ export interface PreparerManifest {
       readonly path: string;
       readonly before: string;
       readonly after: string;
+      readonly prefix?: string;
+      readonly suffix?: string;
     }[];
     readonly verify?: string;
     readonly commit: { readonly subject: string; readonly body?: string };

@@ -135,6 +135,26 @@ describe("configured pre-extraction preparers", () => {
     await expect(compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source }))
       .rejects.toThrow(`text replacement 1 matched neither before nor after text in ${source}`);
   });
+
+  test("refuses ambiguous before text instead of choosing an occurrence", async () => {
+    const source = "apps/consumer/src/tabs/leads/view.ts";
+    const root = fixtureRepo({ [source]: "export const view = 1;\nexport const view = 1;\n" });
+    const configured = replacementPolicy(source, [{ before: "view = 1", after: "view = 2" }]);
+    const config = configuration(scratchDirectory(), [configured]);
+
+    await expect(compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source }))
+      .rejects.toThrow(`text replacement 1 before text is ambiguous in ${source}`);
+  });
+
+  test("does not mistake an unrelated after value for the contextual target state", async () => {
+    const source = "apps/consumer/src/tabs/leads/view.ts";
+    const root = fixtureRepo({ [source]: "const unrelated = 'view = 2';\nexport const view = 9;\n" });
+    const configured = replacementPolicy(source, [{ before: "view = 1", after: "view = 2" }]);
+    const config = configuration(scratchDirectory(), [configured]);
+
+    await expect(compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source }))
+      .rejects.toThrow(`text replacement 1 matched neither before nor after text in ${source}`);
+  });
 });
 
 function policy(command: string) {
@@ -152,7 +172,7 @@ function replacementPolicy(path: string, replacements: readonly { readonly befor
   return {
     id: "source-rewrite",
     phase: "pre-extraction" as const,
-    replacements: replacements.map((replacement) => ({ path, ...replacement })),
+    replacements: replacements.map((replacement) => ({ path, prefix: "export const ", ...replacement })),
     outputs: [path],
     commit: { subject: "refactor: apply source rewrite" },
   };

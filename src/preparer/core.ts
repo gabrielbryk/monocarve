@@ -45,6 +45,8 @@ export async function compilePreparerManifest(input: CompilePreparerInput): Prom
     path: validatedPath(input.rootDir, renderTemplate(replacement.path, vars)),
     before: renderTemplate(replacement.before, vars),
     after: renderTemplate(replacement.after, vars),
+    ...(replacement.prefix === undefined ? {} : { prefix: renderTemplate(replacement.prefix, vars) }),
+    ...(replacement.suffix === undefined ? {} : { suffix: renderTemplate(replacement.suffix, vars) }),
   }));
   const undeclaredReplacement = replacements?.find((replacement) => !outputs.includes(replacement.path));
   if (undeclaredReplacement !== undefined) throw new PreparerError(`text replacement path is not a declared output: ${undeclaredReplacement.path}`);
@@ -171,7 +173,7 @@ export function assertPreparerManifest(config: MonocarveConfig, value: unknown):
   if (manifest.baseline === undefined || typeof manifest.baseline.commit !== "string" || typeof manifest.baseline.configDigest !== "string") throw new PreparerError("preparer manifest baseline is invalid");
   if (manifest.preparer === undefined || typeof manifest.preparer.id !== "string") throw new PreparerError("preparer manifest policy is invalid");
   if (manifest.preparer.command !== undefined && typeof manifest.preparer.command !== "string") throw new PreparerError("preparer manifest command is invalid");
-  if (manifest.preparer.replacements !== undefined && (!Array.isArray(manifest.preparer.replacements) || manifest.preparer.replacements.some((item) => item === null || typeof item !== "object" || typeof item.path !== "string" || typeof item.before !== "string" || typeof item.after !== "string"))) throw new PreparerError("preparer manifest replacements are invalid");
+  if (manifest.preparer.replacements !== undefined && (!Array.isArray(manifest.preparer.replacements) || manifest.preparer.replacements.some((item) => item === null || typeof item !== "object" || typeof item.path !== "string" || typeof item.before !== "string" || typeof item.after !== "string" || (item.prefix !== undefined && typeof item.prefix !== "string") || (item.suffix !== undefined && typeof item.suffix !== "string")))) throw new PreparerError("preparer manifest replacements are invalid");
   if (manifest.preparer.commit === undefined || typeof manifest.preparer.commit.subject !== "string") throw new PreparerError("preparer manifest commit policy is invalid");
   if (manifest.binding === undefined || Object.values(manifest.binding).some((item) => typeof item !== "string")) throw new PreparerError("preparer manifest move binding is invalid");
   if (!Array.isArray(manifest.mutations) || manifest.mutations.some((item) => item === null || typeof item !== "object" || typeof item.path !== "string" || typeof item.contents !== "string")) throw new PreparerError("preparer manifest mutations are invalid");
@@ -193,6 +195,8 @@ export function assertPreparerManifest(config: MonocarveConfig, value: unknown):
     path: renderTemplate(replacement.path, vars),
     before: renderTemplate(replacement.before, vars),
     after: renderTemplate(replacement.after, vars),
+    ...(replacement.prefix === undefined ? {} : { prefix: renderTemplate(replacement.prefix, vars) }),
+    ...(replacement.suffix === undefined ? {} : { suffix: renderTemplate(replacement.suffix, vars) }),
   }));
   const expectedVerify = policy.verify === undefined ? undefined : renderTemplate(policy.verify, vars);
   const expectedCommit = renderCommit(policy, vars);
@@ -285,29 +289,40 @@ function renderCommit(policy: PreparerConfig, vars: Readonly<Record<string, stri
 function validatedPath(root: string, path: string): string { workspacePath(root, path); return path.replaceAll("\\", "/"); }
 function unique(items: readonly string[]): string[] { return [...new Set(items)].sort(byCodeUnit); }
 
-function applyTextReplacements(root: string, replacements: readonly { readonly path: string; readonly before: string; readonly after: string }[]): void {
+type TextReplacement = { readonly path: string; readonly before: string; readonly after: string; readonly prefix?: string; readonly suffix?: string };
+
+function applyTextReplacements(root: string, replacements: readonly TextReplacement[]): void {
   for (const [index, replacement] of replacements.entries()) {
     const absolute = workspacePath(root, replacement.path);
     if (!existsSync(absolute) || !statSync(absolute).isFile()) throw new PreparerError(`text replacement ${index + 1} path is not a file: ${replacement.path}`);
     const contents = readFileSync(absolute, "utf8");
-    const first = contents.indexOf(replacement.before);
+    const beforeState = framed(replacement, replacement.before);
+    const afterState = framed(replacement, replacement.after);
+    const first = contents.indexOf(beforeState);
     if (first >= 0) {
-      if (contents.indexOf(replacement.before, first + replacement.before.length) >= 0) throw new PreparerError(`text replacement ${index + 1} before text is ambiguous in ${replacement.path}`);
-      writeFileSync(absolute, `${contents.slice(0, first)}${replacement.after}${contents.slice(first + replacement.before.length)}`);
+      if (contents.indexOf(beforeState, first + beforeState.length) >= 0) throw new PreparerError(`text replacement ${index + 1} before text is ambiguous in ${replacement.path}`);
+      writeFileSync(absolute, `${contents.slice(0, first)}${afterState}${contents.slice(first + beforeState.length)}`);
       continue;
     }
-    if (contents.includes(replacement.after) || contents.includes(terminalReplacementAfter(replacements, index))) continue;
+    const terminalState = terminalReplacementAfter(replacements, index);
+    if (uniqueOccurrence(contents, afterState) || uniqueOccurrence(contents, terminalState)) continue;
     throw new PreparerError(`text replacement ${index + 1} matched neither before nor after text in ${replacement.path}`);
   }
 }
 
-function terminalReplacementAfter(replacements: readonly { readonly path: string; readonly before: string; readonly after: string }[], index: number): string {
+function terminalReplacementAfter(replacements: readonly TextReplacement[], index: number): string {
   const current = replacements[index]!;
   let terminal = current.after;
   for (const candidate of replacements.slice(index + 1)) {
-    if (candidate.path === current.path && candidate.before === terminal) terminal = candidate.after;
+    if (candidate.path === current.path && candidate.prefix === current.prefix && candidate.suffix === current.suffix && candidate.before === terminal) terminal = candidate.after;
   }
-  return terminal;
+  return framed(current, terminal);
+}
+
+function framed(replacement: Pick<TextReplacement, "prefix" | "suffix">, text: string): string { return `${replacement.prefix ?? ""}${text}${replacement.suffix ?? ""}`; }
+function uniqueOccurrence(contents: string, state: string): boolean {
+  const first = contents.indexOf(state);
+  return first >= 0 && contents.indexOf(state, first + state.length) < 0;
 }
 
 function sameOptionalPolicy(left: unknown, right: unknown): boolean {
