@@ -109,6 +109,29 @@ describe("configured pre-extraction preparers", () => {
     expect(readFileSync(`${root}/${source}`, "utf8")).toBe("export const view = 3;\n");
   });
 
+  test("deletes anchored text and recognizes the deleted terminal state", async () => {
+    const source = "apps/consumer/src/tabs/leads/view.ts";
+    const before = "export const remove = 1;\nexport const keep = 2;\n";
+    const after = "export const keep = 2;\n";
+    const configured = replacementPolicy(source, [{
+      before: "export const remove = 1;\n",
+      after: "",
+      suffix: "export const keep = 2;\n",
+    }]);
+    const root = fixtureRepo({ [source]: before });
+    const config = configuration(scratchDirectory(), [configured]);
+
+    const manifest = await compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source });
+    expect(manifest.mutations[0]?.contents).toBe(after);
+    applyPreparerManifest({ rootDir: root, config, manifest });
+    expect(readFileSync(`${root}/${source}`, "utf8")).toBe(after);
+
+    const appliedRoot = fixtureRepo({ [source]: after });
+    const appliedConfig = configuration(scratchDirectory(), [configured]);
+    const idempotent = await compileStandalonePreparerManifest({ rootDir: appliedRoot, config: appliedConfig, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source });
+    expect(idempotent.mutations[0]?.contents).toBe(after);
+  });
+
   test("keeps replacement source text literal while rendering its path", async () => {
     const source = "apps/consumer/src/tabs/leads/view.ts";
     const root = fixtureRepo({ [source]: "const card = <Widget description={description} />;\n" });

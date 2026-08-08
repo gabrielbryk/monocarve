@@ -192,7 +192,7 @@ export const preparer = z.strictObject({
   replacements: z.array(z.strictObject({
     path: z.string().min(1),
     before: z.string().min(1),
-    after: z.string().min(1),
+    after: z.string(),
     prefix: z.string().min(1).optional(),
     suffix: z.string().min(1).optional(),
   }).superRefine((replacement, ctx) => {
