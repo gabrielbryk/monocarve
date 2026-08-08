@@ -59,11 +59,14 @@ export function recommendCandidate(
   };
 }
 
-function targetRecommendations(
+export function targetRecommendations(
   candidate: Omit<PortfolioCandidate, "score" | "recommendation" | "effort">,
   graph: DependencyGraph,
 ): TargetRecommendation[] {
-  const existing = candidate.dependencies.filter((name) => graph.workspace.packageNames.has(name)).map((packageName) => ({
+  const suggestedExists = graph.workspace.packageNames.has(candidate.suggestedPackageName);
+  const existing = candidate.dependencies
+    .filter((name) => name !== candidate.suggestedPackageName && graph.workspace.packageNames.has(name))
+    .map((packageName) => ({
     packageName,
     action: "extend" as const,
     confidence: "medium" as const,
@@ -72,10 +75,12 @@ function targetRecommendations(
   }));
   return [...existing, {
     packageName: candidate.suggestedPackageName,
-    action: "create" as const,
-    confidence: existing.length === 0 ? "medium" as const : "low" as const,
-    compatibility: "compatible" as const,
-    reasons: [`derived from ${dirname(candidate.files[0] ?? candidate.application)}`],
+    action: suggestedExists ? "extend" as const : "create" as const,
+    confidence: suggestedExists || existing.length > 0 ? "low" as const : "medium" as const,
+    compatibility: suggestedExists ? "requires-review" as const : "compatible" as const,
+    reasons: suggestedExists
+      ? ["suggested package already exists; extending it requires compatibility review"]
+      : [`derived from ${dirname(candidate.files[0] ?? candidate.application)}`],
   }].sort((left, right) => left.packageName.localeCompare(right.packageName));
 }
 

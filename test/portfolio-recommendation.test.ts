@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import ts from "typescript";
 
 import { groupEquivalentCandidates } from "../src/portfolio/groups.ts";
+import { targetRecommendations } from "../src/portfolio/recommendation.ts";
 import { describePureReexport } from "../src/portfolio/shims.ts";
+import type { DependencyGraph } from "../src/graph/model.ts";
 import type { PortfolioCandidate } from "../src/portfolio/types.ts";
 
 function candidate(id: string, files: readonly string[], score: number): PortfolioCandidate {
@@ -40,5 +42,20 @@ describe("architectural portfolio evidence", () => {
   test("renamed forwarding is not called a byte-obvious compatibility shim", () => {
     const source = ts.createSourceFile("shim.ts", 'export { PublicHelp as LocalHelp } from "@acme/page-help";', ts.ScriptTarget.Latest, true);
     expect(describePureReexport(source, ["@acme/page-help"])).toBeUndefined();
+  });
+
+  test("an existing suggested package requires extension review instead of being called a compatible creation", () => {
+    const graph = {
+      workspace: { packageNames: new Map([["@acme/existing", "libs/existing"]]) },
+    } as unknown as DependencyGraph;
+    const extraction = { ...candidate("existing", ["apps/web/src/existing.ts"], 10), dependencies: ["@acme/existing"] };
+
+    expect(targetRecommendations(extraction, graph)).toEqual([{
+      packageName: "@acme/existing",
+      action: "extend",
+      confidence: "low",
+      compatibility: "requires-review",
+      reasons: ["suggested package already exists; extending it requires compatibility review"],
+    }]);
   });
 });
