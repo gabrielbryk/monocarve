@@ -57,7 +57,12 @@ export function assertTypeOnlyPromotion(consumers: readonly PromotionConsumerSou
  * unchecked, because a pure proof must not depend on what happens to exist
  * on disk at compile time.
  */
-export function assertNoRetainedValueImport(rewrittenText: string, importerPath: string, retainedRoots: readonly string[]): void {
+export function assertNoRetainedValueImport(
+  rewrittenText: string,
+  importerPath: string,
+  retainedRoots: readonly string[],
+  allowedRetainedBindings: readonly string[] = [],
+): void {
   const file = ts.createSourceFile(importerPath, rewrittenText, ts.ScriptTarget.Latest, true, scriptKind(importerPath));
   for (const statement of file.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || statement.importClause?.isTypeOnly) continue;
@@ -65,8 +70,23 @@ export function assertNoRetainedValueImport(rewrittenText: string, importerPath:
     if (!retainedRoots.some((root) => underRetainedRoot(importerPath, specifier, root))) continue;
     const namedBindings = statement.importClause?.namedBindings;
     const namedTypeOnly = namedBindings !== undefined && ts.isNamedImports(namedBindings) && namedBindings.elements.every((element) => element.isTypeOnly);
-    if (!namedTypeOnly) throw new BoundaryProofError(`${importerPath} still imports a value binding from retained root ${specifier} after promotion`);
+    if (namedTypeOnly) continue;
+    const actual = importLocalBindings(statement);
+    const allowed = new Set(allowedRetainedBindings);
+    if (actual.length === 0 || actual.some((name) => !allowed.has(name))) {
+      throw new BoundaryProofError(`${importerPath} still imports a value binding from retained root ${specifier} after promotion`);
+    }
   }
+}
+
+function importLocalBindings(statement: ts.ImportDeclaration): string[] {
+  const clause = statement.importClause;
+  if (!clause) return [];
+  const result = clause.name ? [clause.name.text] : [];
+  const bindings = clause.namedBindings;
+  if (bindings && ts.isNamespaceImport(bindings)) result.push(bindings.name.text);
+  if (bindings && ts.isNamedImports(bindings)) result.push(...bindings.elements.filter((element) => !element.isTypeOnly).map((element) => element.name.text));
+  return result;
 }
 
 function underRetainedRoot(importerPath: string, specifier: string, root: string): boolean {

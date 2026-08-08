@@ -120,11 +120,11 @@ interface PortFixture {
   readonly input: CompileBoundaryPreparationManifestInput;
 }
 
-function portFixture(): PortFixture {
+function portFixture(overrides: { readonly retainedSource?: string; readonly consumerSource?: string } = {}): PortFixture {
   const root = fixtureRepo({
     "apps/api/tsconfig.json": TSCONFIG,
-    [PORT_RETAINED]: PORT_RETAINED_SOURCE,
-    [PORT_CONSUMER]: PORT_CONSUMER_SOURCE,
+    [PORT_RETAINED]: overrides.retainedSource ?? PORT_RETAINED_SOURCE,
+    [PORT_CONSUMER]: overrides.consumerSource ?? PORT_CONSUMER_SOURCE,
   });
   const config = fixtureConfig(root, {
     compositionBoundaries: [{
@@ -368,6 +368,38 @@ describe("compileBoundaryPreparationManifest — existing-package strategy", () 
 });
 
 describe("compileBoundaryPreparationManifest — port strategy", () => {
+  test("ignores a graph importer that binds only retained donor symbols", () => {
+    const retainedSource = "export interface Widget { amount: number }\nexport const makeWidget = (): Widget => ({ amount: 0 });\n";
+    const consumerSource = 'import { makeWidget } from "../widget.ts";\nexport const value = makeWidget();\n';
+    const manifest = compileBoundaryPreparationManifest(portFixture({ retainedSource, consumerSource }).input);
+
+    expect(() => assertPreparationManifestValid(manifest)).not.toThrow();
+    expect(manifest.operations.some((operation) => operation.kind === "rewrite-module-specifier")).toBe(false);
+    expect(manifest.changedFiles).not.toContain(PORT_CONSUMER);
+  });
+
+  test("compiles a valid selective split for a mixed retained/promoted importer", () => {
+    const retainedSource = "export interface Widget { amount: number }\nexport const makeWidget = (): Widget => ({ amount: 0 });\n";
+    const consumerSource = 'import { type Widget as Input, makeWidget } from "../widget.ts";\nexport const value: Input = makeWidget();\n';
+    const manifest = compileBoundaryPreparationManifest(portFixture({ retainedSource, consumerSource }).input);
+    const rewrite = manifest.operations.find((operation) => operation.kind === "rewrite-module-specifier");
+
+    expect(() => assertPreparationManifestValid(manifest)).not.toThrow();
+    expect(rewrite?.kind).toBe("rewrite-module-specifier");
+    if (rewrite?.kind !== "rewrite-module-specifier") throw new Error("expected mixed consumer rewrite");
+    expect(rewrite.rewrites).toEqual([{
+      from: "../widget.ts", to: "@acme/ports/widget", symbols: ["Widget"], retainedSymbols: ["makeWidget"],
+    }]);
+
+    const operations = manifest.operations.map((operation) => operation === rewrite ? {
+      ...operation,
+      rewrites: operation.rewrites.map(({ retainedSymbols: _omitted, ...entry }) => entry),
+    } : operation);
+    const { planId: _planId, ...draft } = manifest;
+    const tampered = createPreparationManifest({ ...draft, operations });
+    expect(() => assertPreparationManifestValid(tampered)).toThrow(/still reference the retired specifier|retain undeclared symbols/);
+  });
+
   test("compiles a complete, VALID PreparationManifest end to end, emitting contract and adapter write-file operations", () => {
     const { input } = portFixture();
 

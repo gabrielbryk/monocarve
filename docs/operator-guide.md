@@ -182,7 +182,12 @@ one donor file. Monocarve computes the local declaration dependency closure
 and accepts the group only when the configured declarations equal that closure
 exactly. Value-space dependencies and omitted type dependencies are refusals.
 Contract declarations are emitted in donor source order, and each importer is
-rewritten with only the promoted bindings it actually imports.
+rewritten with only the promoted bindings it actually imports. An importer
+that binds only declarations remaining in the donor is left untouched. A
+mixed named import is split deterministically: promoted bindings move to the
+contract specifier while non-promoted bindings keep importing the donor. The
+manifest records both sides of that split, so validation refuses an omitted or
+invented retained binding.
 
 ### Module promotion (architectural boundary cuts)
 

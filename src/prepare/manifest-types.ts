@@ -167,6 +167,8 @@ export interface RewriteModuleSpecifierOperation {
     readonly from: string;
     readonly to: string;
     readonly symbols: readonly string[];
+    /** Imported names deliberately left on `from` by a symbol-selective split. */
+    readonly retainedSymbols?: readonly string[];
     /** Configured module-specifier call (for example `vi.mock`) instead of an import binding. */
     readonly moduleSpecifierCall?: string;
   }[];

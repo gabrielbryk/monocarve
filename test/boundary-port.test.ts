@@ -170,4 +170,43 @@ describe("planPortBoundary", () => {
       retainedSourceText,
     }))).toThrow(/value dependency|unsafe/);
   });
+
+  test("leaves an importer of only retained declarations untouched", () => {
+    const retainedSourceText = "export interface Widget { amount: number }\nexport const makeWidget = (): Widget => ({ amount: 0 });\n";
+    const retainedConsumer = 'import { makeWidget } from "../widget.ts";\nexport const value = makeWidget();\n';
+    const result = planPortBoundary(baseInput(repo(), {
+      retainedSourceText,
+      consumers: [consumer({ text: retainedConsumer, preconditionHash: hashText(retainedConsumer) })],
+      boundary: boundary({ appAdapter: undefined, template: undefined }),
+    }));
+
+    expect(result.rewrites).toEqual([]);
+    expect(result.contract.contents).toBe("export interface Widget { amount: number }\n");
+  });
+
+  test("splits a mixed importer, retaining value bindings on the donor and moving only promoted type bindings", () => {
+    const retainedSourceText = "export interface Widget { amount: number }\nexport const makeWidget = (): Widget => ({ amount: 0 });\n";
+    const mixedConsumer = 'import { type Widget as Input, makeWidget } from "../widget.ts";\nexport const value: Input = makeWidget();\n';
+    const result = planPortBoundary(baseInput(repo(), {
+      retainedSourceText,
+      consumers: [consumer({ text: mixedConsumer, preconditionHash: hashText(mixedConsumer) })],
+      boundary: boundary({ appAdapter: undefined, template: undefined }),
+    }));
+
+    expect(result.rewrites[0]?.contents).toContain('import { makeWidget } from "../widget.ts";');
+    expect(result.rewrites[0]?.contents).toContain('import { type Widget as Input } from "@acme/ports/widget";');
+    expect(result.rewrites[0]?.rewrites).toEqual([{
+      from: "../widget.ts", to: "@acme/ports/widget", symbols: ["Widget"], retainedSymbols: ["makeWidget"],
+    }]);
+  });
+
+  test("a mixed importer still refuses a promoted binding used in value space", () => {
+    const retainedSourceText = "export interface Widget { amount: number }\nexport const makeWidget = (): Widget => ({ amount: 0 });\n";
+    const unsafeConsumer = 'import { Widget, makeWidget } from "../widget.ts";\nexport const value = [Widget, makeWidget()];\n';
+    expect(() => planPortBoundary(baseInput(repo(), {
+      retainedSourceText,
+      consumers: [consumer({ text: unsafeConsumer, preconditionHash: hashText(unsafeConsumer) })],
+      boundary: boundary({ appAdapter: undefined, template: undefined }),
+    }))).toThrow(/uses Widget in value space/);
+  });
 });

@@ -107,7 +107,15 @@ function validateRewriteEntry(
     return;
   }
   for (const symbol of rewrite.symbols) if (!bound.has(symbol)) add("rewrite-symbols", `rewritten contents do not bind ${symbol} from ${rewrite.to}`, path);
-  if (bindings.has(rewrite.from)) add("rewrite-specifier", `rewritten contents still reference the retired specifier ${rewrite.from}`, path);
+  const retainedSymbols = rewrite.retainedSymbols ?? [];
+  validateSortedStrings(retainedSymbols, "rewrite-symbols", "retained rewrite symbols", add);
+  const retained = bindings.get(rewrite.from);
+  if (retainedSymbols.length === 0 && retained) add("rewrite-specifier", `rewritten contents still reference the retired specifier ${rewrite.from}`, path);
+  if (retainedSymbols.length > 0 && !retained) add("rewrite-specifier", `rewritten contents do not retain the original specifier ${rewrite.from}`, path);
+  for (const symbol of retainedSymbols) if (!retained?.has(symbol)) add("rewrite-symbols", `rewritten contents do not retain ${symbol} from ${rewrite.from}`, path);
+  if (retained && [...retained].some((symbol) => !retainedSymbols.includes(symbol))) {
+    add("rewrite-symbols", `rewritten contents retain undeclared symbols from ${rewrite.from}`, path);
+  }
 }
 
 function collectModuleSpecifierCalls(path: string, text: string): ReadonlyMap<string, ReadonlySet<string>> {

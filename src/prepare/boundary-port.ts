@@ -93,11 +93,13 @@ export function planPortBoundary(input: PlanPortBoundaryInput): PlanPortBoundary
   }
   const contract = writeOperation(input.contractTargetPath, renderContractModule(selection.declarations, input.retainedSourceText, selection.imports), "port-contract");
 
-  assertTypeOnlyPromotion(input.consumers.flatMap((consumer) => importedPromotedSymbols(consumer, boundary.symbols)
+  const selectedConsumers = input.consumers.map((consumer) => ({ consumer, bindings: portImportBindings(consumer, boundary.symbols) }))
+    .filter((item) => item.bindings.promoted.length > 0);
+  assertTypeOnlyPromotion(selectedConsumers.flatMap(({ consumer, bindings }) => bindings.promotedLocals
     .map((localName) => ({ path: consumer.path, text: consumer.text, localName }))));
-  const rewrites = [...input.consumers]
-    .sort((left, right) => byCodeUnit(left.path, right.path))
-    .map((consumer) => planConsumerRewrite(input, consumer));
+  const rewrites = selectedConsumers
+    .sort((left, right) => byCodeUnit(left.consumer.path, right.consumer.path))
+    .map(({ consumer, bindings }) => planConsumerRewrite(input, consumer, bindings));
   return boundary.appAdapter === undefined ? { contract, rewrites } : { contract, adapter: buildAdapter(input, boundary), rewrites };
 }
 
@@ -134,23 +136,17 @@ function buildAdapter(input: PlanPortBoundaryInput, boundary: ResolvedPortBounda
   return writeOperation(appAdapter, contents, "app-adapter");
 }
 
-function planConsumerRewrite(input: PlanPortBoundaryInput, consumer: PortConsumerInput): RewriteModuleSpecifierOperation {
+function planConsumerRewrite(input: PlanPortBoundaryInput, consumer: PortConsumerInput, bindings: PortImportBindings): RewriteModuleSpecifierOperation {
   const { boundary, rootDir } = input;
   const donorPath = resolve(rootDir, boundary.retained);
-  const contents = rewriteResolvedImportSpecifier(
-    consumer.text,
-    resolve(rootDir, consumer.path),
-    donorPath,
-    boundary.packageImport,
-    rootDir,
-    input.moduleSpecifierCalls ?? [],
-    input.resolutionExtensions ?? [],
-    input.cssImportExtensions ?? [],
-  );
+  const contents = bindings.retained.length === 0 ? rewriteResolvedImportSpecifier(
+    consumer.text, resolve(rootDir, consumer.path), donorPath, boundary.packageImport, rootDir,
+    input.moduleSpecifierCalls ?? [], input.resolutionExtensions ?? [], input.cssImportExtensions ?? [],
+  ) : splitPortImport(consumer, boundary.packageImport, bindings);
   if (contents === consumer.text) {
     throw new BoundaryPortError(`${consumer.path} does not resolve to the retained module ${boundary.retained}; refusing a specifier rewrite with no effect`);
   }
-  assertNoRetainedValueImport(contents, consumer.path, boundary.retainedRoots);
+  assertNoRetainedValueImport(contents, consumer.path, boundary.retainedRoots, bindings.retainedLocals);
   const file: PreparationFileMutation = {
     path: consumer.path,
     preconditionHash: consumer.preconditionHash,
@@ -161,27 +157,80 @@ function planConsumerRewrite(input: PlanPortBoundaryInput, consumer: PortConsume
   return {
     kind: "rewrite-module-specifier",
     file,
-    rewrites: [{ from: consumer.specifier, to: boundary.packageImport, symbols: importedPromotedSymbols(consumer, boundary.symbols) }],
+    rewrites: [{
+      from: consumer.specifier,
+      to: boundary.packageImport,
+      symbols: bindings.promoted,
+      ...(bindings.retained.length === 0 ? {} : { retainedSymbols: bindings.retained }),
+    }],
     contents,
   };
 }
 
-function importedPromotedSymbols(consumer: PortConsumerInput, promoted: readonly string[]): string[] {
+interface PortImportBindings {
+  readonly promoted: readonly string[];
+  readonly promotedLocals: readonly string[];
+  readonly retained: readonly string[];
+  readonly retainedLocals: readonly string[];
+  readonly statement?: ts.ImportDeclaration;
+  readonly promotedElements?: readonly ts.ImportSpecifier[];
+  readonly retainedElements?: readonly ts.ImportSpecifier[];
+}
+
+function portImportBindings(consumer: PortConsumerInput, promoted: readonly string[]): PortImportBindings {
   const source = ts.createSourceFile(consumer.path, consumer.text, ts.ScriptTarget.Latest, true, consumer.path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const allowed = new Set(promoted);
-  const result = new Set<string>();
+  const moved = new Set<string>();
+  const movedLocals = new Set<string>();
+  const retained = new Set<string>();
+  const retainedLocals = new Set<string>();
   for (const statement of source.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || statement.moduleSpecifier.text !== consumer.specifier) continue;
     const bindings = statement.importClause?.namedBindings;
     if (!bindings || !ts.isNamedImports(bindings)) continue;
+    const promotedElements: ts.ImportSpecifier[] = [];
+    const retainedElements: ts.ImportSpecifier[] = [];
     for (const element of bindings.elements) {
       const imported = element.propertyName?.text ?? element.name.text;
-      if (allowed.has(imported)) result.add(element.name.text);
+      if (allowed.has(imported)) {
+        moved.add(imported);
+        movedLocals.add(element.name.text);
+        promotedElements.push(element);
+      } else {
+        retained.add(imported);
+        retainedLocals.add(element.name.text);
+        retainedElements.push(element);
+      }
     }
+    if (statement.importClause?.name) {
+      retained.add("default");
+      retainedLocals.add(statement.importClause.name.text);
+    }
+    if (promotedElements.length > 0) return {
+      promoted: [...moved].sort(byCodeUnit), promotedLocals: [...movedLocals].sort(byCodeUnit),
+      retained: [...retained].sort(byCodeUnit), retainedLocals: [...retainedLocals].sort(byCodeUnit),
+      statement, promotedElements, retainedElements,
+    };
   }
-  const symbols = [...result].sort(byCodeUnit);
-  if (symbols.length === 0) throw new BoundaryPortError(`${consumer.path} imports none of the promoted declarations from ${consumer.specifier}`);
-  return symbols;
+  return { promoted: [], promotedLocals: [], retained: [], retainedLocals: [] };
+}
+
+function splitPortImport(consumer: PortConsumerInput, packageImport: string, bindings: PortImportBindings): string {
+  const statement = bindings.statement;
+  const clause = statement?.importClause;
+  if (!statement || !clause || !statement.moduleSpecifier || bindings.promotedElements === undefined || bindings.retainedElements === undefined) {
+    throw new BoundaryPortError(`${consumer.path} cannot safely split its mixed import from ${consumer.specifier}`);
+  }
+  const factory = ts.factory;
+  const retainedNamed = bindings.retainedElements.length > 0 ? factory.createNamedImports(bindings.retainedElements) : undefined;
+  const retainedClause = factory.updateImportClause(clause, clause.isTypeOnly, clause.name, retainedNamed);
+  const promotedClause = factory.updateImportClause(clause, clause.isTypeOnly, undefined, factory.createNamedImports(bindings.promotedElements));
+  const retainedImport = factory.updateImportDeclaration(statement, statement.modifiers, retainedClause, statement.moduleSpecifier, statement.attributes);
+  const promotedImport = factory.updateImportDeclaration(statement, statement.modifiers, promotedClause, factory.createStringLiteral(packageImport), statement.attributes);
+  const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
+  const source = statement.getSourceFile();
+  const replacement = `${printer.printNode(ts.EmitHint.Unspecified, retainedImport, source)}\n${printer.printNode(ts.EmitHint.Unspecified, promotedImport, source)}`;
+  return `${consumer.text.slice(0, statement.getStart(source))}${replacement}${consumer.text.slice(statement.end)}`;
 }
 
 function writeOperation(path: string, contents: string, purpose: "port-contract" | "app-adapter"): PreparationWriteFileOperation {
