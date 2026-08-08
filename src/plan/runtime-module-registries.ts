@@ -9,6 +9,7 @@ export interface RuntimeModuleRegistryDeclaration {
   readonly file: string;
   readonly pointer: string;
   readonly resolveFrom: string;
+  readonly stripPrefix?: string;
 }
 
 interface PointerValue { readonly pointer: string; readonly value: string }
@@ -44,9 +45,11 @@ function normalized(path: string): string {
   return posix.normalize(path).replace(/^\.\//, "");
 }
 
-function registryTarget(resolveFrom: string, target: string): string {
+function registryTarget(resolveFrom: string, target: string, prefix = ""): string {
   const relative = posix.relative(resolveFrom, target);
-  return relative.startsWith(".") ? relative : `./${relative}`;
+  if (prefix !== "") return `${prefix}${relative}`;
+  const path = relative.startsWith(".") ? relative : `./${relative}`;
+  return path;
 }
 
 /**
@@ -71,7 +74,13 @@ export function scanRuntimeModuleRegistry(
     if (first < 0 || text.indexOf(encoded, first + encoded.length) >= 0) {
       throw new PlanningError(`runtime module registry value is not byte-unique at ${declaration.file}${entry.pointer}`);
     }
-    const donorPath = normalized(posix.join(declaration.resolveFrom, entry.value));
+    const stripped = declaration.stripPrefix === undefined
+      ? entry.value
+      : entry.value.startsWith(declaration.stripPrefix)
+        ? entry.value.slice(declaration.stripPrefix.length)
+        : null;
+    if (stripped === null) throw new PlanningError(`runtime module registry value lacks configured prefix at ${declaration.file}${entry.pointer}`);
+    const donorPath = normalized(posix.join(declaration.resolveFrom, stripped));
     const matching = moves.filter((move) => normalized(move.source) === donorPath);
     if (matching.length === 0) continue;
     if (matching.length !== 1) throw new PlanningError(`runtime module registry value matches multiple moves at ${declaration.file}${entry.pointer}`);
@@ -80,18 +89,19 @@ export function scanRuntimeModuleRegistry(
     const position = positionAt(text, start);
     results.push({
       from: entry.value,
-      to: registryTarget(declaration.resolveFrom, move.target),
+      to: registryTarget(declaration.resolveFrom, move.target, declaration.stripPrefix),
       donor: move.source,
       line: position.line,
       column: position.column,
       jsonPointer: entry.pointer,
       resolutionBase: declaration.resolveFrom,
+      ...(declaration.stripPrefix === undefined ? {} : { strippedPrefix: declaration.stripPrefix }),
       span: { start, end: first + encoded.length - 1 },
     });
   }
   return results.sort((left, right) => left.line - right.line || left.column - right.column);
 }
 
-export function expectedRuntimeModuleRegistryTarget(resolutionBase: string, moveTarget: string): string {
-  return registryTarget(resolutionBase, moveTarget);
+export function expectedRuntimeModuleRegistryTarget(resolutionBase: string, moveTarget: string, strippedPrefix?: string): string {
+  return registryTarget(resolutionBase, moveTarget, strippedPrefix);
 }

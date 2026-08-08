@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { loadConfig } from "../src/config.ts";
 import { scanDependencyGraph } from "../src/graph/cruiser.ts";
 import { buildPlanSync, serializeManifest } from "../src/plan/build.ts";
+import { validatePlan } from "../src/plan/validate.ts";
 import { findConsumers } from "../src/plan/consumers.ts";
 import { WorkspaceContext } from "../src/plan/context.ts";
 import { buildPortfolio } from "../src/portfolio/rank.ts";
@@ -281,15 +282,17 @@ test("simulates a declared JSON runtime registry rewrite before external package
     file: "apps/web/scripts/route-registry.json",
     pointer: "/domains/*/module",
     resolveFrom: "apps/web/src",
+    stripPrefix: "./",
   }];
   writeFileSync(configPath, `${JSON.stringify(raw, null, 2)}\n`);
   write(root, "apps/web/scripts/route-registry.json", `${JSON.stringify({
     domains: [{ id: "chart", module: "./widgets/chart.ts", export: "renderChart" }],
   }, null, 2)}\n`);
   write(root, "apps/web/scripts/route-introspection.ts", [
+    'import { join, resolve } from "node:path";',
     'import registry from "./route-registry.json";',
-    'const SOURCE_ROOT = new URL("../src/", import.meta.url);',
-    'export const inspect = () => Promise.all(registry.domains.map((domain) => import(new URL(domain.module, SOURCE_ROOT).href)));',
+    'const SOURCE_ROOT = resolve(import.meta.dir, "../src");',
+    'export const inspect = () => Promise.all(registry.domains.map((domain) => import(join(SOURCE_ROOT, domain.module.slice(2)))));',
     "",
   ].join("\n"));
   fixtureGit(root, "add", "-A");
@@ -305,13 +308,22 @@ test("simulates a declared JSON runtime registry rewrite before external package
   if (registryRewrite?.kind !== "rewrite-path-reference") throw new Error("expected registry rewrite");
   expect(registryRewrite.rewrites).toEqual([{
     from: "./widgets/chart.ts",
-    to: "../../../libs/chart/src/widgets/chart.ts",
+    to: "./../../../libs/chart/src/widgets/chart.ts",
     donor: "apps/web/src/widgets/chart.ts",
     line: 5,
     column: 18,
     jsonPointer: "/domains/0/module",
     resolutionBase: "apps/web/src",
+    strippedPrefix: "./",
   }]);
+
+  const tampered = {
+    ...manifest,
+    operations: manifest.operations.map((operation) => operation === registryRewrite
+      ? { ...operation, rewrites: operation.rewrites.map(({ strippedPrefix: _removed, ...rewrite }) => rewrite) }
+      : operation),
+  };
+  expect(validatePlan(tampered, { config, rootDir: root }).issues.map((issue) => issue.rule)).toContain("path-reference-target");
 
   const simulation = await simulatePlan({ config, rootDir: root, manifest });
   expect(simulation.ok, JSON.stringify(simulation, null, 2)).toBe(true);

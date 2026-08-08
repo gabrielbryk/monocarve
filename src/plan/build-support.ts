@@ -133,7 +133,12 @@ export function pathReferenceRewriteOperations(
   }
   for (const registry of config.runtimeModuleRegistries) {
     const text = context.text(registry.file);
-    const rewrites = scanRuntimeModuleRegistry(text, registry, moves);
+    const rewrites = scanRuntimeModuleRegistry(text, {
+      file: registry.file,
+      pointer: registry.pointer,
+      resolveFrom: registry.resolveFrom,
+      ...(registry.stripPrefix === undefined ? {} : { stripPrefix: registry.stripPrefix }),
+    }, moves);
     if (rewrites.length > 0) byFile.set(registry.file, { text, rewrites: [...(byFile.get(registry.file)?.rewrites ?? []), ...rewrites] });
   }
   return [...byFile.entries()].map(([file, entry]) => {

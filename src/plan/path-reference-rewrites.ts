@@ -44,6 +44,7 @@ export interface PathReferenceRewrite {
   readonly column: number;
   readonly jsonPointer?: string;
   readonly resolutionBase?: string;
+  readonly strippedPrefix?: string;
 }
 
 export interface PathReferenceRewriteSettings {

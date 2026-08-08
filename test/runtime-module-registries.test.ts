@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { posix } from "node:path";
 
 import { rewritePathReferenceText } from "../src/plan/path-reference-rewrites.ts";
 import { scanRuntimeModuleRegistry } from "../src/plan/runtime-module-registries.ts";
@@ -44,4 +45,16 @@ test("refuses a selected registry value without a byte-unique location", () => {
     source: "apps/api/src/sales/routes.ts",
     target: "libs/sales-runtime/src/routes.ts",
   }])).toThrow("runtime module registry value is not byte-unique");
+});
+
+test("preserves an exact prefix stripped by the modeled runtime before resolution", () => {
+  const text = '{"domains":[{"module":"./sales/routes.ts"}]}\n';
+  const rewrites = scanRuntimeModuleRegistry(text, { ...declaration, stripPrefix: "./" }, [{
+    source: "apps/api/src/sales/routes.ts",
+    target: "libs/sales-runtime/src/routes.ts",
+  }]);
+  expect(rewrites[0]?.to).toBe("./../../../libs/sales-runtime/src/routes.ts");
+  expect(rewrites[0]?.strippedPrefix).toBe("./");
+  expect(posix.normalize(posix.join(declaration.resolveFrom, rewrites[0]!.to.slice(2))))
+    .toBe("libs/sales-runtime/src/routes.ts");
 });

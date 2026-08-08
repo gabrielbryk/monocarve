@@ -428,6 +428,8 @@ runtimeModuleRegistries: [{
   file: "apps/api/config/route-registry.json",
   pointer: "/domains/*/module",
   resolveFrom: "apps/api/src",
+  // The consumer calls value.slice(2) before resolving it.
+  stripPrefix: "./",
 }]
 ```
 
@@ -435,6 +437,10 @@ Only string values selected by that pointer are eligible. The plan records the
 resolved concrete JSON pointer, line, column, resolver root, donor, replacement,
 and before/after hashes. A selected value whose raw JSON occurrence is not
 byte-unique refuses planning instead of guessing which occurrence to edit.
+When `stripPrefix` is declared, every selected value must carry it, the moved
+target is rendered with it, and replay re-proves the same strip-then-resolve
+semantics. This models consumers that remove a registry marker before `join`;
+it is not a general text-rewrite hook.
 
 ## Normal extraction loop
 

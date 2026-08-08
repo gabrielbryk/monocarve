@@ -57,6 +57,8 @@ export interface PathReferenceRewrite {
   readonly jsonPointer?: string;
   /** Workspace-relative root from which the registry value resolves. */
   readonly resolutionBase?: string;
+  /** Exact registry prefix the modeled runtime removes before path resolution. */
+  readonly strippedPrefix?: string;
 }
 
 export interface RewritePathReferenceOperation {

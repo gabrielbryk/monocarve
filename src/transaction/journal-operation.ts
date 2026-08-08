@@ -158,12 +158,13 @@ function rederivePathReferenceMatches(
     file: operation.file,
     pointer: rewrite.jsonPointer!,
     resolveFrom: rewrite.resolutionBase!,
+    ...(rewrite.strippedPrefix === undefined ? {} : { stripPrefix: rewrite.strippedPrefix }),
   }, moves));
   const live = new Map([...scan.rewrites, ...registryMatches].map((match) => [`${match.line}:${match.column}`, match] as const));
   if (ordinary.length + structured.length !== operation.rewrites.length) throw new JournalError(`rewrite-path-reference registry identity is incomplete in ${operation.file}`);
   return operation.rewrites.map((recorded) => {
     const found = live.get(`${recorded.line}:${recorded.column}`);
-    if (!found || found.from !== recorded.from || found.to !== recorded.to || found.donor !== recorded.donor || found.jsonPointer !== recorded.jsonPointer || found.resolutionBase !== recorded.resolutionBase) {
+    if (!found || found.from !== recorded.from || found.to !== recorded.to || found.donor !== recorded.donor || found.jsonPointer !== recorded.jsonPointer || found.resolutionBase !== recorded.resolutionBase || found.strippedPrefix !== recorded.strippedPrefix) {
       throw new JournalError(
         `rewrite-path-reference replay mismatch in ${operation.file} at ${recorded.line}:${recorded.column}: live rescan does not reproduce the recorded rewrite`,
       );

@@ -33,6 +33,8 @@ export const runtimeModuleRegistries = z.array(z.strictObject({
   file: relativePath,
   pointer: z.string().regex(/^\/(?:[^/]+\/)*[^/]+$/, "must be an absolute JSON pointer pattern"),
   resolveFrom: relativePath,
+  /** Exact prefix removed by the runtime consumer before resolving the value. */
+  stripPrefix: z.string().min(1).optional(),
 })).default([]);
 
 export type RuntimeModuleRegistriesConfig = z.output<typeof runtimeModuleRegistries>;
