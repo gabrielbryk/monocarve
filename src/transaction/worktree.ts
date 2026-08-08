@@ -31,6 +31,7 @@ import {
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { MonocarveError } from "../errors.ts";
+import { failedGateOutput } from "./gate-diagnostics.ts";
 import { isDirectory } from "../util/files.ts";
 import { git, tryGit } from "../util/git.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
@@ -122,10 +123,15 @@ export async function createWorktree(options: CreateWorktreeOptions): Promise<Wo
 export function installWorkspaceDependencies(workspacePath: string, command: readonly string[] | undefined): void {
   if (!command || command.length === 0) throw new WorktreeError("nodeModules: install requires an install command");
   const [binary, ...args] = command;
-  const result = Bun.spawnSync([binary!, ...args], { cwd: workspacePath, stdout: "inherit", stderr: "pipe" });
+  // An install is an implementation detail of disposable simulation. Letting
+  // its stdout inherit the CLI stream corrupts machine-readable reports and
+  // can race the command's final write. Capture both streams; successful
+  // chatter is discarded and failed chatter is surfaced only as a bounded
+  // diagnostic.
+  const result = Bun.spawnSync([binary!, ...args], { cwd: workspacePath, stdout: "pipe", stderr: "pipe" });
   const exitCode = result.exitCode ?? 1;
   if (exitCode === 0) return;
-  const tail = result.stderr.toString().trimEnd().slice(-INSTALL_ERROR_TAIL);
+  const tail = failedGateOutput({ stdout: result.stdout.toString(), stderr: result.stderr.toString() }).trimEnd().slice(-INSTALL_ERROR_TAIL);
   throw new WorktreeError(`install command failed (exit ${exitCode}): ${command.join(" ")}${tail === "" ? "" : `\n${tail}`}`);
 }
 

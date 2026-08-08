@@ -1,11 +1,11 @@
 import { afterAll, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 
 import type { ExtractionManifest } from "../src/plan/manifest.ts";
 import { hashText, stableStringify } from "../src/util/hash.ts";
 import { cleanupFixtures, fixtureGit } from "./support/fixture-repo.ts";
-import { committedWorkspace, existsSync, readFileSync, runIn, runJsonIn, writeFileSync } from "./support/cli.ts";
+import { CLI, ROOT, committedWorkspace, existsSync, readFileSync, runIn, runJsonIn, writeFileSync } from "./support/cli.ts";
 
 afterAll(cleanupFixtures);
 
@@ -122,6 +122,53 @@ test("preparer CLI plans and simulates a command-free declarative create", async
   expect(planned.mutations).toEqual([expect.objectContaining({ path: "libs/chart/src/contract.ts", preconditionHash: "missing", resultMode: 0o644 })]);
   expect(await runJsonIn(root, "preparer-simulate", "--plan", planned.output)).toMatchObject({ ok: true });
   expect(existsSync(join(root, "libs/chart/src/contract.ts"))).toBe(false);
+}, 30_000);
+
+test("preparer-plan keeps noisy successful disposable installs out of JSON stdout", async () => {
+  const root = committedWorkspace();
+  const configPath = join(root, "monocarve.config.json");
+  const config = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
+  config.transaction = { nodeModules: "install", cleanup: true, simulateGates: true };
+  config.preparers = [{
+    id: "declarative-boundary",
+    phase: "pre-extraction",
+    outputs: ["apps/web/src/types.ts"],
+    replacements: [{ path: "apps/web/src/types.ts", before: "export interface Point {", after: "export interface Coordinate {", suffix: "\n  x: number;" }],
+    creates: [{ path: "libs/chart/src/contract.ts", contents: "export interface Contract {}\n" }],
+    verify: "echo NOISY_VERIFY_OUTPUT; test -s libs/chart/src/contract.ts",
+    commit: { subject: "refactor: prepare boundary" },
+  }];
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+  fixtureGit(root, "add", "--", "monocarve.config.json");
+  fixtureGit(root, "commit", "-qm", "test: configure noisy install preparer");
+
+  const bin = join(root, "test-bin");
+  mkdirSync(bin, { recursive: true });
+  const fakePnpm = join(bin, "pnpm");
+  writeFileSync(fakePnpm, "#!/bin/sh\necho NOISY_INSTALL_OUTPUT\nexit 0\n");
+  chmodSync(fakePnpm, 0o755);
+  const output = ".monocarve/plans/noisy.preparer.json";
+  const child = Bun.spawn([
+    "bun", CLI, "--cwd", root, "preparer-plan", "--preparer", "declarative-boundary",
+    "--source", "apps/web/src/types.ts", "--out", output, "--write", "--json",
+  ], {
+    cwd: ROOT,
+    env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH ?? ""}` },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
+  ]);
+
+  expect(code, `${stderr}\n${stdout}`).toBe(0);
+  expect(stderr).toBe("");
+  expect(stdout).not.toContain("NOISY_INSTALL_OUTPUT");
+  expect(stdout).not.toContain("\nNOISY_VERIFY_OUTPUT\n");
+  const report = JSON.parse(stdout) as { output: string; written: boolean };
+  expect(report).toMatchObject({ output, written: true });
+  expect(existsSync(join(root, output))).toBe(true);
+  expect(JSON.parse(readFileSync(join(root, output), "utf8"))).toMatchObject({ preparer: { id: "declarative-boundary" } });
 }, 30_000);
 
 function extractionManifest(root: string): ExtractionManifest {

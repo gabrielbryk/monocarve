@@ -346,7 +346,7 @@ describe("simulation worktree node_modules", () => {
       commit: head(root),
       worktreeRoot,
       nodeModules: "install",
-      installCommand: ["sh", "-c", "echo 'ERR_PNPM_OUTDATED_LOCKFILE cannot install with frozen-lockfile' >&2; exit 3"],
+      installCommand: ["sh", "-c", "echo 'install context from stdout'; echo 'ERR_PNPM_OUTDATED_LOCKFILE cannot install with frozen-lockfile' >&2; exit 3"],
       label: "failed-install",
     }).catch((error: unknown) => error);
 
@@ -354,6 +354,7 @@ describe("simulation worktree node_modules", () => {
     // A human has to be able to see which command failed and why without
     // reading an install log, so both the code and the tail are in the message.
     expect((failed as Error).message).toContain("exit 3");
+    expect((failed as Error).message).toContain("install context from stdout");
     expect((failed as Error).message).toContain("ERR_PNPM_OUTDATED_LOCKFILE");
 
     // A refused worktree leaves nothing behind, on disk or in git's registry.
