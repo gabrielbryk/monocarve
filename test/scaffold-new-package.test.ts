@@ -238,3 +238,36 @@ test("adds conditional dev dependencies only when their trigger dependency is in
   const parsed = JSON.parse(manifest.contents);
   expect(parsed.devDependencies).toEqual({ "@types/leaflet": "^1.9.21" });
 });
+
+test("extends an existing solution tsconfig with newly inferred package references", () => {
+  const root = fixtureRepo({
+    "pnpm-workspace.yaml": "packages:\n  - libs/*\n",
+    "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\n  libs/target: {}\n\n",
+    "libs/dependency/package.json": '{"name":"@acme/dependency"}\n',
+    "libs/dependency/tsconfig.json": '{"compilerOptions":{"composite":true}}\n',
+    "libs/target/package.json": '{"name":"@acme/target"}\n',
+    "libs/target/tsconfig.json": '{"files":[],"references":[{"path":"./tsconfig.lib.json"}]}\n',
+    "libs/target/tsconfig.lib.json": '{"compilerOptions":{"composite":true}}\n',
+  });
+  const config = fixtureConfig(root, {
+    scaffoldTemplates: {
+      packageJson: { contents: '{"name":"{package}"}\n' },
+      tsconfig: { contents: '{"files":[],"references":[{"path":"./tsconfig.lib.json"}]}\n' },
+      projectReferences: { target: "tsconfig.lib.json", dependencyTarget: "tsconfig.json" },
+    },
+  });
+  const operations = packageOperations({
+    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
+    packageManager: pnpmAdapter, taskRunner: noneTaskRunner, packageName: "@acme/target",
+    packageRoot: "libs/target", projectId: "target", production: ["apps/api/src/feature.ts"],
+    dependencies: { runtime: { "@acme/dependency": "workspace:*" }, dev: {}, packageReferences: ["libs/dependency"] },
+  });
+  const solution = operations.find(
+    (operation) => operation.kind === "write-file" && operation.path === "libs/target/tsconfig.json",
+  );
+  if (solution?.kind !== "write-file") throw new Error("missing extended solution tsconfig");
+  expect(JSON.parse(solution.contents).references).toEqual([
+    { path: "./tsconfig.lib.json" },
+    { path: "../dependency" },
+  ]);
+});
