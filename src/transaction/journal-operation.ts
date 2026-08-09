@@ -122,7 +122,7 @@ function applyPathReferenceRewrite(
   const text = readFileSync(file, "utf8");
   const liveHash = hashText(text);
   if (liveHash !== operation.preconditionHash) throw new HashMismatchError(operation.file, operation.preconditionHash, liveHash);
-  const matches = rederivePathReferenceMatches(operation, text, moves);
+  const matches = rederivePathReferenceMatches(operation, text, moves, root);
   const next = rewritePathReferenceText(text, matches);
   writeChecked(file, operation.file, next, operation.resultHash);
 }
@@ -144,6 +144,7 @@ function rederivePathReferenceMatches(
   operation: Extract<PlanOperation, { kind: "rewrite-path-reference" }>,
   text: string,
   moves: readonly PathMove[],
+  root: string,
 ): PathReferenceRewriteMatch[] {
   const registries = operation.rewrites.filter((rewrite) => rewrite.jsonPointer !== undefined && rewrite.resolutionBase !== undefined);
   const emitted = operation.rewrites.filter((rewrite) => rewrite.emittedModuleSpecifier && rewrite.resolutionBase !== undefined);
@@ -158,7 +159,7 @@ function rederivePathReferenceMatches(
   // has no access to the planning-time config.
   const scan = scanPathReferenceRewrites(text, operation.file, moves, { onAmbiguousMatch: "skip", matchExtensionless, minSegments: 2 });
   const basedMatches = [...new Set(based.map((rewrite) => rewrite.referenceBase!))].flatMap((referenceBase) =>
-    scanPathReferenceRewrites(text, operation.file, moves, { onAmbiguousMatch: "skip", matchExtensionless: based.some((rewrite) => rewrite.referenceBase === referenceBase && !lastSegmentHasExtension(rewrite.from)), minSegments: 2, referenceBase }).rewrites
+    scanPathReferenceRewrites(text, operation.file, moves, { onAmbiguousMatch: "skip", matchExtensionless: based.some((rewrite) => rewrite.referenceBase === referenceBase && !lastSegmentHasExtension(rewrite.from)), minSegments: 2, referenceBase, workspaceRoot: root }).rewrites
   );
   const registryMatches = registries.flatMap((rewrite) => scanRuntimeModuleRegistry(text, {
     file: operation.file,

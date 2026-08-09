@@ -42,6 +42,7 @@ export const PATH_TOKEN = /[A-Za-z0-9_@.\-\\/]+/g;
  */
 export function normalizeToken(
   raw: string,
+  options: { readonly allowParentSegments?: boolean } = {},
 ): { readonly path: string; readonly absolute: boolean; readonly prefixLength: number } | null {
   let value = raw.replaceAll("\\", "/");
   const absolute = value.startsWith("/");
@@ -56,7 +57,7 @@ export function normalizeToken(
   }
   while (value.endsWith("/")) value = value.slice(0, -1);
   if (!value.includes("/")) return null;
-  if (value.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) return null;
+  if (value.split("/").some((segment) => segment === "" || segment === "." || (segment === ".." && !options.allowParentSegments))) return null;
   return { path: value, absolute, prefixLength };
 }
 

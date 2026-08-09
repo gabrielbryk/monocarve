@@ -11,6 +11,8 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { pathReferenceRewriteOperations } from "../src/plan/build-support.ts";
 import { WorkspaceContext } from "../src/plan/context.ts";
@@ -20,7 +22,7 @@ import { manifestPaths } from "../src/plan/manifest.ts";
 import { formatPlanReview, summarizePlanReview } from "../src/plan/review.ts";
 import { validatePlan } from "../src/plan/validate.ts";
 import { hashText } from "../src/util/hash.ts";
-import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, read } from "./support/fixture-repo.ts";
+import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, read, scratchDirectory } from "./support/fixture-repo.ts";
 
 const SOURCE = "apps/api/src/widget.ts";
 const TARGET = "libs/values/src/widget.ts";
@@ -111,6 +113,55 @@ describe("plan-level rewrite-path-reference", () => {
     })]);
     const issues = validatePlan(manifest(root, [move, operations[0]!]), { config, rootDir: root }).issues;
     expect(issues.filter((issue) => issue.rule.startsWith("path-reference"))).toEqual([]);
+  });
+
+  test("resolves a Cloudflare-shaped parent-relative token and keeps the replacement relative to the same base", () => {
+    const donor = "app/backend/src/ingest/territory-zips/route-handlers.ts";
+    const target = "libs/ingest-runtime/src/ingest/territory-zips/route-handlers.ts";
+    const doc = "app/cloudflare-stack/tests/routes.test.ts";
+    const root = fixtureRepo({
+      "package.json": '{"name":"fixture","private":true,"type":"module"}\n',
+      [SOURCE]: "export const widgetValue = 1;\n",
+      [donor]: "export const handlers = true;\n",
+      [doc]: 'const route = "../backend/src/ingest/territory-zips/route-handlers.ts";\n',
+    });
+    const config = fixtureConfig(root, {
+      pathReferences: { textRoots: [{ root: "app/cloudflare-stack/tests", extensions: [".ts"] }] },
+      pathReferenceRewrites: { enabled: true, roots: [{ root: "app/cloudflare-stack/tests", extensions: [".ts"], mode: "exact-path-token", referenceBase: "app/cloudflare-stack" }] },
+      gates: { package: [], project: [], workspace: [] },
+    });
+    const move: PlanOperation = { kind: "move", source: donor, target, preconditionHash: hashText(read(root, donor)), resultHash: hashText(read(root, donor)) };
+    const operations = pathReferenceRewriteOperations(config, new WorkspaceContext(config, root), [move]);
+
+    expect(operations[0]?.rewrites).toEqual([{
+      from: "../backend/src/ingest/territory-zips/route-handlers.ts",
+      to: "../../libs/ingest-runtime/src/ingest/territory-zips/route-handlers.ts",
+      donor, line: 1, column: 16, referenceBase: "app/cloudflare-stack",
+    }]);
+    expect(buildPathReferenceIndex(new WorkspaceContext(config, root)).referencesTo([donor])).toEqual([expect.objectContaining({ file: doc, target: donor })]);
+  });
+
+  test("refuses a reference whose exact lexical donor traverses a symlink outside the workspace", () => {
+    const doc = "app/cloudflare-stack/tests/routes.test.ts";
+    const donor = "app/cloudflare-stack/linked/route-handlers.ts";
+    const root = fixtureRepo({
+      "package.json": '{"name":"fixture","private":true,"type":"module"}\n',
+      [SOURCE]: "export const widgetValue = 1;\n",
+      [doc]: 'const route = "../linked/route-handlers.ts";\n',
+    });
+    const external = scratchDirectory();
+    mkdirSync(external, { recursive: true });
+    writeFileSync(join(external, "route-handlers.ts"), "export const escaped = true;\n");
+    symlinkSync(external, join(root, "app/cloudflare-stack/linked"), "dir");
+    const config = fixtureConfig(root, {
+      pathReferences: { textRoots: [{ root: "app/cloudflare-stack/tests", extensions: [".ts"] }] },
+      pathReferenceRewrites: { enabled: true, roots: [{ root: "app/cloudflare-stack/tests", extensions: [".ts"], mode: "exact-path-token", referenceBase: "app/cloudflare-stack" }] },
+      gates: { package: [], project: [], workspace: [] },
+    });
+    const hash = hashText(read(root, donor));
+    const move: PlanOperation = { kind: "move", source: donor, target: "libs/ingest-runtime/src/route-handlers.ts", preconditionHash: hash, resultHash: hash };
+
+    expect(pathReferenceRewriteOperations(config, new WorkspaceContext(config, root), [move])).toEqual([]);
   });
 
   test("compiles exactly one rewrite-path-reference operation naming the document, with correct hashes and rewrites", () => {

@@ -193,21 +193,23 @@ export function buildPathReferenceIndex(context: WorkspaceContext): PathReferenc
   const scanned = new Set<string>();
 
   const record = (raw: string, occurrence: Occurrence, referenceBases: readonly string[] = []): void => {
-    const normalized = normalizeToken(raw);
+    const normalized = normalizeToken(raw, { allowParentSegments: referenceBases.length > 0 });
     if (normalized === null) return;
     const segments = normalized.path.split("/");
     const extended = segments.at(-1)!.includes(".");
     if (!extended && !settings.matchExtensionless) return;
     const index = extended ? byPath : byStem;
-    for (const key of keysFor(segments, normalized.absolute, settings.minSegments)) {
-      const entries = index.get(key) ?? [];
-      entries.push({ ...occurrence, text: normalized.path });
-      index.set(key, entries);
+    if (!segments.includes("..")) {
+      for (const key of keysFor(segments, normalized.absolute, settings.minSegments)) {
+        const entries = index.get(key) ?? [];
+        entries.push({ ...occurrence, text: normalized.path });
+        index.set(key, entries);
+      }
     }
-    if (!normalized.absolute && !segments.includes("..")) {
+    if (!normalized.absolute) {
       for (const referenceBase of referenceBases) {
         const based = posix.normalize(posix.join(referenceBase, normalized.path));
-        if (!(based === referenceBase || based.startsWith(referenceBase + "/"))) continue;
+        if (based === ".." || based.startsWith("../")) continue;
         const entries = index.get(based) ?? [];
         entries.push({ ...occurrence, text: normalized.path });
         index.set(based, entries);

@@ -382,11 +382,14 @@ pathReferenceRewrites: {
 
 Each root declares a workspace-relative directory, the file extensions to scan,
 and a matching mode. `referenceBase` optionally gives shorthand tokens an exact
-repo-relative resolution base. The replacement is the moved file's new
-repo-relative path; full repo-relative tokens continue to work unchanged. A
-token containing traversal is never resolved through the base, overlapping
-roots may not declare different bases, and any direct-versus-based ambiguity
-refuses the plan. `exact-path-token` is currently the only mode. Tokens are
+repo-relative resolution base. Shorthand tokens receive the moved file's new
+repo-relative path, while tokens beginning with `./` or `../` receive a
+canonical replacement relative to the same base. Full repo-relative tokens
+continue to work unchanged. Parent traversal is accepted only when normalizing
+the token against the base names an exact moved donor inside the real workspace;
+absolute paths, lexical workspace escapes, and symlink escapes are refused.
+Overlapping roots may not declare different bases, and any direct-versus-based
+ambiguity refuses the plan. `exact-path-token` is currently the only mode. Tokens are
 normalized path segments and do not match inside quoted strings, comments, or
 variable names; they match only the exact substring normalized from the source
 path.

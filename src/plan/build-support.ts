@@ -130,7 +130,7 @@ export function pathReferenceRewriteOperations(
       const preconditionHash = context.state(file);
       if (preconditionHash === "missing") throw new PlanningError(`path-reference document does not exist: ${file}`);
       const text = context.text(file);
-      const scan = scanPathReferenceRewrites(text, file, moves, { ...scanSettings, ...(scanRoot.referenceBase === undefined ? {} : { referenceBase: scanRoot.referenceBase }) });
+      const scan = scanPathReferenceRewrites(text, file, moves, { ...scanSettings, workspaceRoot: context.rootDir, ...(scanRoot.referenceBase === undefined ? {} : { referenceBase: scanRoot.referenceBase }) });
       if (scan.rewrites.length === 0) continue;
       byFile.set(file, { text, rewrites: [...(byFile.get(file)?.rewrites ?? []), ...scan.rewrites] });
     }

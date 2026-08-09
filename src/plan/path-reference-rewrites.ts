@@ -28,7 +28,8 @@
  * it is simply out of corpus, exactly as the scanner treats it.
  */
 
-import { extname, posix } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import { dirname, extname, posix, resolve, sep } from "node:path";
 
 import { applyReplacements, type Replacement } from "../codemod/imports.ts";
 import { byCodeUnit } from "../util/hash.ts";
@@ -55,6 +56,7 @@ export interface PathReferenceRewriteSettings {
   readonly matchExtensionless: boolean;
   readonly minSegments: number;
   readonly referenceBase?: string;
+  readonly workspaceRoot?: string;
 }
 
 export interface PathReferenceRewriteMatch extends PathReferenceRewrite {
@@ -154,15 +156,15 @@ function buildReplacementSuffix(rawToken: string, replacementTarget: string): st
  * `candidatesForToken`'s own "no candidate" case.
  */
 export function expectedPathReferenceTarget(rawToken: string, moveSource: string, moveTarget: string, referenceBase?: string): string | null {
-  const normalized = normalizeToken(rawToken);
+  const normalized = normalizeToken(rawToken, { allowParentSegments: referenceBase !== undefined });
   if (normalized === null) return null;
   const hasExtension = normalized.path.split("/").at(-1)!.includes(".");
   const target = hasExtension ? moveSource : stripExtension(moveSource);
   if (referenceBase !== undefined) {
-    if (normalized.absolute || normalized.path.split("/").includes("..")) return null;
+    if (normalized.absolute) return null;
     const based = posix.normalize(posix.join(referenceBase, normalized.path));
-    if (based !== target || !(based === referenceBase || based.startsWith(referenceBase + "/"))) return null;
-    return buildReplacementSuffix(rawToken, hasExtension ? moveTarget : stripExtension(moveTarget));
+    if (based === ".." || based.startsWith("../") || based !== target) return null;
+    return basedReplacement(rawToken, referenceBase, hasExtension ? moveTarget : stripExtension(moveTarget));
   }
   const suffixLength = matchedSuffixLength(normalized.path, normalized.absolute, target);
   if (suffixLength === null) return null;
@@ -178,7 +180,7 @@ function candidatesForToken(
   matchExtensionless: boolean,
   referenceBase?: string,
 ): Candidate[] {
-  const normalized = normalizeToken(rawToken);
+  const normalized = normalizeToken(rawToken, { allowParentSegments: referenceBase !== undefined });
   if (normalized === null) return [];
   const hasExtension = normalized.path.split("/").at(-1)!.includes(".");
   if (!hasExtension && !matchExtensionless) return [];
@@ -186,11 +188,11 @@ function candidatesForToken(
   const candidates: Candidate[] = [];
   for (const move of moves) {
     const source = hasExtension ? move.source : stripExtension(move.source);
-    const directSuffixLength = matchedSuffixLength(normalized.path, normalized.absolute, source);
-    const basedSource = referenceBase === undefined || normalized.absolute || normalized.path.split("/").includes("..")
+    const directSuffixLength = referenceBase !== undefined && normalized.absolute ? null : matchedSuffixLength(normalized.path, normalized.absolute, source);
+    const basedSource = referenceBase === undefined || normalized.absolute
       ? null
       : posix.normalize(posix.join(referenceBase, normalized.path));
-    const based = basedSource === source && (basedSource === referenceBase || basedSource.startsWith(referenceBase + "/"));
+    const based = basedSource === source && basedSource !== ".." && !basedSource.startsWith("../");
     const suffixLength = directSuffixLength ?? (based ? normalized.path.split("/").length : null);
     if (suffixLength === null) continue;
     const replacementTarget = hasExtension ? move.target : stripExtension(move.target);
@@ -198,11 +200,31 @@ function candidatesForToken(
     // before it — a URL scheme, "./", a doubled leading slash, mixed
     // separators — survives untouched instead of being reconstructed.
     const suffixStart = span.start + suffixOffsetInRawToken(normalized.path, normalized.prefixLength, suffixLength);
-    const matchedSpan = { start: suffixStart, end: span.end };
-    const to = buildReplacementSuffix(rawToken, replacementTarget);
+    const matchedSpan = directSuffixLength === null && based ? span : { start: suffixStart, end: span.end };
+    const to = directSuffixLength === null && based ? basedReplacement(rawToken, referenceBase!, replacementTarget) : buildReplacementSuffix(rawToken, replacementTarget);
     candidates.push({ span: matchedSpan, line, column, from: rawToken, to, donor: move.source, ...(directSuffixLength === null && based ? { referenceBase: referenceBase! } : {}) });
   }
   return candidates;
+}
+
+function basedReplacement(rawToken: string, referenceBase: string, moveTarget: string): string {
+  const normalizedRaw = rawToken.replaceAll("\\", "/");
+  if (!normalizedRaw.startsWith("./") && !normalizedRaw.startsWith("../")) return buildReplacementSuffix(rawToken, moveTarget);
+  let relative = posix.relative(referenceBase, moveTarget);
+  if (normalizedRaw.startsWith("./") && !relative.startsWith(".")) relative = `./${relative}`;
+  return buildReplacementSuffix(rawToken, relative);
+}
+
+function isRealWorkspacePath(workspaceRoot: string, path: string): boolean {
+  const root = realpathSync(workspaceRoot);
+  let probe = resolve(workspaceRoot, path);
+  while (!existsSync(probe)) {
+    const parent = dirname(probe);
+    if (parent === probe) return false;
+    probe = parent;
+  }
+  const actual = realpathSync(probe);
+  return actual === root || actual.startsWith(root + sep);
 }
 
 function distinctResolutions(group: readonly Candidate[]): Candidate[] {
@@ -273,7 +295,8 @@ export function scanPathReferenceRewrites(
   const eligibleMoves = moves.filter((move) => segmentCount(move.source) >= settings.minSegments);
   for (const match of text.matchAll(PATH_TOKEN)) {
     const span = { start: match.index, end: match.index + match[0].length };
-    const candidates = candidatesForToken(match[0], span, lineStarts, eligibleMoves, settings.matchExtensionless, settings.referenceBase);
+    const candidates = candidatesForToken(match[0], span, lineStarts, eligibleMoves, settings.matchExtensionless, settings.referenceBase)
+      .filter((candidate) => candidate.referenceBase === undefined || settings.workspaceRoot === undefined || isRealWorkspacePath(settings.workspaceRoot, candidate.donor));
     if (candidates.length === 0) continue;
     const winner = resolveSpan(file, candidates, ambiguities);
     if (winner) resolved.push(winner);

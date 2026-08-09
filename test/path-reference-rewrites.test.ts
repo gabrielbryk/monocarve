@@ -40,6 +40,22 @@ describe("documentKindFor", () => {
 });
 
 describe("scanPathReferenceRewrites / rewritePathReferenceText", () => {
+  test("a declared base permits contained parent traversal but refuses workspace escape and absolute tokens", () => {
+    const based = settings({ referenceBase: "app/cloudflare-stack" });
+    const valid = scanPathReferenceRewrites(
+      "../backend/src/ingest/routes.ts",
+      FILE,
+      [move("app/backend/src/ingest/routes.ts", "libs/ingest-runtime/src/ingest/routes.ts")],
+      based,
+    );
+    expect(valid.rewrites[0]).toMatchObject({
+      from: "../backend/src/ingest/routes.ts",
+      to: "../../libs/ingest-runtime/src/ingest/routes.ts",
+      referenceBase: "app/cloudflare-stack",
+    });
+    expect(scanPathReferenceRewrites("../../../outside/routes.ts", FILE, [move("../outside/routes.ts", "libs/x/routes.ts")], based).rewrites).toEqual([]);
+    expect(scanPathReferenceRewrites("/repo/app/backend/src/ingest/routes.ts", FILE, [move("app/backend/src/ingest/routes.ts", "libs/x/routes.ts")], based).rewrites).toEqual([]);
+  });
   test("case 1: an exact token naming a moved source yields one correct rewrite whose span splices to the expected bytes", () => {
     const text = "See apps/api/src/alpha.ts for details.\n";
     const moves = [move("apps/api/src/alpha.ts", "libs/values/src/alpha.ts")];
