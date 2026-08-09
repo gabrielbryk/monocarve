@@ -174,9 +174,9 @@ test("keeps the default barrel manifest free of subpath-only fields and byte-det
 
   expect(serializeManifest(second)).toBe(bytes);
   expect(first.target.publicModules).toBeUndefined();
-  expect(first.consumers.flatMap((consumer) => consumer.specifiers).every((rewrite) => rewrite.donor === undefined)).toBe(true);
+  expect(first.consumers.flatMap((consumer) => consumer.specifiers).every((rewrite) => rewrite.donor !== undefined)).toBe(true);
   expect(bytes).not.toContain('"publicModules"');
-  expect(bytes).not.toContain('"donor"');
+  expect(bytes).toContain('"donor"');
 });
 
 test("does not guess that an unindexed computed dynamic import consumes this candidate", async () => {
@@ -223,12 +223,41 @@ test("rewrites a proven production consumer edge alongside an unrelated computed
   expect(findConsumers(productionContext, [CHART], "@acme/chart")).toContainEqual(
     expect.objectContaining({
       file: LAZY,
-      rewrites: [{ from: "./widgets/chart.ts", to: "@acme/chart" }],
+      rewrites: [{ from: "./widgets/chart.ts", to: "@acme/chart", donor: CHART }],
       donors: [CHART],
     }),
   );
   expect(productionCandidate?.rejectionReasons.some((reason) => reason.code === "unplannable")).toBe(false);
   expect(productionCandidate?.eligible).toBe(true);
+});
+
+test("keeps donor identity when one consumer mixes package-root and subpath destinations", () => {
+  const format = "apps/web/src/widgets/format.ts";
+  const root = workspace([
+    'import { renderChart } from "./widgets/chart.ts";',
+    'import { format } from "./widgets/format.ts";',
+    "void renderChart; void format;",
+    "",
+  ].join("\n"));
+  write(root, format, "export const format = 1;\n");
+  const config = parseConfig({
+    applications: [{ name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json", packageName: "@acme/web" }],
+    packageRoots: ["libs"],
+    portfolio: { minFiles: 1 },
+    scaffoldTemplates: { packageJson: { contents: "{}" } },
+  });
+  const context = new WorkspaceContext(config, root);
+  const consumers = findConsumers(
+    context,
+    [CHART, format],
+    "@acme/extracted",
+    new Map([[CHART, "@acme/extracted/widgets/chart"]]),
+  );
+
+  expect(consumers.find((consumer) => consumer.file === LAZY)?.rewrites).toEqual([
+    { from: "./widgets/chart.ts", to: "@acme/extracted/widgets/chart", donor: CHART },
+    { from: "./widgets/format.ts", to: "@acme/extracted", donor: format },
+  ]);
 });
 
 test("applies and audits a route-introspection-shaped consumer while retaining its computed registry load", async () => {

@@ -145,6 +145,22 @@ describe("donor-specific journal rewrites", () => {
     expect(result).toContain(`from "${BETA_PUBLIC}"`);
   });
 
+  test("replays one package-root destination and one public subpath canonically", async () => {
+    const root = fixtureRepo(files());
+    const config = fixtureConfig(root);
+    const rewrites = [
+      { from: "./alpha.ts", to: "@acme/values", donor: ALPHA },
+      DISTINCT_REWRITES[1],
+    ] as const;
+    const result = rewriteResult(root, rewrites);
+    const operation = rewriteOperation(root, [ALPHA, BETA], rewrites, result);
+
+    await expect(executeJournal({ config, treeRoot: root, manifest: manifest(root, [operation]) })).resolves.toMatchObject({ skipped: 0 });
+    expect(read(root, CONSUMER)).toBe(result);
+    expect(result).toContain('from "@acme/values"');
+    expect(result).toContain(`from "${BETA_PUBLIC}"`);
+  });
+
   test("rewrites a NodeNext .js specifier after its .ts donor moves first", async () => {
     const root = fixtureRepo(files());
     const config = fixtureConfig(root);

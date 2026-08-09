@@ -25,6 +25,7 @@ export interface OperationContext {
   readonly packageName: string;
   readonly rewriteTargets: ReadonlySet<string>;
   readonly publicSpecifierByDonor: ReadonlyMap<string, string>;
+  readonly selectedDonors: ReadonlySet<string>;
   readonly packageRoot: string;
   readonly entrypoint: string;
 }
@@ -341,7 +342,7 @@ function validateRewrite(
     if (rewrite.donor !== undefined && !operation.donors.includes(rewrite.donor)) {
       issues.add("rewrite-donor", `rewrite names undeclared donor ${rewrite.donor}`, at);
     }
-    validateDonorSurface(rewrite, context.packageName, context.publicSpecifierByDonor, issues, "rewrite-donor", at);
+    validateDonorSurface(rewrite, context.packageName, context.publicSpecifierByDonor, context.selectedDonors, issues, "rewrite-donor", at);
   }
   if (!isFileState(operation.preconditionHash) || !isSha256(operation.resultHash)) {
     issues.add("rewrite-hash", `rewrite hashes for ${operation.file} must be SHA-256`, at);
@@ -393,6 +394,7 @@ export function validateDonorSurface(
   rewrite: ImportRewrite,
   packageName: string,
   publicSpecifierByDonor: ReadonlyMap<string, string>,
+  selectedDonors: ReadonlySet<string>,
   issues: Issues,
   rule: string,
   at: Partial<ValidationIssue>,
@@ -403,7 +405,8 @@ export function validateDonorSurface(
   }
   const expected = publicSpecifierByDonor.get(rewrite.donor);
   if (expected === undefined) {
-    issues.add(rule, `rewrite donor ${rewrite.donor} has no declared public module`, at);
+    if (!selectedDonors.has(rewrite.donor)) issues.add(rule, `rewrite donor ${rewrite.donor} is not a selected source`, at);
+    else if (rewrite.to !== packageName) issues.add(rule, `rewrite donor ${rewrite.donor} without a public module must target package root ${packageName}`, at);
   } else if (rewrite.to !== expected) {
     issues.add(rule, `rewrite donor ${rewrite.donor} must target its declared public surface ${expected}`, at);
   }

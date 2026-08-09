@@ -10,7 +10,7 @@
 import { byCodeUnit } from "../util/hash.ts";
 import { applicationOwner } from "../config/helpers.ts";
 import type { ConsumerDependencySection } from "../adapters/types.ts";
-import type { WorkspaceContext } from "./context.ts";
+import { PlanningError, type WorkspaceContext } from "./context.ts";
 export { partitionTests } from "./test-relocation.ts";
 
 export interface Consumer {
@@ -26,7 +26,7 @@ export interface Consumer {
    * the plan repoints both — so both belong here, or the manifest under-reports
    * the edit it performs and validation only ever sees the first one.
    */
-  readonly rewrites: readonly { readonly from: string; readonly to: string }[];
+  readonly rewrites: readonly { readonly from: string; readonly to: string; readonly donor: string }[];
   /** Donor files this consumer reaches, workspace-relative. */
   readonly donors: readonly string[];
   /**
@@ -103,13 +103,21 @@ export function findConsumers(
             const reference = references.find((entry) => entry.specifier === specifier)!;
             const donor = absoluteDonors.find((entry) => entry === reference.resolved);
             const relativeDonor = donor === undefined ? undefined : context.relative(donor);
+            if (relativeDonor === undefined) {
+              throw new PlanningError(`resolved consumer edge ${file} -> ${specifier} has no selected donor identity`);
+            }
             const publicSpecifier = relativeDonor === undefined ? undefined : publicSpecifierFor.get(relativeDonor);
             const resourceSuffix = relativeDonor !== undefined && context.config.assetExtensions.some((extension) => relativeDonor.endsWith(extension))
               ? (specifier.match(/[?#].*$/u)?.[0] ?? "") : "";
             return {
               from: specifier,
               to: publicSpecifier === undefined ? packageName : `${publicSpecifier}${resourceSuffix}`,
-              ...(publicSpecifier === undefined || relativeDonor === undefined ? {} : { donor: relativeDonor }),
+              // A resolved consumer edge always has a known donor. Keep that
+              // identity even when its public destination is the package root:
+              // one consumer can legitimately target a mix of root and
+              // subpath exports, and journal replay must never have to combine
+              // the old one-target representation with donor-specific edits.
+              donor: relativeDonor,
             };
           }),
           donors: donorsForFile,

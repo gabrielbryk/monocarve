@@ -54,7 +54,8 @@ export function validatePlan(manifest: ExtractionManifest, options: ValidatePlan
   const source = validateSource(manifest, options, issues, containedPath);
   const target = validateTarget(manifest, options, issues, [...source.files, ...source.assets], containedPath);
   validateDependencies(manifest, options, issues);
-  const consumers = validateConsumers(manifest, issues, target.packageName, target.publicModules, containedPath);
+  const selectedDonors = new Set([...source.files, ...source.tests, ...source.assets]);
+  const consumers = validateConsumers(manifest, issues, target.packageName, target.publicModules, selectedDonors, containedPath);
   validateModulePromotion(manifest, consumers, issues);
   validateMetadata(manifest, issues, containedPath);
   validateOperations(manifest, options, issues, {
@@ -63,6 +64,7 @@ export function validatePlan(manifest: ExtractionManifest, options: ValidatePlan
     packageName: target.packageName,
     rewriteTargets: new Set([target.packageName, ...target.publicModules.map((module) => module.specifier)]),
     publicSpecifierByDonor: new Map(target.publicModules.map((module) => [module.source, module.specifier])),
+    selectedDonors,
     packageRoot: target.packageRoot,
     entrypoint: `${target.packageRoot}/${target.entrypoint}`,
   });
@@ -340,6 +342,7 @@ function validateConsumers(
   issues: Issues,
   packageName: string,
   publicModules: NonNullable<ExtractionManifest["target"]["publicModules"]>,
+  selectedDonors: ReadonlySet<string>,
   containedPath: (path: string, rule: string) => boolean,
 ): ReadonlySet<string> {
   const consumerFiles = new Set<string>();
@@ -359,7 +362,7 @@ function validateConsumers(
     for (const rewrite of consumer.specifiers) {
       if (!rewriteTargets.has(rewrite.to)) issues.add("consumer", `consumer rewrite must target a declared ${packageName} surface`);
       if (rewrite.from === rewrite.to) issues.add("consumer", `consumer rewrite for ${consumer.file} is a no-op`);
-      validateDonorSurface(rewrite, packageName, publicSpecifierByDonor, issues, "consumer", { path: consumer.file });
+      validateDonorSurface(rewrite, packageName, publicSpecifierByDonor, selectedDonors, issues, "consumer", { path: consumer.file });
     }
   }
   return consumerFiles;

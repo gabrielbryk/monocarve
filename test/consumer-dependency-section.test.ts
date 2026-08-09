@@ -7,7 +7,7 @@ function consumer(packageRoot: string, dependencySection: Consumer["dependencySe
     package: packageRoot,
     file: `${packageRoot}/src/consumer-${dependencySection}.ts`,
     expectedImporter: "./donor.ts",
-    rewrites: [{ from: "./donor.ts", to: "@acme/donor" }],
+    rewrites: [{ from: "./donor.ts", to: "@acme/donor", donor: "apps/api/src/donor.ts" }],
     donors: ["apps/donor/src/donor.ts"],
     dependencySection,
   };
