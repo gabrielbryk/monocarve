@@ -36,6 +36,8 @@ export function currentGeneratorManifest(options: {
   for (const [id, records] of groups) {
     const configured = options.config.postJournalPreparers.find((item) => item.id === id);
     if (configured === undefined) { failures.push(`post-journal preparer ${id} is absent from current configuration`); continue; }
+    if (configured.command === undefined) { failures.push(`post-journal preparer ${id} no longer declares its historical command`); continue; }
+    const command = configured.command;
     const oldOutputs = records.map((item) => item.path).sort();
     const newOutputs = [...configured.outputs].sort();
     const commandMatches = records.every((item) => item.regenerate === configured.command && item.verify === configured.verify);
@@ -48,7 +50,7 @@ export function currentGeneratorManifest(options: {
     const { verify: _historicalVerify, ...template } = records[0]!;
     generatedFiles = generatedFiles.filter((item) => item.preparerId !== id);
     generatedFiles.push(...newOutputs.map((path): GeneratedFileRecord => ({
-      ...template, path, regenerate: configured.command,
+      ...template, path, regenerate: command,
       ...(configured.verify === undefined ? {} : { verify: configured.verify }),
     })));
     evolutions.push(evolution);

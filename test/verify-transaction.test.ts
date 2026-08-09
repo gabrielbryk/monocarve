@@ -26,7 +26,7 @@ describe("transaction verification", () => {
     const base = baseManifest(root);
     const manifest: ExtractionManifest = {
       ...base,
-      generatedFiles: [{ path: "quality-baseline.txt", source: TARGET, regenerate: config.postJournalPreparers[0]!.command, regenerateOnApply: true, exemptReason: "fixture output", preparerId: "incomplete-generator" }],
+      generatedFiles: [{ path: "quality-baseline.txt", source: TARGET, regenerate: config.postJournalPreparers[0]!.command!, regenerateOnApply: true, exemptReason: "fixture output", preparerId: "incomplete-generator" }],
       changedFiles: [...base.changedFiles, "quality-baseline.txt"].sort(),
     };
 

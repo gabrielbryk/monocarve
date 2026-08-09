@@ -415,7 +415,7 @@ specific workspace is hardcoded anywhere in `src/`.
 | `firstPartyPackages` | `root` + `name` pairs for an exact-root first-party package (the root itself is the package, unlike `packageRoots`); the declared `name` drives dependency inference |
 | `packageNamePattern` | what a generated package name must look like; defaults from `packageScope` |
 | `generatedArtifacts` | provenance-header patterns, plus artifacts a move invalidates (`path`, `source`, `regenerate`, `triggers`, `exemptReason`) and the per-command `timeoutMs` their regeneration gets — its own budget, because a codegen command is not a gate tier |
-| `postJournalPreparers` | declared-output commands run after moves and before audit/gates, plus optional `emittedModuleSpecifiers` that rewrite exact generator-template imports relative to a declared generated output |
+| `postJournalPreparers` | ordered anchored `replacements`, exact `creates`, optional declared-output commands, and verification run after moves and dependency installation but before audit/gates; optional `emittedModuleSpecifiers` rewrites exact generator-template imports |
 | `preparers` | pre-extraction declared-output policies: optional ordered text `replacements`, declarative file `creates`, an optional repository command and verification, and exact commit metadata |
 | `dependencyPruning` | `mode: "report"` (default) records possible donor dependency orphans; `apply` removes reviewed candidates. Configured tests and tsconfig `types` count as consumers; `keep` retains irreducible tool/runtime dependencies by repository policy. |
 | `graph` | `tsPreCompilationDeps`, extra cruiser config, `exclude`, `cache` |

@@ -65,11 +65,15 @@ export function generatedFilesFor(
   // defaults to empty so every existing config (which never passes it) keeps
   // testing triggers against `production` alone, byte-for-byte the old result.
   const triggerPaths = [...production, ...documents];
-  const postJournal = triggeredPostJournalPreparers(config, triggerPaths).flatMap((preparer) => preparer.outputs.map((path): GeneratedFileRecord => ({
-    path, source: targets[0] ?? path, regenerate: preparer.command, regenerateOnApply: true,
+  const postJournal = triggeredPostJournalPreparers(config, triggerPaths).flatMap((preparer) => {
+    const command = preparer.command;
+    return command === undefined ? [] : preparer.outputs
+    .filter((path) => !(preparer.replacements ?? []).some((replacement) => replacement.path === path))
+    .map((path): GeneratedFileRecord => ({
+    path, source: targets[0] ?? path, regenerate: command, regenerateOnApply: true,
     exemptReason: "declared post-journal preparer output: result is proven by simulation and immediate audit",
     preparerId: preparer.id, ...(preparer.verify === undefined ? {} : { verify: preparer.verify }),
-  })));
+  })); });
   return [...declared, ...triggered, ...postJournal].sort((left, right) => byCodeUnit(left.path, right.path));
 }
 

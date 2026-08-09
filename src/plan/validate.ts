@@ -400,6 +400,20 @@ function validateMetadata(manifest: ExtractionManifest, issues: Issues, containe
     if (generated.expectedHash !== undefined && !isSha256(generated.expectedHash)) issues.add("generated-file", `generated file ${generated.path} has an invalid expectedHash`);
     if (generated.expectedHash === undefined && generated.exemptReason === undefined) issues.add("generated-file", `generated file ${generated.path} needs expectedHash or exemptReason`);
   }
+  const postIds = new Set<string>();
+  for (const preparer of manifest.postJournalPreparers ?? []) {
+    if (postIds.has(preparer.id)) issues.add("post-journal-preparer", `duplicate post-journal preparer id: ${preparer.id}`);
+    postIds.add(preparer.id);
+    for (const output of preparer.outputs) containedPath(output, "post-journal-preparer");
+    for (const mutation of preparer.mutations) {
+      containedPath(mutation.path, "post-journal-preparer");
+      if (mutation.preconditionHash !== "missing" && !isSha256(mutation.preconditionHash)) issues.add("post-journal-preparer", `invalid precondition hash: ${mutation.path}`);
+      if (!isSha256(mutation.resultHash)) issues.add("post-journal-preparer", `invalid result hash: ${mutation.path}`);
+      if (!preparer.outputs.includes(mutation.path)) issues.add("post-journal-preparer", `declarative mutation is not an owned output: ${mutation.path}`);
+      if (mutation.preconditionMode !== "missing" && mutation.preconditionMode !== 0o644 && mutation.preconditionMode !== 0o755) issues.add("post-journal-preparer", `invalid precondition mode: ${mutation.path}`);
+      if (mutation.resultMode !== 0o644 && mutation.resultMode !== 0o755) issues.add("post-journal-preparer", `invalid result mode: ${mutation.path}`);
+    }
+  }
   for (const [name, commit] of Object.entries(manifest.commits ?? {})) {
     if (commit && !COMMIT_SUBJECT.test(commit.subject)) issues.add("commit-subject", `invalid Conventional Commit subject for the ${name} commit`);
   }

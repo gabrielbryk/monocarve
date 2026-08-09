@@ -7,6 +7,7 @@ import { scrubbedGitEnv } from "../util/git.ts";
 import { hashJson, MISSING, type FileState } from "../util/hash.ts";
 import type { PreparationManifest } from "./manifest-types.ts";
 import { preparationOperationPaths } from "./manifest.ts";
+import { applyFileCreates, applyTextReplacements } from "../preparer/declarative.ts";
 
 export interface PreparationPreparerReport {
   readonly ok: boolean;
@@ -20,8 +21,10 @@ export function preparationPostJournalRecords(config: MonocarveConfig, changedPa
     preparer.triggers.length === 0 || changedPaths.some((path) => preparer.triggers.some((pattern) => new RegExp(pattern).test(path))),
   ).map((preparer) => ({
     id: preparer.id,
-    command: preparer.command,
-    outputs: [...preparer.outputs].sort(),
+    ...(preparer.command === undefined ? {} : { command: preparer.command }),
+    outputs: [...new Set([...preparer.outputs, ...(preparer.creates?.map((item) => item.path) ?? [])])].sort(),
+    ...(preparer.replacements === undefined ? {} : { replacements: preparer.replacements.map((item) => ({ path: item.path, before: item.before, after: item.after, ...(item.prefix === undefined ? {} : { prefix: item.prefix }), ...(item.suffix === undefined ? {} : { suffix: item.suffix }) })) }),
+    ...(preparer.creates === undefined ? {} : { creates: preparer.creates.map((item) => ({ ...item, mode: item.mode ?? 0o644 })) }),
     emittedModuleSpecifiers: [...preparer.emittedModuleSpecifiers]
       .map((item) => ({ ...item }))
       .sort((left, right) => left.source.localeCompare(right.source) || left.resolutionBase.localeCompare(right.resolutionBase)),
@@ -75,18 +78,25 @@ export function runPreparationPostJournalPreparers(config: MonocarveConfig, root
     const emittedModuleSpecifiers = preparer?.emittedModuleSpecifiers
       .map((item) => ({ ...item }))
       .sort((left, right) => left.source.localeCompare(right.source) || left.resolutionBase.localeCompare(right.resolutionBase));
-    if (!preparer || hashJson({ command: preparer.command, outputs: [...preparer.outputs].sort(), verify: preparer.verify, emittedModuleSpecifiers }) !== hashJson({ command: record.command, outputs: [...record.outputs], verify: record.verify, emittedModuleSpecifiers: record.emittedModuleSpecifiers })) {
+    const policy = preparer === undefined ? undefined : { ...(preparer.command === undefined ? {} : { command: preparer.command }), outputs: [...new Set([...preparer.outputs, ...(preparer.creates?.map((item) => item.path) ?? [])])].sort(), ...(preparer.replacements === undefined ? {} : { replacements: preparer.replacements.map((item) => ({ path: item.path, before: item.before, after: item.after, ...(item.prefix === undefined ? {} : { prefix: item.prefix }), ...(item.suffix === undefined ? {} : { suffix: item.suffix }) })) }), ...(preparer.creates === undefined ? {} : { creates: preparer.creates.map((item) => ({ ...item, mode: item.mode ?? 0o644 })) }), verify: preparer.verify, emittedModuleSpecifiers };
+    if (!preparer || hashJson(policy) !== hashJson({ ...(record.command === undefined ? {} : { command: record.command }), outputs: [...record.outputs], ...(record.replacements === undefined ? {} : { replacements: record.replacements }), ...(record.creates === undefined ? {} : { creates: record.creates }), verify: record.verify, emittedModuleSpecifiers: record.emittedModuleSpecifiers })) {
       return { ok: false, changed, hashes, failure: `preparation post-journal preparer ${record.id} differs from current configuration` };
     }
     const before = record.outputs.map((path) => fileState(`${rootDir}/${path}`));
+    try {
+      if (record.replacements !== undefined) applyTextReplacements(rootDir, record.replacements);
+      if (record.creates !== undefined) applyFileCreates(rootDir, record.creates.map((item) => ({ ...item, mode: item.mode as 0o644 | 0o755 })));
+    } catch (error) { return { ok: false, changed, hashes, failure: `preparation post-journal preparer ${record.id} declarative edit failed: ${(error as Error).message}` }; }
     const overlappingArtifacts = artifacts.filter((artifact) => record.outputs.includes(artifact.path));
     const whollyCoveredBySameCommand = overlappingArtifacts.length === record.outputs.length
       && overlappingArtifacts.every((artifact) => artifact.regenerate === record.command);
     if (!whollyCoveredBySameCommand) {
       const conflicting = overlappingArtifacts.find((artifact) => artifact.regenerate !== record.command);
       if (conflicting !== undefined) return { ok: false, changed, hashes, failure: `generated output ${conflicting.path} has conflicting configured commands` };
-      const result = run(record.command, rootDir, config.generatedArtifacts.timeoutMs);
-      if (result.status !== 0) return { ok: false, changed, hashes, failure: `preparation post-journal preparer ${record.id} failed (exit ${result.status ?? "signal"})${result.output ? `\n${result.output}` : ""}` };
+      if (record.command !== undefined) {
+        const result = run(record.command, rootDir, config.generatedArtifacts.timeoutMs);
+        if (result.status !== 0) return { ok: false, changed, hashes, failure: `preparation post-journal preparer ${record.id} failed (exit ${result.status ?? "signal"})${result.output ? `\n${result.output}` : ""}` };
+      }
     }
     if (record.verify !== undefined) {
       const verification = run(record.verify, rootDir, config.generatedArtifacts.timeoutMs);

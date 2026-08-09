@@ -42,7 +42,7 @@ export function regeneratedArtifacts(manifest: ExtractionManifest): GeneratedFil
   return manifest.generatedFiles.filter((generated) => generated.regenerateOnApply === true);
 }
 export function regeneratedArtifactPaths(manifest: ExtractionManifest): string[] {
-  return regeneratedArtifacts(manifest).map((generated) => generated.path);
+  return [...new Set([...regeneratedArtifacts(manifest).map((generated) => generated.path), ...(manifest.postJournalPreparers ?? []).flatMap((preparer) => preparer.outputs)])].sort();
 }
 export function planSensitivePaths(manifest: ExtractionManifest): readonly string[] {
   return [

@@ -31,10 +31,13 @@
  *    of quietly doing something else.
  */
 
+import { statSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { triggeredArtifacts, triggeredPostJournalPreparers, type MonocarveConfig } from "../config.ts";
 import { fileState } from "../util/files.ts";
+import { hashJson } from "../util/hash.ts";
+import { applyFileCreates, applyTextReplacements } from "../preparer/declarative.ts";
 import { scrubbedGitEnv, statusEntries } from "../util/git.ts";
 import { MISSING, type FileState } from "../util/hash.ts";
 import { regeneratedArtifacts, type ExtractionManifest } from "../plan/manifest.ts";
@@ -84,6 +87,20 @@ export function regenerateArtifacts(options: RegenerateOptions): RegenerationRep
   const configured = new Map(config.generatedArtifacts.artifacts.map((artifact) => [artifact.path, artifact]));
   const configuredPreparers = new Map(config.postJournalPreparers.map((preparer) => [preparer.id, preparer]));
 
+  for (const record of manifest.postJournalPreparers ?? []) {
+    const preparer = configuredPreparers.get(record.id);
+    const configuredPolicy = preparer === undefined ? undefined : {
+      id: preparer.id, ...(preparer.command === undefined ? {} : { command: preparer.command }),
+      outputs: [...new Set([...preparer.outputs, ...(preparer.creates?.map((item) => item.path) ?? [])])].sort(),
+      ...(preparer.replacements === undefined ? {} : { replacements: preparer.replacements.map((item) => ({ ...item })) }),
+      ...(preparer.creates === undefined ? {} : { creates: preparer.creates.map((item) => ({ ...item, mode: item.mode ?? 0o644 })) }),
+      emittedModuleSpecifiers: preparer.emittedModuleSpecifiers.map((item) => ({ ...item })),
+      ...(preparer.verify === undefined ? {} : { verify: preparer.verify }),
+    };
+    const { mutations: _mutations, ...recordPolicy } = record;
+    if (configuredPolicy === undefined || hashJson(configuredPolicy) !== hashJson(recordPolicy)) return { ok: false, artifacts: [], failure: `post-journal preparer ${record.id} differs from current configuration` };
+  }
+
   // A configured artifact this extraction triggers that the plan never
   // recorded: the config gained it after the plan was compiled. Applying now
   // would leave it stale, and the plan's `changedFiles` would be wrong about
@@ -101,7 +118,7 @@ export function regenerateArtifacts(options: RegenerateOptions): RegenerationRep
         "does not declare them; recompile the plan against the current config",
     };
   }
-  const declaredPreparerIds = new Set(records.flatMap((record) => record.preparerId === undefined ? [] : [record.preparerId]));
+  const declaredPreparerIds = new Set([...(manifest.postJournalPreparers ?? []).map((record) => record.id), ...records.flatMap((record) => record.preparerId === undefined ? [] : [record.preparerId])]);
   const rewrittenDocuments = manifest.operations
     .filter((operation) => operation.kind === "rewrite-path-reference")
     .map((operation) => operation.file);
@@ -112,6 +129,43 @@ export function regenerateArtifacts(options: RegenerateOptions): RegenerationRep
 
   const artifacts: ArtifactRegeneration[] = [];
   const completedPreparers = new Set<string>();
+  for (const record of manifest.postJournalPreparers ?? []) {
+    const before = new Map(record.outputs.map((path) => [path, fileState(resolve(treeRoot, path))]));
+    const beforeDirty = dirtyPaths(treeRoot);
+    for (const mutation of record.mutations) {
+      const current = fileState(resolve(treeRoot, mutation.path));
+      if (current !== mutation.preconditionHash && current !== mutation.resultHash) return { ok: false, artifacts, failure: `post-journal preparer ${record.id} precondition differs from manifest: ${mutation.path}` };
+      const rawMode = current === MISSING ? "missing" : statSync(resolve(treeRoot, mutation.path)).mode;
+      const mode = rawMode === "missing" ? "missing" : (rawMode & 0o111 ? 0o755 : 0o644);
+      const expectedMode = current === mutation.resultHash ? mutation.resultMode : mutation.preconditionMode;
+      if (mode !== expectedMode) return { ok: false, artifacts, failure: `post-journal preparer ${record.id} precondition mode differs from manifest: ${mutation.path}` };
+    }
+    try {
+      if (record.replacements !== undefined) applyTextReplacements(treeRoot, record.replacements);
+      if (record.creates !== undefined) applyFileCreates(treeRoot, record.creates.map((item) => ({ ...item, mode: item.mode as 0o644 | 0o755 })));
+    } catch (error) { return { ok: false, artifacts, failure: `post-journal preparer ${record.id} declarative edit failed: ${(error as Error).message}` }; }
+    for (const mutation of record.mutations) {
+      const current = fileState(resolve(treeRoot, mutation.path));
+      if (current !== mutation.resultHash) return { ok: false, artifacts, failure: `post-journal preparer ${record.id} declarative result differs from manifest: ${mutation.path}` };
+    }
+    const started = Date.now();
+    if (record.command !== undefined) {
+      const result = run(record.command, treeRoot, config.generatedArtifacts.timeoutMs);
+      if (result.exitCode !== 0) return { ok: false, artifacts, failure: `post-journal preparer ${record.id} failed (exit ${result.exitCode})${result.output ? `\n${result.output}` : ""}` };
+    }
+    if (record.verify !== undefined) {
+      const verification = run(record.verify, treeRoot, config.generatedArtifacts.timeoutMs);
+      if (verification.exitCode !== 0) return { ok: false, artifacts, failure: `post-journal preparer ${record.id} verification failed (exit ${verification.exitCode})${verification.output ? `\n${verification.output}` : ""}` };
+    }
+    const undeclared = newlyDirtyPaths(treeRoot, beforeDirty).filter((path) => !record.outputs.includes(path));
+    if (undeclared.length > 0) return { ok: false, artifacts, failure: `post-journal preparer ${record.id} changed undeclared output(s): ${undeclared.join(", ")}` };
+    for (const generated of records.filter((item) => item.preparerId === record.id)) {
+      const after = fileState(resolve(treeRoot, generated.path));
+      artifacts.push({ path: generated.path, command: record.command ?? "declarative edits", exitCode: 0, durationMs: Date.now() - started, changed: before.get(generated.path) !== after, hash: after });
+      if (after === MISSING) return { ok: false, artifacts, failure: `post-journal preparer ${record.id} produced no declared output: ${generated.path}` };
+    }
+    completedPreparers.add(record.id);
+  }
   for (const record of records) {
     if (record.preparerId !== undefined) {
       if (completedPreparers.has(record.preparerId)) continue;

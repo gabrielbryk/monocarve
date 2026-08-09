@@ -337,11 +337,40 @@ containing only config and manifest; Monocarve then advances the real index and
 restores the outputs before the normal `preparer-apply` lifecycle.
 
 Preparers that must inspect the moved tree use `postJournalPreparers`. Each
-declares `phase: "after-journal-before-gates"`, a command, exact outputs,
-optional move-path triggers, and an optional verification command. Outputs are
+declares `phase: "after-journal-before-gates"`, exact outputs, optional ordered
+anchored `replacements`, optional exact `creates`, an optional command, move-path
+triggers, and an optional verification command. Declarative edits use the same
+unique framed-state, sequential-chain, terminal-state, and idempotence rules as
+pre-extraction preparers. Their fixed order is replacements, creates, command,
+then verify. Outputs are
 recorded in the extraction manifest, regenerated before audit and gates, and
 included in the wiring commit. Undeclared repository changes still fail the
 changed-scope audit.
+
+```ts
+postJournalPreparers: [{
+  id: "module-registry",
+  phase: "after-journal-before-gates",
+  replacements: [{
+    path: "tools/module-registry.ts",
+    prefix: "export const modules = [",
+    before: '"apps/api/src/domain.ts"',
+    after: '"libs/domain/src/domain.ts"',
+    suffix: "] as const;\n",
+  }],
+  creates: [{ path: "tools/generated-input.ts", contents: "export {};\n", mode: 0o644 }],
+  command: "bun tools/generate.ts",
+  outputs: ["tools/module-registry.ts", "generated/baseline.ts"],
+  triggers: ["^apps/api/src/domain\\.ts$"],
+  verify: "bun tools/generate.ts --check",
+}]
+```
+
+Created paths are outputs automatically and must not also appear in `outputs`.
+Replacement paths must appear in `outputs`. The immutable manifest records the
+full policy and exact before/result hashes and modes. Declarative paths may not
+collide with journal operations or emitted-module-specifier sources; planning
+refuses instead of relying on an implicit ordering.
 
 Use a pre-extraction preparer for deterministic source compatibility edits
 (strict TypeScript fixes, test-environment directives, or explicit ambient

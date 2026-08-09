@@ -50,6 +50,7 @@ export interface AuditReport {
   readonly entrypointClosure: ProofResult;
   readonly lockfileIntegrity: ProofResult;
   readonly generatedArtifacts: ProofResult;
+  readonly postJournalDeclarativeIntegrity?: ProofResult;
   /** Exact planned source/test/asset counts and their landed move targets. */
   readonly sourceConservation: ProofResult & {
     readonly plannedFiles: number;

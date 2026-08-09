@@ -150,8 +150,18 @@ export type AssetEmissionProofConfig = z.output<typeof assetEmissionProofs>[numb
 export const postJournalPreparers = z.array(z.strictObject({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
   phase: z.literal("after-journal-before-gates"),
-  command: z.string().min(1),
-  outputs: z.array(relativePath).min(1),
+  command: z.string().min(1).optional(),
+  replacements: z.array(z.strictObject({
+    path: relativePath,
+    before: z.string().min(1),
+    after: z.string(),
+    prefix: z.string().min(1).optional(),
+    suffix: z.string().min(1).optional(),
+  }).superRefine((replacement, ctx) => {
+    if (replacement.prefix === undefined && replacement.suffix === undefined) ctx.addIssue({ code: "custom", message: "text replacement must configure prefix or suffix context" });
+  })).min(1).optional(),
+  creates: z.array(z.strictObject({ path: relativePath, contents: z.string(), mode: z.union([z.literal(0o644), z.literal(0o755)]).optional() })).min(1).optional(),
+  outputs: z.array(relativePath).default([]),
   triggers: z.array(regexSource).default([]),
   verify: z.string().min(1).optional(),
   emittedModuleSpecifiers: z.array(z.strictObject({
@@ -160,12 +170,25 @@ export const postJournalPreparers = z.array(z.strictObject({
     /** Generated module whose directory is the emitted specifiers' resolution base. */
     resolutionBase: relativePath,
   })).default([]),
+}).superRefine((item, context) => {
+  if (item.command === undefined && item.replacements === undefined && item.creates === undefined) context.addIssue({ code: "custom", message: "post-journal preparer must configure command, replacements, or creates" });
 })).default([]).superRefine((items, context) => {
   const ids = new Set<string>();
   const outputs = new Set<string>();
   items.forEach((item, index) => {
     if (ids.has(item.id)) context.addIssue({ code: "custom", path: [index, "id"], message: "post-journal preparer id must be unique" });
     ids.add(item.id);
+    const creates = new Set(item.creates?.map((create) => create.path) ?? []);
+    if (creates.size !== (item.creates?.length ?? 0)) context.addIssue({ code: "custom", path: [index, "creates"], message: "post-journal create path must be unique" });
+    for (const replacement of item.replacements ?? []) {
+      if (!item.outputs.includes(replacement.path)) context.addIssue({ code: "custom", path: [index, "replacements"], message: `post-journal replacement path is not a declared output: ${replacement.path}` });
+      if (creates.has(replacement.path)) context.addIssue({ code: "custom", path: [index], message: `post-journal path cannot be both replaced and created: ${replacement.path}` });
+    }
+    for (const path of creates) if (item.outputs.includes(path)) context.addIssue({ code: "custom", path: [index, "creates"], message: `created path is automatically an output and must not be declared twice: ${path}` });
+    for (const path of creates) {
+      if (outputs.has(path)) context.addIssue({ code: "custom", path: [index, "creates"], message: `post-journal preparer output is duplicated: ${path}` });
+      outputs.add(path);
+    }
     item.outputs.forEach((output) => {
       if (outputs.has(output)) context.addIssue({ code: "custom", path: [index, "outputs"], message: `post-journal preparer output is duplicated: ${output}` });
       outputs.add(output);

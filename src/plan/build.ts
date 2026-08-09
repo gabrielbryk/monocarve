@@ -1,7 +1,8 @@
 /** Deterministic compilation of one eligible portfolio candidate. */
+import { statSync } from "node:fs";
 import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapters/registry.ts";
 import { GENERATOR } from "../branding.ts";
-import { applicationOwner, getApplication, packageNameMatcher, packageNameOf, renderExtractionProfile, resolveExtractionProfile, triggeredPostJournalPreparers, type MonocarveConfig } from "../config.ts";
+import { applicationOwner, getApplication, packageNameMatcher, packageNameOf, renderExtractionProfile, resolveExtractionProfile, triggeredArtifacts, triggeredPostJournalPreparers, type MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import type { PortfolioCandidate } from "../portfolio/types.ts";
 import { byCodeUnit, hashText, stableStringify, type Sha256 } from "../util/hash.ts";
@@ -12,7 +13,7 @@ import { inferDependencies } from "./dependencies.ts";
 import { collectDependencyEvidence } from "./dependency-evidence.ts";
 import { composeDonorDependencyPruning, donorDependencyPruningCandidates } from "./donor-pruning.ts";
 import { consumerWiringOperations, packageOperations, projectedLockfile } from "./scaffold.ts";
-import { PLAN_SCHEMA_VERSION, type EscapeRewrite, type ExtractionManifest, type PlanOperation } from "./manifest.ts";
+import { PLAN_SCHEMA_VERSION, type EscapeRewrite, type ExtractionManifest, type PlanOperation, type PostJournalPreparerRecord } from "./manifest.ts";
 import { sourceExportsFromFile, type ExportSurface } from "./public-surface.ts";
 import { buildPlanProvenance } from "./provenance.ts";
 import { appendConsumerOperations, appendStaticFsReferenceOperations, consumerApplications, escapeRewritesFor, evaluationEffectsFor, selectExtractionSources } from "./build-phases.ts";
@@ -162,6 +163,7 @@ function buildManifest(state: BuildState, selection: ReturnType<typeof selectExt
     .filter((operation): operation is Extract<PlanOperation, { kind: "rewrite-path-reference" }> => operation.kind === "rewrite-path-reference")
     .map((operation) => operation.file);
   const generatedFiles = generatedFilesFor(state.config, state.context, selection.production, selection.targets, rewrittenDocuments);
+  const postJournalPreparers = postJournalRecordsFor(state.config, state.context, operations, [...selection.production, ...rewrittenDocuments]);
   const sourceBlobs = sourceBlobsFor(state.context, [...selection.sources, ...selection.assets]);
   const consumerOwners = consumerApplications(state.context, consumers);
   const sections = new Map(consumerDependencyOwners(consumers).map((entry) => [entry.owner, entry.dependencySection]));
@@ -177,8 +179,8 @@ function buildManifest(state: BuildState, selection: ReturnType<typeof selectExt
   return { schemaVersion: PLAN_SCHEMA_VERSION, planId: profilePlanId(state.candidate.id, state.profile.name), createdAt: state.baseline.committedAt, generator: { ...GENERATOR }, provenance, baselineCommit: state.baseline.commit, graphDigest: graphDigest(state.graph), application: state.candidate.application, ...(state.candidate.recommendation === undefined ? {} : { assessment: { status: state.candidate.recommendation.status, cohesion: state.candidate.recommendation.cohesion, reasons: state.candidate.recommendation.reasons, compatibilityShims: (state.candidate.compatibilityShims ?? []).map(({ path, packageName, replacementSpecifier, productionConsumers, testConsumers }) => ({ path, packageName, replacementSpecifier, productionConsumers, testConsumers })), targetOptions: state.candidate.recommendation.targetOptions, selectedTarget: { packageName: state.packageName, packageRoot: state.packageRoot, action: state.graph.workspace.owners.includes(state.packageRoot) ? "extend" as const : "create" as const } } }), ...(state.options.modulePromotion === undefined ? {} : { modulePromotion: state.options.modulePromotion }),
     target: { packageName: state.packageName, packageRoot: state.packageRoot, entrypoint: state.templates.entrypoint, projectId: state.projectId, ...(state.profile.name === undefined ? {} : { profile: { name: state.profile.name, candidateName: state.candidateName } }), requiredExports: selection.publicModules.length > 0 ? [] : dedupeExports(selection.production.flatMap((source) => sourceExportsFromFile(state.context.absolute(source), source))), ...(selection.publicModules.length > 0 ? { publicModules: selection.publicModules } : {}) },
     source: { files: selection.production, tests: selection.tests, ...(selection.assets.length > 0 ? { assets: selection.assets } : {}), sccs: Object.fromEntries(state.candidate.sccs.filter((scc) => scc.members.some((member) => selection.production.includes(member))).map((scc) => [scc.id, scc.members.filter((member) => selection.production.includes(member))])) }, dependencies, dependencyDecisions, projectedArtifacts: projectedArtifactEvidence(operations), ...(pruningCandidates.length === 0 ? {} : { donorDependencyPruning: { mode: state.config.dependencyPruning.mode, candidates: pruningCandidates } }), sourceBlobs, operations, ...(state.pathMigrationNoops.length === 0 ? {} : { pathMigrationNoops: [...state.pathMigrationNoops].sort((left, right) => byCodeUnit(left.path, right.path)) }),
-    consumers: consumers.map((consumer) => ({ file: consumer.file, owner: consumer.package, expectedImporter: consumer.expectedImporter, specifiers: consumer.rewrites, external: state.graph.nodes.get(consumer.file)?.application !== state.candidate.application, dependencySection: sections.get(consumer.package) ?? "runtime" })), generatedFiles,
-    changedFiles: [...new Set([...operations.flatMap(operationPathsOf), ...generatedFiles.filter((generated) => generated.regenerateOnApply).map((generated) => generated.path)])].sort(), ...(lockOperation ? { lockfileImporter: { packageRoot: state.packageRoot, hash: hashText(lockOperation.block) } } : currentLockHash ? { lockfileImporter: { packageRoot: state.packageRoot, hash: currentLockHash } } : {}),
+    consumers: consumers.map((consumer) => ({ file: consumer.file, owner: consumer.package, expectedImporter: consumer.expectedImporter, specifiers: consumer.rewrites, external: state.graph.nodes.get(consumer.file)?.application !== state.candidate.application, dependencySection: sections.get(consumer.package) ?? "runtime" })), generatedFiles, ...(postJournalPreparers.length === 0 ? {} : { postJournalPreparers }),
+    changedFiles: [...new Set([...operations.flatMap(operationPathsOf), ...generatedFiles.filter((generated) => generated.regenerateOnApply).map((generated) => generated.path), ...postJournalPreparers.flatMap((preparer) => preparer.outputs)])].sort(), ...(lockOperation ? { lockfileImporter: { packageRoot: state.packageRoot, hash: hashText(lockOperation.block) } } : currentLockHash ? { lockfileImporter: { packageRoot: state.packageRoot, hash: currentLockHash } } : {}),
     expectedDynamicImportDelta: { added: dynamicImportDelta.added.sort(byCodeUnit), removed: dynamicImportDelta.removed.sort(byCodeUnit) }, evaluationEffects: evaluationEffectsFor({ config: state.config, context: state.context, graph: state.graph, production: selection.production, targets: selection.targets, rewrites, packageWiring, entrypointPath: selection.entrypointPath }), metrics: { movedFiles: selection.sources.length + selection.assets.length, movedLines, applicationLinesBefore: applicationLines, applicationLinesAfter: Math.max(0, applicationLines - movedLines), consumers: consumers.length }, commits: { plan: { subject: renderTemplate(state.config.commitTemplates.plan, commitVars), ...trailer(state.config, commitVars) }, move: { subject: renderTemplate(state.config.commitTemplates.move, commitVars), ...trailer(state.config, commitVars) }, wiring: { subject: renderTemplate(state.config.commitTemplates.wiring, commitVars), ...trailer(state.config, commitVars) } }, gates: renderGates(state.config, state.profile.gates, { ...commitVars, consumerOwners, taskRunner: state.taskRunner, rootDir: state.options.rootDir }) };
 }
 
@@ -187,6 +189,51 @@ function generatorOwnedOutputs(config: MonocarveConfig, production: readonly str
     .filter((operation): operation is Extract<PlanOperation, { kind: "rewrite-path-reference" }> => operation.kind === "rewrite-path-reference")
     .map((operation) => operation.file);
   return new Set(triggeredPostJournalPreparers(config, [...production, ...documents]).flatMap((preparer) => preparer.outputs));
+}
+
+function postJournalRecordsFor(config: MonocarveConfig, context: WorkspaceContext, operations: readonly PlanOperation[], triggers: readonly string[]): PostJournalPreparerRecord[] {
+  const journalPaths = new Set(operations.flatMap(operationPathsOf));
+  const generatedPaths = new Set(triggeredArtifacts(config, triggers).map((artifact) => artifact.path));
+  const records = triggeredPostJournalPreparers(config, triggers).map((preparer): PostJournalPreparerRecord => {
+    const replacements = preparer.replacements?.map((item) => ({ path: item.path, before: item.before, after: item.after, ...(item.prefix === undefined ? {} : { prefix: item.prefix }), ...(item.suffix === undefined ? {} : { suffix: item.suffix }) }));
+    const creates = preparer.creates?.map((item) => ({ ...item, mode: item.mode ?? 0o644 }));
+    const declarativePaths = [...new Set([...(replacements?.map((item) => item.path) ?? []), ...(creates?.map((item) => item.path) ?? [])])];
+    const collision = declarativePaths.find((path) => journalPaths.has(path));
+    if (collision !== undefined) throw new PlanningError(`post-journal preparer ${preparer.id} declarative path collides with a journal operation: ${collision}`);
+    const generatedCollision = declarativePaths.find((path) => generatedPaths.has(path));
+    if (generatedCollision !== undefined) throw new PlanningError(`post-journal preparer ${preparer.id} declarative path collides with a generated artifact: ${generatedCollision}`);
+    const emittedCollision = declarativePaths.find((path) => preparer.emittedModuleSpecifiers.some((item) => item.source === path));
+    if (emittedCollision !== undefined) throw new PlanningError(`post-journal preparer ${preparer.id} declarative path collides with emitted module specifier rewriting: ${emittedCollision}`);
+    const mutations = declarativePaths.map((path) => {
+      const create = creates?.find((item) => item.path === path);
+      if (create !== undefined) return { path, preconditionHash: "missing" as const, preconditionMode: "missing" as const, resultHash: hashText(create.contents), resultMode: create.mode };
+      if (!context.exists(path)) throw new PlanningError(`post-journal replacement path does not exist at baseline: ${path}`);
+      const before = context.text(path);
+      let after = before;
+      const chain = replacements ?? [];
+      for (const [index, replacement] of chain.entries()) if (replacement.path === path) after = applyExactReplacement(after, replacement, chain, index, preparer.id);
+      const mode = statSync(context.absolute(path)).mode & 0o111 ? 0o755 : 0o644;
+      return { path, preconditionHash: hashText(before), preconditionMode: mode, resultHash: hashText(after), resultMode: mode };
+    }).sort((left, right) => byCodeUnit(left.path, right.path));
+    const outputs = [...new Set([...preparer.outputs, ...(creates?.map((item) => item.path) ?? [])])].sort(byCodeUnit);
+    return { id: preparer.id, ...(preparer.command === undefined ? {} : { command: preparer.command }), outputs, ...(replacements === undefined ? {} : { replacements }), ...(creates === undefined ? {} : { creates }), mutations, emittedModuleSpecifiers: preparer.emittedModuleSpecifiers.map((item) => ({ ...item })), ...(preparer.verify === undefined ? {} : { verify: preparer.verify }) };
+  });
+  return records.sort((left, right) => byCodeUnit(left.id, right.id));
+}
+
+function applyExactReplacement(contents: string, replacement: { readonly path: string; readonly before: string; readonly after: string; readonly prefix?: string; readonly suffix?: string }, all: readonly { readonly path: string; readonly before: string; readonly after: string; readonly prefix?: string; readonly suffix?: string }[], index: number, id: string): string {
+  const framed = (text: string) => `${replacement.prefix ?? ""}${text}${replacement.suffix ?? ""}`;
+  const before = framed(replacement.before);
+  const first = contents.indexOf(before);
+  if (first >= 0) {
+    if (contents.indexOf(before, first + before.length) >= 0) throw new PlanningError(`post-journal preparer ${id} replacement ${index + 1} before text is ambiguous in ${replacement.path}`);
+    return `${contents.slice(0, first)}${framed(replacement.after)}${contents.slice(first + before.length)}`;
+  }
+  let terminal = replacement.after;
+  for (const candidate of all.slice(index + 1)) if (candidate.path === replacement.path && candidate.prefix === replacement.prefix && candidate.suffix === replacement.suffix && candidate.before === terminal) terminal = candidate.after;
+  const states = [framed(replacement.after), framed(terminal)];
+  if (states.some((state) => { const at = contents.indexOf(state); return at >= 0 && contents.indexOf(state, at + state.length) < 0; })) return contents;
+  throw new PlanningError(`post-journal preparer ${id} replacement ${index + 1} matched neither before nor after text in ${replacement.path}`);
 }
 function dependencyDecisionsFor(state: BuildState, sources: readonly string[], dependencies: ReturnType<typeof dependenciesFor>, pruning: readonly { name: string }[]) {
   const evidence = collectDependencyEvidence(state.context, state.graph, sources, state.packageName);

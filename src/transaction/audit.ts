@@ -1,6 +1,6 @@
 /** Independent post-transaction proofs. Each proof fails independently. */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { createPackageManagerAdapter } from "../adapters/registry.ts";
@@ -434,6 +434,13 @@ export function auditPlanSync(options: AuditOptions): AuditReport {
     return [`generated file ${generated.path} carries neither a hash nor an exemption`];
   });
   const generatedArtifacts = proof(generatedFailures, manifest.generatedFiles.length);
+  const postJournalFailures = (manifest.postJournalPreparers ?? []).flatMap((preparer) => preparer.mutations.flatMap((mutation) => {
+    const path = resolve(rootDir, mutation.path);
+    if (stateAt(rootDir, mutation.path) !== mutation.resultHash) return [`post-journal declarative result does not match its recorded hash: ${mutation.path}`];
+    const mode = existsSync(path) ? (statSync(path).mode & 0o111 ? 0o755 : 0o644) : "missing";
+    return mode === mutation.resultMode ? [] : [`post-journal declarative result does not match its recorded mode: ${mutation.path}`];
+  }));
+  const postJournalDeclarativeIntegrity = proof(postJournalFailures, (manifest.postJournalPreparers ?? []).flatMap((item) => item.mutations).length);
 
   /* -- source/test/asset conservation ----------------------------------- */
 
@@ -461,6 +468,7 @@ export function auditPlanSync(options: AuditOptions): AuditReport {
     entrypointClosure,
     lockfileIntegrity,
     generatedArtifacts,
+    postJournalDeclarativeIntegrity,
     sourceConservation,
   };
   const failures = [

@@ -1,5 +1,5 @@
 import type { EvaluationEffectKind } from "../codemod/side-effects.ts";
-import type { Sha256 } from "../util/hash.ts";
+import type { FileState, Sha256 } from "../util/hash.ts";
 import type { ExportSurface } from "./public-surface.ts";
 import type { ImportRewrite, PlanOperation } from "./manifest-operations.ts";
 
@@ -81,6 +81,16 @@ export interface GeneratedFileRecord {
   readonly exemptReason?: string;
   readonly regenerateOnApply?: true;
   readonly preparerId?: string;
+  readonly verify?: string;
+}
+export interface PostJournalPreparerRecord {
+  readonly id: string;
+  readonly command?: string;
+  readonly outputs: readonly string[];
+  readonly replacements?: readonly { readonly path: string; readonly before: string; readonly after: string; readonly prefix?: string; readonly suffix?: string }[];
+  readonly creates?: readonly { readonly path: string; readonly contents: string; readonly mode: number }[];
+  readonly mutations: readonly { readonly path: string; readonly preconditionHash: FileState; readonly preconditionMode: number | "missing"; readonly resultHash: Sha256; readonly resultMode: number }[];
+  readonly emittedModuleSpecifiers: readonly { readonly source: string; readonly resolutionBase: string }[];
   readonly verify?: string;
 }
 export interface DynamicImportDelta { readonly added: readonly string[]; readonly removed: readonly string[] }
@@ -196,6 +206,7 @@ export interface ExtractionManifest {
   }[];
   readonly consumers: readonly ConsumerRewrite[];
   readonly generatedFiles: readonly GeneratedFileRecord[];
+  readonly postJournalPreparers?: readonly PostJournalPreparerRecord[];
   readonly changedFiles: readonly string[];
   readonly lockfileImporter?: { readonly packageRoot: string; readonly hash: Sha256 };
   readonly expectedDynamicImportDelta: DynamicImportDelta;

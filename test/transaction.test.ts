@@ -97,7 +97,7 @@ describe("extraction transaction against a scratch repository", () => {
     const base = baseManifest(root);
     const manifest: ExtractionManifest = {
       ...base,
-      generatedFiles: [{ path: "quality-baseline.txt", source: TARGET, regenerate: config.postJournalPreparers[0]!.command, regenerateOnApply: true, exemptReason: "fixture post-journal output", preparerId: "path-ratchet", verify: `grep -q '${TARGET}' quality-baseline.txt` }],
+      generatedFiles: [{ path: "quality-baseline.txt", source: TARGET, regenerate: config.postJournalPreparers[0]!.command!, regenerateOnApply: true, exemptReason: "fixture post-journal output", preparerId: "path-ratchet", verify: `grep -q '${TARGET}' quality-baseline.txt` }],
       changedFiles: [...base.changedFiles, "quality-baseline.txt"].sort(),
     };
     const result = await simulatePlan({ config, rootDir: root, manifest, skipGates: true });

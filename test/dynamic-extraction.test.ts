@@ -431,6 +431,7 @@ test("simulates a declared JSON runtime registry rewrite before external package
   const missingGeneratorRecord = {
     ...manifest,
     generatedFiles: manifest.generatedFiles.filter((file) => file.path !== "apps/web/src/routes.ts"),
+    postJournalPreparers: [],
   };
   expect(regenerateArtifacts({ config, treeRoot: root, manifest: missingGeneratorRecord }).failure)
     .toContain("configured post-journal preparer(s) missing from plan: route-stubs");

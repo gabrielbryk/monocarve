@@ -268,8 +268,10 @@ export interface PreparationManifest {
   /** Config-bound generators that must run after replay and before audit/gates. */
   readonly postJournalPreparers?: readonly {
     readonly id: string;
-    readonly command: string;
+    readonly command?: string;
     readonly outputs: readonly string[];
+    readonly replacements?: readonly { readonly path: string; readonly before: string; readonly after: string; readonly prefix?: string; readonly suffix?: string }[];
+    readonly creates?: readonly { readonly path: string; readonly contents: string; readonly mode: number }[];
     readonly emittedModuleSpecifiers: readonly { readonly source: string; readonly resolutionBase: string }[];
     readonly verify?: string;
   }[];
