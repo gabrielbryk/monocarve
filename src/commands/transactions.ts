@@ -8,6 +8,7 @@ import { validatePlan } from "../plan/validate.ts";
 import { applyPlan, preflight } from "../transaction/apply.ts";
 import { auditPlanSync } from "../transaction/audit.ts";
 import { inspectGateEffects } from "../transaction/gate-inspection.ts";
+import { verifyAppliedPlan } from "../transaction/verify.ts";
 import { assertPreparerManifest, type PreparerManifest } from "../preparer/index.ts";
 import { simulatePlan } from "../transaction/simulate.ts";
 import { applyTransactionStatus, recoverApplyTransaction } from "../transaction/apply-state.ts";
@@ -103,6 +104,12 @@ async function audit(args: ParsedArgs): Promise<void> {
 async function verify(args: ParsedArgs): Promise<void> {
   const { config, rootDir } = await load(args);
   const { path, manifest } = await loadManifest(args, rootDir);
+  const applied = await verifyAppliedPlan({ config, rootDir, manifest, manifestPath: path });
+  if (applied !== undefined) {
+    print(applied, args);
+    if (applied.blockers.length > 0) process.exitCode = 1;
+    return;
+  }
   const validation = validatePlan(manifest, { config, rootDir });
   const blockers = await preflight({ config, rootDir, manifest, manifestPath: path });
   print({ validation, blockers }, args);

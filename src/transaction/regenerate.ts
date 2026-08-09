@@ -35,7 +35,7 @@ import { resolve } from "node:path";
 
 import { triggeredArtifacts, triggeredPostJournalPreparers, type MonocarveConfig } from "../config.ts";
 import { fileState } from "../util/files.ts";
-import { scrubbedGitEnv } from "../util/git.ts";
+import { scrubbedGitEnv, statusEntries } from "../util/git.ts";
 import { MISSING, type FileState } from "../util/hash.ts";
 import { regeneratedArtifacts, type ExtractionManifest } from "../plan/manifest.ts";
 
@@ -124,8 +124,15 @@ export function regenerateArtifacts(options: RegenerateOptions): RegenerationRep
         return { ok: false, artifacts, failure: `post-journal preparer ${record.preparerId} output set differs from current configuration` };
       }
       const before = new Map(declared.map((path) => [path, fileState(resolve(treeRoot, path))]));
+      const repositoryBefore = dirtyPaths(treeRoot);
       const result = run(preparer.command, treeRoot, config.generatedArtifacts.timeoutMs);
       if (result.exitCode !== 0) return { ok: false, artifacts, failure: `post-journal preparer ${preparer.id} failed (exit ${result.exitCode})${result.output ? `\n${result.output}` : ""}` };
+      const undeclared = newlyDirtyPaths(treeRoot, repositoryBefore).filter((path) => !declared.includes(path));
+      if (undeclared.length > 0) return {
+        ok: false,
+        artifacts,
+        failure: `post-journal preparer ${preparer.id} changed undeclared output(s): ${undeclared.join(", ")}; add every generated output to the preparer configuration and recompile the plan`,
+      };
       if (preparer.verify !== undefined) {
         const verification = run(preparer.verify, treeRoot, config.generatedArtifacts.timeoutMs);
         if (verification.exitCode !== 0) return { ok: false, artifacts, failure: `post-journal preparer ${preparer.id} verification failed (exit ${verification.exitCode})${verification.output ? `\n${verification.output}` : ""}` };
@@ -158,8 +165,10 @@ export function regenerateArtifacts(options: RegenerateOptions): RegenerationRep
 
     const absolute = resolve(treeRoot, record.path);
     const before = fileState(absolute);
+    const repositoryBefore = dirtyPaths(treeRoot);
     const result = run(artifact.regenerate, treeRoot, config.generatedArtifacts.timeoutMs);
     const after = fileState(absolute);
+    const undeclared = newlyDirtyPaths(treeRoot, repositoryBefore).filter((path) => path !== record.path);
     const entry: ArtifactRegeneration = {
       path: record.path,
       command: artifact.regenerate,
@@ -170,6 +179,12 @@ export function regenerateArtifacts(options: RegenerateOptions): RegenerationRep
       ...(result.exitCode === 0 ? {} : { output: result.output }),
     };
     artifacts.push(entry);
+
+    if (undeclared.length > 0) return {
+      ok: false,
+      artifacts,
+      failure: `generator for ${record.path} changed undeclared output(s): ${undeclared.join(", ")}; declare each output separately and recompile the plan`,
+    };
 
     if (result.exitCode !== 0) {
       return {
@@ -190,6 +205,14 @@ export function regenerateArtifacts(options: RegenerateOptions): RegenerationRep
   }
 
   return { ok: true, artifacts };
+}
+
+function dirtyPaths(rootDir: string): ReadonlySet<string> {
+  return new Set(statusEntries(rootDir).flatMap((entry) => entry.paths));
+}
+
+function newlyDirtyPaths(rootDir: string, before: ReadonlySet<string>): string[] {
+  return [...dirtyPaths(rootDir)].filter((path) => !before.has(path)).sort();
 }
 
 interface CommandResult {
