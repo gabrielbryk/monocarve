@@ -9,10 +9,11 @@
  */
 
 import ts from "typescript";
+import { realpathSync } from "node:fs";
 import { relative, resolve } from "node:path";
 
 import { MonocarveError } from "../errors.ts";
-import { showBaseline } from "../util/git.ts";
+import { git, repositoryPrefix, showBaseline } from "../util/git.ts";
 import { resolveExportSurface } from "./public-surface-analysis.ts";
 
 export interface ExportSurface {
@@ -47,30 +48,53 @@ export function sourceExportsFromBaseline(workspaceRoot: string, commit: string,
   const options = compilerOptions();
   const fallback = ts.createCompilerHost(options);
   const cache = new Map<string, string | null>();
+  const prefix = repositoryPrefix(workspaceRoot);
+  const baselineFiles = new Set(
+    git({ cwd: workspaceRoot }, "ls-tree", "-r", "--name-only", commit, "--", prefix || ".")
+      .split("\n")
+      .filter(Boolean)
+      .map((entry) => prefix && entry.startsWith(prefix) ? entry.slice(prefix.length) : entry),
+  );
+  const baselineDirectories = new Set<string>([""]);
+  for (const file of baselineFiles) {
+    const parts = file.split("/");
+    for (let index = 1; index < parts.length; index += 1) baselineDirectories.add(parts.slice(0, index).join("/"));
+  }
   const workspacePathOf = (fileName: string): string | null => {
     const workspacePath = relative(resolve(workspaceRoot), resolve(fileName)).replaceAll("\\", "/");
     return workspacePath === ".." || workspacePath.startsWith("../") ? null : workspacePath;
+  };
+  const baselineWorkspacePathOf = (fileName: string, known: ReadonlySet<string>): string | null => {
+    const direct = workspacePathOf(fileName);
+    if (direct !== null && known.has(direct)) return direct;
+    try {
+      const physical = workspacePathOf(realpathSync.native(fileName));
+      return physical !== null && known.has(physical) ? physical : null;
+    } catch {
+      return null;
+    }
   };
   const baselinePathText = (workspacePath: string): string | null => {
     if (!cache.has(workspacePath)) cache.set(workspacePath, showBaseline(workspaceRoot, commit, workspacePath));
     return cache.get(workspacePath) ?? null;
   };
-  const allowed = baselineSurfaceClosure(path, baselinePathText);
   const baselineText = (fileName: string): string | null => {
-    const workspacePath = workspacePathOf(fileName);
-    return workspacePath !== null && allowed.has(workspacePath) ? baselinePathText(workspacePath) : null;
+    const workspacePath = baselineWorkspacePathOf(fileName, baselineFiles);
+    return workspacePath !== null ? baselinePathText(workspacePath) : null;
   };
   const host: ts.CompilerHost = {
     ...fallback,
     getCurrentDirectory: () => workspaceRoot,
+    // Directory traversal may follow a workspace-package symlink out of
+    // node_modules. File reads remain pinned to Git below, so admitting a live
+    // directory can only help TypeScript locate immutable baseline files.
     directoryExists: (directoryName) => {
-      const workspacePath = workspacePathOf(directoryName);
-      if (workspacePath === null) return fallback.directoryExists?.(directoryName) ?? false;
-      const prefix = workspacePath === "" ? "" : `${workspacePath}/`;
-      return [...allowed].some((candidate) => candidate.startsWith(prefix));
+      const workspacePath = baselineWorkspacePathOf(directoryName, baselineDirectories);
+      return workspacePath !== null
+        || (fallback.directoryExists?.(directoryName) ?? false);
     },
-    fileExists: (fileName) => workspacePathOf(fileName) === null ? fallback.fileExists(fileName) : baselineText(fileName) !== null,
-    readFile: (fileName) => workspacePathOf(fileName) === null ? fallback.readFile(fileName) : baselineText(fileName) ?? undefined,
+    fileExists: (fileName) => baselineText(fileName) !== null || fallback.fileExists(fileName),
+    readFile: (fileName) => baselineText(fileName) ?? fallback.readFile(fileName),
     getSourceFile: (fileName, languageVersion) => {
       const contents = baselineText(fileName);
       return contents === null
@@ -79,37 +103,6 @@ export function sourceExportsFromBaseline(workspaceRoot: string, commit: string,
     },
   };
   return sourceExportsFromProgram(absolute, path, ts.createProgram([absolute], options, host));
-}
-
-/** Keep Git reads bounded to files that can affect the declared export surface. */
-function baselineSurfaceClosure(path: string, read: (path: string) => string | null): Set<string> {
-  const allowed = new Set<string>();
-  const visit = (current: string, followExports: boolean): void => {
-    if (allowed.has(current)) return;
-    const contents = read(current);
-    if (contents === null) return;
-    allowed.add(current);
-    if (!followExports) return;
-    const source = ts.createSourceFile(current, contents, ts.ScriptTarget.Latest, true);
-    for (const statement of source.statements) {
-      const specifier = (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement))
-        && statement.moduleSpecifier && ts.isStringLiteralLike(statement.moduleSpecifier)
-        ? statement.moduleSpecifier.text
-        : undefined;
-      if (!specifier?.startsWith(".")) continue;
-      const resolved = resolveBaselineModule(current, specifier, read);
-      if (resolved !== null) visit(resolved, followExports && ts.isExportDeclaration(statement));
-    }
-  };
-  visit(path, true);
-  return allowed;
-}
-
-function resolveBaselineModule(importer: string, specifier: string, read: (path: string) => string | null): string | null {
-  const base = resolve("/", importer, "..", specifier).slice(1).replaceAll("\\", "/");
-  const withoutRuntimeExtension = base.replace(/\.(?:mjs|cjs|js|jsx)$/, "");
-  const candidates = [base, withoutRuntimeExtension, ...[".ts", ".tsx", ".mts", ".cts", ".d.ts"].map((extension) => `${withoutRuntimeExtension}${extension}`), ...[".ts", ".tsx", ".mts", ".cts", ".d.ts"].map((extension) => `${withoutRuntimeExtension}/index${extension}`)];
-  return candidates.find((candidate) => read(candidate) !== null) ?? null;
 }
 
 function compilerOptions(): ts.CompilerOptions {

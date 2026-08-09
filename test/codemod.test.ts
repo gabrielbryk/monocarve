@@ -238,4 +238,26 @@ describe("public surface", () => {
       { name: "nested", typeOnly: false },
     ]);
   });
+
+  test("resolves baseline facades through installed package exports", () => {
+    const root = fixtureRepo({
+      "src/surface.ts": 'export * from "@acme/contracts";\n',
+    });
+    const baseline = fixtureGit(root, "rev-parse", "HEAD");
+    mkdirSync(join(root, "node_modules/@acme/contracts"), { recursive: true });
+    writeFileSync(join(root, "node_modules/@acme/contracts/package.json"), JSON.stringify({
+      name: "@acme/contracts",
+      type: "module",
+      exports: { ".": "./index.ts" },
+    }));
+    writeFileSync(
+      join(root, "node_modules/@acme/contracts/index.ts"),
+      "export interface Contract { value: string }\nexport const contract = 1;\n",
+    );
+
+    expect(sourceExportsFromBaseline(root, baseline, "src/surface.ts")).toEqual([
+      { name: "Contract", typeOnly: true },
+      { name: "contract", typeOnly: false },
+    ]);
+  });
 });
