@@ -45,6 +45,8 @@ export interface PathReferenceRewrite {
   readonly jsonPointer?: string;
   readonly resolutionBase?: string;
   readonly strippedPrefix?: string;
+  /** This string is emitted by a generator and resolves from `resolutionBase`. */
+  readonly emittedModuleSpecifier?: true;
 }
 
 export interface PathReferenceRewriteSettings {

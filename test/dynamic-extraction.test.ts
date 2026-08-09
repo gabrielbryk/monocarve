@@ -22,6 +22,7 @@ import { applyPlan } from "../src/transaction/apply.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
 import { simulatePlan } from "../src/transaction/simulate.ts";
 import { regenerateArtifacts } from "../src/transaction/regenerate.ts";
+import { scanEmittedModuleSpecifiers } from "../src/plan/emitted-module-specifiers.ts";
 import { cleanupFixtures, fixtureGit, scratchDirectory, write } from "./support/fixture-repo.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -292,6 +293,10 @@ test("simulates a declared JSON runtime registry rewrite before external package
     outputs: ["apps/web/src/routes.ts"],
     triggers: ["^apps/web/scripts/route-registry\\.json$"],
     verify: "bun apps/web/scripts/route-stubs.ts --check",
+    emittedModuleSpecifiers: [{
+      source: "apps/web/scripts/route-stubs.ts",
+      resolutionBase: "apps/web/src/routes.ts",
+    }],
   }];
   raw.transaction = { nodeModules: "symlink", cleanup: true, simulateGates: true };
   writeFileSync(configPath, `${JSON.stringify(raw, null, 2)}\n`);
@@ -326,7 +331,8 @@ test("simulates a declared JSON runtime registry rewrite before external package
     'const registryPath = "apps/web/scripts/route-registry.json";',
     'const outputPath = "apps/web/src/routes.ts";',
     'const registry = JSON.parse(readFileSync(registryPath, "utf8"));',
-    'const expected = registry.domains.map((domain: { module: string; export: string }) => `export { ${domain.export} } from ${JSON.stringify(domain.module)};`).join("\\n") + "\\n";',
+    'const fixed = `import { renderChart as governedChart } from "./widgets/chart.ts";\\nvoid governedChart;\\n`;',
+    'const expected = fixed + registry.domains.map((domain: { module: string; export: string }) => `export { ${domain.export} } from ${JSON.stringify(domain.module)};`).join("\\n") + "\\n";',
     'if (process.argv.includes("--check")) {',
     '  if (readFileSync(outputPath, "utf8") !== expected) process.exit(1);',
     '} else {',
@@ -335,7 +341,7 @@ test("simulates a declared JSON runtime registry rewrite before external package
     '}',
     "",
   ].join("\n"));
-  write(root, "apps/web/src/routes.ts", 'export { renderChart } from "./widgets/chart.ts";\n');
+  write(root, "apps/web/src/routes.ts", 'import { renderChart as governedChart } from "./widgets/chart.ts";\nvoid governedChart;\nexport { renderChart } from "./widgets/chart.ts";\n');
   fixtureGit(root, "add", "-A");
   fixtureGit(root, "commit", "-qm", "test: add declared runtime module registry");
 
@@ -357,6 +363,23 @@ test("simulates a declared JSON runtime registry rewrite before external package
     resolutionBase: "apps/web/src",
     strippedPrefix: "./",
   }]);
+  const templateRewrite = manifest.operations.find((operation) => operation.kind === "rewrite-path-reference" && operation.file === "apps/web/scripts/route-stubs.ts");
+  expect(templateRewrite?.kind).toBe("rewrite-path-reference");
+  if (templateRewrite?.kind !== "rewrite-path-reference") throw new Error("expected generator template rewrite");
+  expect(templateRewrite.rewrites).toEqual([expect.objectContaining({
+    from: "./widgets/chart.ts",
+    to: "../../../libs/chart/src/widgets/chart.ts",
+    donor: CHART,
+    resolutionBase: "apps/web/src/routes.ts",
+    emittedModuleSpecifier: true,
+  })]);
+  const tamperedTemplate = {
+    ...manifest,
+    operations: manifest.operations.map((operation) => operation === templateRewrite
+      ? { ...operation, rewrites: operation.rewrites.map(({ emittedModuleSpecifier: _removed, ...rewrite }) => rewrite) }
+      : operation),
+  };
+  expect(validatePlan(tamperedTemplate, { config, rootDir: root }).issues.map((issue) => issue.rule)).toContain("path-reference-structured-identity");
 
   const tampered = {
     ...manifest,
@@ -406,6 +429,17 @@ test("simulates a declared JSON runtime registry rewrite before external package
     exitCode: 0,
   }));
 }, 300_000);
+
+test("refuses an emitted module specifier that ambiguously identifies multiple moves", () => {
+  expect(() => scanEmittedModuleSpecifiers(
+    'const emitted = "./widgets/chart.ts";\n',
+    { source: "apps/web/scripts/route-stubs.ts", resolutionBase: "apps/web/src/routes.ts" },
+    [
+      { source: CHART, target: "libs/chart-a/src/widgets/chart.ts" },
+      { source: CHART, target: "libs/chart-b/src/widgets/chart.ts" },
+    ],
+  )).toThrow("matches multiple moves");
+});
 
 test("continues to reject a genuinely computed module reference inside moved production code", async () => {
   const root = workspace();

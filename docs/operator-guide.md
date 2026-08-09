@@ -454,8 +454,20 @@ postJournalPreparers: [{
   outputs: ["apps/api/src/routes.ts"],
   triggers: ["^apps/api/config/route-registry\\.json$"],
   verify: "bun apps/api/scripts/route-stubs.ts --check",
+  emittedModuleSpecifiers: [{
+    source: "apps/api/scripts/route-stubs.ts",
+    resolutionBase: "apps/api/src/routes.ts",
+  }],
 }]
 ```
+
+`emittedModuleSpecifiers` covers generator/template source that contains a
+module specifier which will be emitted verbatim. `resolutionBase` must be one
+of the preparer's outputs: the string resolves from that generated module's
+directory, not from the generator source. The planner binds each exact quoted
+string to one moved donor, derives its destination-relative replacement, and
+journals the generator-source rewrite before regeneration. Ambiguous donors,
+config drift, source-byte drift, and manifest identity tampering refuse.
 
 The journal rewrites the registry and scaffolds package/dependency state first.
 The projected tree then installs or links those dependencies and verifies its

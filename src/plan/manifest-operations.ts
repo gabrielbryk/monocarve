@@ -59,6 +59,8 @@ export interface PathReferenceRewrite {
   readonly resolutionBase?: string;
   /** Exact registry prefix the modeled runtime removes before path resolution. */
   readonly strippedPrefix?: string;
+  /** This string is emitted by a generator and resolves from `resolutionBase`. */
+  readonly emittedModuleSpecifier?: true;
 }
 
 export interface RewritePathReferenceOperation {

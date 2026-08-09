@@ -14,6 +14,7 @@ import { PlanningError, WorkspaceContext } from "./context.ts";
 import type { BuildPlanOptions } from "./build.ts";
 import type { EscapeRewrite, ExtractionManifest, GeneratedFileRecord, MigratePathKeysOperation, PathMove, PlanOperation, RewritePathReferenceOperation } from "./manifest.ts";
 import { scanRuntimeModuleRegistry } from "./runtime-module-registries.ts";
+import { scanEmittedModuleSpecifiers } from "./emitted-module-specifiers.ts";
 
 export function baselineOf(options: BuildPlanOptions): ResolvedCommit {
   try { return resolveCommit(options.rootDir, options.baselineCommit); }
@@ -143,6 +144,14 @@ export function pathReferenceRewriteOperations(
       ...(registry.stripPrefix === undefined ? {} : { stripPrefix: registry.stripPrefix }),
     }, moves);
     if (rewrites.length > 0) byFile.set(registry.file, { text, rewrites: [...(byFile.get(registry.file)?.rewrites ?? []), ...rewrites] });
+  }
+  const changedPaths = [...moves.map((move) => move.source), ...byFile.keys()];
+  for (const preparer of triggeredPostJournalPreparers(config, changedPaths)) {
+    for (const declaration of preparer.emittedModuleSpecifiers) {
+      const text = context.text(declaration.source);
+      const rewrites = scanEmittedModuleSpecifiers(text, declaration, moves);
+      if (rewrites.length > 0) byFile.set(declaration.source, { text, rewrites: [...(byFile.get(declaration.source)?.rewrites ?? []), ...rewrites] });
+    }
   }
   return [...byFile.entries()].map(([file, entry]) => {
     const rewrites = [...entry.rewrites].sort((left, right) => left.line - right.line || left.column - right.column || byCodeUnit(left.donor, right.donor));

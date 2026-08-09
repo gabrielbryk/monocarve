@@ -3,6 +3,7 @@ import { byCodeUnit, isFileState, isSha256 } from "../../util/hash.ts";
 import type { PlanOperation } from "../manifest.ts";
 import { documentKindFor, expectedPathReferenceTarget } from "../path-reference-rewrites.ts";
 import { expectedRuntimeModuleRegistryTarget } from "../runtime-module-registries.ts";
+import { expectedEmittedModuleSpecifierTarget } from "../emitted-module-specifiers.ts";
 import { Issues } from "./shared.ts";
 
 export function validatePathReferenceRewrite(
@@ -62,13 +63,17 @@ function validateRewrites(
       // here, before it ever reaches apply.
       const expected = rewrite.resolutionBase === undefined
         ? expectedPathReferenceTarget(rewrite.from, move.source, move.target)
-        : expectedRuntimeModuleRegistryTarget(rewrite.resolutionBase, move.target, rewrite.strippedPrefix);
-      if ((rewrite.jsonPointer === undefined) !== (rewrite.resolutionBase === undefined)) {
-        issues.add("path-reference-registry-identity", `structured registry rewrite must record both jsonPointer and resolutionBase: ${operation.file}`, at);
+        : rewrite.emittedModuleSpecifier
+          ? expectedEmittedModuleSpecifierTarget(rewrite.resolutionBase, move.target)
+          : expectedRuntimeModuleRegistryTarget(rewrite.resolutionBase, move.target, rewrite.strippedPrefix);
+      const identities = Number(rewrite.jsonPointer !== undefined) + Number(rewrite.emittedModuleSpecifier === true);
+      if ((rewrite.resolutionBase === undefined && identities !== 0) || (rewrite.resolutionBase !== undefined && identities !== 1)) {
+        issues.add("path-reference-structured-identity", `structured rewrite must record resolutionBase and exactly one identity: ${operation.file}`, at);
       }
       if (rewrite.strippedPrefix !== undefined && rewrite.resolutionBase === undefined) {
         issues.add("path-reference-registry-identity", `strippedPrefix requires structured registry identity: ${operation.file}`, at);
       }
+      if (rewrite.strippedPrefix !== undefined && rewrite.emittedModuleSpecifier) issues.add("path-reference-registry-identity", `emitted module specifier cannot carry strippedPrefix: ${operation.file}`, at);
       if (rewrite.strippedPrefix !== undefined && !rewrite.from.startsWith(rewrite.strippedPrefix)) {
         issues.add("path-reference-registry-prefix", `structured registry value does not carry its declared strippedPrefix: ${operation.file}`, at);
       }

@@ -154,6 +154,12 @@ export const postJournalPreparers = z.array(z.strictObject({
   outputs: z.array(relativePath).min(1),
   triggers: z.array(regexSource).default([]),
   verify: z.string().min(1).optional(),
+  emittedModuleSpecifiers: z.array(z.strictObject({
+    /** Generator/template source containing module specifiers emitted verbatim. */
+    source: relativePath,
+    /** Generated module whose directory is the emitted specifiers' resolution base. */
+    resolutionBase: relativePath,
+  })).default([]),
 })).default([]).superRefine((items, context) => {
   const ids = new Set<string>();
   const outputs = new Set<string>();
@@ -163,6 +169,12 @@ export const postJournalPreparers = z.array(z.strictObject({
     item.outputs.forEach((output) => {
       if (outputs.has(output)) context.addIssue({ code: "custom", path: [index, "outputs"], message: `post-journal preparer output is duplicated: ${output}` });
       outputs.add(output);
+    });
+    const sources = new Set<string>();
+    item.emittedModuleSpecifiers.forEach((declaration, declarationIndex) => {
+      if (sources.has(declaration.source)) context.addIssue({ code: "custom", path: [index, "emittedModuleSpecifiers", declarationIndex, "source"], message: `emitted module specifier source is duplicated: ${declaration.source}` });
+      sources.add(declaration.source);
+      if (!item.outputs.includes(declaration.resolutionBase)) context.addIssue({ code: "custom", path: [index, "emittedModuleSpecifiers", declarationIndex, "resolutionBase"], message: "emitted module specifier resolutionBase must be one of the preparer's declared outputs" });
     });
   });
 });
