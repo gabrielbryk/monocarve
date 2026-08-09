@@ -328,8 +328,12 @@ When adding a preparer whose generated output is already required by commit
 hooks, compile the standalone plan while only the config is dirty with
 `--bootstrap-config <path>`. Review the manifest, then run
 `preparer-bootstrap-commit`. The transaction runs the ordinary hooks with the
-reviewed outputs temporarily present, commits only the config and manifest,
-and restores the checkout before the normal `preparer-apply` lifecycle.
+reviewed outputs temporarily present and staged, so hook frameworks that stash
+unstaged changes inspect the proven tree. A temporary forwarding hook removes
+only those outputs from the index after the real pre-commit hook succeeds; Git
+therefore commits only the config and manifest. Every other configured hook is
+forwarded unchanged, and the outputs are restored before the normal
+`preparer-apply` lifecycle.
 
 Preparers that must inspect the moved tree use `postJournalPreparers`. Each
 declares `phase: "after-journal-before-gates"`, a command, exact outputs,
