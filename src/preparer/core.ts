@@ -1,23 +1,25 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-import type { MonocarveConfig, PreparerConfig } from "../config.ts";
-import { MonocarveError } from "../errors.ts";
+import { triggeredArtifacts, type MonocarveConfig, type PreparerConfig } from "../config.ts";
 import type { ExtractionManifest, MoveOperation } from "../plan/manifest.ts";
 import { executePreparationJournal, finalizeCompletedPreparationJournal, rollbackCompletedPreparationJournal } from "../prepare/journal.ts";
 import { createPackageManagerAdapter } from "../adapters/registry.ts";
 import { createWorktree } from "../transaction/worktree.ts";
-import { failedGateOutput } from "../transaction/gate-diagnostics.ts";
 import { fileState } from "../util/files.ts";
-import { currentBranch, git, headCommit, repositoryPrefix, resolveCommit, scrubbedGitEnv, showBaseline, statusEntries } from "../util/git.ts";
+import { currentBranch, git, headCommit, repositoryPrefix, resolveCommit, showBaseline, statusEntries } from "../util/git.ts";
 import { isGuardedBranch } from "../config.ts";
 import { byCodeUnit, hashBytes, hashJson, hashText, MISSING, stableStringify } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";
 import { renderTemplate } from "../util/template.ts";
 import { PREPARER_MANIFEST_SCHEMA_VERSION, type PreparerManifest, type PreparerMutation } from "./manifest.ts";
 import { bindBootstrapConfig } from "./bootstrap-config.ts";
+import { preparationPostJournalRecords, runPreparationPostJournalPreparers } from "../prepare/post-journal.ts";
+import { restoreSnapshot, snapshotPaths } from "../transaction/journal.ts";
+import { PreparerError } from "./error.ts";
+import { runPreparerCommand } from "./run-command.ts";
 
-export class PreparerError extends MonocarveError { override readonly name = "PreparerError"; }
+export { PreparerError } from "./error.ts";
 
 export interface CompilePreparerInput {
   readonly rootDir: string;
@@ -82,12 +84,30 @@ export async function compilePreparerManifest(input: CompilePreparerInput): Prom
     const before = Object.fromEntries(outputs.map((path) => [path, state(worktree.workspacePath, path)]));
     if (replacements !== undefined) applyTextReplacements(worktree.workspacePath, replacements);
     if (creates !== undefined) applyFileCreates(worktree.workspacePath, creates);
-    if (command !== undefined) await run(command, worktree.workspacePath, input.config.gates.timeoutMs, "preparer");
-    if (verify !== undefined) await run(verify, worktree.workspacePath, input.config.gates.timeoutMs, "preparer verify");
+    if (command !== undefined) await runPreparerCommand(command, worktree.workspacePath, input.config.gates.timeoutMs, "preparer");
+    if (verify !== undefined) await runPreparerCommand(verify, worktree.workspacePath, input.config.gates.timeoutMs, "preparer verify");
+    const initialMutations = outputs.map((path): PreparerMutation => mutation(worktree.workspacePath, path, before[path]!));
+    const triggerPaths = initialMutations
+      .filter((item) => item.preconditionHash !== item.resultHash || item.preconditionMode !== item.resultMode)
+      .map((item) => item.path)
+      .sort(byCodeUnit);
+    const generatedArtifacts = triggeredArtifacts(input.config, triggerPaths).map((artifact) => ({
+      path: artifact.path, source: artifact.source, regenerate: artifact.regenerate, regenerateOnApply: true as const,
+      ...(artifact.exemptReason === undefined ? {} : { exemptReason: artifact.exemptReason }),
+    })).sort((left, right) => byCodeUnit(left.path, right.path));
+    const postJournalPreparers = preparationPostJournalRecords(input.config, triggerPaths);
+    const generatedPaths = unique([...generatedArtifacts.map((item) => item.path), ...postJournalPreparers.flatMap((item) => item.outputs)]);
+    const overlap = generatedPaths.find((path) => outputs.includes(path));
+    if (overlap !== undefined) throw new PreparerError(`preparer output cannot also be a triggered generated output: ${overlap}`);
+    const generatedBefore = Object.fromEntries(generatedPaths.map((path) => [path, state(worktree.workspacePath, path)]));
+    const generation = runPreparationPostJournalPreparers(input.config, worktree.workspacePath, { triggerPaths, generatedArtifacts, postJournalPreparers });
+    if (!generation.ok) throw new PreparerError(generation.failure ?? "preparer generation failed");
     const changed = unique(statusEntries(worktree.workspacePath).flatMap((entry) => entry.paths)).sort(byCodeUnit);
-    const undeclared = changed.filter((path) => !outputs.includes(path));
+    const changedFiles = unique([...outputs, ...generatedPaths]);
+    const undeclared = changed.filter((path) => !changedFiles.includes(path));
     if (undeclared.length > 0) throw new PreparerError(`preparer wrote undeclared repository-visible path(s): ${undeclared.join(", ")}`);
-    const mutations = outputs.map((path): PreparerMutation => mutation(worktree.workspacePath, path, before[path]!));
+    const mutations = [...initialMutations, ...generatedPaths.map((path): PreparerMutation => mutation(worktree.workspacePath, path, generatedBefore[path]!))]
+      .sort((left, right) => byCodeUnit(left.path, right.path));
     const draft = {
       schemaVersion: PREPARER_MANIFEST_SCHEMA_VERSION,
       createdAt: resolved.committedAt,
@@ -102,6 +122,10 @@ export async function compilePreparerManifest(input: CompilePreparerInput): Prom
         targetPath: move.target,
       },
       mutations,
+      generatedArtifacts,
+      postJournalPreparers,
+      triggerPaths,
+      changedFiles,
     } as const;
     return { ...draft, planId: hashJson(draft) };
   } finally {
@@ -171,16 +195,29 @@ export async function applyPreparerManifest(options: {
   readonly verify?: boolean;
 }): Promise<void> {
   assertPreparerManifest(options.config, options.manifest);
-  const operations = options.manifest.mutations.map((item) => ({ kind: "write" as const, ...item }));
+  const generatedPaths = new Set([
+    ...options.manifest.generatedArtifacts.map((item) => item.path),
+    ...options.manifest.postJournalPreparers.flatMap((item) => item.outputs),
+  ]);
+  const operations = options.manifest.mutations.filter((item) => !generatedPaths.has(item.path)).map((item) => ({ kind: "write" as const, ...item }));
+  const generatedSnapshots = snapshotPaths(options.rootDir, [...generatedPaths]);
   const journal = executePreparationJournal({ rootDir: options.rootDir, operations });
   try {
+    const generation = runPreparationPostJournalPreparers(options.config, options.rootDir, options.manifest);
+    if (!generation.ok) throw new PreparerError(generation.failure ?? "preparer generation failed");
+    for (const item of options.manifest.mutations) {
+      const actual = state(options.rootDir, item.path);
+      if (actual.hash !== item.resultHash || actual.mode !== item.resultMode) throw new PreparerError(`applied preparer output differs from reviewed result: ${item.path}`);
+    }
     if (options.verify === true && options.manifest.preparer.verify !== undefined) {
-      await run(options.manifest.preparer.verify, options.rootDir, options.config.gates.timeoutMs, "preparer verify");
+      await runPreparerCommand(options.manifest.preparer.verify, options.rootDir, options.config.gates.timeoutMs, "preparer verify");
     }
     finalizeCompletedPreparationJournal(journal.recovery);
   } catch (error) {
+    const generatedRestore = restoreSnapshot(options.rootDir, generatedSnapshots);
     const restored = rollbackCompletedPreparationJournal(journal.recovery);
-    if (restored.failures.length > 0) throw new PreparerError(`preparer apply failed and rollback was incomplete: ${restored.failures.map((item) => item.path).join(", ")}`);
+    const failures = [...generatedRestore.failures, ...restored.failures];
+    if (failures.length > 0) throw new PreparerError(`preparer apply failed and rollback was incomplete: ${failures.map((item) => item.path).join(", ")}`);
     throw error;
   }
 }
@@ -207,6 +244,7 @@ export function assertPreparerManifest(config: MonocarveConfig, value: unknown):
   if (manifest.preparer.commit === undefined || typeof manifest.preparer.commit.subject !== "string") throw new PreparerError("preparer manifest commit policy is invalid");
   if (manifest.binding === undefined || Object.values(manifest.binding).some((item) => typeof item !== "string")) throw new PreparerError("preparer manifest move binding is invalid");
   if (!Array.isArray(manifest.mutations) || manifest.mutations.some((item) => item === null || typeof item !== "object" || typeof item.path !== "string" || typeof item.contents !== "string")) throw new PreparerError("preparer manifest mutations are invalid");
+  if (!Array.isArray(manifest.generatedArtifacts) || !Array.isArray(manifest.postJournalPreparers) || !Array.isArray(manifest.triggerPaths) || !Array.isArray(manifest.changedFiles)) throw new PreparerError("preparer manifest generation scope is invalid");
   if (manifest.baseline.configDigest !== hashJson(config)) throw new PreparerError("preparer manifest configuration digest mismatch");
   const { planId: _planId, ...draft } = manifest;
   if (manifest.planId !== hashJson(draft)) throw new PreparerError("preparer manifest identity mismatch");
@@ -242,7 +280,21 @@ export function assertPreparerManifest(config: MonocarveConfig, value: unknown):
   if (manifest.preparer.command !== expectedCommand || !sameOptionalPolicy(manifest.preparer.replacements, expectedReplacements) || !sameOptionalPolicy(manifest.preparer.creates, expectedCreates) || manifest.preparer.verify !== expectedVerify || hashJson(manifest.preparer.commit) !== hashJson(expectedCommit)) {
     throw new PreparerError("preparer manifest commands differ from configuration");
   }
-  const expectedOutputs = unique([...renderedOutputs, ...(expectedCreates?.map((create) => create.path) ?? [])]);
+  const expectedPrimaryOutputs = unique([...renderedOutputs, ...(expectedCreates?.map((create) => create.path) ?? [])]);
+  const expectedTriggerPaths = manifest.mutations
+    .filter((item) => expectedPrimaryOutputs.includes(item.path))
+    .filter((item) => item.preconditionHash !== item.resultHash || item.preconditionMode !== item.resultMode)
+    .map((item) => item.path)
+    .sort(byCodeUnit);
+  if (hashJson(manifest.triggerPaths) !== hashJson(expectedTriggerPaths)) throw new PreparerError("preparer manifest trigger paths differ from effective mutations");
+  const expectedArtifacts = triggeredArtifacts(config, manifest.triggerPaths).map((artifact) => ({
+    path: artifact.path, source: artifact.source, regenerate: artifact.regenerate, regenerateOnApply: true as const,
+    ...(artifact.exemptReason === undefined ? {} : { exemptReason: artifact.exemptReason }),
+  })).sort((left, right) => byCodeUnit(left.path, right.path));
+  const expectedPostJournal = preparationPostJournalRecords(config, manifest.triggerPaths);
+  if (hashJson(manifest.generatedArtifacts) !== hashJson(expectedArtifacts) || hashJson(manifest.postJournalPreparers) !== hashJson(expectedPostJournal)) throw new PreparerError("preparer manifest generation policy differs from configuration");
+  const expectedOutputs = unique([...expectedPrimaryOutputs, ...expectedArtifacts.map((item) => item.path), ...expectedPostJournal.flatMap((item) => item.outputs)]);
+  if (hashJson(manifest.changedFiles) !== hashJson(expectedOutputs)) throw new PreparerError("preparer manifest changed scope differs from configuration");
   const actualOutputs = manifest.mutations.map((item) => item.path).sort(byCodeUnit);
   if (manifest.bootstrapConfig !== undefined) {
     validatedPath(".", manifest.bootstrapConfig.path);
@@ -416,84 +468,4 @@ function uniqueOccurrence(contents: string, state: string): boolean {
 function sameOptionalPolicy(left: unknown, right: unknown): boolean {
   if (left === undefined || right === undefined) return left === right;
   return hashJson(left) === hashJson(right);
-}
-
-async function run(command: string, cwd: string, timeout: number, label: string): Promise<void> {
-  // Drain both streams while the process tree runs. Bun.spawnSync's buffered
-  // pipes can terminate the invoking CLI without returning to JavaScript when
-  // a nested repository gate produces sustained output. The async boundary is
-  // also explicit about stdin: repository verification is non-interactive and
-  // must never consume the operator CLI's input stream.
-  const child = Bun.spawn(["sh", "-c", command], {
-    cwd,
-    env: scrubbedGitEnv(),
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  let timedOut = false;
-  const timeoutTimer = setTimeout(() => {
-    timedOut = true;
-    child.kill();
-  }, timeout);
-  const stdoutCapture = captureProcessStream(child.stdout);
-  const stderrCapture = captureProcessStream(child.stderr);
-  // A pending pipe read alone does not keep Bun alive after the direct child
-  // exits. A descendant may still own the inherited descriptor, so retain one
-  // explicit event-loop handle until bounded post-exit finalization completes.
-  const keepAlive = setInterval(() => undefined, 1_000);
-  let exitCode: number;
-  let stdout: string;
-  let stderr: string;
-  try {
-    exitCode = await child.exited;
-    clearTimeout(timeoutTimer);
-    await drainAfterExit([stdoutCapture, stderrCapture], 250);
-    [stdout, stderr] = await Promise.all([stdoutCapture.result, stderrCapture.result]);
-  } finally {
-    clearTimeout(timeoutTimer);
-    clearInterval(keepAlive);
-  }
-  if (exitCode !== 0 || timedOut) {
-    const output = failedGateOutput({ stdout, stderr }).trim();
-    const reason = timedOut ? `timed out after ${timeout}ms` : `failed (exit ${exitCode})`;
-    throw new PreparerError(`${label} command ${reason}${output ? `:\n${output}` : ""}`);
-  }
-}
-
-interface ProcessStreamCapture {
-  readonly result: Promise<string>;
-  cancel(): Promise<void>;
-}
-
-/** Drain a child stream while retaining only bounded diagnostics. */
-function captureProcessStream(stream: ReadableStream<Uint8Array>): ProcessStreamCapture {
-  const limit = 16_000;
-  const marker = "\n… process output omitted …\n";
-  const head = 4_000;
-  const tail = limit - head - marker.length;
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  const result = (async (): Promise<string> => {
-    let output = "";
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      output += decoder.decode(value, { stream: true });
-      if (output.length > limit) output = `${output.slice(0, head)}${marker}${output.slice(-tail)}`;
-    }
-    output += decoder.decode();
-    return output.length <= limit ? output : `${output.slice(0, head)}${marker}${output.slice(-tail)}`;
-  })();
-  return { result, cancel: async () => { await reader.cancel(); } };
-}
-
-async function drainAfterExit(captures: readonly ProcessStreamCapture[], graceMs: number): Promise<void> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  await Promise.race([
-    Promise.all(captures.map((capture) => capture.result)).then(() => undefined),
-    new Promise<void>((resolve) => { timer = setTimeout(resolve, graceMs); }),
-  ]);
-  if (timer !== undefined) clearTimeout(timer);
-  await Promise.all(captures.map((capture) => capture.cancel()));
 }

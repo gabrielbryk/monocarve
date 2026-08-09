@@ -270,6 +270,7 @@ export interface PreparationManifest {
     readonly id: string;
     readonly command: string;
     readonly outputs: readonly string[];
+    readonly emittedModuleSpecifiers: readonly { readonly source: string; readonly resolutionBase: string }[];
     readonly verify?: string;
   }[];
   readonly compatibilityReexports: readonly CompatibilityReexportIntent[];

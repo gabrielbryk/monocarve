@@ -46,4 +46,24 @@ export interface PreparerManifest {
     readonly targetPath: string;
   };
   readonly mutations: readonly PreparerMutation[];
+  /** Config-bound generated artifacts invalidated by the preparer's effective source mutations. */
+  readonly generatedArtifacts: readonly {
+    readonly path: string;
+    readonly source: string;
+    readonly regenerate: string;
+    readonly regenerateOnApply: true;
+    readonly exemptReason?: string;
+  }[];
+  /** Config-bound generators run after the preparer journal and before verification. */
+  readonly postJournalPreparers: readonly {
+    readonly id: string;
+    readonly command: string;
+    readonly outputs: readonly string[];
+    readonly emittedModuleSpecifiers: readonly { readonly source: string; readonly resolutionBase: string }[];
+    readonly verify?: string;
+  }[];
+  /** Effective preparer mutations which select generation triggers. */
+  readonly triggerPaths: readonly string[];
+  /** Exact sorted union of preparer and generated output paths. */
+  readonly changedFiles: readonly string[];
 }
