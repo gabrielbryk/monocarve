@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { flagBool, flagString, type ParsedArgs } from "../cli/args.ts";
 import type { MonocarveConfig } from "../config.ts";
 import { IoError, UsageError } from "../errors.ts";
-import { applyPreparerManifest, assertApprovedPreparerManifest, assertPreparerManifest, commitPreparerOutputs, compilePreparerManifest, compileStandalonePreparerManifest, serializePreparerManifest, simulatePreparerManifest, type PreparerManifest } from "../preparer/index.ts";
+import { applyPreparerManifest, assertApprovedPreparerManifest, assertPreparerManifest, commitPreparerBootstrap, commitPreparerOutputs, compilePreparerManifest, compileStandalonePreparerManifest, serializePreparerManifest, simulatePreparerManifest, type PreparerManifest } from "../preparer/index.ts";
 import { currentBranch } from "../util/git.ts";
 import { isGuardedBranch } from "../config.ts";
 import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
@@ -16,7 +16,7 @@ async function preparerPlan(args: ParsedArgs): Promise<void> {
   const extractionPath = flagString(args, "extraction");
   const sourcePath = relativeWorkspacePath(loaded.rootDir, required(args, "source"));
   const manifest = extractionPath === undefined
-    ? await compileStandalonePreparerManifest({ rootDir: loaded.rootDir, config: loaded.config, baselineCommit: "HEAD", preparerId: required(args, "preparer"), sourcePath })
+    ? await compileStandalonePreparerManifest({ rootDir: loaded.rootDir, config: loaded.config, baselineCommit: "HEAD", preparerId: required(args, "preparer"), sourcePath, ...(flagString(args, "bootstrap-config") === undefined ? {} : { bootstrapConfigPath: relativeWorkspacePath(loaded.rootDir, flagString(args, "bootstrap-config")!) }) })
     : await compilePreparerManifest({ rootDir: loaded.rootDir, config: loaded.config, extraction: (await loadManifest(withPlan(args, extractionPath), loaded.rootDir)).manifest, preparerId: required(args, "preparer"), sourcePath });
   const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.preparer.json`);
   const written = flagBool(args, "write");
@@ -51,6 +51,13 @@ async function preparerCommit(args: ParsedArgs): Promise<void> {
   print({ schema: "preparer-commit", planId: manifest.planId, commit, next: "compile a fresh extraction plan from the new HEAD" }, args);
 }
 
+async function preparerBootstrapCommit(args: ParsedArgs): Promise<void> {
+  const loaded = await load(args);
+  const { path, manifest } = loadPreparerManifest(args, loaded.rootDir, loaded.config);
+  const commit = await commitPreparerBootstrap(loaded.rootDir, loaded.config, path, manifest, required(args, "subject"));
+  print({ schema: "preparer-bootstrap-commit", planId: manifest.planId, commit, next: ["preparer-apply", "--plan", path] }, args);
+}
+
 function loadPreparerManifest(args: ParsedArgs, rootDir: string, config: MonocarveConfig): { readonly path: string; readonly manifest: PreparerManifest } {
   const input = flagString(args, "plan") ?? args.positionals[0];
   if (input === undefined) throw new UsageError("a preparer manifest path is required (--plan <path>)");
@@ -78,9 +85,15 @@ function withPlan(args: ParsedArgs, path: string): ParsedArgs {
 export const preparerCommands: Record<string, CommandSpec> = {
   "preparer-plan": {
     summary: "compile a declared-output pre-extraction transaction",
-    usage: "preparer-plan [--extraction <path>] --preparer <id> --source <path> [--out <path>] [--write]",
+    usage: "preparer-plan [--extraction <path>] --preparer <id> --source <path> [--bootstrap-config <path>] [--out <path>] [--write]",
     details: "Runs the configured preparer only in a disposable baseline worktree. With --extraction it binds templates to one exact move destination; without it, --source is a repository policy anchor exposed as both sourcePath and targetPath. Refuses undeclared repository-visible changes and optionally writes a separately reviewable manifest.",
     run: preparerPlan,
+  },
+  "preparer-bootstrap-commit": {
+    summary: "commit an introducing config and approval through normal hooks",
+    usage: "preparer-bootstrap-commit --plan <path> --subject <conventional-commit-subject>",
+    details: "Temporarily applies reviewed outputs so normal hooks can validate a newly introduced preparer config, commits only that config and its manifest, then rolls outputs back for the ordinary preparer apply lifecycle.",
+    run: preparerBootstrapCommit,
   },
   "preparer-simulate": {
     summary: "replay a preparer manifest without changing the checkout",

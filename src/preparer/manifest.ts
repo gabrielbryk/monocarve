@@ -17,6 +17,7 @@ export interface PreparerManifest {
   readonly planId: string;
   readonly createdAt: string;
   readonly baseline: { readonly commit: string; readonly configDigest: Sha256 };
+  readonly bootstrapConfig?: PreparerMutation;
   readonly extractionPlanId: string;
   readonly preparer: {
     readonly id: string;

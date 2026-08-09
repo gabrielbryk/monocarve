@@ -15,6 +15,7 @@ import { byCodeUnit, hashBytes, hashJson, hashText, MISSING, stableStringify } f
 import { workspacePath } from "../util/paths.ts";
 import { renderTemplate } from "../util/template.ts";
 import { PREPARER_MANIFEST_SCHEMA_VERSION, type PreparerManifest, type PreparerMutation } from "./manifest.ts";
+import { bindBootstrapConfig } from "./bootstrap-config.ts";
 
 export class PreparerError extends MonocarveError { override readonly name = "PreparerError"; }
 
@@ -34,6 +35,8 @@ export interface CompileStandalonePreparerInput {
   readonly preparerId: string;
   /** Repository-owned policy anchor exposed as both sourcePath and targetPath. */
   readonly sourcePath: string;
+  /** Dirty configuration introduced by this transaction and committed with its manifest. */
+  readonly bootstrapConfigPath?: string;
 }
 
 export async function compilePreparerManifest(input: CompilePreparerInput): Promise<PreparerManifest> {
@@ -116,13 +119,14 @@ export async function compileStandalonePreparerManifest(input: CompileStandalone
     target: { packageName: "standalone", packageRoot: "." },
     operations: [{ kind: "move", source: input.sourcePath, target: input.sourcePath }],
   } as unknown as ExtractionManifest;
-  return compilePreparerManifest({
+  const manifest = await compilePreparerManifest({
     rootDir: input.rootDir,
     config: input.config,
     extraction: syntheticExtraction,
     preparerId: input.preparerId,
     sourcePath: input.sourcePath,
   });
+  return input.bootstrapConfigPath === undefined ? manifest : bindBootstrapConfig(input.rootDir, manifest, validatedPath(input.rootDir, input.bootstrapConfigPath));
 }
 
 export function serializePreparerManifest(manifest: PreparerManifest): string {
@@ -143,11 +147,19 @@ export function assertApprovedPreparerManifest(rootDir: string, path: string, ma
   }
   const changed = git({ cwd: rootDir }, "diff", "--name-only", "--no-renames", `${baseline}..${head}`).split("\n").filter(Boolean);
   const repositoryPath = `${repositoryPrefix(rootDir)}${path}`;
-  if (changed.length !== 1 || changed[0] !== repositoryPath) throw new PreparerError("approved preparer commit must contain exactly the manifest");
+  const expectedPaths = [repositoryPath, ...(manifest.bootstrapConfig === undefined ? [] : [`${repositoryPrefix(rootDir)}${manifest.bootstrapConfig.path}`])].sort(byCodeUnit);
+  if (changed.length !== expectedPaths.length || changed.sort(byCodeUnit).some((item, index) => item !== expectedPaths[index])) throw new PreparerError("approved preparer commit must contain exactly the manifest and its declared bootstrap config");
   const expected = serializePreparerManifest(manifest);
   const loaded = readFileSync(workspacePath(rootDir, path), "utf8");
   if (loaded !== expected || showBaseline(rootDir, head, path) !== expected) {
     throw new PreparerError("loaded preparer manifest bytes do not match the reviewed committed manifest");
+  }
+  if (manifest.bootstrapConfig !== undefined) {
+    const committed = showBaseline(rootDir, head, manifest.bootstrapConfig.path);
+    const parent = showBaseline(rootDir, baseline, manifest.bootstrapConfig.path);
+    if (committed === null || parent === null || hashText(committed) !== manifest.bootstrapConfig.resultHash || hashText(parent) !== manifest.bootstrapConfig.preconditionHash) {
+      throw new PreparerError("approved bootstrap config does not match reviewed preimage and result");
+    }
   }
 }
 
@@ -187,6 +199,7 @@ export function assertPreparerManifest(config: MonocarveConfig, value: unknown):
   if (manifest.schemaVersion !== PREPARER_MANIFEST_SCHEMA_VERSION) throw new PreparerError("unsupported preparer manifest schema");
   if (typeof manifest.planId !== "string" || typeof manifest.extractionPlanId !== "string") throw new PreparerError("preparer manifest identities must be strings");
   if (manifest.baseline === undefined || typeof manifest.baseline.commit !== "string" || typeof manifest.baseline.configDigest !== "string") throw new PreparerError("preparer manifest baseline is invalid");
+  if (manifest.bootstrapConfig !== undefined && (manifest.bootstrapConfig === null || typeof manifest.bootstrapConfig !== "object" || typeof manifest.bootstrapConfig.path !== "string" || typeof manifest.bootstrapConfig.contents !== "string" || manifest.bootstrapConfig.resultHash !== hashText(manifest.bootstrapConfig.contents) || ![0o644, 0o755].includes(manifest.bootstrapConfig.preconditionMode as number) || ![0o644, 0o755].includes(manifest.bootstrapConfig.resultMode))) throw new PreparerError("preparer manifest bootstrap config is invalid");
   if (manifest.preparer === undefined || typeof manifest.preparer.id !== "string") throw new PreparerError("preparer manifest policy is invalid");
   if (manifest.preparer.command !== undefined && typeof manifest.preparer.command !== "string") throw new PreparerError("preparer manifest command is invalid");
   if (manifest.preparer.replacements !== undefined && (!Array.isArray(manifest.preparer.replacements) || manifest.preparer.replacements.some((item) => item === null || typeof item !== "object" || typeof item.path !== "string" || typeof item.before !== "string" || typeof item.after !== "string" || (item.prefix !== undefined && typeof item.prefix !== "string") || (item.suffix !== undefined && typeof item.suffix !== "string")))) throw new PreparerError("preparer manifest replacements are invalid");
@@ -231,6 +244,10 @@ export function assertPreparerManifest(config: MonocarveConfig, value: unknown):
   }
   const expectedOutputs = unique([...renderedOutputs, ...(expectedCreates?.map((create) => create.path) ?? [])]);
   const actualOutputs = manifest.mutations.map((item) => item.path).sort(byCodeUnit);
+  if (manifest.bootstrapConfig !== undefined) {
+    validatedPath(".", manifest.bootstrapConfig.path);
+    if (actualOutputs.includes(manifest.bootstrapConfig.path)) throw new PreparerError("bootstrap config cannot also be a preparer output");
+  }
   if (expectedOutputs.length !== actualOutputs.length || expectedOutputs.some((path, index) => path !== actualOutputs[index])) {
     throw new PreparerError("preparer manifest outputs differ from configuration");
   }

@@ -225,7 +225,8 @@ result — matching `prepare-apply`'s exact simulate-then-commit shape.
 
 | command | usage and boundary |
 | --- | --- |
-| `preparer-plan` | `preparer-plan [--extraction <path>] --preparer <id> --source <path> [--out <path>] [--write]` — run one configured preparer in a disposable baseline worktree and compile its declared outputs into a reviewable manifest. Without an extraction, `source` is the standalone policy anchor. |
+| `preparer-plan` | `preparer-plan [--extraction <path>] --preparer <id> --source <path> [--bootstrap-config <path>] [--out <path>] [--write]` — run one configured preparer in a disposable baseline worktree and compile its declared outputs into a reviewable manifest. Without an extraction, `source` is the standalone policy anchor. |
+| `preparer-bootstrap-commit` | `preparer-bootstrap-commit --plan <path> --subject <subject>` — for a plan compiled with `preparer-plan --bootstrap-config <path>`, temporarily materialize reviewed outputs so normal hooks can validate the introducing config, commit only the exact config and manifest, then roll the outputs back. |
 | `preparer-simulate` | `preparer-simulate --plan <path>` — replay captured outputs and their configured verification without changing the checkout. |
 | `preparer-apply` | `preparer-apply --plan <path>` — require the exact manifest as the sole commit directly above its extraction baseline, simulate first, then journal-apply reviewed outputs with rollback; never commits the outputs. |
 | `preparer-commit` | `preparer-commit --plan <path>` — verify exact applied bytes and modes, refuse guarded branches or any extra dirty path, and commit only declared outputs with configured metadata. |
@@ -322,6 +323,13 @@ scope—then regenerate the extraction plan from the new `HEAD` because the
 reviewed extraction manifest is now stale. Verification commands run only in
 disposable worktrees, never during real-checkout journal replay. Ignored scratch
 writes are discarded with that worktree and are not captured or applied.
+
+When adding a preparer whose generated output is already required by commit
+hooks, compile the standalone plan while only the config is dirty with
+`--bootstrap-config <path>`. Review the manifest, then run
+`preparer-bootstrap-commit`. The transaction runs the ordinary hooks with the
+reviewed outputs temporarily present, commits only the config and manifest,
+and restores the checkout before the normal `preparer-apply` lifecycle.
 
 Preparers that must inspect the moved tree use `postJournalPreparers`. Each
 declares `phase: "after-journal-before-gates"`, a command, exact outputs,

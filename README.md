@@ -317,7 +317,7 @@ These are the main workflow commands, not the complete registry. Run
 | `prepare-plan` | compile a reviewed, replayable type-only declaration preparation |
 | `prepare-multi-plan` | compile reviewed per-donor seams into one atomic multi-file preparation |
 | `prepare-apply` / `prepare-audit` | simulate or commit a preparation, then independently replay its proof |
-| `preparer-plan` / `preparer-simulate` / `preparer-apply` / `preparer-commit` | compile, prove, journal-apply, and explicitly commit configured declared-output ratchets |
+| `preparer-plan` / `preparer-bootstrap-commit` / `preparer-simulate` / `preparer-apply` / `preparer-commit` | compile, bootstrap through normal hooks, prove, journal-apply, and explicitly commit configured declared-output ratchets |
 | `campaign resolve` | re-scan and resolve the next ordered `{path, packageName}` target; compile at most one plan and stop for review |
 | `campaign optimize` | emit ROI-ranked stable targets and coupling preparation priorities |
 | legacy `campaign init/status/advance/record` | finish an existing schema-v1 preparation/extraction pair ledger |
