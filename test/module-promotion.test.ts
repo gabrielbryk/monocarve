@@ -14,6 +14,7 @@ import { applyPlan } from "../src/transaction/apply.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
 import { inspectCommitChain } from "../src/transaction/commit-evidence.ts";
 import { classifyLifecycle } from "../src/transaction/lifecycle-status.ts";
+import { simulatePlan } from "../src/transaction/simulate.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, read, write } from "./support/fixture-repo.ts";
 import { landManifest } from "./support/transaction-fixture.ts";
 import { runIn } from "./support/cli.ts";
@@ -28,11 +29,11 @@ const TERRITORY_TEST = "apps/api/src/territory/service.test.ts";
 const TERRITORY_SERVICE = "apps/api/src/territory/service.ts";
 const CONSUMER_ROOT_TEST = "apps/api/tests/admin/helpers.test.ts";
 
-function setup(options: { cycle?: boolean; hiddenConsumer?: boolean; retireSource?: boolean; noGraphEdges?: boolean; sourceDependsOnApp?: boolean; directTests?: boolean; consumerRootTest?: boolean; subpathSurface?: boolean } = {}) {
+function setup(options: { cycle?: boolean; hiddenConsumer?: boolean; retireSource?: boolean; noGraphEdges?: boolean; sourceDependsOnApp?: boolean; directTests?: boolean; consumerRootTest?: boolean; subpathSurface?: boolean; existingTarget?: boolean; targetModule?: string } = {}) {
   const root = fixtureRepo({
     "package.json": '{"name":"fixture","private":true}\n',
     "pnpm-workspace.yaml": "packages:\n  - 'apps/*'\n  - 'libs/*'\n",
-    "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\n  apps/api: {}\n",
+    "pnpm-lock.yaml": `lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\n  apps/api: {}\n${options.existingTarget ? "\n  libs/resource-contracts: {}\n" : ""}`,
     "apps/api/package.json": '{"name":"@acme/api","private":true}\n',
     "apps/api/tsconfig.json": JSON.stringify({ compilerOptions: { strict: true, module: "ESNext", moduleResolution: "Bundler" }, include: ["src"] }),
     [SOURCE]: "export const Contract = { id: 1 };\nexport type Contract = typeof Contract;\n",
@@ -44,6 +45,10 @@ function setup(options: { cycle?: boolean; hiddenConsumer?: boolean; retireSourc
       [TERRITORY_TEST]: 'import { Contract } from "../resources/schemas.ts";\nimport { territory } from "./service.ts";\nvoid [Contract, territory];\n',
     } : {}),
     ...(options.consumerRootTest ? { [CONSUMER_ROOT_TEST]: 'import { Contract } from "../../src/resources/schemas.ts";\nvoid Contract;\n' } : {}),
+    ...(options.existingTarget ? {
+      "libs/resource-contracts/package.json": `${JSON.stringify({ name: "@acme/resource-contracts", version: "0.1.0", private: true, type: "module", exports: { ".": "./src/index.ts", "./product-data-scope": "./src/resources/schemas.ts" } }, null, 2)}\n`,
+      "libs/resource-contracts/src/index.ts": "export const existing = true;\n",
+    } : {}),
   });
   const config = fixtureConfig(root, {
     applications: [{ name: "api", sourceRoot: "apps/api/src", consumerRoots: options.consumerRootTest ? ["apps/api/tests"] : [], tsconfig: "apps/api/tsconfig.json", packageName: "@acme/api", compositionRoots: [] }],
@@ -53,7 +58,7 @@ function setup(options: { cycle?: boolean; hiddenConsumer?: boolean; retireSourc
       publicSurface: { mode: "subpaths", keyTemplate: "./{pathNoExtension}", targetTemplate: "./src/{path}" },
       packageJson: { contents: `${JSON.stringify({ name: "{package}", version: "0.1.0", private: true, type: "module", exports: { ".": "./src/index.ts" } }, null, 2)}\n` },
     } } : {}),
-    modulePromotions: [{ id: "resource-contracts", source: SOURCE, targetPackage: "@acme/resource-contracts", targetModule: "index", retireSource: options.retireSource ?? true }],
+    modulePromotions: [{ id: "resource-contracts", source: SOURCE, targetPackage: "@acme/resource-contracts", targetModule: options.targetModule ?? "index", retireSource: options.retireSource ?? true }],
   });
   const baseline = resolveCommit(root, "HEAD");
   const dependencies: ScanReport["modules"][number]["dependencies"] = options.cycle === false && !options.sourceDependsOnApp ? [] : [{ module: "../routes.ts", resolved: CONSUMER }];
@@ -128,6 +133,32 @@ describe("module promotion", () => {
     await executeJournal({ config: fixture.config, treeRoot: fixture.root, manifest, useGitMv: false });
     expect(auditPlanSync({ rootDir: fixture.root, config: fixture.config, manifest }).passed).toBe(true);
   });
+
+  test("rewrites an associated test to an existing package's promoted public subpath", async () => {
+    const fixture = setup({ cycle: false, directTests: true, existingTarget: true, subpathSurface: true, targetModule: "product-data-scope" });
+    const manifest = compileModulePromotion({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, context: new WorkspaceContext(fixture.config, fixture.root), baselineCommit: fixture.baseline.commit, promotionId: "resource-contracts" });
+    const movedTest = manifest.operations.find((item) => item.kind === "move-with-rewrite" && item.source === OWNED_TEST);
+    expect(manifest.target.publicModules?.find((item) => item.source === SOURCE)?.specifier).toBe("@acme/resource-contracts/product-data-scope");
+    expect(movedTest?.kind === "move-with-rewrite" ? movedTest.rewrites : undefined).toEqual([
+      { donorlessSpecifier: "./schemas.ts", packageSpecifier: "@acme/resource-contracts/product-data-scope" },
+    ]);
+
+    const simulation = await simulatePlan({ config: fixture.config, rootDir: fixture.root, manifest, skipGates: true });
+    expect(simulation.ok, simulation.failure).toBe(true);
+    await executeJournal({ config: fixture.config, treeRoot: fixture.root, manifest, useGitMv: false });
+    expect(auditPlanSync({ rootDir: fixture.root, config: fixture.config, manifest }).passed).toBe(true);
+
+    if (movedTest?.kind !== "move-with-rewrite") throw new Error("fixture has no rewritten associated test");
+    const tampered = {
+      ...manifest,
+      operations: manifest.operations.map((operation) => operation === movedTest
+        ? { ...operation, rewrites: [{ ...operation.rewrites[0]!, packageSpecifier: "@acme/resource-contracts" }] }
+        : operation),
+    };
+    const tamperedAudit = auditPlanSync({ rootDir: fixture.root, config: fixture.config, manifest: tampered });
+    expect(tamperedAudit.passed).toBe(false);
+    expect(tamperedAudit.codemodReplay.passed).toBe(false);
+  }, 120_000);
 
   test("committed promotion with a rewritten owned test has an exact applied lifecycle", async () => {
     const fixture = setup({ cycle: false, directTests: true });

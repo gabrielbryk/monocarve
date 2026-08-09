@@ -59,10 +59,13 @@ export function compileModulePromotion(input: CompileModulePromotionInput): Extr
   const importers = modulePromotionImporterEvidence({ graph: input.graph, context, source: promotion.source });
   const directTests = importers.filter((path) => context.isTest(path));
   const testPartition = partitionTests(context, [promotion.source], directTests, []);
+  const promotedSpecifier = promotion.targetModule === "index"
+    ? promotion.targetPackage
+    : `${promotion.targetPackage}/${promotion.targetModule.replace(/^\.\//, "")}`;
   const travellingTestRewrites = testPartition.travelling.flatMap((test) =>
     context.moduleReferences(test)
       .filter((reference) => reference.specifier !== null && reference.resolved === context.absolute(promotion.source))
-      .map((reference) => ({ file: test, specifier: reference.specifier!, package: promotion.targetPackage })),
+      .map((reference) => ({ file: test, specifier: reference.specifier!, package: promotedSpecifier })),
   );
   const scc: Scc = toSccs(appGraph.condensed).find((item) => item.members.includes(promotion.source))!;
   const candidate: PortfolioCandidate = {

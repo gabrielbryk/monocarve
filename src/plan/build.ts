@@ -1,7 +1,7 @@
 /** Deterministic compilation of one eligible portfolio candidate. */
 import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapters/registry.ts";
 import { GENERATOR } from "../branding.ts";
-import { applicationOwner, getApplication, packageNameMatcher, renderExtractionProfile, resolveExtractionProfile, triggeredPostJournalPreparers, type MonocarveConfig } from "../config.ts";
+import { applicationOwner, getApplication, packageNameMatcher, packageNameOf, renderExtractionProfile, resolveExtractionProfile, triggeredPostJournalPreparers, type MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import type { PortfolioCandidate } from "../portfolio/types.ts";
 import { byCodeUnit, hashText, stableStringify, type Sha256 } from "../util/hash.ts";
@@ -119,10 +119,11 @@ function dependenciesFor(state: BuildState, sources: readonly string[], rewrites
   const dependencies = inferDependencies(state.context, state.graph, sources, state.packageName);
   addAutomaticJsxRuntime(state, sources, dependencies);
   for (const entries of rewrites.values()) for (const rewrite of entries) {
-    if (rewrite.packageSpecifier === state.packageName) continue;
-    const owner = state.graph.workspace.packageNames.get(rewrite.packageSpecifier);
+    const packageName = packageNameOf(rewrite.packageSpecifier);
+    if (packageName === state.packageName) continue;
+    const owner = state.graph.workspace.packageNames.get(packageName);
     if (!owner) throw new PlanningError(`rewrite target is not a workspace package: ${rewrite.packageSpecifier}`);
-    if (!dependencies.dev[rewrite.packageSpecifier]) dependencies.runtime[rewrite.packageSpecifier] = "workspace:*";
+    if (!dependencies.dev[packageName]) dependencies.runtime[packageName] = "workspace:*";
     if (!dependencies.packageReferences.includes(owner)) dependencies.packageReferences = [...dependencies.packageReferences, owner].sort();
   }
   return dependencies;
