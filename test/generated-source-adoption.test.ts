@@ -1,11 +1,14 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { buildDependencyGraph, type ScanReport } from "../src/graph/build.ts";
 import { compileGeneratedSourceAdoption } from "../src/prepare/generated-source-adoption.ts";
+import type { PreparationManifest } from "../src/prepare/manifest-types.ts";
 import { auditPreparationSync } from "../src/prepare/audit.ts";
 import { assertPreparationPolicy, preparationFilesystemOperations, simulatePreparation } from "../src/prepare/simulate.ts";
 import { executePreparationJournal } from "../src/prepare/journal.ts";
 import { runPreparationPostJournalPreparers } from "../src/prepare/post-journal.ts";
+import { assertPreparationManifestValid, serializePreparationManifest } from "../src/prepare/manifest.ts";
 import { resolveCommit } from "../src/util/git.ts";
 import { hashText } from "../src/util/hash.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, write } from "./support/fixture-repo.ts";
@@ -48,7 +51,7 @@ describe("generated-source adoption", () => {
     expect(adoption.contents).toBe("export const Contract = 1;\n");
     executePreparationJournal({ rootDir: root, operations: preparationFilesystemOperations(manifest) });
     const audit = auditPreparationSync({ config, rootDir: root, manifest, freshGraph: { commit: baseline.commit, digest: hashText("graph") } });
-    expect(audit.passed).toBe(true);
+    expect(audit.failures).toEqual([]);
   });
 
   test("refuses generator retirement when another generated output survives", () => {
@@ -88,6 +91,13 @@ describe("generated-source adoption", () => {
         regenerate: "printf 'fresh\\n' > generated/workers-port-ledger.json",
         triggers: ["^apps/api/src/"],
       }] },
+      postJournalPreparers: [{
+        id: "backend-workers-port-ledger",
+        phase: "after-journal-before-gates",
+        command: "printf 'fresh\\n' > generated/workers-port-ledger.json",
+        outputs: ["generated/workers-port-ledger.json"],
+        triggers: ["^apps/api/src/"],
+      }],
       generatedSourceAdoptions: [{ id: "contracts", artifacts: [
         { path: ARTIFACT, missingSource: SOURCE, removeHeaderLines: 3 },
         { path: packageArtifact, missingSource: packageSource, removeHeaderLines: 3 },
@@ -104,6 +114,12 @@ describe("generated-source adoption", () => {
       regenerate: "printf 'fresh\\n' > generated/workers-port-ledger.json",
     }]);
     expect(manifest.changedFiles).toContain("generated/workers-port-ledger.json");
+    expect(manifest.changedFiles.filter((path) => path === "generated/workers-port-ledger.json")).toHaveLength(1);
+    const planPath = "plans/adoption.json";
+    write(root, planPath, serializePreparationManifest(manifest));
+    const reloaded = JSON.parse(readFileSync(`${root}/${planPath}`, "utf8")) as PreparationManifest;
+    expect(() => assertPreparationManifestValid(reloaded)).not.toThrow();
+    expect(reloaded).toEqual(manifest);
     assertPreparationPolicy(config, manifest);
     expect(() => assertPreparationPolicy(config, { ...manifest, policyAnchor: { sourcePath: packageArtifact, targetPath: packageArtifact, targetModuleSpecifier: "adopt:contracts" } })).toThrow(/differs from the compiler-selected/);
     const simulation = await simulatePreparation({ config, rootDir: root, manifest, baselineGraphScanner: async ({ baselineCommit }) => ({ commit: baselineCommit, digest: manifest.graphDigest }) });
@@ -112,7 +128,7 @@ describe("generated-source adoption", () => {
     executePreparationJournal({ rootDir: root, operations: preparationFilesystemOperations(manifest) });
     const generated = runPreparationPostJournalPreparers(config, root, manifest);
     expect(generated.ok).toBe(true);
-    const audit = auditPreparationSync({ config, rootDir: root, manifest, freshGraph: { commit: baseline.commit, digest: manifest.graphDigest }, regeneratedArtifacts: generated.hashes as never });
+    const audit = auditPreparationSync({ config, rootDir: root, manifest, approvedManifestPath: planPath, freshGraph: { commit: baseline.commit, digest: manifest.graphDigest }, regeneratedArtifacts: generated.hashes as never });
     expect(audit.passed).toBe(true);
   });
 

@@ -354,9 +354,13 @@ function validateScope(manifest: PreparationManifest, add: AddIssue): void {
     if (!isWorkspacePath(artifact.path) || !isWorkspacePath(artifact.source)) add("generated-artifact", "generated artifact paths must be workspace-relative", artifact.path);
     if (!artifact.regenerate) add("generated-artifact", "generated artifact regenerate command must be non-empty", artifact.path);
   }
-  const paths = [...manifest.operations.flatMap(preparationOperationPaths), ...artifacts.map((item) => item.path), ...(manifest.postJournalPreparers ?? []).flatMap((item) => item.outputs)].sort(byCodeUnit);
+  const paths = [...new Set([
+    ...manifest.operations.flatMap(preparationOperationPaths),
+    ...artifacts.map((item) => item.path),
+    ...(manifest.postJournalPreparers ?? []).flatMap((item) => item.outputs),
+  ])].sort(byCodeUnit);
   validateSortedStrings(manifest.changedFiles, "changed-files", "changedFiles", add);
-  if (paths.length !== manifest.changedFiles.length || paths.some((path, index) => path !== manifest.changedFiles[index])) add("changed-files", "changedFiles must exactly equal the sorted operation mutation paths");
+  if (paths.length !== manifest.changedFiles.length || paths.some((path, index) => path !== manifest.changedFiles[index])) add("changed-files", "changedFiles must exactly equal the sorted union of operation, generated-artifact, and post-journal mutation paths");
 }
 
 function validateLiveState(manifest: PreparationManifest, options: ValidatePreparationManifestOptions, add: AddIssue): void {
