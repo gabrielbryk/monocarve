@@ -1,5 +1,5 @@
 import { GENERATOR } from "../branding.ts";
-import { ownerFor, type MonocarveConfig } from "../config.ts";
+import { ownerFor, triggeredArtifacts, type MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import { PlanningError } from "../plan/context.ts";
 import { git, resolveCommit, showBaseline } from "../util/git.ts";
@@ -7,6 +7,7 @@ import { byCodeUnit, hashJson, hashText, type Sha256 } from "../util/hash.ts";
 import { baselineFileMode, type PreparationManifestRendering } from "./build.ts";
 import { createPreparationManifest, assertPreparationManifestValid, preparationOperationPaths } from "./manifest.ts";
 import type { PreparationManifest, PreparationReplayOperation } from "./manifest-types.ts";
+import { preparationPostJournalRecords } from "./post-journal.ts";
 
 export interface CompileGeneratedSourceAdoptionInput {
   readonly rootDir: string; readonly config: MonocarveConfig; readonly graph: DependencyGraph;
@@ -58,7 +59,13 @@ export function compileGeneratedSourceAdoption(input: CompileGeneratedSourceAdop
     operations.push({ kind: "delete-generated-source-generator", adoptedOutputs: surviving, file: { path: adoption.retireGenerator, preconditionHash: hashText(generatorText), preconditionMode: baselineFileMode(input.rootDir, baseline.commit, adoption.retireGenerator), resultHash: hashText(""), resultMode: 0 } });
   }
   const ordered = operations.sort((left, right) => byCodeUnit(preparationOperationPaths(left)[0]!, preparationOperationPaths(right)[0]!) || byCodeUnit(left.kind, right.kind));
-  const manifest = createPreparationManifest({ schemaVersion: 1, createdAt: baseline.committedAt, generator: { ...GENERATOR }, baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: hashJson(input.config) }, graphDigest: input.graphDigest, policyAnchor, declarations: [], operations: ordered, compatibilityReexports: [], changedFiles: [...new Set(ordered.flatMap(preparationOperationPaths))].sort(byCodeUnit), commits: { prepare: input.rendering.commit }, gates: { package: [...input.rendering.gates.package].sort(byCodeUnit), project: [...input.rendering.gates.project].sort(byCodeUnit), workspace: [...input.rendering.gates.workspace].sort(byCodeUnit) } });
+  const operationPaths = [...new Set(ordered.flatMap(preparationOperationPaths))].sort(byCodeUnit);
+  const generatedArtifacts = triggeredArtifacts(input.config, operationPaths)
+    .map((artifact) => ({ path: artifact.path, source: artifact.source, regenerate: artifact.regenerate }))
+    .sort((left, right) => byCodeUnit(left.path, right.path));
+  const postJournalPreparers = preparationPostJournalRecords(input.config, operationPaths);
+  const changedFiles = [...new Set([...operationPaths, ...generatedArtifacts.map((item) => item.path), ...postJournalPreparers.flatMap((item) => item.outputs)])].sort(byCodeUnit);
+  const manifest = createPreparationManifest({ schemaVersion: 1, createdAt: baseline.committedAt, generator: { ...GENERATOR }, baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: hashJson(input.config) }, graphDigest: input.graphDigest, policyAnchor, declarations: [], operations: ordered, generatedArtifacts, postJournalPreparers, compatibilityReexports: [], changedFiles, commits: { prepare: input.rendering.commit }, gates: { package: [...input.rendering.gates.package].sort(byCodeUnit), project: [...input.rendering.gates.project].sort(byCodeUnit), workspace: [...input.rendering.gates.workspace].sort(byCodeUnit) } });
   assertPreparationManifestValid(manifest);
   return manifest;
 }

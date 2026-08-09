@@ -5,6 +5,7 @@ import { compileGeneratedSourceAdoption } from "../src/prepare/generated-source-
 import { auditPreparationSync } from "../src/prepare/audit.ts";
 import { assertPreparationPolicy, preparationFilesystemOperations, simulatePreparation } from "../src/prepare/simulate.ts";
 import { executePreparationJournal } from "../src/prepare/journal.ts";
+import { runPreparationPostJournalPreparers } from "../src/prepare/post-journal.ts";
 import { resolveCommit } from "../src/util/git.ts";
 import { hashText } from "../src/util/hash.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, write } from "./support/fixture-repo.ts";
@@ -77,9 +78,16 @@ describe("generated-source adoption", () => {
       [packageArtifact]: `${packageHeader}export const Analytics = 1;\n`,
       "libs/analytics-contracts/package.json": JSON.stringify({ name: "@acme/analytics-contracts" }),
       [GENERATOR]: "export {};\n",
+      "generated/workers-port-ledger.json": "stale\n",
     });
     const config = fixtureConfig(root, {
       preparation: { gates: { workspace: ["true"] }, commit: { subject: "refactor: adopt generated contracts" } },
+      generatedArtifacts: { artifacts: [{
+        path: "generated/workers-port-ledger.json",
+        source: "apps/api/src",
+        regenerate: "printf 'fresh\\n' > generated/workers-port-ledger.json",
+        triggers: ["^apps/api/src/"],
+      }] },
       generatedSourceAdoptions: [{ id: "contracts", artifacts: [
         { path: ARTIFACT, missingSource: SOURCE, removeHeaderLines: 3 },
         { path: packageArtifact, missingSource: packageSource, removeHeaderLines: 3 },
@@ -90,13 +98,21 @@ describe("generated-source adoption", () => {
     const manifest = compileGeneratedSourceAdoption({ rootDir: root, config, graph, baselineCommit: baseline.commit, graphDigest: hashText("mixed-graph"), adoptionId: "contracts", policySpecifier: "adopt:contracts", rendering: { commit: { subject: "refactor: adopt generated contracts" }, gates: { package: [], project: [], workspace: ["true"] } } });
 
     expect(manifest.policyAnchor?.sourcePath).toBe(ARTIFACT);
+    expect(manifest.generatedArtifacts).toEqual([{
+      path: "generated/workers-port-ledger.json",
+      source: "apps/api/src",
+      regenerate: "printf 'fresh\\n' > generated/workers-port-ledger.json",
+    }]);
+    expect(manifest.changedFiles).toContain("generated/workers-port-ledger.json");
     assertPreparationPolicy(config, manifest);
     expect(() => assertPreparationPolicy(config, { ...manifest, policyAnchor: { sourcePath: packageArtifact, targetPath: packageArtifact, targetModuleSpecifier: "adopt:contracts" } })).toThrow(/differs from the compiler-selected/);
     const simulation = await simulatePreparation({ config, rootDir: root, manifest, baselineGraphScanner: async ({ baselineCommit }) => ({ commit: baselineCommit, digest: manifest.graphDigest }) });
     expect(simulation.ok).toBe(true);
     expect(simulation.audit?.passed).toBe(true);
     executePreparationJournal({ rootDir: root, operations: preparationFilesystemOperations(manifest) });
-    const audit = auditPreparationSync({ config, rootDir: root, manifest, freshGraph: { commit: baseline.commit, digest: manifest.graphDigest } });
+    const generated = runPreparationPostJournalPreparers(config, root, manifest);
+    expect(generated.ok).toBe(true);
+    const audit = auditPreparationSync({ config, rootDir: root, manifest, freshGraph: { commit: baseline.commit, digest: manifest.graphDigest }, regeneratedArtifacts: generated.hashes as never });
     expect(audit.passed).toBe(true);
   });
 
