@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { parseConfig } from "../src/config.ts";
-import { parseManifest } from "../src/plan/build.ts";
+import { generatedFilesFor, parseManifest } from "../src/plan/build.ts";
+import { WorkspaceContext } from "../src/plan/context.ts";
 import { validatePlan } from "../src/plan/validate.ts";
 import { simulatePlan } from "../src/transaction/simulate.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
@@ -70,10 +71,14 @@ function configuredWorkspace(): string {
     "",
   ].join("\n"));
   write(root, "apps/api/src/routes-estimating.ts", [
+    "// AUTO-GENERATED - DO NOT EDIT",
+    "// Source of truth: docs/routes/route-meta.json",
+    "// Regenerate: bun scripts/generate-routes.ts",
     'import { handle } from "./estimating/handler.ts";',
     "export const estimatingRoute = handle;",
     "",
   ].join("\n"));
+  write(root, "docs/routes/route-meta.json", "{}\n");
   write(root, "apps/api/src/wiring-estimating.ts", [
     'import { handle } from "./estimating/handler.ts";',
     "export const estimatingWiring = { handle };",
@@ -97,6 +102,15 @@ describe("evacuation immutable plan lifecycle", () => {
     expect(response.manifest.source.files).toContain("apps/api/src/routes-estimating.ts");
     expect(response.manifest.source.files).toContain("apps/api/src/wiring-estimating.ts");
     expect(response.manifest.provenance?.evacuation?.includedCompositionRoots).toEqual(["apps/api/src/routes-estimating.ts", "apps/api/src/wiring-estimating.ts"]);
+    expect(response.manifest.generatedFiles).toContainEqual(expect.objectContaining({
+      path: "libs/format/src/routes-estimating.ts",
+      source: "docs/routes/route-meta.json",
+      regenerate: "bun scripts/generate-routes.ts",
+    }));
+
+    const config = parseConfig(JSON.parse(readFileSync(join(root, "monocarve.config.json"), "utf8")), join(root, "monocarve.config.json"));
+    const simulation = await simulatePlan({ config, rootDir: root, manifest: response.manifest });
+    expect(simulation.ok, JSON.stringify(simulation, null, 2)).toBe(true);
 
     const raw = JSON.parse(readFileSync(join(root, "monocarve.config.json"), "utf8"));
     const tampered = structuredClone(response.manifest);
@@ -109,7 +123,39 @@ describe("evacuation immutable plan lifecycle", () => {
     expect(audit.passed).toBe(false);
     expect(audit.unauditable).toContainEqual(expect.stringContaining("[composition-inclusion]"));
     expect(audit.unauditable).toContainEqual(expect.stringContaining("[evacuation-identity]"));
+
+    const generatedTamper = structuredClone(response.manifest);
+    (generatedTamper.generatedFiles[0] as { source: string }).source = "docs/routes/missing.json";
+    const generatedSimulation = await simulatePlan({ config, rootDir: root, manifest: generatedTamper });
+    expect(generatedSimulation.ok).toBe(false);
+    expect(generatedSimulation.failure).toContain("audit failed in the simulation worktree");
+    expect(generatedSimulation.failure).toContain("declares a source that does not exist: docs/routes/missing.json");
   }, 240_000);
+
+  test("distinguishes missing source and regeneration fields in generated headers", () => {
+    const root = configuredWorkspace();
+    const configPath = join(root, "monocarve.config.json");
+    const raw = JSON.parse(readFileSync(configPath, "utf8"));
+    const config = parseConfig(raw, configPath);
+    const source = "apps/api/src/routes-estimating.ts";
+    const target = "libs/format/src/routes-estimating.ts";
+
+    write(root, source, "// AUTO-GENERATED - DO NOT EDIT\n// Regenerate: bun scripts/generate-routes.ts\nexport {};\n");
+    expect(() => generatedFilesFor(config, new WorkspaceContext(config, root), [source], [target]))
+      .toThrow("missing source provenance (Source: or Source of truth:)");
+
+    write(root, source, "// AUTO-GENERATED - DO NOT EDIT\n// Source of truth: docs/routes/route-meta.json\nexport {};\n");
+    expect(() => generatedFilesFor(config, new WorkspaceContext(config, root), [source], [target]))
+      .toThrow("missing regeneration provenance (Regenerate:)");
+
+    const configuredOverride = parseConfig({
+      ...raw,
+      generatedArtifacts: { provenance: { source: "^//\\s*Origin:\\s*(.+)$" } },
+    }, configPath);
+    write(root, source, "// AUTO-GENERATED - DO NOT EDIT\n// Origin: docs/routes/route-meta.json\n// Regenerate: bun scripts/generate-routes.ts\nexport {};\n");
+    expect(generatedFilesFor(configuredOverride, new WorkspaceContext(configuredOverride, root), [source], [target]))
+      .toContainEqual(expect.objectContaining({ source: "docs/routes/route-meta.json" }));
+  });
 
   test("refuses composition inclusion that was not selected", async () => {
     const root = configuredWorkspace();

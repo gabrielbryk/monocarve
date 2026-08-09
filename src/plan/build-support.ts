@@ -44,7 +44,12 @@ export function generatedFilesFor(
   const declared = production.flatMap((source, index): GeneratedFileRecord[] => {
     const provenance = generatedProvenance(config, context.rootDir, source);
     if (provenance === null) return [];
-    if (provenance.source === null || provenance.regenerate === null) throw new PlanningError(`generated source declares no provenance to carry: ${source}`);
+    if (provenance.source === null) {
+      throw new PlanningError(`generated source header is missing source provenance (Source: or Source of truth:): ${source}`);
+    }
+    if (provenance.regenerate === null) {
+      throw new PlanningError(`generated source header is missing regeneration provenance (Regenerate:): ${source}`);
+    }
     const state = context.state(source);
     return [{ path: targets[index]!, source: provenance.source, regenerate: provenance.regenerate, ...(state === "missing" ? {} : { expectedHash: state }) }];
   });
