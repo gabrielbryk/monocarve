@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
 import type { MonocarveConfig } from "../config.ts";
+import { fileState } from "../util/files.ts";
 import { showBaselineBytes } from "../util/git.ts";
 import { hashBytes, hashJson, hashText, MISSING, type FileState } from "../util/hash.ts";
 import { normalizePath, workspacePath } from "../util/paths.ts";
@@ -50,6 +51,7 @@ export function auditPreparationSync(options: PreparationAuditOptions): Preparat
   const scopeFailures: string[] = [];
   const typeValueFailures: string[] = [];
   const graphFailures: string[] = [];
+  const generatedFailures: string[] = [];
 
   const baselineByPath = new Map<string, Uint8Array>();
   for (const operation of extracts) {
@@ -77,6 +79,13 @@ export function auditPreparationSync(options: PreparationAuditOptions): Preparat
     graphFailures.push("manifest graph digest does not match the fresh graph evidence");
   }
   const { retainedRootClearance, adapterSurfaceParity } = computeBoundaryAuditProofs(rootDir, manifest.operations);
+  for (const artifact of manifest.generatedArtifacts ?? []) {
+    const current = fileState(workspacePath(rootDir, artifact.path));
+    if (current === MISSING) generatedFailures.push(`declared generated artifact is missing: ${artifact.path}`);
+    const observed = options.regeneratedArtifacts?.[artifact.path];
+    if (options.regeneratedArtifacts !== undefined && observed === undefined) generatedFailures.push(`generator replay supplied no freshness hash for ${artifact.path}`);
+    else if (observed !== undefined && current !== observed) generatedFailures.push(`generated artifact changed after regeneration: ${artifact.path}`);
+  }
 
   const byteReplay = preparationProof(byteFailures, extracts.length * 5 + manifest.operations.filter((item) => item.kind === "write-file").length * 3);
   const fileModes = preparationProof(modeFailures, modeChecks);
@@ -88,6 +97,7 @@ export function auditPreparationSync(options: PreparationAuditOptions): Preparat
   const changedPathScope = preparationProof(scopeFailures, manifest.changedFiles.length);
   const typeValueClaims = preparationProof(typeValueFailures, extracts.length + manifest.compatibilityReexports.length);
   const graphDigest = preparationProof(graphFailures, 2);
+  const generatedArtifactFreshness = preparationProof(generatedFailures, (manifest.generatedArtifacts ?? []).length);
   const failures = [
     ...byteReplay.failures,
     ...fileModes.failures,
@@ -99,6 +109,7 @@ export function auditPreparationSync(options: PreparationAuditOptions): Preparat
     ...changedPathScope.failures,
     ...typeValueClaims.failures,
     ...graphDigest.failures,
+    ...generatedArtifactFreshness.failures,
     ...retainedRootClearance.failures,
     ...adapterSurfaceParity.failures,
   ];
@@ -117,6 +128,7 @@ export function auditPreparationSync(options: PreparationAuditOptions): Preparat
     changedPathScope,
     typeValueClaims,
     graphDigest,
+    generatedArtifactFreshness,
     retainedRootClearance,
     adapterSurfaceParity,
     failures,

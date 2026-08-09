@@ -10,9 +10,12 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { buildDependencyGraph, type ScanReport } from "../src/graph/build.ts";
 import { verifyPreparationResultModes } from "../src/prepare/audit-modes.ts";
 import { compileBoundaryPreparationManifest, type CompileBoundaryPreparationManifestInput } from "../src/prepare/build.ts";
-import { validatePreparationManifest } from "../src/prepare/manifest.ts";
+import { createPreparationManifest, validatePreparationManifest } from "../src/prepare/manifest.ts";
 import type { PreparationManifest } from "../src/prepare/manifest-types.ts";
-import { assertPreparationPolicy, simulatePreparation } from "../src/prepare/simulate.ts";
+import { runPreparationPostJournalPreparers } from "../src/prepare/post-journal.ts";
+import { auditPreparationSync } from "../src/prepare/audit.ts";
+import { executePreparationJournal } from "../src/prepare/journal.ts";
+import { assertPreparationPolicy, preparationFilesystemOperations, simulatePreparation } from "../src/prepare/simulate.ts";
 import { resolveCommit } from "../src/util/git.ts";
 import { hashText } from "../src/util/hash.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo } from "./support/fixture-repo.ts";
@@ -36,11 +39,12 @@ const TSCONFIG = JSON.stringify({
  * `gates.workspace` is caller-controlled so the simulation-failure test can
  * force a real, observable gate failure.
  */
-function existingPackageFixture(workspaceGate: string, retire = false): { readonly root: string; readonly config: ReturnType<typeof fixtureConfig>; readonly manifest: PreparationManifest } {
+function existingPackageFixture(workspaceGate: string, retire = false, extraConfig: Record<string, unknown> = {}, extraFiles: Record<string, string> = {}): { readonly root: string; readonly config: ReturnType<typeof fixtureConfig>; readonly manifest: PreparationManifest } {
   const root = fixtureRepo({
     "apps/api/tsconfig.json": TSCONFIG,
     [RETAINED]: RETAINED_SOURCE,
     [IMPORTER]: IMPORTER_SOURCE,
+    ...extraFiles,
   });
   const config = fixtureConfig(root, {
     compositionBoundaries: [{
@@ -54,6 +58,7 @@ function existingPackageFixture(workspaceGate: string, retire = false): { readon
       gates: { package: [], project: [], workspace: [workspaceGate] },
       commit: { subject: "refactor: prepare env boundary" },
     },
+    ...extraConfig,
   });
   const baseline = resolveCommit(root, "HEAD");
   const modules: ScanReport["modules"][number][] = [
@@ -121,6 +126,48 @@ describe("preparation manifest validity — the relaxation must not open a hole"
 });
 
 describe("simulatePreparation — failure restores the tree and leaves the real checkout untouched", () => {
+  test("runs boundary-triggered artifacts and post-journal preparers before audit and gates", async () => {
+    const { root, config, manifest } = existingPackageFixture("true", false, {
+      generatedArtifacts: { artifacts: [{ path: "generated/ledger.txt", source: "apps/api/src", regenerate: "printf 'fresh\\n' > generated/ledger.txt", triggers: ["^apps/api/src/"] }] },
+      postJournalPreparers: [{ id: "post-ledger", phase: "after-journal-before-gates", command: "printf 'post\\n' > generated/post.txt", outputs: ["generated/post.txt"], triggers: ["^apps/api/src/"] }],
+    }, { "generated/ledger.txt": "stale\n", "generated/post.txt": "stale\n" });
+
+    expect(manifest.generatedArtifacts).toEqual([{ path: "generated/ledger.txt", source: "apps/api/src", regenerate: "printf 'fresh\\n' > generated/ledger.txt" }]);
+    expect(manifest.postJournalPreparers?.map((item) => item.id)).toEqual(["post-ledger"]);
+    expect(manifest.changedFiles).toContain("generated/ledger.txt");
+    expect(manifest.changedFiles).toContain("generated/post.txt");
+    const result = await simulatePreparation({ config, rootDir: root, manifest, baselineGraphScanner: async ({ baselineCommit }) => ({ commit: baselineCommit, digest: manifest.graphDigest }) });
+    expect(result.ok).toBe(true);
+    expect(result.audit?.generatedArtifactFreshness).toEqual({ passed: true, checked: 1, failures: [] });
+    executePreparationJournal({ rootDir: root, operations: preparationFilesystemOperations(manifest) });
+    const generated = runPreparationPostJournalPreparers(config, root, manifest);
+    expect(generated.ok).toBe(true);
+    const audit = auditPreparationSync({ config, rootDir: root, manifest, freshGraph: { commit: manifest.baseline.commit, digest: manifest.graphDigest }, regeneratedArtifacts: generated.hashes as never });
+    expect(audit.passed).toBe(true);
+  });
+
+  test("fails closed when a triggered generator is a no-op or produces no output", async () => {
+    for (const regenerate of ["true", "rm -f generated/ledger.txt"]) {
+      const fixture = existingPackageFixture("true", false, {
+        generatedArtifacts: { artifacts: [{ path: "generated/ledger.txt", source: "apps/api/src", regenerate, triggers: ["^apps/api/src/"] }] },
+      }, { "generated/ledger.txt": "stale\n" });
+      const result = await simulatePreparation({ config: fixture.config, rootDir: fixture.root, manifest: fixture.manifest, baselineGraphScanner: async ({ baselineCommit }) => ({ commit: baselineCommit, digest: fixture.manifest.graphDigest }) });
+      expect(result.ok).toBe(false);
+      expect(result.failure).toMatch(/not refreshed|produced no declared output/);
+    }
+  });
+
+  test("refuses a stale manifest that omits a newly required triggered artifact", async () => {
+    const fixture = existingPackageFixture("true", false, {
+      generatedArtifacts: { artifacts: [{ path: "generated/ledger.txt", source: "apps/api/src", regenerate: "printf 'fresh\\n' > generated/ledger.txt", triggers: ["^apps/api/src/"] }] },
+    }, { "generated/ledger.txt": "stale\n" });
+    const { planId: _planId, generatedArtifacts: _generatedArtifacts, ...draft } = fixture.manifest;
+    const stale = createPreparationManifest({ ...draft, changedFiles: draft.changedFiles.filter((path) => path !== "generated/ledger.txt") });
+    const result = await simulatePreparation({ config: fixture.config, rootDir: fixture.root, manifest: stale, baselineGraphScanner: async ({ baselineCommit }) => ({ commit: baselineCommit, digest: stale.graphDigest }) });
+    expect(result.ok).toBe(false);
+    expect(result.failure).toContain("generated artifact set differs");
+  });
+
   test("a gate failure inside the disposable worktree never mutates the real repository", async () => {
     const { root, config, manifest } = existingPackageFixture("exit 1");
     const beforeHead = fixtureGit(root, "rev-parse", "HEAD");

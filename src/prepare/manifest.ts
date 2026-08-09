@@ -348,7 +348,13 @@ function validateCompatibility(manifest: PreparationManifest, add: AddIssue): vo
 }
 
 function validateScope(manifest: PreparationManifest, add: AddIssue): void {
-  const paths = [...manifest.operations.flatMap(preparationOperationPaths), ...(manifest.postJournalPreparers ?? []).flatMap((item) => item.outputs)].sort(byCodeUnit);
+  const artifacts = manifest.generatedArtifacts ?? [];
+  validateSorted(artifacts, (item) => item.path, "generated-artifact-order", "generatedArtifacts must be path-sorted", add);
+  for (const artifact of artifacts) {
+    if (!isWorkspacePath(artifact.path) || !isWorkspacePath(artifact.source)) add("generated-artifact", "generated artifact paths must be workspace-relative", artifact.path);
+    if (!artifact.regenerate) add("generated-artifact", "generated artifact regenerate command must be non-empty", artifact.path);
+  }
+  const paths = [...manifest.operations.flatMap(preparationOperationPaths), ...artifacts.map((item) => item.path), ...(manifest.postJournalPreparers ?? []).flatMap((item) => item.outputs)].sort(byCodeUnit);
   validateSortedStrings(manifest.changedFiles, "changed-files", "changedFiles", add);
   if (paths.length !== manifest.changedFiles.length || paths.some((path, index) => path !== manifest.changedFiles[index])) add("changed-files", "changedFiles must exactly equal the sorted operation mutation paths");
 }

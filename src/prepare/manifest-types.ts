@@ -257,6 +257,12 @@ export interface PreparationManifest {
   };
   readonly declarations: readonly PreparationDeclarationGroupSelector[];
   readonly operations: readonly PreparationReplayOperation[];
+  /** Config-bound generated artifacts invalidated by this preparation. */
+  readonly generatedArtifacts?: readonly {
+    readonly path: string;
+    readonly source: string;
+    readonly regenerate: string;
+  }[];
   /** Config-bound generators that must run after replay and before audit/gates. */
   readonly postJournalPreparers?: readonly {
     readonly id: string;

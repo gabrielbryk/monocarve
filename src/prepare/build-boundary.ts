@@ -13,7 +13,7 @@ import { extname, posix, relative, resolve } from "node:path";
 import ts from "typescript";
 
 import { GENERATOR } from "../branding.ts";
-import type { MonocarveConfig } from "../config.ts";
+import { triggeredArtifacts, type MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import { PlanningError } from "../plan/context.ts";
 import { rewritePathReferenceText, scanPathReferenceRewrites } from "../plan/path-reference-rewrites.ts";
@@ -61,10 +61,7 @@ export interface CompileBoundaryPreparationManifestInput {
   readonly cssImportExtensions?: readonly string[];
 }
 
-/**
- * Compile one declared boundary-preparation plan from its config policy and
- * a freshly scanned dependency graph, reading every donor and consumer from
- * the resolved baseline exactly as `compilePreparationManifest` does.
+/** Compile one declared boundary-preparation plan from config and a fresh graph.
  *
  * `compositionBoundaries` and `portPromotions` are normalized once by
  * `resolveBoundaries`, then routed to the matching builder
@@ -116,8 +113,11 @@ export function compileBoundaryPreparationManifest(input: CompileBoundaryPrepara
   const operations = [...boundaryOperations, ...referenceOperations];
   const ordered = [...operations].sort(boundaryOperationOrder);
   const operationPaths = [...new Set(ordered.flatMap(preparationOperationPaths))].sort(byCodeUnit);
+  const generatedArtifacts = triggeredArtifacts(input.config, operationPaths)
+    .map((artifact) => ({ path: artifact.path, source: artifact.source, regenerate: artifact.regenerate }))
+    .sort((left, right) => byCodeUnit(left.path, right.path));
   const postJournalPreparers = preparationPostJournalRecords(input.config, operationPaths);
-  const changedFiles = [...new Set([...operationPaths, ...postJournalPreparers.flatMap((item) => item.outputs)])].sort(byCodeUnit);
+  const changedFiles = [...new Set([...operationPaths, ...generatedArtifacts.map((item) => item.path), ...postJournalPreparers.flatMap((item) => item.outputs)])].sort(byCodeUnit);
   const manifest = createPreparationManifest({
     schemaVersion: 1,
     createdAt: baseline.committedAt,
@@ -131,6 +131,7 @@ export function compileBoundaryPreparationManifest(input: CompileBoundaryPrepara
     // own.
     declarations: [],
     operations: ordered,
+    generatedArtifacts,
     postJournalPreparers,
     compatibilityReexports: [],
     changedFiles,

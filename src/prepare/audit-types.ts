@@ -33,6 +33,8 @@ export interface PreparationAuditReport {
   readonly typeValueClaims: PreparationProofResult;
   /** The plan selection was based on this exact fresh workspace graph. */
   readonly graphDigest: PreparationProofResult;
+  /** Declared generator outputs exist and, during replay, match the observed post-generator hashes. */
+  readonly generatedArtifactFreshness?: PreparationProofResult;
   /**
    * Independent re-proof that every importer a boundary's `delete-module`
    * operation retired no longer holds a value-level import into the retained
@@ -56,6 +58,8 @@ export interface PreparationAuditOptions {
   readonly approvedManifestPath?: string;
   /** A caller must rescan the baseline; stale graph evidence is a refusal. */
   readonly freshGraph: PreparationFreshGraphEvidence;
+  /** Exact hashes observed by the generator runner in this replay. */
+  readonly regeneratedArtifacts?: Readonly<Record<string, Sha256>>;
 }
 
 export function preparationProof(failures: readonly string[], checked: number): PreparationProofResult {

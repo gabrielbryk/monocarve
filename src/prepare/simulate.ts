@@ -247,7 +247,7 @@ export async function simulatePreparation(options: SimulatePreparationOptions): 
       keep = !config.transaction.cleanup;
       return failed(manifest, journal.applied.length, gates, baselineGraph, preparation.failure ?? "post-journal preparer failed", undefined, keep ? worktree.path : undefined);
     }
-    const audit = auditPreparationSync({ config, rootDir: worktree.workspacePath, manifest, freshGraph: baselineGraph });
+    const audit = auditPreparationSync({ config, rootDir: worktree.workspacePath, manifest, freshGraph: baselineGraph, regeneratedArtifacts: preparation.hashes as Readonly<Record<string, import("../util/hash.ts").Sha256>> });
     if (!audit.passed) {
       finalizeCompletedPreparationJournal(journal.recovery);
       keep = !config.transaction.cleanup;

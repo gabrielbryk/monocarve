@@ -166,7 +166,7 @@ async function applyCommittedPreparation(
     // The preparation journal owns filesystem recovery. An empty snapshot set
     // makes this helper restore only HEAD/index, never overwrite concurrent
     // residue the journal deliberately preserved.
-    snapshots: snapshotPaths(rootDir, (manifest.postJournalPreparers ?? []).flatMap((item) => item.outputs)),
+    snapshots: snapshotPaths(rootDir, [...(manifest.generatedArtifacts ?? []).map((item) => item.path), ...(manifest.postJournalPreparers ?? []).flatMap((item) => item.outputs)]),
     staged: true,
     ...(indexTree === null ? {} : { indexTree }),
   };
@@ -194,6 +194,7 @@ async function applyCommittedPreparation(
       rootDir,
       manifest,
       freshGraph: baselineGraph,
+      regeneratedArtifacts: preparation.hashes as Readonly<Record<string, import("../util/hash.ts").Sha256>>,
       ...(options.manifestPath === undefined ? {} : { approvedManifestPath: options.manifestPath }),
     });
     if (!audit.passed) throw new PreparationApplyError(`preparation audit failed: ${audit.failures.join("; ")}`);
