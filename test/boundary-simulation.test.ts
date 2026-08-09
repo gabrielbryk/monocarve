@@ -10,7 +10,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { buildDependencyGraph, type ScanReport } from "../src/graph/build.ts";
 import { verifyPreparationResultModes } from "../src/prepare/audit-modes.ts";
 import { compileBoundaryPreparationManifest, type CompileBoundaryPreparationManifestInput } from "../src/prepare/build.ts";
-import { createPreparationManifest, validatePreparationManifest } from "../src/prepare/manifest.ts";
+import { createPreparationManifest, serializePreparationManifest, validatePreparationManifest } from "../src/prepare/manifest.ts";
 import type { PreparationManifest } from "../src/prepare/manifest-types.ts";
 import { runPreparationPostJournalPreparers } from "../src/prepare/post-journal.ts";
 import { auditPreparationSync } from "../src/prepare/audit.ts";
@@ -132,7 +132,7 @@ describe("simulatePreparation — failure restores the tree and leaves the real 
       postJournalPreparers: [{ id: "post-ledger", phase: "after-journal-before-gates", command: "printf 'post\\n' > generated/post.txt", outputs: ["generated/post.txt"], triggers: ["^apps/api/src/"] }],
     }, { "generated/ledger.txt": "stale\n", "generated/post.txt": "stale\n" });
 
-    expect(manifest.generatedArtifacts).toEqual([{ path: "generated/ledger.txt", source: "apps/api/src", regenerate: "printf 'fresh\\n' > generated/ledger.txt" }]);
+    expect(manifest.generatedArtifacts).toEqual([{ path: "generated/ledger.txt", source: "apps/api/src", regenerate: "printf 'fresh\\n' > generated/ledger.txt", regenerateOnApply: true }]);
     expect(manifest.postJournalPreparers?.map((item) => item.id)).toEqual(["post-ledger"]);
     expect(manifest.changedFiles).toContain("generated/ledger.txt");
     expect(manifest.changedFiles).toContain("generated/post.txt");
@@ -155,6 +155,32 @@ describe("simulatePreparation — failure restores the tree and leaves the real 
       expect(result.ok).toBe(false);
       expect(result.failure).toMatch(/not refreshed|produced no declared output/);
     }
+  });
+
+  test("accepts a Moon-sync-like no-op only with its exact configured exemption", async () => {
+    const fixture = existingPackageFixture("true", false, {
+      generatedArtifacts: { artifacts: [{
+        path: "apps/api/tsconfig.json", source: "apps/api/src", regenerate: "true",
+        triggers: ["^apps/api/src/"], exemptReason: "Moon sync may truthfully preserve an already-current project file",
+      }] },
+    });
+    const reloaded = JSON.parse(serializePreparationManifest(fixture.manifest)) as PreparationManifest;
+    expect(validatePreparationManifest(reloaded).ok).toBe(true);
+    expect(reloaded.generatedArtifacts).toEqual([{
+      path: "apps/api/tsconfig.json", source: "apps/api/src", regenerate: "true", regenerateOnApply: true,
+      exemptReason: "Moon sync may truthfully preserve an already-current project file",
+    }]);
+    const result = await simulatePreparation({ config: fixture.config, rootDir: fixture.root, manifest: reloaded, baselineGraphScanner: async ({ baselineCommit }) => ({ commit: baselineCommit, digest: reloaded.graphDigest }) });
+    expect(result.ok).toBe(true);
+    expect(result.audit?.generatedArtifactFreshness?.passed).toBe(true);
+
+    const record = reloaded.generatedArtifacts![0]!;
+    const { exemptReason: _exemptReason, ...withoutExemption } = record;
+    const { planId: _planId, ...draft } = reloaded;
+    const tampered = createPreparationManifest({ ...draft, generatedArtifacts: [withoutExemption] });
+    const refused = await simulatePreparation({ config: fixture.config, rootDir: fixture.root, manifest: tampered, baselineGraphScanner: async ({ baselineCommit }) => ({ commit: baselineCommit, digest: tampered.graphDigest }) });
+    expect(refused.ok).toBe(false);
+    expect(refused.failure).toContain("differs from current configuration");
   });
 
   test("refuses a stale manifest that omits a newly required triggered artifact", async () => {

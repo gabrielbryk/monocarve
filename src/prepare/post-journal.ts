@@ -34,7 +34,11 @@ export function runPreparationPostJournalPreparers(config: MonocarveConfig, root
   let changed = false;
   for (const record of artifacts) {
     const configured = configuredArtifacts.get(record.path);
-    if (!configured || hashJson({ path: configured.path, source: configured.source, regenerate: configured.regenerate }) !== hashJson(record)) {
+    const expected = configured === undefined ? undefined : {
+      path: configured.path, source: configured.source, regenerate: configured.regenerate, regenerateOnApply: true as const,
+      ...(configured.exemptReason === undefined ? {} : { exemptReason: configured.exemptReason }),
+    };
+    if (!configured || hashJson(expected) !== hashJson(record)) {
       return { ok: false, changed, hashes, failure: `preparation generated artifact ${record.path} differs from current configuration` };
     }
     const before = fileState(`${rootDir}/${record.path}`);
@@ -42,7 +46,7 @@ export function runPreparationPostJournalPreparers(config: MonocarveConfig, root
     if (result.status !== 0) return { ok: false, changed, hashes, failure: `preparation generated artifact ${record.path} failed (exit ${result.status ?? "signal"})${result.output ? `\n${result.output}` : ""}` };
     const after = fileState(`${rootDir}/${record.path}`);
     if (after === MISSING) return { ok: false, changed, hashes, failure: `preparation generated artifact ${record.path} produced no declared output` };
-    if (after === before) return { ok: false, changed, hashes, failure: `preparation generated artifact ${record.path} was not refreshed by its generator` };
+    if (after === before && record.exemptReason === undefined) return { ok: false, changed, hashes, failure: `preparation generated artifact ${record.path} was not refreshed by its generator` };
     hashes[record.path] = after;
     changed = true;
   }

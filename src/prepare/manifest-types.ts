@@ -262,6 +262,8 @@ export interface PreparationManifest {
     readonly path: string;
     readonly source: string;
     readonly regenerate: string;
+    readonly regenerateOnApply: true;
+    readonly exemptReason?: string;
   }[];
   /** Config-bound generators that must run after replay and before audit/gates. */
   readonly postJournalPreparers?: readonly {

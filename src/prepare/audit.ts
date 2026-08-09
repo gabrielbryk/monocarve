@@ -71,7 +71,10 @@ export function auditPreparationSync(options: PreparationAuditOptions): Preparat
   const provenancePath = options.approvedManifestPath === undefined
     ? undefined
     : normalizePath(options.approvedManifestPath);
-  verifyChangedScope(rootDir, manifest.baseline.commit, manifest.changedFiles, provenancePath, scopeFailures, (manifest.postJournalPreparers ?? []).flatMap((item) => item.outputs));
+  verifyChangedScope(rootDir, manifest.baseline.commit, manifest.changedFiles, provenancePath, scopeFailures, [
+    ...(manifest.generatedArtifacts ?? []).filter((item) => item.exemptReason !== undefined).map((item) => item.path),
+    ...(manifest.postJournalPreparers ?? []).flatMap((item) => item.outputs),
+  ]);
   if (options.freshGraph.commit !== manifest.baseline.commit) {
     graphFailures.push("fresh graph commit does not match the preparation baseline");
   }

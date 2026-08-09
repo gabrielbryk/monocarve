@@ -353,6 +353,8 @@ function validateScope(manifest: PreparationManifest, add: AddIssue): void {
   for (const artifact of artifacts) {
     if (!isWorkspacePath(artifact.path) || !isWorkspacePath(artifact.source)) add("generated-artifact", "generated artifact paths must be workspace-relative", artifact.path);
     if (!artifact.regenerate) add("generated-artifact", "generated artifact regenerate command must be non-empty", artifact.path);
+    if (artifact.regenerateOnApply !== true) add("generated-artifact", "generated artifact must declare regenerateOnApply true", artifact.path);
+    if (artifact.exemptReason !== undefined && artifact.exemptReason.length === 0) add("generated-artifact", "generated artifact exemptReason must be non-empty when present", artifact.path);
   }
   const paths = [...new Set([
     ...manifest.operations.flatMap(preparationOperationPaths),

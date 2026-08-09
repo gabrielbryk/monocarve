@@ -112,6 +112,7 @@ describe("generated-source adoption", () => {
       path: "generated/workers-port-ledger.json",
       source: "apps/api/src",
       regenerate: "printf 'fresh\\n' > generated/workers-port-ledger.json",
+      regenerateOnApply: true,
     }]);
     expect(manifest.changedFiles).toContain("generated/workers-port-ledger.json");
     expect(manifest.changedFiles.filter((path) => path === "generated/workers-port-ledger.json")).toHaveLength(1);

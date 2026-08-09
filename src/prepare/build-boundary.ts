@@ -113,8 +113,8 @@ export function compileBoundaryPreparationManifest(input: CompileBoundaryPrepara
   const operations = [...boundaryOperations, ...referenceOperations];
   const ordered = [...operations].sort(boundaryOperationOrder);
   const operationPaths = [...new Set(ordered.flatMap(preparationOperationPaths))].sort(byCodeUnit);
-  const generatedArtifacts = triggeredArtifacts(input.config, operationPaths)
-    .map((artifact) => ({ path: artifact.path, source: artifact.source, regenerate: artifact.regenerate }))
+  const generatedArtifacts = triggeredArtifacts(input.config, operationPaths).map((artifact) => ({ path: artifact.path, source: artifact.source,
+    regenerate: artifact.regenerate, regenerateOnApply: true as const, ...(artifact.exemptReason === undefined ? {} : { exemptReason: artifact.exemptReason }) }))
     .sort((left, right) => byCodeUnit(left.path, right.path));
   const postJournalPreparers = preparationPostJournalRecords(input.config, operationPaths);
   const changedFiles = [...new Set([...operationPaths, ...generatedArtifacts.map((item) => item.path), ...postJournalPreparers.flatMap((item) => item.outputs)])].sort(byCodeUnit);
