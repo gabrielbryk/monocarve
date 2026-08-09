@@ -100,3 +100,67 @@ test("preparer planning and apply fail closed for missing and stale generated ou
   expect(stale.stderr).toContain("differs from reviewed result");
   expect(existsSync(join(staleRoot, "generated/ledger.txt"))).toBe(false);
 }, 30_000);
+
+test("terminal preparer reconciliation still triggers and commits only a stale generated ledger", async () => {
+  const root = committedWorkspace();
+  const configPath = join(root, "monocarve.config.json");
+  const source = "apps/web/src/route-options.ts";
+  const ledger = "generated/workers-port-ledger.json";
+  writeFileSync(join(root, source), "export const routeOptions = 'old';\n");
+  writeFileSync(join(root, ledger), "old ledger\n");
+  const baseConfig = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
+  baseConfig.preparers = [{
+    id: "prepare-route-options",
+    phase: "pre-extraction",
+    outputs: [source],
+    replacements: [{ path: source, prefix: "export const routeOptions = ", before: "'old'", after: "'new'", suffix: ";\n" }],
+    commit: { subject: "refactor: prepare route options" },
+  }];
+  writeFileSync(configPath, `${JSON.stringify(baseConfig, null, 2)}\n`);
+  fixtureGit(root, "add", configPath, source, ledger);
+  fixtureGit(root, "commit", "-qm", "test: seed terminal reconciliation");
+
+  const first = await runJsonIn<{ output: string }>(root, "preparer-plan", "--preparer", "prepare-route-options", "--source", source, "--write");
+  fixtureGit(root, "add", "-f", first.output);
+  fixtureGit(root, "commit", "-qm", "chore: approve source preparer");
+  await runJsonIn(root, "preparer-apply", "--plan", first.output);
+  await runJsonIn(root, "preparer-commit", "--plan", first.output);
+  expect(readFileSync(join(root, source), "utf8")).toContain("'new'");
+  expect(readFileSync(join(root, ledger), "utf8")).toBe("old ledger\n");
+
+  const reconciledConfig = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
+  reconciledConfig.generatedArtifacts = {
+    artifacts: [{
+      path: ledger,
+      source,
+      regenerate: `printf 'current ledger\\n' > ${ledger}`,
+      triggers: ["^apps/web/src/"],
+      exemptReason: "terminal reconciliation fixture",
+    }],
+  };
+  writeFileSync(configPath, `${JSON.stringify(reconciledConfig, null, 2)}\n`);
+  fixtureGit(root, "add", configPath);
+  fixtureGit(root, "commit", "-qm", "test: configure ledger reconciliation");
+
+  const second = await runJsonIn<{
+    output: string;
+    triggerPaths: string[];
+    generatedArtifacts: { path: string }[];
+    mutations: { path: string; preconditionHash: string; resultHash: string }[];
+  }>(root, "preparer-plan", "--preparer", "prepare-route-options", "--source", source, "--write");
+  expect(second.triggerPaths).toEqual([source]);
+  expect(second.generatedArtifacts).toEqual([expect.objectContaining({ path: ledger })]);
+  expect(second.mutations.find((item) => item.path === source)).toMatchObject({
+    preconditionHash: second.mutations.find((item) => item.path === source)?.resultHash,
+  });
+  expect(second.mutations.find((item) => item.path === ledger)?.preconditionHash)
+    .not.toBe(second.mutations.find((item) => item.path === ledger)?.resultHash);
+  expect(await runJsonIn(root, "preparer-simulate", "--plan", second.output)).toMatchObject({ ok: true });
+  fixtureGit(root, "add", "-f", second.output);
+  fixtureGit(root, "commit", "-qm", "chore: approve ledger reconciliation");
+  expect(await runJsonIn(root, "preparer-apply", "--plan", second.output)).toMatchObject({ ok: true });
+  await runJsonIn(root, "preparer-commit", "--plan", second.output);
+  expect(fixtureGit(root, "show", "--format=", "--name-only", "HEAD")).toBe(ledger);
+  expect(readFileSync(join(root, ledger), "utf8")).toBe("current ledger\n");
+  expect(fixtureGit(root, "status", "--short")).toBe("");
+}, 30_000);

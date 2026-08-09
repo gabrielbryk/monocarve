@@ -87,10 +87,11 @@ export async function compilePreparerManifest(input: CompilePreparerInput): Prom
     if (command !== undefined) await runPreparerCommand(command, worktree.workspacePath, input.config.gates.timeoutMs, "preparer");
     if (verify !== undefined) await runPreparerCommand(verify, worktree.workspacePath, input.config.gates.timeoutMs, "preparer verify");
     const initialMutations = outputs.map((path): PreparerMutation => mutation(worktree.workspacePath, path, before[path]!));
-    const triggerPaths = initialMutations
-      .filter((item) => item.preconditionHash !== item.resultHash || item.preconditionMode !== item.resultMode)
-      .map((item) => item.path)
-      .sort(byCodeUnit);
+    // A preparer is also the supported reconciliation path after its source
+    // rewrite has already landed. Keep every declared mutation path in trigger
+    // scope even when it is at the terminal state, otherwise a stale derived
+    // artifact can never be repaired by recompiling the same preparer.
+    const triggerPaths = initialMutations.map((item) => item.path).sort(byCodeUnit);
     const generatedArtifacts = triggeredArtifacts(input.config, triggerPaths).map((artifact) => ({
       path: artifact.path, source: artifact.source, regenerate: artifact.regenerate, regenerateOnApply: true as const,
       ...(artifact.exemptReason === undefined ? {} : { exemptReason: artifact.exemptReason }),
@@ -281,12 +282,8 @@ export function assertPreparerManifest(config: MonocarveConfig, value: unknown):
     throw new PreparerError("preparer manifest commands differ from configuration");
   }
   const expectedPrimaryOutputs = unique([...renderedOutputs, ...(expectedCreates?.map((create) => create.path) ?? [])]);
-  const expectedTriggerPaths = manifest.mutations
-    .filter((item) => expectedPrimaryOutputs.includes(item.path))
-    .filter((item) => item.preconditionHash !== item.resultHash || item.preconditionMode !== item.resultMode)
-    .map((item) => item.path)
-    .sort(byCodeUnit);
-  if (hashJson(manifest.triggerPaths) !== hashJson(expectedTriggerPaths)) throw new PreparerError("preparer manifest trigger paths differ from effective mutations");
+  const expectedTriggerPaths = [...expectedPrimaryOutputs].sort(byCodeUnit);
+  if (hashJson(manifest.triggerPaths) !== hashJson(expectedTriggerPaths)) throw new PreparerError("preparer manifest trigger paths differ from declared mutations");
   const expectedArtifacts = triggeredArtifacts(config, manifest.triggerPaths).map((artifact) => ({
     path: artifact.path, source: artifact.source, regenerate: artifact.regenerate, regenerateOnApply: true as const,
     ...(artifact.exemptReason === undefined ? {} : { exemptReason: artifact.exemptReason }),
