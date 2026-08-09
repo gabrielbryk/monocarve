@@ -174,4 +174,24 @@ describe("config doctor", () => {
       detail: "root \"scripts\" is not covered by pathReferences.textRoots; the rewriter would mutate a tree the warning scanner never looked at",
     });
   });
+
+  test("rejects multiple resolution bases for overlapping rewrite roots", async () => {
+    const root = scratchDirectory();
+    mkdirSync(join(root, "apps/consumer/src"), { recursive: true });
+    mkdirSync(join(root, "config/nested"), { recursive: true });
+    writeFileSync(join(root, "apps/consumer/tsconfig.json"), "{}\n");
+    fixtureGit(root, "init", "-q");
+    const config = parseConfig({
+      applications: [{ name: "consumer", sourceRoot: "apps/consumer/src", tsconfig: "apps/consumer/tsconfig.json" }],
+      packageRoots: ["packages"],
+      pathReferences: { textRoots: [{ root: "config", extensions: [".md"] }] },
+      pathReferenceRewrites: { enabled: true, roots: [
+        { root: "config", extensions: [".md"], mode: "exact-path-token", referenceBase: "apps/api/src" },
+        { root: "config/nested", extensions: [".md"], mode: "exact-path-token", referenceBase: "apps/web/src" },
+      ] },
+      scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
+    });
+    const report = await inspectConfig({ config, rootDir: root, configPath: join(root, "monocarve.config.ts") });
+    expect(report.semanticIssues.some((issue) => issue.detail.includes("multiple referenceBase values"))).toBe(true);
+  });
 });

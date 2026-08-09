@@ -101,6 +101,29 @@ function manifest(root: string, operations: readonly PlanOperation[]): Extractio
 describe("rewrite-path-reference transaction", () => {
   afterEach(cleanupFixtures);
 
+  test("a tampered shorthand resolution base is refused during replay", async () => {
+    const root = fixtureRepo({ ...files(), [DOC]: "See src/alpha.ts for details.\n" });
+    const config = fixtureConfig(root, {
+      pathReferences: { minSegments: 2, textRoots: [{ root: "docs", extensions: [".md"] }] },
+      pathReferenceRewrites: {
+        enabled: true,
+        minSegments: 2,
+        roots: [{ root: "docs", extensions: [".md"], mode: "exact-path-token", referenceBase: "apps/api" }],
+      },
+      gates: { package: [], project: [], workspace: [] },
+    });
+    const rewrite = rewriteOp(root, config);
+    expect(rewrite.rewrites[0]?.referenceBase).toBe("apps/api");
+    const forged: RewritePathReferenceOperation = {
+      ...rewrite,
+      rewrites: rewrite.rewrites.map((entry) => ({ ...entry, referenceBase: "apps/other" })),
+    };
+
+    await expect(executeJournal({ config, treeRoot: root, manifest: manifest(root, [moveOp(root), forged]) })).rejects.toThrow("replay mismatch");
+    expect(read(root, DOC)).toBe("See src/alpha.ts for details.\n");
+    expect(read(root, FIRST)).toBe("export const alpha = 1;\n");
+  });
+
   test("apply writes exactly the planned bytes, and the post-state hash equals resultHash", async () => {
     const root = fixtureRepo(files());
     const config = configFor(root);

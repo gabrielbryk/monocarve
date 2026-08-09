@@ -130,7 +130,7 @@ export function pathReferenceRewriteOperations(
       const preconditionHash = context.state(file);
       if (preconditionHash === "missing") throw new PlanningError(`path-reference document does not exist: ${file}`);
       const text = context.text(file);
-      const scan = scanPathReferenceRewrites(text, file, moves, scanSettings);
+      const scan = scanPathReferenceRewrites(text, file, moves, { ...scanSettings, ...(scanRoot.referenceBase === undefined ? {} : { referenceBase: scanRoot.referenceBase }) });
       if (scan.rewrites.length === 0) continue;
       byFile.set(file, { text, rewrites: [...(byFile.get(file)?.rewrites ?? []), ...scan.rewrites] });
     }
@@ -155,6 +155,12 @@ export function pathReferenceRewriteOperations(
   }
   return [...byFile.entries()].map(([file, entry]) => {
     const rewrites = [...entry.rewrites].sort((left, right) => left.line - right.line || left.column - right.column || byCodeUnit(left.donor, right.donor));
+    const positions = new Set<string>();
+    for (const rewrite of rewrites) {
+      const position = `${rewrite.line}:${rewrite.column}`;
+      if (positions.has(position)) throw new PlanningError(`ambiguous path reference in ${file}:${position} — multiple configured resolution bases match the same token`);
+      positions.add(position);
+    }
     const preconditionHash = context.state(file);
     const resultHash = hashText(rewritePathReferenceText(entry.text, rewrites));
     if (resultHash === preconditionHash) throw new PlanningError(`path reference rewrite for ${file} did not change the document`);

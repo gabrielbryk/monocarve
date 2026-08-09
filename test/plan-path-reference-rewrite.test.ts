@@ -14,6 +14,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { pathReferenceRewriteOperations } from "../src/plan/build-support.ts";
 import { WorkspaceContext } from "../src/plan/context.ts";
+import { buildPathReferenceIndex } from "../src/plan/path-references.ts";
 import type { ExtractionManifest, PlanOperation, RewritePathReferenceOperation } from "../src/plan/manifest.ts";
 import { manifestPaths } from "../src/plan/manifest.ts";
 import { formatPlanReview, summarizePlanReview } from "../src/plan/review.ts";
@@ -81,6 +82,36 @@ function manifest(root: string, operations: readonly PlanOperation[]): Extractio
 
 describe("plan-level rewrite-path-reference", () => {
   afterEach(cleanupFixtures);
+
+  test("resolves RM-shaped shorthand markdown paths from a declared source base and records provenance", () => {
+    const donor = "app/backend/src/governance/repository.ts";
+    const target = "libs/governance-backend/src/governance/repository.ts";
+    const rule = ".claude/rules/backend/server.md";
+    const root = fixtureRepo({
+      "package.json": '{"name":"fixture","private":true,"type":"module"}\n',
+      [SOURCE]: "export const widgetValue = 1;\n",
+      "app/backend/tsconfig.json": '{"compilerOptions":{"module":"NodeNext","moduleResolution":"NodeNext"},"include":["src"]}\n',
+      [donor]: "export const repository = true;\n",
+      [rule]: "Repository rules: `governance/repository.ts`.\n",
+    });
+    const config = fixtureConfig(root, {
+      pathReferences: { textRoots: [{ root: ".claude", extensions: [".md"] }] },
+      pathReferenceRewrites: { enabled: true, roots: [{ root: ".claude", extensions: [".md"], mode: "exact-path-token", referenceBase: "app/backend/src" }] },
+      gates: { package: [], project: [], workspace: [] },
+    });
+    const move: PlanOperation = { kind: "move", source: donor, target, preconditionHash: hashText(read(root, donor)), resultHash: hashText(read(root, donor)) };
+    const operations = pathReferenceRewriteOperations(config, new WorkspaceContext(config, root), [move]);
+
+    expect(operations).toHaveLength(1);
+    expect(operations[0]!.rewrites).toEqual([{
+      from: "governance/repository.ts", to: target, donor, line: 1, column: 20, referenceBase: "app/backend/src",
+    }]);
+    expect(buildPathReferenceIndex(new WorkspaceContext(config, root)).referencesTo([donor])).toEqual([expect.objectContaining({
+      file: rule, target: donor, text: "governance/repository.ts",
+    })]);
+    const issues = validatePlan(manifest(root, [move, operations[0]!]), { config, rootDir: root }).issues;
+    expect(issues.filter((issue) => issue.rule.startsWith("path-reference"))).toEqual([]);
+  });
 
   test("compiles exactly one rewrite-path-reference operation naming the document, with correct hashes and rewrites", () => {
     const root = fixtureRepo(files());

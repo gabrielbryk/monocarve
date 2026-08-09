@@ -247,6 +247,17 @@ function scaffoldSemanticIssues(config: MonocarveConfig, rootDir: string): Confi
         });
       }
     }
+    for (const [index, left] of config.pathReferenceRewrites.roots.entries()) {
+      for (const right of config.pathReferenceRewrites.roots.slice(index + 1)) {
+        const overlaps = left.root === right.root || left.root.startsWith(right.root + "/") || right.root.startsWith(left.root + "/");
+        if (overlaps && left.referenceBase !== right.referenceBase) {
+          issues.push({
+            severity: "error", context: "pathReferenceRewrites",
+            detail: `overlapping roots "${left.root}" and "${right.root}" declare multiple referenceBase values; a document may have only one resolution base`,
+          });
+        }
+      }
+    }
   }
   return issues.filter((issue, index) => issues.findIndex((entry) => entry.context === issue.context && entry.detail === issue.detail) === index);
 }

@@ -61,6 +61,8 @@ export interface PathReferenceRewrite {
   readonly strippedPrefix?: string;
   /** This string is emitted by a generator and resolves from `resolutionBase`. */
   readonly emittedModuleSpecifier?: true;
+  /** Ordinary token was resolved from this declared repo-relative base. */
+  readonly referenceBase?: string;
 }
 
 export interface RewritePathReferenceOperation {

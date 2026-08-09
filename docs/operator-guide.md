@@ -364,6 +364,9 @@ pathReferenceRewrites: {
       root: "docs",
       extensions: [".md"],
       mode: "exact-path-token",
+      // Optional: `governance/repository.ts` means
+      // `app/backend/src/governance/repository.ts` in this tree.
+      referenceBase: "app/backend/src",
     },
     {
       root: "config",
@@ -378,7 +381,12 @@ pathReferenceRewrites: {
 ```
 
 Each root declares a workspace-relative directory, the file extensions to scan,
-and a matching mode. `exact-path-token` is currently the only mode. Tokens are
+and a matching mode. `referenceBase` optionally gives shorthand tokens an exact
+repo-relative resolution base. The replacement is the moved file's new
+repo-relative path; full repo-relative tokens continue to work unchanged. A
+token containing traversal is never resolved through the base, overlapping
+roots may not declare different bases, and any direct-versus-based ambiguity
+refuses the plan. `exact-path-token` is currently the only mode. Tokens are
 normalized path segments and do not match inside quoted strings, comments, or
 variable names; they match only the exact substring normalized from the source
 path.

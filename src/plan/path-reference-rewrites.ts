@@ -28,7 +28,7 @@
  * it is simply out of corpus, exactly as the scanner treats it.
  */
 
-import { extname } from "node:path";
+import { extname, posix } from "node:path";
 
 import { applyReplacements, type Replacement } from "../codemod/imports.ts";
 import { byCodeUnit } from "../util/hash.ts";
@@ -47,12 +47,14 @@ export interface PathReferenceRewrite {
   readonly strippedPrefix?: string;
   /** This string is emitted by a generator and resolves from `resolutionBase`. */
   readonly emittedModuleSpecifier?: true;
+  readonly referenceBase?: string;
 }
 
 export interface PathReferenceRewriteSettings {
   readonly onAmbiguousMatch: "refuse" | "skip";
   readonly matchExtensionless: boolean;
   readonly minSegments: number;
+  readonly referenceBase?: string;
 }
 
 export interface PathReferenceRewriteMatch extends PathReferenceRewrite {
@@ -80,6 +82,7 @@ interface Candidate {
   readonly from: string;
   readonly to: string;
   readonly donor: string;
+  readonly referenceBase?: string;
 }
 
 export function documentKindFor(file: string): "markdown" | "json" | "plain-text" {
@@ -150,11 +153,17 @@ function buildReplacementSuffix(rawToken: string, replacementTarget: string): st
  * `moveSource` at all (wrong shape, or too short a suffix), matching
  * `candidatesForToken`'s own "no candidate" case.
  */
-export function expectedPathReferenceTarget(rawToken: string, moveSource: string, moveTarget: string): string | null {
+export function expectedPathReferenceTarget(rawToken: string, moveSource: string, moveTarget: string, referenceBase?: string): string | null {
   const normalized = normalizeToken(rawToken);
   if (normalized === null) return null;
   const hasExtension = normalized.path.split("/").at(-1)!.includes(".");
   const target = hasExtension ? moveSource : stripExtension(moveSource);
+  if (referenceBase !== undefined) {
+    if (normalized.absolute || normalized.path.split("/").includes("..")) return null;
+    const based = posix.normalize(posix.join(referenceBase, normalized.path));
+    if (based !== target || !(based === referenceBase || based.startsWith(referenceBase + "/"))) return null;
+    return buildReplacementSuffix(rawToken, hasExtension ? moveTarget : stripExtension(moveTarget));
+  }
   const suffixLength = matchedSuffixLength(normalized.path, normalized.absolute, target);
   if (suffixLength === null) return null;
   const replacementTarget = hasExtension ? moveTarget : stripExtension(moveTarget);
@@ -167,6 +176,7 @@ function candidatesForToken(
   lineStarts: readonly number[],
   moves: readonly PathMove[],
   matchExtensionless: boolean,
+  referenceBase?: string,
 ): Candidate[] {
   const normalized = normalizeToken(rawToken);
   if (normalized === null) return [];
@@ -175,8 +185,13 @@ function candidatesForToken(
   const { line, column } = positionAt(lineStarts, span.start);
   const candidates: Candidate[] = [];
   for (const move of moves) {
-    const target = hasExtension ? move.source : stripExtension(move.source);
-    const suffixLength = matchedSuffixLength(normalized.path, normalized.absolute, target);
+    const source = hasExtension ? move.source : stripExtension(move.source);
+    const directSuffixLength = matchedSuffixLength(normalized.path, normalized.absolute, source);
+    const basedSource = referenceBase === undefined || normalized.absolute || normalized.path.split("/").includes("..")
+      ? null
+      : posix.normalize(posix.join(referenceBase, normalized.path));
+    const based = basedSource === source && (basedSource === referenceBase || basedSource.startsWith(referenceBase + "/"));
+    const suffixLength = directSuffixLength ?? (based ? normalized.path.split("/").length : null);
     if (suffixLength === null) continue;
     const replacementTarget = hasExtension ? move.target : stripExtension(move.target);
     // Narrow the replaced span to exactly the matched suffix so every byte
@@ -185,14 +200,14 @@ function candidatesForToken(
     const suffixStart = span.start + suffixOffsetInRawToken(normalized.path, normalized.prefixLength, suffixLength);
     const matchedSpan = { start: suffixStart, end: span.end };
     const to = buildReplacementSuffix(rawToken, replacementTarget);
-    candidates.push({ span: matchedSpan, line, column, from: rawToken, to, donor: move.source });
+    candidates.push({ span: matchedSpan, line, column, from: rawToken, to, donor: move.source, ...(directSuffixLength === null && based ? { referenceBase: referenceBase! } : {}) });
   }
   return candidates;
 }
 
 function distinctResolutions(group: readonly Candidate[]): Candidate[] {
   const seen = new Map<string, Candidate>();
-  for (const candidate of group) seen.set(`${candidate.donor} ${candidate.to}`, candidate);
+  for (const candidate of group) seen.set(`${candidate.donor} ${candidate.to} ${candidate.referenceBase ?? "<repo>"}`, candidate);
   return [...seen.values()];
 }
 
@@ -258,7 +273,7 @@ export function scanPathReferenceRewrites(
   const eligibleMoves = moves.filter((move) => segmentCount(move.source) >= settings.minSegments);
   for (const match of text.matchAll(PATH_TOKEN)) {
     const span = { start: match.index, end: match.index + match[0].length };
-    const candidates = candidatesForToken(match[0], span, lineStarts, eligibleMoves, settings.matchExtensionless);
+    const candidates = candidatesForToken(match[0], span, lineStarts, eligibleMoves, settings.matchExtensionless, settings.referenceBase);
     if (candidates.length === 0) continue;
     const winner = resolveSpan(file, candidates, ambiguities);
     if (winner) resolved.push(winner);

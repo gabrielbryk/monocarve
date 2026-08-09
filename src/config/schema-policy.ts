@@ -249,6 +249,8 @@ export const pathRewriteRoot = z.strictObject({
   root: relativePath,
   extensions: z.array(z.string().regex(/^\./, "extension must start with a dot")).min(1),
   mode: z.literal("exact-path-token"),
+  /** Resolve shorthand tokens in this tree from this repo-relative base. */
+  referenceBase: protectedPath.optional(),
 });
 
 export const pathReferenceRewrites = z.strictObject({

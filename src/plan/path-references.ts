@@ -85,7 +85,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { extname, resolve } from "node:path";
+import { extname, posix, resolve } from "node:path";
 
 import ts from "typescript";
 
@@ -192,7 +192,7 @@ export function buildPathReferenceIndex(context: WorkspaceContext): PathReferenc
   const byStem = new Map<string, Occurrence[]>();
   const scanned = new Set<string>();
 
-  const record = (raw: string, occurrence: Occurrence): void => {
+  const record = (raw: string, occurrence: Occurrence, referenceBases: readonly string[] = []): void => {
     const normalized = normalizeToken(raw);
     if (normalized === null) return;
     const segments = normalized.path.split("/");
@@ -203,6 +203,15 @@ export function buildPathReferenceIndex(context: WorkspaceContext): PathReferenc
       const entries = index.get(key) ?? [];
       entries.push({ ...occurrence, text: normalized.path });
       index.set(key, entries);
+    }
+    if (!normalized.absolute && !segments.includes("..")) {
+      for (const referenceBase of referenceBases) {
+        const based = posix.normalize(posix.join(referenceBase, normalized.path));
+        if (!(based === referenceBase || based.startsWith(referenceBase + "/"))) continue;
+        const entries = index.get(based) ?? [];
+        entries.push({ ...occurrence, text: normalized.path });
+        index.set(based, entries);
+      }
     }
   };
 
@@ -220,7 +229,12 @@ export function buildPathReferenceIndex(context: WorkspaceContext): PathReferenc
       if (scanned.has(file)) continue;
       if ((statSync(absolute, { throwIfNoEntry: false })?.size ?? 0) > settings.maxBytes) continue;
       scanned.add(file);
-      scanText(readFileSync(absolute, "utf8"), file, record);
+      const referenceBases = context.config.pathReferenceRewrites.enabled
+        ? context.config.pathReferenceRewrites.roots
+          .filter((root) => root.referenceBase !== undefined && (file === root.root || file.startsWith(root.root + "/")) && root.extensions.includes(extname(file)))
+          .map((root) => root.referenceBase!)
+        : [];
+      scanText(readFileSync(absolute, "utf8"), file, (raw, occurrence) => record(raw, occurrence, referenceBases));
     }
   }
 
@@ -312,4 +326,3 @@ function textFiles(directory: string, extensions: readonly string[]): string[] {
     })
     .sort();
 }
-

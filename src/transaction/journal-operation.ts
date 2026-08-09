@@ -147,7 +147,8 @@ function rederivePathReferenceMatches(
 ): PathReferenceRewriteMatch[] {
   const registries = operation.rewrites.filter((rewrite) => rewrite.jsonPointer !== undefined && rewrite.resolutionBase !== undefined);
   const emitted = operation.rewrites.filter((rewrite) => rewrite.emittedModuleSpecifier && rewrite.resolutionBase !== undefined);
-  const ordinary = operation.rewrites.filter((rewrite) => rewrite.jsonPointer === undefined && !rewrite.emittedModuleSpecifier && rewrite.resolutionBase === undefined);
+  const ordinary = operation.rewrites.filter((rewrite) => rewrite.jsonPointer === undefined && !rewrite.emittedModuleSpecifier && rewrite.resolutionBase === undefined && rewrite.referenceBase === undefined);
+  const based = operation.rewrites.filter((rewrite) => rewrite.jsonPointer === undefined && !rewrite.emittedModuleSpecifier && rewrite.resolutionBase === undefined && rewrite.referenceBase !== undefined);
   const matchExtensionless = ordinary.length > 0 && ordinary.some((rewrite) => !lastSegmentHasExtension(rewrite.from));
   // minSegments: 2 (the schema's own floor) rather than the configured value —
   // this rederive only needs to reproduce a rewrite the plan already recorded,
@@ -156,6 +157,9 @@ function rederivePathReferenceMatches(
   // spuriously reject a legitimately recorded rewrite just because apply time
   // has no access to the planning-time config.
   const scan = scanPathReferenceRewrites(text, operation.file, moves, { onAmbiguousMatch: "skip", matchExtensionless, minSegments: 2 });
+  const basedMatches = [...new Set(based.map((rewrite) => rewrite.referenceBase!))].flatMap((referenceBase) =>
+    scanPathReferenceRewrites(text, operation.file, moves, { onAmbiguousMatch: "skip", matchExtensionless: based.some((rewrite) => rewrite.referenceBase === referenceBase && !lastSegmentHasExtension(rewrite.from)), minSegments: 2, referenceBase }).rewrites
+  );
   const registryMatches = registries.flatMap((rewrite) => scanRuntimeModuleRegistry(text, {
     file: operation.file,
     pointer: rewrite.jsonPointer!,
@@ -166,11 +170,11 @@ function rederivePathReferenceMatches(
     source: operation.file,
     resolutionBase: rewrite.resolutionBase!,
   }, moves));
-  const live = new Map([...scan.rewrites, ...registryMatches, ...emittedMatches].map((match) => [`${match.line}:${match.column}`, match] as const));
-  if (ordinary.length + registries.length + emitted.length !== operation.rewrites.length) throw new JournalError(`rewrite-path-reference structured identity is incomplete in ${operation.file}`);
+  const live = new Map([...scan.rewrites, ...basedMatches, ...registryMatches, ...emittedMatches].map((match) => [`${match.line}:${match.column}`, match] as const));
+  if (ordinary.length + based.length + registries.length + emitted.length !== operation.rewrites.length) throw new JournalError(`rewrite-path-reference structured identity is incomplete in ${operation.file}`);
   return operation.rewrites.map((recorded) => {
     const found = live.get(`${recorded.line}:${recorded.column}`);
-    if (!found || found.from !== recorded.from || found.to !== recorded.to || found.donor !== recorded.donor || found.jsonPointer !== recorded.jsonPointer || found.resolutionBase !== recorded.resolutionBase || found.strippedPrefix !== recorded.strippedPrefix || found.emittedModuleSpecifier !== recorded.emittedModuleSpecifier) {
+    if (!found || found.from !== recorded.from || found.to !== recorded.to || found.donor !== recorded.donor || found.jsonPointer !== recorded.jsonPointer || found.resolutionBase !== recorded.resolutionBase || found.strippedPrefix !== recorded.strippedPrefix || found.emittedModuleSpecifier !== recorded.emittedModuleSpecifier || found.referenceBase !== recorded.referenceBase) {
       throw new JournalError(
         `rewrite-path-reference replay mismatch in ${operation.file} at ${recorded.line}:${recorded.column}: live rescan does not reproduce the recorded rewrite`,
       );

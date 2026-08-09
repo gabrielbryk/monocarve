@@ -62,7 +62,7 @@ function validateRewrites(
       // that would otherwise validate against its own say-so is rejected
       // here, before it ever reaches apply.
       const expected = rewrite.resolutionBase === undefined
-        ? expectedPathReferenceTarget(rewrite.from, move.source, move.target)
+        ? expectedPathReferenceTarget(rewrite.from, move.source, move.target, rewrite.referenceBase)
         : rewrite.emittedModuleSpecifier
           ? expectedEmittedModuleSpecifierTarget(rewrite.resolutionBase, move.target)
           : expectedRuntimeModuleRegistryTarget(rewrite.resolutionBase, move.target, rewrite.strippedPrefix);
@@ -72,6 +72,9 @@ function validateRewrites(
       }
       if (rewrite.strippedPrefix !== undefined && rewrite.resolutionBase === undefined) {
         issues.add("path-reference-registry-identity", `strippedPrefix requires structured registry identity: ${operation.file}`, at);
+      }
+      if (rewrite.referenceBase !== undefined && rewrite.resolutionBase !== undefined) {
+        issues.add("path-reference-base-identity", `ordinary referenceBase cannot be combined with structured resolutionBase: ${operation.file}`, at);
       }
       if (rewrite.strippedPrefix !== undefined && rewrite.emittedModuleSpecifier) issues.add("path-reference-registry-identity", `emitted module specifier cannot carry strippedPrefix: ${operation.file}`, at);
       if (rewrite.strippedPrefix !== undefined && !rewrite.from.startsWith(rewrite.strippedPrefix)) {
