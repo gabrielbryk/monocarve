@@ -98,6 +98,24 @@ describe("self-contained test relocation", () => {
     });
   });
 
+  test("retains a private test helper imported by a retained test", () => {
+    const workspace = context({
+      [`${sourceRoot}/unit.ts`]: "export const unit = 1;\n",
+      [`${sourceRoot}/shell.ts`]: "export const shell = 1;\n",
+      [`${sourceRoot}/test-support.test.ts`]: 'import { unit } from "./unit.ts"; export { unit };\n',
+      [`${sourceRoot}/consumer.test.ts`]: 'import { unit } from "./unit.ts"; import { shell } from "./shell.ts"; import "./test-support.test.ts"; void unit; void shell;\n',
+    });
+    expect(partitionTests(
+      workspace,
+      [`${sourceRoot}/unit.ts`],
+      [`${sourceRoot}/consumer.test.ts`, `${sourceRoot}/test-support.test.ts`],
+      [],
+    )).toEqual({
+      travelling: [],
+      retained: [`${sourceRoot}/consumer.test.ts`, `${sourceRoot}/test-support.test.ts`],
+    });
+  });
+
   test("refuses a retained test that imports a moved production asset", () => {
     const workspace = context({
       [`${sourceRoot}/unit.ts`]: "export const unit = 1;\n",

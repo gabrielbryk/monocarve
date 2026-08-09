@@ -15,7 +15,7 @@ export function partitionTests(
   const fixedRetained = classified.filter((test) => context.testKind(test) !== "unit");
   const unitTests = classified.filter((test) => context.testKind(test) === "unit");
   fixedRetained.forEach((test) => validateFixedRetainedTest(context, test, assets));
-  return partitionUnitTests(
+  const partition = partitionUnitTests(
     context,
     production,
     unitTests,
@@ -23,6 +23,39 @@ export function partitionTests(
     fixedRetained,
     context.config.testRelocation.strategy === "all-importers",
   );
+  return retainTestsWithRetainedImporters(context, production, assets, partition);
+}
+
+/**
+ * Tests are private package implementation, not public modules. A test helper
+ * can therefore travel only when every first-party importer travels with it.
+ * Demotion is a fixed point because retaining one test can in turn retain the
+ * helper it imports. Without this pass a retained test is rewritten to the
+ * package root for a travelling helper that the package never exports.
+ */
+function retainTestsWithRetainedImporters(
+  context: WorkspaceContext,
+  production: readonly string[],
+  assets: readonly string[],
+  partition: TestRelocationPartition,
+): TestRelocationPartition {
+  const movedProduction = new Set([...production, ...assets]);
+  const travelling = new Set(partition.travelling);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const test of [...travelling].sort(byCodeUnit)) {
+      const importers = context.consumerIndex().get(context.absolute(test)) ?? [];
+      if (importers.some((importer) => !movedProduction.has(importer) && !travelling.has(importer))) {
+        travelling.delete(test);
+        changed = true;
+      }
+    }
+  }
+  return {
+    travelling: [...travelling].sort(byCodeUnit),
+    retained: [...new Set([...partition.retained, ...partition.travelling.filter((test) => !travelling.has(test))])].sort(byCodeUnit),
+  };
 }
 
 function validateFixedRetainedTest(context: WorkspaceContext, test: string, assets: readonly string[]): void {
