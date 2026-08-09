@@ -7,12 +7,14 @@ import { auditPlanSync } from "./audit.ts";
 import { inspectCommitChain } from "./commit-evidence.ts";
 import { regenerateArtifacts } from "./regenerate.ts";
 import { createWorktree } from "./worktree.ts";
+import { currentGeneratorManifest, type GeneratorEvolution } from "./generator-evolution.ts";
 
 export interface AppliedVerification {
   readonly lifecycle: "applied";
   readonly chain: ReturnType<typeof inspectCommitChain>;
   readonly audit: ReturnType<typeof auditPlanSync>;
   readonly regeneration: ReturnType<typeof regenerateArtifacts>;
+  readonly generatorEvolutions: readonly GeneratorEvolution[];
   readonly blockers: readonly string[];
 }
 
@@ -31,12 +33,14 @@ export async function verifyAppliedPlan(options: {
   readonly rootDir: string;
   readonly manifest: ExtractionManifest;
   readonly manifestPath: string;
+  readonly configPath: string;
 }): Promise<AppliedVerification | undefined> {
   const commit = headCommit(options.rootDir);
   const chain = inspectCommitChain({ ...options, headCommit: commit });
   if (chain.phase !== "applied") return undefined;
 
   const audit = auditPlanSync(options);
+  const current = currentGeneratorManifest({ ...options, appliedCommit: chain.appliedCommit! });
   const packageManager = createPackageManagerAdapter(options.config);
   const worktree = await createWorktree({
     rootDir: options.rootDir,
@@ -48,7 +52,9 @@ export async function verifyAppliedPlan(options: {
   });
   let regeneration: ReturnType<typeof regenerateArtifacts>;
   try {
-    regeneration = regenerateArtifacts({ config: options.config, treeRoot: worktree.workspacePath, manifest: options.manifest });
+    regeneration = current.failures.length === 0
+      ? regenerateArtifacts({ config: options.config, treeRoot: worktree.workspacePath, manifest: current.manifest })
+      : { ok: false, artifacts: [], failure: current.failures.join("; ") };
   } finally {
     await worktree.dispose();
   }
@@ -57,5 +63,5 @@ export async function verifyAppliedPlan(options: {
     ...(audit.passed ? [] : audit.failures),
     ...(regeneration.ok ? [] : [regeneration.failure ?? "generated-artifact verification failed"]),
   ];
-  return { lifecycle: "applied", chain, audit, regeneration, blockers };
+  return { lifecycle: "applied", chain, audit, regeneration, generatorEvolutions: current.evolutions, blockers };
 }

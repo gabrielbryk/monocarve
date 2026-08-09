@@ -102,9 +102,9 @@ async function audit(args: ParsedArgs): Promise<void> {
 }
 
 async function verify(args: ParsedArgs): Promise<void> {
-  const { config, rootDir } = await load(args);
+  const { config, configPath, rootDir } = await load(args);
   const { path, manifest } = await loadManifest(args, rootDir);
-  const applied = await verifyAppliedPlan({ config, rootDir, manifest, manifestPath: path });
+  const applied = await verifyAppliedPlan({ config, configPath, rootDir, manifest, manifestPath: path });
   if (applied !== undefined) {
     print(applied, args);
     if (applied.blockers.length > 0) process.exitCode = 1;
