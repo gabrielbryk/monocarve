@@ -21,9 +21,17 @@ describe("transaction lifecycle evidence", () => {
   afterEach(cleanupFixtures);
 
   test("classifies the exact approval, application, and descendant boundaries", async () => {
-    const root = fixtureRepo(extractionFiles());
+    const root = fixtureRepo({ ...extractionFiles(), "quality-baseline.txt": "stable\n" });
     const config = fixtureConfig(root);
-    const manifest = baseManifest(root);
+    const base = baseManifest(root);
+    const manifest = {
+      ...base,
+      generatedFiles: [{
+        path: "quality-baseline.txt", source: TARGET, regenerate: "true", regenerateOnApply: true as const,
+        expectedHash: hashText("stable\n"), exemptReason: "unchanged post-journal fixture",
+      }],
+      changedFiles: [...base.changedFiles, "quality-baseline.txt"].sort(),
+    };
     const manifestPath = approve(root, manifest);
     const approved = inspectCommitChain({ rootDir: root, manifest, manifestPath });
     expect(approved).toMatchObject({ valid: true, phase: "approved", laterCommitCount: 0 });

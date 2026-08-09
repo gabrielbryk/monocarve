@@ -10,8 +10,12 @@ import { resolveCommit } from "../src/util/git.ts";
 import { WorkspaceContext } from "../src/plan/context.ts";
 import { executeJournal } from "../src/transaction/journal.ts";
 import { commitAppliedPlan } from "../src/transaction/apply-commit.ts";
+import { applyPlan } from "../src/transaction/apply.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
+import { inspectCommitChain } from "../src/transaction/commit-evidence.ts";
+import { classifyLifecycle } from "../src/transaction/lifecycle-status.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, read, write } from "./support/fixture-repo.ts";
+import { landManifest } from "./support/transaction-fixture.ts";
 import { runIn } from "./support/cli.ts";
 
 afterEach(cleanupFixtures);
@@ -124,6 +128,26 @@ describe("module promotion", () => {
     await executeJournal({ config: fixture.config, treeRoot: fixture.root, manifest, useGitMv: false });
     expect(auditPlanSync({ rootDir: fixture.root, config: fixture.config, manifest }).passed).toBe(true);
   });
+
+  test("committed promotion with a rewritten owned test has an exact applied lifecycle", async () => {
+    const fixture = setup({ cycle: false, directTests: true });
+    const manifest = compileModulePromotion({ rootDir: fixture.root, config: fixture.config, graph: fixture.graph, context: new WorkspaceContext(fixture.config, fixture.root), baselineCommit: fixture.baseline.commit, promotionId: "resource-contracts" });
+    const manifestPath = landManifest(fixture.root, manifest);
+
+    const applied = await applyPlan({ config: fixture.config, rootDir: fixture.root, manifest, manifestPath, commit: true });
+    expect(applied.ok).toBe(true);
+    const chain = inspectCommitChain({ rootDir: fixture.root, manifest, manifestPath });
+    expect(chain).toMatchObject({ valid: true, phase: "applied" });
+    expect(classifyLifecycle({ manifestPath, atBaseline: false, planWritten: true, chain, currentTreeValid: true }).state).toBe("applied");
+    expect(auditPlanSync({ rootDir: fixture.root, config: fixture.config, manifest }).passed).toBe(true);
+
+    write(fixture.root, "libs/resource-contracts/src/resources/schemas.test.ts", "tampered\n");
+    fixtureGit(fixture.root, "add", "--", "libs/resource-contracts/src/resources/schemas.test.ts");
+    fixtureGit(fixture.root, "commit", "--amend", "--no-edit", "-q");
+    const tampered = inspectCommitChain({ rootDir: fixture.root, manifest, manifestPath });
+    expect(tampered.valid).toBeFalse();
+    expect(tampered.failures).toContain("wiring bytes do not match the manifest: libs/resource-contracts/src/resources/schemas.test.ts");
+  }, 120_000);
 
   test("validation rejects importer evidence that omits a legitimately relocated test", () => {
     const fixture = setup({ cycle: false, directTests: true });

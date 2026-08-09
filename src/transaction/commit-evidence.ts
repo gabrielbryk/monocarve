@@ -1,6 +1,6 @@
 /** Read-only proof of the exact commit chain emitted by a committed apply. */
 import { readFileSync } from "node:fs";
-import { pureRenames, wiringPaths, type ExtractionManifest } from "../plan/manifest.ts";
+import { pureRenames, regeneratedArtifactPaths, wiringPaths, type ExtractionManifest } from "../plan/manifest.ts";
 import { git, repositoryPrefix, showBaselineBytes, tryGit } from "../util/git.ts";
 import { hashBytes } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";
@@ -94,7 +94,14 @@ function proveMove(root: string, manifest: ExtractionManifest, parent: string, c
 function proveWiring(root: string, manifest: ExtractionManifest, parent: string, commit: string, failures: string[]): boolean {
   if (tryGit({ cwd: root }, "rev-parse", `${commit}^`) !== parent) failures.push("wiring commit is not directly atop the preceding boundary");
   if (tryGit({ cwd: root }, "log", "-1", "--format=%s", commit) !== manifest.commits.wiring.subject) failures.push("wiring subject does not match the manifest");
-  if (!same(lines(git({ cwd: root }, "diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-r", commit)), wiringPaths(manifest).map((path) => repoPath(root, path)))) failures.push("wiring paths do not match the manifest");
+  const actualPaths = lines(git({ cwd: root }, "diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-r", commit));
+  const generatedPaths = regeneratedArtifactPaths(manifest);
+  const generated = new Set(generatedPaths);
+  const optionalGenerated = generatedPaths.map((path) => repoPath(root, path));
+  const requiredPaths = wiringPaths(manifest)
+    .filter((path) => !generated.has(path))
+    .map((path) => repoPath(root, path));
+  if (!sameRequiredScope(actualPaths, requiredPaths, optionalGenerated)) failures.push("wiring paths do not match the manifest");
   const finalHashes = new Map<string, string>();
   for (const operation of manifest.operations) {
     if (operation.kind === "move") continue;
@@ -129,4 +136,9 @@ function repoPath(root: string, path: string): string { return `${repositoryPref
 function same(left: readonly string[], right: readonly string[]): boolean {
   const a = [...left].sort(); const b = [...right].sort();
   return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+function sameRequiredScope(actual: readonly string[], required: readonly string[], optional: readonly string[]): boolean {
+  const allowed = new Set([...required, ...optional]);
+  const present = new Set(actual);
+  return actual.every((path) => allowed.has(path)) && required.every((path) => present.has(path));
 }
