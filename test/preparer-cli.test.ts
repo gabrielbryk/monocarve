@@ -89,21 +89,20 @@ test("preparer bootstrap commits introducing config through hooks that require g
   config.preparers = [{
     id: "sync-guides",
     phase: "pre-extraction",
-    command: "printf 'current config output\\n' > generated-guide.md",
-    outputs: ["generated-guide.md"],
-    verify: "grep -q 'current config output' generated-guide.md",
+    command: "printf 'current config output\\n' > generated-guide.md && printf 'new output\\n' > generated-new.md",
+    outputs: ["generated-guide.md", "generated-new.md"],
+    verify: "grep -q 'current config output' generated-guide.md && grep -q 'new output' generated-new.md",
     commit: { subject: "docs: sync generated guide" },
   }];
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
   writeFileSync(join(root, ".git/hooks/pre-commit"), [
     "#!/bin/sh",
     "set -eu",
-    "git diff --cached --name-only | grep -qx generated-guide.md",
-    "patch=$(mktemp)",
-    "trap 'test ! -s \"$patch\" || git apply \"$patch\"; rm -f \"$patch\"' EXIT",
-    "git diff --binary > \"$patch\"",
-    "test ! -s \"$patch\" || git checkout -- .",
+    "! git diff --cached --name-only | grep -qx generated-guide.md",
+    "test \"$(git diff --cached --name-only | sort)\" = \".monocarve/plans/bootstrap.preparer.json\nmonocarve.config.json\"",
+    "git diff --quiet",
     "grep -q 'current config output' generated-guide.md",
+    "grep -q 'new output' generated-new.md",
   ].join("\n"));
   chmodSync(join(root, ".git/hooks/pre-commit"), 0o755);
   writeFileSync(join(root, ".git/hooks/commit-msg"), "#!/bin/sh\ngrep -qx 'chore: configure guide sync' \"$1\"\n");
@@ -113,9 +112,11 @@ test("preparer bootstrap commits introducing config through hooks that require g
     "preparer-plan", "--preparer", "sync-guides", "--source", "monocarve.config.json",
     "--bootstrap-config", "monocarve.config.json", "--out", ".monocarve/plans/bootstrap.preparer.json", "--write");
   expect(readFileSync(join(root, "generated-guide.md"), "utf8")).toBe("stale output\n");
+  expect(existsSync(join(root, "generated-new.md"))).toBe(false);
   const committed = await runJsonIn<{ commit: string }>(root, "preparer-bootstrap-commit", "--plan", planned.output, "--subject", "chore: configure guide sync");
   expect(committed.commit).toHaveLength(40);
   expect(readFileSync(join(root, "generated-guide.md"), "utf8")).toBe("stale output\n");
+  expect(existsSync(join(root, "generated-new.md"))).toBe(false);
   expect(fixtureGit(root, "show", "--format=", "--name-only", "HEAD").split("\n").sort()).toEqual([".monocarve/plans/bootstrap.preparer.json", "monocarve.config.json"]);
   expect(await runJsonIn(root, "preparer-apply", "--plan", planned.output)).toMatchObject({ ok: true });
   expect(readFileSync(join(root, "generated-guide.md"), "utf8")).toBe("current config output\n");
