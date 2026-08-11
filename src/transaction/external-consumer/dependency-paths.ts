@@ -80,7 +80,25 @@ function rootDependencyEntry(
   // manufacture an implicit-any failure that the repository compiler does not.
   const conventionalTypes = resolve(packageRoot, "index.d.ts");
   if (existsSync(conventionalTypes)) return conventionalTypes;
-  return definitelyTypedEntry(require, dependency) ?? (manifest?.main ? resolve(packageRoot, manifest.main) : resolved);
+  const runtimeEntry = manifest?.main ? resolve(packageRoot, manifest.main) : resolved;
+  return definitelyTypedEntry(require, dependency) ?? adjacentDeclaration(runtimeEntry) ?? runtimeEntry;
+}
+
+/**
+ * Some ESM packages ship declaration siblings without advertising a `types`
+ * condition (for example `dist/index.mjs` beside `dist/index.d.mts`). The
+ * repository compiler discovers those siblings, so the synthetic consumer
+ * must prefer them over mapping the package name directly to JavaScript.
+ */
+function adjacentDeclaration(runtimeEntry: string): string | undefined {
+  const candidates = runtimeEntry.endsWith(".mjs")
+    ? [runtimeEntry.replace(/\.mjs$/u, ".d.mts")]
+    : runtimeEntry.endsWith(".cjs")
+      ? [runtimeEntry.replace(/\.cjs$/u, ".d.cts")]
+      : runtimeEntry.endsWith(".js")
+        ? [runtimeEntry.replace(/\.js$/u, ".d.ts")]
+        : [];
+  return candidates.find(existsSync);
 }
 
 function addDependencySubpaths(

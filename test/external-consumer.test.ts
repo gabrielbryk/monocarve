@@ -85,7 +85,12 @@ function proofFixture(): { readonly root: string; readonly config: MonocarveConf
     "apps/donor/package.json": packageJson({
       name: "@acme/donor",
       private: true,
-      dependencies: { "legacy-default": "1.0.0", "legacy-typed": "1.0.0", "plain-runtime": "1.0.0" },
+      dependencies: {
+        "adjacent-declarations": "1.0.0",
+        "legacy-default": "1.0.0",
+        "legacy-typed": "1.0.0",
+        "plain-runtime": "1.0.0",
+      },
     }),
     "apps/donor/tsconfig.json": packageJson({ compilerOptions: {}, include: ["src"] }),
     "libs/carved/package.json": packageJson({
@@ -100,7 +105,8 @@ function proofFixture(): { readonly root: string; readonly config: MonocarveConf
       'import { feature } from "@acme/utility/feature";',
       'import { runtimeValue } from "plain-runtime";',
       'import { legacyValue } from "legacy-typed";',
-      "export const combined = `${feature}:${runtimeValue}:${legacyValue}:${ambientSignal}`;",
+      'import { adjacentValue } from "adjacent-declarations";',
+      "export const combined = `${feature}:${runtimeValue}:${legacyValue}:${adjacentValue}:${ambientSignal}`;",
       'export { bundled } from "./bundled";',
       "",
     ].join("\n"),
@@ -119,6 +125,14 @@ function proofFixture(): { readonly root: string; readonly config: MonocarveConf
     "apps/donor/node_modules/legacy-typed/package.json": packageJson({ name: "legacy-typed", main: "./lib/index.js" }),
     "apps/donor/node_modules/legacy-typed/lib/index.js": "exports.legacyValue = 1;\n",
     "apps/donor/node_modules/legacy-typed/index.d.ts": "export const legacyValue: number;\n",
+    "apps/donor/node_modules/adjacent-declarations/package.json": packageJson({
+      name: "adjacent-declarations",
+      type: "module",
+      main: "./dist/index.mjs",
+      exports: { ".": { import: "./dist/index.mjs", default: "./dist/index.mjs" } },
+    }),
+    "apps/donor/node_modules/adjacent-declarations/dist/index.mjs": "export const adjacentValue = 1;\n",
+    "apps/donor/node_modules/adjacent-declarations/dist/index.d.mts": "export const adjacentValue: number;\n",
     "apps/donor/node_modules/@types/plain-runtime/package.json": packageJson({ name: "@types/plain-runtime", types: "./index.d.ts" }),
     "apps/donor/node_modules/@types/plain-runtime/index.d.ts": "export const runtimeValue: number;\n",
     "apps/donor/node_modules/@types/ambient-only/index.d.ts": "declare const ambientSignal: string;\n",
