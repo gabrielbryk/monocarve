@@ -148,6 +148,7 @@ describe("configured pre-extraction preparers", () => {
     fixtureGit(root, "commit", "-qm", "test: apply declarative create");
     const idempotent = await compilePreparerManifest({ rootDir: root, config, extraction: extractionManifest(root), preparerId: configured.id, sourcePath: source });
     expect(idempotent.mutations[0]).toMatchObject({ preconditionHash: manifest.mutations[0]!.resultHash, resultHash: manifest.mutations[0]!.resultHash, preconditionMode: 0o755, resultMode: 0o755 });
+    await applyPreparerManifest({ rootDir: root, config, manifest: idempotent });
   });
 
   test("refuses a declarative create when different bytes already exist", async () => {

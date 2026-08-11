@@ -200,7 +200,14 @@ export async function applyPreparerManifest(options: {
     ...options.manifest.generatedArtifacts.map((item) => item.path),
     ...options.manifest.postJournalPreparers.flatMap((item) => item.outputs),
   ]);
-  const operations = options.manifest.mutations.filter((item) => !generatedPaths.has(item.path)).map((item) => ({ kind: "write" as const, ...item }));
+  // A captured output whose precondition already equals its reviewed result is
+  // an idempotent no-op. Keep it in the manifest's post-apply byte proof, but
+  // do not hand it to the journal: renaming and recreating an unchanged path
+  // creates needless rollback state and can turn a later verifier failure into
+  // residue when generated workspace tooling changes its ancestor topology.
+  const operations = options.manifest.mutations
+    .filter((item) => !generatedPaths.has(item.path) && (item.preconditionHash !== item.resultHash || item.preconditionMode !== item.resultMode))
+    .map((item) => ({ kind: "write" as const, ...item }));
   const generatedSnapshots = snapshotPaths(options.rootDir, [...generatedPaths]);
   const journal = executePreparationJournal({ rootDir: options.rootDir, operations });
   try {
