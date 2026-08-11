@@ -62,12 +62,12 @@
     "prepublishOnly": "bun run build:bundle && bun run verify-package"
   },
   "dependencies": {
-    "dependency-cruiser": "^16.10.0",
-    "typescript": "^5.9.0",
+    "dependency-cruiser": "^18.1.1",
+    "typescript": "^7.0.2",
     "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",
-    "oxc-parser": "^0.139.0"
+    "oxc-parser": "^0.143.0"
   }
 }
