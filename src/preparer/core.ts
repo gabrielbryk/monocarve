@@ -6,7 +6,7 @@ import { executePreparationJournal, finalizeCompletedPreparationJournal, rollbac
 import { createPackageManagerAdapter } from "../adapters/registry.ts";
 import { createWorktree } from "../transaction/worktree.ts";
 import { fileState } from "../util/files.ts";
-import { currentBranch, git, headCommit, repositoryPrefix, resolveCommit, showBaseline, statusEntries } from "../util/git.ts";
+import { currentBranch, git, headCommit, repositoryPrefix, resolveCommit, showBaseline, showBaselineBytes, statusEntries } from "../util/git.ts";
 import { isGuardedBranch } from "../config.ts";
 import { byCodeUnit, hashBytes, hashJson, hashText, MISSING, stableStringify } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";
@@ -100,7 +100,12 @@ export async function compilePreparerManifest(input: CompilePreparerInput): Prom
     const generatedPaths = unique([...generatedArtifacts.map((item) => item.path), ...postJournalPreparers.flatMap((item) => item.outputs)]);
     const overlap = generatedPaths.find((path) => outputs.includes(path));
     if (overlap !== undefined) throw new PreparerError(`preparer output cannot also be a triggered generated output: ${overlap}`);
-    const generatedBefore = Object.fromEntries(generatedPaths.map((path) => [path, state(worktree.workspacePath, path)]));
+    // Dependency installation runs before this point and may rewrite generated
+    // files (for example pnpm-lock.yaml or Moon's root tsconfig).  Capture the
+    // reviewed precondition from the immutable baseline commit, not the
+    // disposable worktree after install; otherwise simulation records
+    // post-install bytes as pre=result and real apply cannot commit them.
+    const generatedBefore = Object.fromEntries(generatedPaths.map((path) => [path, baselineState(input.rootDir, resolved.commit, path)]));
     const generation = runPreparationPostJournalPreparers(input.config, worktree.workspacePath, { triggerPaths, generatedArtifacts, postJournalPreparers });
     if (!generation.ok) throw new PreparerError(generation.failure ?? "preparer generation failed");
     const changed = unique(statusEntries(worktree.workspacePath).flatMap((entry) => entry.paths)).sort(byCodeUnit);
@@ -370,6 +375,14 @@ function mutation(root: string, path: string, before: ReturnType<typeof state>):
 function state(root: string, path: string): { readonly hash: ReturnType<typeof fileState>; readonly mode: number | "missing" } {
   const absolute = workspacePath(root, path);
   return existsSync(absolute) ? { hash: fileState(absolute), mode: canonicalMode(statSync(absolute).mode) } : { hash: MISSING, mode: MISSING };
+}
+
+function baselineState(root: string, commit: string, path: string): { readonly hash: ReturnType<typeof fileState>; readonly mode: number | "missing" } {
+  const bytes = showBaselineBytes(root, commit, path);
+  if (bytes === null) return { hash: MISSING, mode: MISSING };
+  const tree = git({ cwd: root }, "ls-tree", commit, "--", `${repositoryPrefix(root)}${path}`);
+  const mode = tree.split(" ")[0];
+  return { hash: hashBytes(bytes), mode: mode === "100755" ? 0o755 : 0o644 };
 }
 
 function canonicalMode(mode: number): 0o644 | 0o755 { return (mode & 0o111) === 0 ? 0o644 : 0o755; }
