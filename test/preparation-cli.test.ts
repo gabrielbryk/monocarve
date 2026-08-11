@@ -56,6 +56,21 @@ test("seams compiles a deterministic read-only proposal from a selected declarat
   expect(seam.requiredImports).toHaveLength(1);
 }, 15_000);
 
+test("prepare-apply refuses a schema-v1 preparer manifest with the correct recovery command", async () => {
+  const root = committedWorkspace();
+  const path = "plans/preparer.json";
+  mkdirSync(join(root, "plans"), { recursive: true });
+  writeFileSync(join(root, path), JSON.stringify({
+    schemaVersion: 1,
+    planId: "preparer-plan",
+    preparer: { id: "rewrite-boundary", phase: "pre-extraction" },
+  }));
+  const result = await runIn(root, "prepare-apply", "--plan", path, "--commit");
+  expect(result.code).toBe(64);
+  expect(result.stderr).toContain(`is a preparer manifest; use preparer-apply --plan ${path}`);
+  expect(result.stderr).not.toContain("TypeError");
+});
+
 test("seams-multi deterministically analyzes an explicit configured file scope", async () => {
   const root = committedWorkspace();
   const arguments_ = [

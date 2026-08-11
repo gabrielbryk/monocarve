@@ -388,6 +388,12 @@ export function loadPreparationManifest(args: ParsedArgs, rootDir: string): { pa
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new UsageError(`preparation plan ${path} is not a JSON object`);
   }
+  if ("preparer" in parsed && !("operations" in parsed)) {
+    throw new UsageError(`preparation plan ${path} is a preparer manifest; use preparer-apply --plan ${path} (then preparer-commit) instead`);
+  }
+  if (!("operations" in parsed)) {
+    throw new UsageError(`preparation plan ${path} is missing its operations array; refusing to interpret an unknown schema as a declaration-preparation plan`);
+  }
   const manifest = parsed as PreparationManifest;
   assertPreparationManifestValid(manifest);
   return { path, manifest };
