@@ -599,29 +599,40 @@ next actions, and `plan --write --commit-approval` is the explicit one-command
 equivalent; both mutation forms refuse unrelated dirt and guarded branches.
 Resolve every reported blocker before continuing.
 
-Run the simulation explicitly, including the optional package-manager lockfile
-comparison when the plan has a lockfile importer:
-
-```sh
-bunx monocarve apply --plan .monocarve/plans/c-example123.json --verify-lockfile
-```
-
-Without `--commit`, `apply` simulates only. It replays the journal in a
-disposable worktree, regenerates configured artifacts, audits that tree, checks
-the lockfile when requested, and runs the configured gates. The real checkout
-is not changed. Its `transaction.nodeModules` strategy defaults to `symlink`;
-`install` and `none` are available for workspaces whose gates need those
-strategies. A passing simulation is the point at which the generated plan has
-evidence that it can land.
-
-After the simulation passes, commit the transaction:
+When the reviewed plan is ready to land, use the one-pass landing command,
+including the optional package-manager lockfile comparison when the plan has a
+lockfile importer:
 
 ```sh
 bunx monocarve apply --plan .monocarve/plans/c-example123.json --commit --verify-lockfile
 bunx monocarve audit --plan .monocarve/plans/c-example123.json
 ```
 
-The committed apply repeats simulation first, then creates up to two commits:
+`apply --commit` performs the mandatory simulation once, then immediately
+applies the identical verified journal. This is the default landing path.
+
+Without `--commit`, `apply` is an evidence-only feasibility or review run. It replays the journal in a
+disposable worktree, regenerates configured artifacts, audits that tree, checks
+the lockfile when requested, and runs the configured gates. The real checkout
+is not changed. Its `transaction.nodeModules` strategy defaults to `symlink`;
+`install` and `none` are available for workspaces whose gates need those
+strategies. Use this standalone form only when someone must review feasibility
+evidence before deciding whether to land. Do not run it immediately before a
+committed apply: the committed invocation must simulate again, so that sequence
+pays cold setup and repository gates twice. Monocarve does not cache simulation
+evidence because safe reuse would need to bind the exact plan, approval,
+baseline, configuration, compiler, dependencies, generated outputs, gates, and
+execution environment.
+
+After simulation, the committed apply creates up to two commits:
+
+Some repositories attach their full staged Definition of Done to every commit.
+For an extraction campaign, if the operator has explicit authorization to defer
+that expensive hook, set `SKIP` to that hook's exact identifier for intermediate
+commits only. Keep all structural, lint, hygiene, secret, and commit-message
+hooks active, record the focused gates, and run the full Definition of Done once
+before opening the pull request. Do not use broad `--no-verify` as a performance
+shortcut.
 the move commit contains only declared R100 renames; the wiring commit contains
 scaffolding, import rewrites, lockfile changes, move-with-rewrite changes, and
 regenerated artifacts. Audit the result immediately, before another extraction

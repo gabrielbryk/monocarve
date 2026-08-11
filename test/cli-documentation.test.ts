@@ -41,4 +41,12 @@ describe("CLI documentation", () => {
     expect(help).toContain("without changing the workspace");
     expect(reference).toContain("exact top-level and nested move targets");
   });
+
+  test("apply help directs landing workflows through one committed invocation", () => {
+    const help = commandHelp(COMMANDS.apply!);
+    expect(help).toContain("Use --commit as the default landing path");
+    expect(help).toContain("simulates once");
+    expect(help).toContain("do not run it immediately before a committed apply");
+    expect(help).toContain("no simulation evidence is cached");
+  });
 });

@@ -58,11 +58,22 @@ Resolve readiness failures with the decision tree above. Then commit prerequisit
 
 1. Review scope, baseline, destination, journal, gates, and generated outputs.
 2. Approve exactly one immutable plan.
-3. Simulate only when it provides evidence not already established by readiness checks or repository policy requires it.
-4. Apply once. Do not launch an overlapping retry.
-5. Audit and verify the terminal result, including source conservation, import direction, package boundaries, and commit partitioning.
-6. Run focused package and consumer gates during iteration.
-7. Run the repository's full Definition of Done once after the extraction unit is complete.
+3. If the next intended action is landing, run `apply --commit` directly. It performs the mandatory simulation once and then applies the identical verified journal.
+4. Run standalone `apply` without `--commit` only when feasibility evidence must be reviewed before landing, policy explicitly requires a separate review boundary, or the operator does not yet intend to mutate the checkout. Never run it merely as a prelude to an immediate committed apply: the committed invocation must simulate again and Monocarve intentionally does not cache that evidence.
+5. Apply once. Do not launch an overlapping retry.
+6. Audit and verify the terminal result, including source conservation, import direction, package boundaries, and commit partitioning.
+7. Run focused package and consumer gates during iteration.
+8. Run the repository's full Definition of Done once after the extraction unit is complete.
+
+If a repository's commit hook invokes its full staged Definition of Done on every intermediate extraction commit, and the user or repository policy explicitly authorizes bypassing that hook for the campaign, skip only that named hook for intermediate commits (for example, `SKIP=<full-gate-hook-id> git commit ...`). Keep structural, lint, hygiene, secret, and commit-message hooks enabled; record the focused gates run for each commit; and run the full Definition of Done once before the PR. Never use broad `--no-verify` for this optimization.
+
+### Simulation decision
+
+- **Ready and landing now:** `apply --commit`. One invocation, one mandatory simulation, then commit.
+- **Evidence-only review or uncertain landing:** standalone `apply`. Stop after it and review; accept that a later committed apply will simulate again.
+- **Trying to save time by skipping proof:** refused. Do not use `--skip-simulation`, stale receipts, or manual journal replay.
+
+Simulation receipt reuse is deliberately deferred. Safe reuse would have to bind the exact plan and approval bytes, baseline and checkout state, configuration and compiler identity, dependency installation, generated outputs, gate commands, and relevant execution environment. Reusing less evidence could land a journal that was not the one actually proved.
 
 ### Process supervision
 
@@ -113,6 +124,8 @@ Escalate when setup and lifecycle time materially exceeds the expected extractio
 - Approving before destination typecheck, lint, and test-scaffold readiness.
 - Treating a yielded wrapper as a completed child process.
 - Starting a second apply because the first is quiet.
+- Running standalone `apply` and then immediately running `apply --commit`, paying for the same cold setup and gates twice.
+- Using broad `--no-verify` when only an explicitly authorized full-gate hook needs deferral until the final PR proof.
 - Running the entire workspace gate after every small edit.
 - Investigating a tool defect before ruling out process, environment, and destination-readiness failures.
 - Letting global generator output silently expand the extraction.

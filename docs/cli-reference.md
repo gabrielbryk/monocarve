@@ -139,7 +139,7 @@ does not infer new reasons from the current checkout.
 | `verify` | `verify --plan <path>` — read-only manifest validation plus apply preflight. |
 | `doctor` | `doctor --plan <path> [--verify-lockfile]` — replay, audit, and run repository gates in a disposable worktree. |
 | `inspect-gates` | `inspect-gates --plan <path>` — run every declared gate separately against the landed plan, attributing exact repository-visible changed paths and suggesting missing generated-artifact declarations without changing the checkout. |
-| `apply` | `apply --plan <path> [--commit] [--resume] [--skip-gates] [--verify-lockfile]` — always simulates first; without `--commit`, the checkout is unchanged. |
+| `apply` | `apply --plan <path> [--commit] [--resume] [--skip-gates] [--verify-lockfile]` — use `--commit` as the default landing path; it performs one mandatory simulation and then applies. Without `--commit`, this is an evidence-only feasibility/review run and the checkout is unchanged. |
 | `apply-status` | `apply-status` — read-only durable phase and owner evidence for a committing apply. |
 | `apply-recover` | `apply-recover --plan <path>` — release only a stopped matching owner, then print the verified apply/resume argv. |
 | `audit` | `audit --plan <path> [--skip-compile-proof]` — independently verify the tree produced by the plan. Run it immediately after apply. |
@@ -151,6 +151,10 @@ does not infer new reasons from the current checkout.
 `--skip-simulation` is explicitly refused. `--resume` accepts only a verified
 transaction boundary. `--skip-gates` does not bypass validation, journal,
 scope, or audit proofs; normal operation should run the configured gates.
+Do not run standalone `apply` immediately before `apply --commit`: the committed
+invocation already simulates, and Monocarve intentionally does not reuse stale
+simulation evidence. Use the standalone form only when its result must be
+reviewed before deciding whether to land.
 Refreshing is a separate compile step to a new path. It never approves or
 applies the refreshed plan in the same invocation. Source, closure, target,
 config, or execution-policy drift remains a hard refusal.

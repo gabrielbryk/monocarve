@@ -184,6 +184,12 @@ them.
 Only then replay the identical hashed operations in the real checkout, producing
 the move commit and the wiring commit. Any failure rolls back.
 
+For a reviewed plan that is ready to land, invoke `apply --commit` directly: it
+performs that mandatory simulation once and then applies. Standalone `apply`
+without `--commit` is for feasibility or review when landing is not yet intended.
+Do not run both back-to-back; the committed invocation intentionally simulates
+again rather than trusting stale cached evidence.
+
 Between the journal and the gates, in both trees, the declared **generated
 artifacts** are regenerated: a registry, barrel, or ledger that a move
 invalidates is not something the plan can write, and a workspace that checks its
