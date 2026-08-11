@@ -181,6 +181,21 @@ describe("external consumer compile proof", () => {
     expect(result.diagnostics.join("\n")).toContain("plain-runtime");
   });
 
+  test("does not guess a mismatched declaration flavor beside an ESM entry", () => {
+    const fixture = proofFixture();
+    rmSync(`${fixture.root}/apps/donor/node_modules/adjacent-declarations/dist/index.d.mts`);
+    write(
+      fixture.root,
+      "apps/donor/node_modules/adjacent-declarations/dist/index.d.ts",
+      "export const adjacentValue: number;\n",
+    );
+
+    const result = run(fixture.root, fixture.config, fixture.manifest);
+
+    expect(result.passed).toBe(false);
+    expect(result.diagnostics.join("\n")).toContain("adjacent-declarations");
+  });
+
   test("fails when the donor compiler profile omits the ambient type it needs", () => {
     const fixture = proofFixture();
     const result = run(fixture.root, config("bundler", ["ambient-alternate"]), fixture.manifest);
