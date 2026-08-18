@@ -22,7 +22,7 @@ where supported.
 | command | usage and boundary |
 | --- | --- |
 | `plan` | `plan --candidate <id> ... [--verify-lockfile] [--out <path>] [--write] [--commit-approval] [--json] [--verbose]` — compile deterministically; terminals get the concise review while pipes and explicit machine modes retain the complete manifest. |
-| `scan` | `scan [--app <name>] [--no-cache] [--include-extracted] [--out <path>]` — build the configured dependency model without editing the workspace. |
+| `scan` | `scan [--app <name>] [--no-cache] [--include-extracted] [--out <path>] [--report-out <path>]` — build the configured dependency model without editing the workspace; `--report-out` writes the raw scanner report for the selected app for later `--graph` replay. |
 | `visualize` | `visualize [--app <name>] [--port <number>] [--no-open] [--no-cache] [--include-extracted]` — serve the current SCC-level dependency graph as an interactive loopback-only web UI. Search and edge-kind filters are local; Rescan rebuilds the read-only graph. |
 | `layers` | `layers [--app <name>] [--out <path>]` — report domains, components, and dependency-first layers. |
 | `portfolio` | `portfolio [--app <name>] [--limit <n>] [--recommendation <status>] [--strategy <cohesive\|max-loc\|low-risk\|campaign\|preparation>] [--include-extracted] [--communities] [--hub-inbound-threshold <n>] [--out <path>]` — show one representative per near-equivalent group; defaults to architecturally recommended candidates. |
