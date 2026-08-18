@@ -28,7 +28,7 @@ export function consumerWiringOperations(input: ConsumerWiringInput): PlanOperat
 }
 
 function wireConsumer(input: ConsumerWiringInput, owner: ConsumerDependencyOwner, lockfile: string): { operations: PlanOperation[]; lockfile: string } {
-  const manifestFile = `${owner.owner}/package.json`;
+  const manifestFile = ownerPath(owner.owner, "package.json");
   if (!input.context.exists(manifestFile)) return { operations: [], lockfile };
   const operations = [consumerManifestOperation(input, owner, manifestFile), consumerReferenceOperation(input, owner.owner)].filter(
     (operation): operation is PlanOperation => operation !== undefined,
@@ -82,7 +82,7 @@ function devManifest(manifest: ManifestDependencies, dev: Record<string, string>
 }
 
 function consumerReferenceOperation(input: ConsumerWiringInput, owner: string): PlanOperation | undefined {
-  const path = `${owner}/tsconfig.json`;
+  const path = ownerPath(owner, "tsconfig.json");
   if (!input.context.exists(path)) return undefined;
   const tsconfig = parseJsonFile(input.context.text(path), path) as Record<string, unknown> & { references?: { path?: string }[]; compilerOptions?: { composite?: unknown } };
   // A project reference is valid only for a composite build project (or an
@@ -95,6 +95,10 @@ function consumerReferenceOperation(input: ConsumerWiringInput, owner: string): 
   const index = references.findIndex((reference) => target < (reference.path ?? ""));
   const next = index < 0 ? [...references, { path: target }] : [...references.slice(0, index), { path: target }, ...references.slice(index)];
   return writeOperation(input.context, path, stringifyJson({ ...tsconfig, references: next }), "wiring:consumer-project-references");
+}
+
+function ownerPath(owner: string, file: string): string {
+  return owner === "." || owner === "" ? file : `${owner}/${file}`;
 }
 
 function consumerImporterOperation(input: ConsumerWiringInput, owner: ConsumerDependencyOwner, lockfile: string): { operation: PlanOperation; lockfile: string } | undefined {

@@ -82,5 +82,6 @@ test("does not add a project reference to an ordinary noEmit application config"
     consumerOwners: [{ owner: ".", dependencySection: "runtime" }],
     lockfileText: "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n",
   });
+  expect(operations.some((operation) => operation.kind === "write-file" && operation.path === "package.json")).toBe(true);
   expect(operations.some((operation) => operation.kind === "write-file" && operation.path === "./tsconfig.json")).toBe(false);
 });
