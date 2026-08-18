@@ -17,7 +17,7 @@ import { explainArtifact, explainDependency, formatPlanExplanation } from "../pl
 import { simulatePlan } from "../transaction/simulate.ts";
 import { showBaseline } from "../util/git.ts";
 import type { CommandSpec } from "./types.ts";
-import { assertPlannableTree, load, loadGraph, loadManifest, outputPath, print, writeOutput } from "./shared.ts";
+import { assertPlannableTree, load, loadGraph, loadManifest, outputPath, print, writeOutput, type LoadedGraph } from "./shared.ts";
 import { portfolioFor } from "./discovery.ts";
 import { relativeWorkspacePath } from "../util/paths.ts";
 
@@ -31,8 +31,11 @@ async function plan(args: ParsedArgs): Promise<void> {
   const portfolio = portfolioFor(args, loaded);
   const candidate = portfolio.candidates.find((entry) => entry.id === candidateId);
   if (!candidate) throw new UsageError(`no candidate with id ${candidateId}`);
-  if (!candidate.eligible && !flagBool(args, "force")) {
-    throw new UsageError(`candidate ${candidateId} is not eligible: ${candidate.rejectionReasons.map((reason) => reason.detail).join("; ")}`);
+  const sourceFlags = args.repeated.get("source") ?? [];
+  const selectedSources = sourceFlags.map((source) => relativeWorkspacePath(loaded.rootDir, source));
+  const narrowed = selectedSources.length === 0 ? candidate : narrowCandidate(candidate, selectedSources, loaded.graph);
+  if (!narrowed.eligible && !flagBool(args, "force")) {
+    throw new UsageError(`candidate ${candidateId} is not eligible: ${narrowed.rejectionReasons.map((reason) => reason.detail).join("; ")}`);
   }
   const packageName = flagString(args, "package-name");
   if (candidate.recommendation?.requiresExplicitPackageName && packageName === undefined && flagString(args, "profile") === undefined) {
@@ -42,7 +45,7 @@ async function plan(args: ParsedArgs): Promise<void> {
   const profile = flagString(args, "profile");
   const manifest = buildPlanSync({
     config: loaded.config, rootDir: loaded.rootDir, graph: loaded.graph, context: loaded.context,
-    candidate, baselineCommit: loaded.graph.commit ?? "HEAD",
+    candidate: narrowed, baselineCommit: loaded.graph.commit ?? "HEAD",
     ...(packageName === undefined ? {} : { packageName }),
     ...(packageRoot === undefined ? {} : { packageRoot }),
     ...(profile === undefined ? {} : { profile }),
@@ -84,6 +87,17 @@ async function plan(args: ParsedArgs): Promise<void> {
     });
     print(`${formatPlanReview(review).trimEnd()}\n\nOutput: ${out} (${written ? "written" : "dry run"})`, args);
   }
+}
+
+function narrowCandidate(candidate: Awaited<ReturnType<typeof portfolioFor>>["candidates"][number], sources: readonly string[], graph: LoadedGraph["graph"]) {
+  const wanted = new Set(sources);
+  const files = candidate.files.filter((file) => wanted.has(file));
+  if (files.length !== sources.length) throw new UsageError(`--source must name candidate production files; requested ${sources.join(", ")}`);
+  const missing = [...new Set(files.flatMap((file) => (graph.outgoing.get(file) ?? []).filter((target) => candidate.files.includes(target) && !wanted.has(target))))].sort();
+  if (missing.length > 0) throw new UsageError(`--source selection is not closed; also select required candidate files: ${missing.join(", ")}`);
+  const tests = candidate.tests.filter((test) => test.startsWith(`${files[0]?.replace(/\.tsx?$/, "") ?? ""}`) || files.some((file) => test.startsWith(file.replace(/\.tsx?$/, ""))));
+  const sccs = candidate.sccs.filter((scc) => scc.members.some((member) => wanted.has(member)));
+  return { ...candidate, files, tests, sccs };
 }
 
 async function scope(args: ParsedArgs): Promise<void> {
@@ -294,7 +308,7 @@ export function approvalGuidance(out: string, evidence: ManifestApprovalEvidence
 }
 
 export const planningCommands: Record<string, CommandSpec> = {
-  plan: { summary: "compile a hash-journaled extraction plan", usage: "plan --candidate <id> [--profile <name> | --package-name <name> [--package-root <path>]] [--force] [--verify-lockfile] [--out <path>] [--write [--commit-approval]] [--json | --verbose]", details: "Prints the bounded operator review by default; --json or --verbose emits the full proof manifest. --package-name resolves a known workspace package root automatically; --package-root is an explicit override. A root containing package.json is extended, otherwise a new package is scaffolded. Low-confidence recommendations require an explicit target. --write reports exact review, approval, and apply actions; --commit-approval explicitly creates only the manifest approval commit.", run: plan },
+  plan: { summary: "compile a hash-journaled extraction plan", usage: "plan --candidate <id> [--source <path> ...] [--profile <name> | --package-name <name> [--package-root <path>]] [--force] [--verify-lockfile] [--out <path>] [--write [--commit-approval]] [--json | --verbose]", details: "Prints the bounded operator review by default; --json or --verbose emits the full proof manifest. Repeat --source to intentionally narrow a multi-SCC candidate. --package-name resolves a known workspace package root automatically; --package-root is an explicit override. A root containing package.json is extended, otherwise a new package is scaffolded. Low-confidence recommendations require an explicit target. --write reports exact review, approval, and apply actions; --commit-approval explicitly creates only the manifest approval commit.", run: plan },
   scope: { summary: "resolve a stable source path and review its current plan", usage: "scope --path <source> --package-name <name> [--app <name>] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]", details: "Resolves the current principal SCC candidate from a stable source path. It requires an intentional target, prints a concise review by default, and never writes unless --write is explicit.", run: scope },
   "plan-review": { summary: "render the deterministic operator review for a plan", usage: "plan-review --plan <path> [--approval-subject <subject>] [--json]", details: "Reads the manifest and its Git baseline without changing the workspace. The review exposes exact move targets, wiring and public-surface changes, generated outputs, gates, warnings, and the subject/path inputs used for approval.", run: reviewPlan },
   explain: { summary: "explain why a plan changes one dependency or artifact", usage: "explain --plan <path> (--dependency <name> | --artifact <path>) [--json]", details: "Read-only. Reports persisted dependency source/reason evidence or the exact operation chain and projected final hash for an artifact.", run: explainPlan },
