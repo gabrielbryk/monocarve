@@ -1,4 +1,6 @@
-import { isPackageOwner } from "../config.ts";
+import { resolve } from "node:path";
+import ts from "typescript";
+import { applicationOwner, isPackageOwner } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import { isBuiltinModule, type WorkspaceContext } from "./context.ts";
 
@@ -87,5 +89,31 @@ export function collectDependencyEvidence(
     recordSpecifiers(context, graph, source, packageName, evidence, workspaceNamesSeen);
     recordUnresolvedWorkspaceEdges(context, graph, source, packageName, ownerToPackage, evidence, workspaceNamesSeen);
   }
+  recordConfiguredTypes(context, packageName, sources, evidence);
   return evidence;
+}
+
+/** Ambient compiler types are package inputs even when no source import names them. */
+function recordConfiguredTypes(
+  context: WorkspaceContext,
+  packageName: string,
+  sources: readonly string[],
+  evidence: { owners: Map<string, Set<string>>; sections: Map<string, DependencySection>; sources: Map<string, Set<string>> },
+): void {
+  const owners = new Set(sources.map((source) => context.ownerOf(source)));
+  for (const application of context.config.applications) {
+    if (!owners.has(applicationOwner(application))) continue;
+    const configPath = resolve(context.rootDir, application.tsconfig);
+    const read = ts.readConfigFile(configPath, ts.sys.readFile);
+    const configured = read.error === undefined && Array.isArray(read.config?.compilerOptions?.types)
+      ? read.config.compilerOptions.types
+      : [];
+    for (const type of configured) {
+      const name = context.packageNameOf(type) ?? type;
+      if (name === packageName || isBuiltinModule(name)) continue;
+      // Attribute the evidence to a moved source so version resolution uses
+      // the donating owner (the tsconfig path itself is not a manifest owner).
+      noteDependency(evidence, name, "dev", sources[0] ?? application.sourceRoot, context);
+    }
+  }
 }

@@ -1,6 +1,7 @@
 /** Target package scaffold operations, decomposed by the file they may change. */
 
 import { resolve } from "node:path";
+import ts from "typescript";
 
 import type { AdapterEditResult } from "../adapters/types.ts";
 import { hashText } from "../util/hash.ts";
@@ -224,11 +225,23 @@ function rootTsconfigOperation(input: ScaffoldInput, templates: ReturnType<typeo
   const exists = input.context.exists(path);
   if (!exists && !templates.tsconfig) return undefined;
   const current = exists ? input.context.text(path) : render(input, templates.tsconfig!);
-  const rendered = parseJsonFile(current, path) as { references?: readonly { path?: string }[] };
+  const rendered = parseJsonFile(current, path) as { references?: readonly { path?: string }[]; compilerOptions?: Record<string, unknown> };
   const existing = rendered.references ?? [];
   const merged = [...existing, ...references.filter((entry) => !existing.some((item) => item.path === entry.path))];
-  const contents = stringifyJson(merged.length > 0 ? { ...rendered, references: merged } : rendered);
+  const types = ambientCompilerTypes(input);
+  const compilerOptions = types.length > 0
+    ? { ...(rendered.compilerOptions ?? {}), types: [...new Set([...(Array.isArray(rendered.compilerOptions?.types) ? rendered.compilerOptions.types : []), ...types])] }
+    : rendered.compilerOptions;
+  const next = { ...rendered, ...(compilerOptions === undefined ? {} : { compilerOptions }), ...(merged.length > 0 ? { references: merged } : {}) };
+  const contents = stringifyJson(next);
   return exists && contents === current ? undefined : writeOperation(input.context, path, contents, "scaffold:tsconfig");
+}
+
+function ambientCompilerTypes(input: ScaffoldInput): string[] {
+  const configPath = resolve(input.context.rootDir, input.application.tsconfig);
+  const read = ts.readConfigFile(configPath, ts.sys.readFile);
+  const types = read.error === undefined ? read.config?.compilerOptions?.types : undefined;
+  return Array.isArray(types) ? types.filter((type): type is string => typeof type === "string") : [];
 }
 
 function projectReferences(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>): { path: string }[] {
@@ -293,8 +306,13 @@ function referenceTemplate(templates: ReturnType<typeof templatesFor>, target: s
 
 function initialTsconfigOperation(input: ScaffoldInput, template: ReturnType<typeof referenceTemplate>, path: string, references: readonly { path: string }[]): PlanOperation {
   const rendered = parseJsonFile(render(input, template!), path);
-  assertCompilerProfileRepresented(input, rendered, path);
-  return writeOperation(input.context, path, stringifyJson(references.length ? { ...rendered, references } : rendered), "scaffold:tsconfig");
+  const types = ambientCompilerTypes(input);
+  const compilerOptions = types.length > 0
+    ? { ...((rendered.compilerOptions ?? {}) as Record<string, unknown>), types: [...new Set([...(Array.isArray((rendered.compilerOptions as Record<string, unknown> | undefined)?.types) ? (rendered.compilerOptions as Record<string, unknown>).types as unknown[] : []), ...types])] }
+    : rendered.compilerOptions;
+  const next = { ...rendered, ...(compilerOptions === undefined ? {} : { compilerOptions }), ...(references.length ? { references } : {}) };
+  assertCompilerProfileRepresented(input, next, path);
+  return writeOperation(input.context, path, stringifyJson(next), "scaffold:tsconfig");
 }
 
 function assertCompilerProfileRepresented(input: ScaffoldInput, rendered: Record<string, unknown>, path: string): void {

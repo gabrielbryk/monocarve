@@ -205,7 +205,7 @@ export function generatedProvenance(
   const header = readFileSync(absolute, "utf8").split("\n").slice(0, settings.headerLines);
   if (!header.some((line) => new RegExp(settings.marker, "i").test(line))) return null;
   const capture = (pattern: string): string | null =>
-    header.map((line) => line.match(new RegExp(pattern))?.[1]).find((value) => value !== undefined) ?? null;
+    header.map((line) => line.match(new RegExp(pattern, "i"))?.[1]).find((value) => value !== undefined) ?? null;
   const source = capture(settings.source);
   const regenerate = capture(settings.regenerate);
   return { source, sourceExists: source !== null && existsSync(resolve(rootDir, source)), regenerate };

@@ -12,7 +12,7 @@ export const generatedArtifacts = z.strictObject({
       /** A file is generated when one of its first `headerLines` matches this. */
       marker: regexSource.default("@generated|DO NOT EDIT"),
       /** Capture group 1 yields the generating source path. */
-      source: regexSource.default("^//\\s*Source(?:\\s+of\\s+truth)?:\\s*(.+)$"),
+      source: regexSource.default("^//\\s*Source(?:\\s+of\\s+truth)?\\s*:\\s*(.+)$"),
       /** Capture group 1 yields the regeneration command. */
       regenerate: regexSource.default("^//\\s*Regenerate:\\s*(.+)$"),
       headerLines: z.number().int().positive().default(12),

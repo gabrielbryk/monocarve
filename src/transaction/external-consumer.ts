@@ -46,10 +46,17 @@ export function compileExternalConsumer(options: CompileExternalConsumerOptions)
   const fixture = writeExternalConsumerFixture(fixtureRoot, manifest.target);
   try {
     const compilerOptions = compilerOptionsFor(config, manifest, rootDir, installedRoot);
-    const declaredTypes = partitionTypes(getApplication(config, manifest.application).compilerProfile.types, installedRoot, compilerOptions);
-    const program = ts.createProgram([fixture, ...declaredTypes.ambient], {
+    const application = getApplication(config, manifest.application);
+    const configured = configuredTypes(rootDir, application.tsconfig);
+    const declaredTypes = partitionTypes(
+      [...new Set([...application.compilerProfile.types, ...configured])],
+      installedRoot,
+      compilerOptions,
+    );
+    const configuredAmbient = configured.flatMap((name) => resolveTypeFile(name, installedRoot, compilerOptions));
+    const program = ts.createProgram([fixture, ...declaredTypes.ambient, ...configuredAmbient], {
       ...compilerOptions,
-      ...(declaredTypes.types.length > 0 ? { types: declaredTypes.types } : {}),
+      ...(application.compilerProfile.types.length > 0 ? { types: application.compilerProfile.types } : {}),
     });
     const diagnostics = [
       ...ts.getPreEmitDiagnostics(program).map(formatDiagnostic),
@@ -132,6 +139,19 @@ function compilerOptionsFor(
       [manifest.target.packageName]: [relativePosix(rootDir, entrypoint)],
     },
   };
+}
+
+function resolveTypeFile(name: string, installedRoot: string, options: ts.CompilerOptions): string[] {
+  const containingFile = resolve(installedRoot, `__${TOOL_NAME}_types__.ts`);
+  const host = ts.createCompilerHost(options, true);
+  const resolved = ts.resolveTypeReferenceDirective(name, containingFile, options, host).resolvedTypeReferenceDirective?.resolvedFileName;
+  return resolved === undefined ? [] : [resolved];
+}
+
+function configuredTypes(rootDir: string, tsconfig: string): string[] {
+  const read = ts.readConfigFile(resolve(rootDir, tsconfig), ts.sys.readFile);
+  const types = read.error === undefined ? read.config?.compilerOptions?.types : undefined;
+  return Array.isArray(types) ? types.filter((type): type is string => typeof type === "string") : [];
 }
 
 function moduleOptions(moduleResolution: "nodenext" | "bundler"): Pick<ts.CompilerOptions, "module" | "moduleResolution"> {

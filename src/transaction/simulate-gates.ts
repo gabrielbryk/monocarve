@@ -164,7 +164,10 @@ async function runBunGateCommand(
   try {
     const child = Bun.spawn([...command], {
       cwd: options.cwd,
-      env: { ...process.env, TMPDIR: gateTemp, TEMP: gateTemp, TMP: gateTemp },
+      // Package-manager shims may otherwise prompt before repairing a
+      // worktree's dependency layout, which makes isolated gates fail with a
+      // TTY-only error instead of testing the plan.
+      env: { ...process.env, CI: "true", TMPDIR: gateTemp, TEMP: gateTemp, TMP: gateTemp },
       stdout: "pipe",
       stderr: "pipe",
       timeout: options.timeoutMs,
