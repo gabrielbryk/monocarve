@@ -43,7 +43,10 @@ export function selectExtractionSources(args: {
   readonly publicSurface: MonocarveConfig["scaffoldTemplates"]["publicSurface"];
   readonly targetModule?: string;
 }): SourceSelection {
-  const production = args.candidate.files.filter((path) => args.context.isProductionSource(path)).sort();
+  const production = withAmbientAugmentations(
+    args.context,
+    args.candidate.files.filter((path) => args.context.isProductionSource(path)),
+  );
   const assets = [...args.candidate.assets].sort();
   const partition = partitionTests(args.context, production, [...args.candidate.tests].sort(), assets);
   const tests = [...partition.travelling];
@@ -100,6 +103,24 @@ export function selectExtractionSources(args: {
     production, assets, tests, sources, targets, assetTargets, entrypointPath, publicModules,
     publicSpecifierFor: new Map(publicModules.map((entry) => [entry.source, entry.specifier])),
   };
+}
+
+/** Carry repository-owned module augmentations whose declarations are global
+ * to an imported third-party package. TypeScript does not expose these as
+ * runtime/module edges, but an extracted source can depend on them for its
+ * public typecheck contract. */
+function withAmbientAugmentations(context: WorkspaceContext, selected: readonly string[]): string[] {
+  const packages = new Set(selected.flatMap((source) => context.moduleReferences(source)
+    .map((reference) => reference.specifier)
+    .filter((specifier): specifier is string => specifier !== null && !specifier.startsWith("."))
+    .map((specifier) => context.packageNameOf(specifier))));
+  if (packages.size === 0) return [...selected].sort();
+  const augmentations = context.repositorySources().filter((path) => {
+    if (selected.includes(path) || !context.isProductionSource(path)) return false;
+    const text = context.text(path);
+    return [...text.matchAll(/declare\s+module\s+["']([^"']+)["']/gu)].some((match) => packages.has(match[1]!));
+  });
+  return [...new Set([...selected, ...augmentations])].sort();
 }
 
 export function escapeRewritesFor(candidate: PortfolioCandidate): Map<string, EscapeRewrite[]> {
