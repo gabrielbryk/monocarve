@@ -331,7 +331,12 @@ function taskFileContents(input: ScaffoldInput, templates: ReturnType<typeof tem
   const lines = taskFile.trimEnd().split("\n");
   const testIndex = lines.findIndex((line) => line.trim() === "test:");
   if (testIndex < 0) {
-    return `${taskFile.trimEnd()}\n\n# Generated for a package with no travelling test files; remove when it gains one.\ntasks:\n  test:\n    args: [${emptySuiteArgument(input, templates)}]\n`;
+    const tasksIndex = lines.findIndex((line) => line.trim() === "tasks:");
+    if (tasksIndex < 0) {
+      return `${taskFile.trimEnd()}\n\n# Generated for a package with no travelling test files; remove when it gains one.\ntasks:\n  test:\n    args: [${emptySuiteArgument(input, templates)}]\n`;
+    }
+    lines.push("", "# Generated for a package with no travelling test files; remove when it gains one.", "  test:", `    args: [${emptySuiteArgument(input, templates)}]`);
+    return `${lines.join("\n")}\n`;
   }
   const argsIndex = lines.findIndex((line, index) => index > testIndex && /^\s{4}args:/.test(line));
   if (argsIndex < 0) {
