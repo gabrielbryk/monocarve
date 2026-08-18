@@ -9,6 +9,7 @@ import { renderTemplate } from "../util/template.ts";
 import { PlanningError } from "./context.ts";
 import type { PlanOperation } from "./manifest.ts";
 import { barrelSpecifier, type ScaffoldInput } from "./scaffold.ts";
+import { sourceExportsFromFile } from "./public-surface.ts";
 import { parseJsonFile, render, stringifyJson, templateVars, templatesFor, writeOperation } from "./scaffold-shared.ts";
 
 /** Operations creating (or extending) the target package. */
@@ -175,6 +176,7 @@ function entrypointOperation(input: ScaffoldInput, templates: ReturnType<typeof 
     return writeOperation(input.context, path, "", "scaffold:entrypoint");
   }
   const barrel = input.context.exists(path) ? input.context.text(path) : "";
+  if (barrel && !scaffolding) assertNoBarrelExportCollisions(input, path);
   const missing = input.production.map((source) => renderTemplate(templates.barrelExport, {
     ...templateVars(input, templates), specifier: barrelSpecifier(templates, input.context.targetRelativePath(source)),
   })).filter((line) => !barrel.includes(line));
@@ -182,6 +184,23 @@ function entrypointOperation(input: ScaffoldInput, templates: ReturnType<typeof 
   const separator = barrel && !barrel.endsWith("\n") ? "\n" : "";
   const contents = missing.length > 0 ? `${barrel}${separator}${missing.join("\n")}\n` : "";
   return writeOperation(input.context, path, contents, "scaffold:entrypoint");
+}
+
+/** Refuse an invalid package barrel instead of emitting ambiguous export-star
+ * bindings when an existing package is extended by another generated module. */
+function assertNoBarrelExportCollisions(input: ScaffoldInput, entrypoint: string): void {
+  const existing = new Set(sourceExportsFromFile(input.context.absolute(entrypoint), entrypoint).map((entry) => entry.name));
+  const collisions = new Set<string>();
+  for (const source of input.production) {
+    for (const entry of sourceExportsFromFile(input.context.absolute(source), source)) {
+      if (existing.has(entry.name)) collisions.add(entry.name);
+    }
+  }
+  if (collisions.size > 0) {
+    throw new PlanningError(
+      `cannot extend ${input.packageName} entrypoint ${entrypoint} with ambiguous export-star bindings: ${[...collisions].sort().join(", ")}; choose a separate package or configure an explicit export surface`,
+    );
+  }
 }
 
 function tsconfigOperations(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>): PlanOperation[] {
