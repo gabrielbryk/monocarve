@@ -84,7 +84,11 @@ function devManifest(manifest: ManifestDependencies, dev: Record<string, string>
 function consumerReferenceOperation(input: ConsumerWiringInput, owner: string): PlanOperation | undefined {
   const path = `${owner}/tsconfig.json`;
   if (!input.context.exists(path)) return undefined;
-  const tsconfig = parseJsonFile(input.context.text(path), path) as Record<string, unknown> & { references?: { path?: string }[] };
+  const tsconfig = parseJsonFile(input.context.text(path), path) as Record<string, unknown> & { references?: { path?: string }[]; compilerOptions?: { composite?: unknown } };
+  // A project reference is valid only for a composite build project (or an
+  // existing solution config). Ordinary application configs commonly use
+  // noEmit and must remain typecheck-only consumers.
+  if (tsconfig.compilerOptions?.composite !== true && !Array.isArray(tsconfig.references)) return undefined;
   const target = relativePosix(resolve("/", owner), resolve("/", input.packageRoot));
   const references = tsconfig.references ?? [];
   if (references.some((reference) => reference.path === target)) return undefined;

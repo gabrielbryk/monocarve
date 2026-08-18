@@ -66,3 +66,21 @@ test("wires retained-test consumers as dev dependencies and promotes a mixed own
   expect(block.includes("    dependencies:")).toBe(true);
   expect(block.includes("    devDependencies:")).toBe(false);
 });
+
+test("does not add a project reference to an ordinary noEmit application config", () => {
+  const root = fixtureRepo({
+    "package.json": '{"name":"@acme/app","private":true}\n',
+    "tsconfig.json": '{"compilerOptions":{"noEmit":true}}\n',
+    "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n",
+  });
+  const config = fixtureConfig(root);
+  const operations = consumerWiringOperations({
+    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
+    packageManager: pnpmAdapter, taskRunner: moonAdapter, packageName: "@acme/new-package",
+    packageRoot: "libs/new-package", projectId: "new-package", production: [],
+    dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+    consumerOwners: [{ owner: ".", dependencySection: "runtime" }],
+    lockfileText: "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n",
+  });
+  expect(operations.some((operation) => operation.kind === "write-file" && operation.path === "./tsconfig.json")).toBe(false);
+});
