@@ -177,7 +177,7 @@ function entrypointOperation(input: ScaffoldInput, templates: ReturnType<typeof 
     return writeOperation(input.context, path, "", "scaffold:entrypoint");
   }
   const barrel = input.context.exists(path) ? input.context.text(path) : "";
-  if (barrel && !scaffolding) assertNoBarrelExportCollisions(input, path);
+  if (input.production.length > 1 || (barrel && !scaffolding)) assertNoBarrelExportCollisions(input, path);
   const missing = input.production.map((source) => renderTemplate(templates.barrelExport, {
     ...templateVars(input, templates), specifier: barrelSpecifier(templates, input.context.targetRelativePath(source)),
   })).filter((line) => !barrel.includes(line));
@@ -190,16 +190,17 @@ function entrypointOperation(input: ScaffoldInput, templates: ReturnType<typeof 
 /** Refuse an invalid package barrel instead of emitting ambiguous export-star
  * bindings when an existing package is extended by another generated module. */
 function assertNoBarrelExportCollisions(input: ScaffoldInput, entrypoint: string): void {
-  const existing = new Set(sourceExportsFromFile(input.context.absolute(entrypoint), entrypoint).map((entry) => entry.name));
+  const existing = new Set(input.context.exists(entrypoint) ? sourceExportsFromFile(input.context.absolute(entrypoint), entrypoint).map((entry) => entry.name) : []);
   const collisions = new Set<string>();
   for (const source of input.production) {
     for (const entry of sourceExportsFromFile(input.context.absolute(source), source)) {
       if (existing.has(entry.name)) collisions.add(entry.name);
+      existing.add(entry.name);
     }
   }
   if (collisions.size > 0) {
     throw new PlanningError(
-      `cannot extend ${input.packageName} entrypoint ${entrypoint} with ambiguous export-star bindings: ${[...collisions].sort().join(", ")}; choose a separate package or configure an explicit export surface`,
+      `cannot generate ${input.packageName} entrypoint ${entrypoint} with ambiguous export-star bindings: ${[...collisions].sort().join(", ")}; choose a separate package or configure an explicit export surface`,
     );
   }
 }
