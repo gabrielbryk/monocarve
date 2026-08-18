@@ -23,7 +23,7 @@
  */
 
 import { afterAll, describe, expect, test } from "bun:test";
-import { chmodSync, cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -280,6 +280,19 @@ describe("cli error reporting", () => {
     expect(ok.stderr).toBe("");
     expect(ok.code).toBe(0);
     expect(existsSync(join(root, "reports/scan-summary.json"))).toBe(true);
+  }, 120_000);
+
+  test("--report-out writes a raw report that --graph can replay", async () => {
+    const root = workspace();
+    const report = "reports/raw.json";
+    const captured = await runIn(root, "scan", "--app", "web", "--report-out", report, "--no-cache");
+    expect(captured.stderr).toBe("");
+    expect(captured.code).toBe(0);
+    expect((JSON.parse(readFileSync(join(root, report), "utf8")) as { modules: unknown[] }).modules.length).toBeGreaterThan(0);
+
+    const replayed = await runIn(root, "scan", "--app", "web", "--graph", `web=${report}`);
+    expect(replayed.stderr).toBe("");
+    expect(replayed.code).toBe(0);
   }, 120_000);
 
   /**

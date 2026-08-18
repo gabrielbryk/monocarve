@@ -67,11 +67,7 @@ export async function scanDependencyGraph(options: ScanOptions): Promise<Depende
     if (cached) return cached;
   }
 
-  const reports: Record<string, ScanReport> = {};
-  for (const app of applications) {
-    const supplied = options.reports?.[app.name];
-    reports[app.name] = supplied ?? (await cruiseApplication(config, rootDir, app.name));
-  }
+  const reports = await scanDependencyReports(options, applications);
 
   const graph = buildDependencyGraph({
     config,
@@ -81,6 +77,21 @@ export async function scanDependencyGraph(options: ScanOptions): Promise<Depende
   });
   if (config.graph.cache && options.reports === undefined) graphCache.set(key, graph);
   return graph;
+}
+
+/** Capture the raw scanner reports used to build a graph for operator replay. */
+export async function scanDependencyReports(
+  options: ScanOptions,
+  applications = options.application
+    ? [getApplication(options.config, options.application)]
+    : options.config.applications,
+): Promise<Record<string, ScanReport>> {
+  const reports: Record<string, ScanReport> = {};
+  for (const app of applications) {
+    const supplied = options.reports?.[app.name];
+    reports[app.name] = supplied ?? (await cruiseApplication(options.config, options.rootDir, app.name));
+  }
+  return reports;
 }
 
 function safeHead(rootDir: string): string | undefined {

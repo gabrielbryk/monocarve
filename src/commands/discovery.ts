@@ -26,6 +26,7 @@ import { analyzePlanConflicts, type CampaignPlan } from "../campaign/index.ts";
 import { analyzePreparationImpact } from "../impact/index.ts";
 import { analyzeCapabilityPartitions, analyzeTypeScriptSource, analyzeWorkspaceSymbols } from "../symbols/index.ts";
 import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
+import { scanDependencyReports } from "../graph/cruiser.ts";
 import type { CommandSpec } from "./types.ts";
 import { loadPreparationManifest } from "./preparation.ts";
 import { graphDigest, load, loadGraph, print, printReport, systemReason, writeOutput, type LoadedGraph } from "./shared.ts";
@@ -91,6 +92,13 @@ async function scan(args: ParsedArgs): Promise<void> {
   const summary = { ...summarizeGraph(graph), digest: graphDigest(graph), commit: graph.commit ?? null };
   const out = flagString(args, "out");
   if (out) writeOutput(rootDir, out, `${JSON.stringify(summary, null, 2)}\n`);
+  const reportOut = flagString(args, "report-out");
+  if (reportOut !== undefined) {
+    const application = flagString(args, "app");
+    if (application === undefined) throw new UsageError("--report-out requires --app <name>");
+    const reports = await scanDependencyReports({ config: (await load(args)).config, rootDir, application, ...(flagBool(args, "no-cache") ? { noCache: true } : {}) });
+    writeOutput(rootDir, reportOut, `${JSON.stringify(reports[application], null, 2)}\n`);
+  }
   print(summary, args);
 }
 
@@ -289,7 +297,7 @@ async function impact(args: ParsedArgs): Promise<void> {
 }
 
 export const discoveryCommands: Record<string, CommandSpec> = {
-  scan: { summary: "build the dependency model", usage: "scan [--app <name>] [--no-cache] [--include-extracted] [--out <path>]", details: "Reads configured applications without changing the workspace. --include-extracted keeps already-extracted paths in the model.", run: scan },
+  scan: { summary: "build the dependency model", usage: "scan [--app <name>] [--no-cache] [--include-extracted] [--out <path>] [--report-out <path>]", details: "Reads configured applications without changing the workspace. --include-extracted keeps already-extracted paths in the model. --report-out writes the raw scanner report for the selected --app so it can be replayed with --graph.", run: scan },
   layers: { summary: "report domains, components, and dependency layers", usage: "layers [--app <name>] [--out <path>]", details: "Read-only architecture report derived from the current or captured graph.", run: layers },
   symbols: { summary: "analyze one file's declaration and symbol graph", usage: "symbols --file <path> [--out <path>]", details: "Reports declarations, type/value spaces, exact references, merged groups, and SCCs; never edits the file.", run: symbols },
   "split-candidates": { summary: "rank symbol split suggestions for one file", usage: "split-candidates --file <path> [--app <name>] [--out <path>]", details: "Ranks declaration SCCs using cross-file consumers and configured domain affinity.", run: splitCandidates },
