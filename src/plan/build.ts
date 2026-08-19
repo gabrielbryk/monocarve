@@ -265,7 +265,7 @@ function dependencyDecisionsFor(state: BuildState, sources: readonly string[], d
     .sort((left, right) => byCodeUnit(left.name, right.name) || byCodeUnit(left.decision, right.decision));
 }
 function sourceBlobsFor(context: WorkspaceContext, paths: readonly string[]): Record<string, Sha256> { const blobs: Record<string, Sha256> = {}; for (const path of paths) { const state = context.state(path); if (state === "missing") throw new PlanningError(`selected source does not exist: ${path}`); blobs[path] = state; } return blobs; }
-function operationPathsOf(operation: PlanOperation): string[] { switch (operation.kind) { case "move": case "move-with-rewrite": return [operation.source, operation.target]; case "rewrite-import": case "rewrite-fs-reference": case "rewrite-path-reference": return [operation.file]; case "write-file": return [operation.path]; case "lockfile-importer": return [operation.lockfile]; case "migrate-path-keys": return [operation.path]; } }
+function operationPathsOf(operation: PlanOperation): string[] { switch (operation.kind) { case "move": case "move-with-rewrite": return [operation.source, operation.target]; case "rewrite-import": case "rewrite-fs-reference": case "rewrite-path-reference": return [operation.file]; case "write-file": case "delete-file": return [operation.path]; case "lockfile-importer": return [operation.lockfile]; case "migrate-path-keys": return [operation.path]; } }
 function donorTargetsOf(selection: ReturnType<typeof selectExtractionSources>): Map<string, string> {
   const map = new Map<string, string>();
   selection.sources.forEach((source, index) => map.set(source, selection.targets[index]!));

@@ -88,6 +88,16 @@ export interface WriteFileOperation {
   readonly generator?: string;
 }
 
+export interface DeleteFileOperation {
+  readonly kind: "delete-file";
+  readonly path: string;
+  readonly file: string;
+  readonly source: string;
+  readonly target: string;
+  readonly preconditionHash: FileState;
+  readonly resultHash: Sha256;
+}
+
 export type LockfileImporterMode = "insert" | "replace";
 
 export interface LockfileImporterOperation {
@@ -134,6 +144,7 @@ export type PlanOperation =
   | RewriteFsReferenceOperation
   | RewritePathReferenceOperation
   | WriteFileOperation
+  | DeleteFileOperation
   | LockfileImporterOperation
   | MoveWithRewriteOperation
   | MigratePathKeysOperation;

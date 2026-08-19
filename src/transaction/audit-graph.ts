@@ -43,7 +43,7 @@ function multisetDelta(before: readonly string[], after: readonly string[]): Dyn
 export function dynamicImportDelta(manifest: ExtractionManifest, rootDir: string): DynamicImportDelta {
   const before: string[] = []; const after: string[] = [];
   for (const operation of manifest.operations) {
-    if (operation.kind === "lockfile-importer" || operation.kind === "migrate-path-keys" || operation.kind === "rewrite-path-reference") continue;
+    if (operation.kind === "lockfile-importer" || operation.kind === "migrate-path-keys" || operation.kind === "rewrite-path-reference" || operation.kind === "delete-file") continue;
     if (isAnyMove(operation)) { before.push(...dynamicSignatures(showBaseline(rootDir, manifest.baselineCommit, operation.source) ?? "", resolve(rootDir, operation.source), rootDir)); after.push(...dynamicSignatures(textAt(rootDir, operation.target), resolve(rootDir, operation.target), rootDir)); continue; }
     const path = operation.kind === "write-file" ? operation.path : operation.file; before.push(...dynamicSignatures(showBaseline(rootDir, manifest.baselineCommit, path) ?? "", resolve(rootDir, path), rootDir)); after.push(...dynamicSignatures(textAt(rootDir, path), resolve(rootDir, path), rootDir));
   }

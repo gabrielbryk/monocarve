@@ -288,6 +288,8 @@ function operationPathsOf(operation: PlanOperation): string[] {
       return [operation.file];
     case "write-file":
       return [operation.path];
+    case "delete-file":
+      return [operation.path];
     case "lockfile-importer":
       return [operation.lockfile];
     case "migrate-path-keys":

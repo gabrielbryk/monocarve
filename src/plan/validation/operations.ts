@@ -127,6 +127,9 @@ function validateOperation(
       }
       validateWrite(operation, index, options, issues, mutated, isPromotionCompatibilityWrite(manifest, operation));
       return;
+    case "delete-file":
+      if (operation.preconditionHash === "missing") issues.add("invalid-precondition", `cannot delete missing file ${operation.path}`, { operationIndex: index });
+      return;
     case "lockfile-importer":
       validateLockfileImporter(operation, index, options, issues, manifest, mutated);
       return;
@@ -255,7 +258,7 @@ function readdirNames(absolute: string): string[] {
 function operationKey(operation: PlanOperation): string {
   if (isAnyMove(operation)) return `${operation.kind}:${operation.source}:${operation.target}`;
   if (operation.kind === "lockfile-importer") return `${operation.kind}:${operation.packageRoot}`;
-  if (operation.kind === "write-file" || operation.kind === "migrate-path-keys") return `${operation.kind}:${operation.path}`;
+  if (operation.kind === "write-file" || operation.kind === "delete-file" || operation.kind === "migrate-path-keys") return `${operation.kind}:${operation.path}`;
   if (operation.kind === "rewrite-path-reference") return `rewrite-path-reference:${operation.file}`;
   return `${operation.kind}:${operation.file}`;
 }

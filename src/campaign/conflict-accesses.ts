@@ -48,6 +48,8 @@ function operationAccesses(plan: CampaignPlan, operation: PlanOperation, index: 
         operation.kind,
         writeKeys(plan, operation.generator),
       )];
+    case "delete-file":
+      return [access(plan, operation.path, "exact", "read-write", "operation-output", index, operation.kind, [])];
     case "lockfile-importer":
       return [access(
         plan,

@@ -1,5 +1,5 @@
 /** Effects for individual journal operations. All callers precheck state first. */
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 import type { PackageManagerAdapter } from "../adapters/types.ts";
@@ -35,7 +35,13 @@ export function applyOperation(
   if (operation.kind === "rewrite-path-reference") return applyPathReferenceRewrite(operation, root, moves);
   if (operation.kind === "lockfile-importer") return applyLockfileImporter(adapter, operation, root);
   if (operation.kind === "migrate-path-keys") return applyPathMigration(config, operation, root);
+  if (operation.kind === "delete-file") return applyDelete(operation, root);
   return applyWrite(operation, root);
+}
+
+function applyDelete(operation: Extract<PlanOperation, { kind: "delete-file" }>, root: string): void {
+  const path = resolve(root, operation.path);
+  unlinkSync(path);
 }
 
 function applyMove(config: MonocarveConfig, operation: Extract<PlanOperation, { kind: "move" | "move-with-rewrite" }>, root: string, useGitMv: boolean): void {

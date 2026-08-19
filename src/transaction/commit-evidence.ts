@@ -124,6 +124,7 @@ function operationTarget(operation: Exclude<ExtractionManifest["operations"][num
     case "move-with-rewrite": return operation.target;
     case "write-file": case "migrate-path-keys": return operation.path;
     case "lockfile-importer": return operation.lockfile;
+    case "delete-file": return operation.path;
     case "rewrite-import": case "rewrite-fs-reference": case "rewrite-path-reference": return operation.file;
   }
 }

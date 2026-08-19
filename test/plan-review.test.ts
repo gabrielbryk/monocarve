@@ -62,6 +62,7 @@ describe("plan review summary", () => {
       "rewrite-fs-reference": 0,
       "rewrite-path-reference": 0,
       "write-file": 1,
+      "delete-file": 0,
       "lockfile-importer": 1,
       "migrate-path-keys": 1,
     });

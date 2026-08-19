@@ -33,6 +33,7 @@ function blockState(
 
 export function isCompleted(adapter: PackageManagerAdapter, operation: PlanOperation, root: string): boolean {
   if (isAnyMove(operation)) return stateAt(root, operation.source) === MISSING && stateAt(root, operation.target) === operation.resultHash;
+  if (operation.kind === "delete-file") return stateAt(root, operation.path) === MISSING;
   if (operation.kind === "lockfile-importer") {
     const state = blockState(adapter, operation, root);
     return state.current === state.expected;
@@ -42,6 +43,7 @@ export function isCompleted(adapter: PackageManagerAdapter, operation: PlanOpera
 
 export function isAtPrecondition(adapter: PackageManagerAdapter, operation: PlanOperation, root: string): boolean {
   if (isAnyMove(operation)) return stateAt(root, operation.source) === operation.preconditionHash && stateAt(root, operation.target) === MISSING;
+  if (operation.kind === "delete-file") return stateAt(root, operation.path) === operation.preconditionHash;
   if (operation.kind === "lockfile-importer") {
     const state = blockState(adapter, operation, root);
     return operation.mode === "replace" ? state.current !== undefined && state.current !== state.expected : state.current === undefined;

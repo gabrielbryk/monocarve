@@ -22,6 +22,7 @@ export function operationTargets(operation: PlanOperation): string[] {
     case "rewrite-fs-reference": return [operation.file];
     case "rewrite-path-reference": return [operation.file];
     case "write-file": return [operation.path];
+    case "delete-file": return [operation.path];
     case "lockfile-importer": return [operation.lockfile];
     case "migrate-path-keys": return [operation.path];
   }
