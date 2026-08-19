@@ -230,8 +230,13 @@ function rootTsconfigOperation(input: ScaffoldInput, templates: ReturnType<typeo
   const existing = rendered.references ?? [];
   const merged = [...existing, ...references.filter((entry) => !existing.some((item) => item.path === entry.path))];
   const types = ambientCompilerTypes(input);
-  const compilerOptions = types.length > 0
-    ? { ...(rendered.compilerOptions ?? {}), types: [...new Set([...(Array.isArray(rendered.compilerOptions?.types) ? rendered.compilerOptions.types : []), ...types])] }
+  const jsx = ambientCompilerOption(input, "jsx");
+  const compilerOptions = types.length > 0 || (jsx !== undefined && rendered.compilerOptions?.jsx === undefined)
+    ? {
+      ...(rendered.compilerOptions ?? {}),
+      ...(jsx !== undefined && rendered.compilerOptions?.jsx === undefined ? { jsx } : {}),
+      ...(types.length > 0 ? { types: [...new Set([...(Array.isArray(rendered.compilerOptions?.types) ? rendered.compilerOptions.types : []), ...types])] } : {}),
+    }
     : rendered.compilerOptions;
   const next = { ...rendered, ...(compilerOptions === undefined ? {} : { compilerOptions }), ...(merged.length > 0 ? { references: merged } : {}) };
   const contents = stringifyJson(next);
@@ -243,6 +248,12 @@ function ambientCompilerTypes(input: ScaffoldInput): string[] {
   const read = ts.readConfigFile(configPath, ts.sys.readFile);
   const types = read.error === undefined ? read.config?.compilerOptions?.types : undefined;
   return Array.isArray(types) ? types.filter((type): type is string => typeof type === "string") : [];
+}
+
+function ambientCompilerOption(input: ScaffoldInput, name: string): unknown {
+  const configPath = resolve(input.context.rootDir, input.application.tsconfig);
+  const read = ts.readConfigFile(configPath, ts.sys.readFile);
+  return read.error === undefined ? read.config?.compilerOptions?.[name] : undefined;
 }
 
 function projectReferences(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>): { path: string }[] {
@@ -308,8 +319,14 @@ function referenceTemplate(templates: ReturnType<typeof templatesFor>, target: s
 function initialTsconfigOperation(input: ScaffoldInput, template: ReturnType<typeof referenceTemplate>, path: string, references: readonly { path: string }[]): PlanOperation {
   const rendered = parseJsonFile(render(input, template!), path);
   const types = ambientCompilerTypes(input);
-  const compilerOptions = types.length > 0
-    ? { ...((rendered.compilerOptions ?? {}) as Record<string, unknown>), types: [...new Set([...(Array.isArray((rendered.compilerOptions as Record<string, unknown> | undefined)?.types) ? (rendered.compilerOptions as Record<string, unknown>).types as unknown[] : []), ...types])] }
+  const jsx = ambientCompilerOption(input, "jsx");
+  const existingOptions = (rendered.compilerOptions ?? {}) as Record<string, unknown>;
+  const compilerOptions = types.length > 0 || (jsx !== undefined && existingOptions.jsx === undefined)
+    ? {
+      ...existingOptions,
+      ...(jsx !== undefined && existingOptions.jsx === undefined ? { jsx } : {}),
+      ...(types.length > 0 ? { types: [...new Set([...(Array.isArray(existingOptions.types) ? existingOptions.types : []), ...types])] } : {}),
+    }
     : rendered.compilerOptions;
   const next = { ...rendered, ...(compilerOptions === undefined ? {} : { compilerOptions }), ...(references.length ? { references } : {}) };
   assertCompilerProfileRepresented(input, next, path);
