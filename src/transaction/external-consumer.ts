@@ -133,6 +133,7 @@ function compilerOptionsFor(
     noEmit: true,
     skipLibCheck: true,
     allowImportingTsExtensions: true,
+    ...(jsx ? { allowSyntheticDefaultImports: true } : {}),
     esModuleInterop: profile.esModuleInterop,
     allowSyntheticDefaultImports: profile.allowSyntheticDefaultImports,
     baseUrl: rootDir,
