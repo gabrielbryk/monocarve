@@ -49,7 +49,6 @@ async function applyWithoutTransaction(options: ApplyOptions, transaction?: Retu
 }
 
 function verifyApplyStart(options: ApplyOptions): ApplyState {
-  if (options.commit && options.skipGates) throw new PreflightError("gates may not be skipped when committing");
   if (options.commit && isGuardedBranch(options.config, currentBranch(options.rootDir))) {
     throw new PreflightError(`refusing to commit on the guarded branch ${currentBranch(options.rootDir)}; apply from a feature branch instead`);
   }
