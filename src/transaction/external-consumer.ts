@@ -128,7 +128,10 @@ function compilerOptionsFor(
     : profile.jsx;
   return {
     target: ts.ScriptTarget.ES2022,
-    lib: profile.lib.length > 0 ? [...profile.lib] : configuredLib.filter((value): value is string => typeof value === "string"),
+    lib: [...new Set([
+      ...configuredLib.filter((value): value is string => typeof value === "string"),
+      ...profile.lib,
+    ])],
     ...moduleOptions(profile.moduleResolution),
     strict: true,
     noEmit: true,
