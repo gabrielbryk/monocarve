@@ -20,6 +20,7 @@ import { sourceExportsFromFile } from "../plan/public-surface.ts";
 import { buildPlanProvenance } from "../plan/provenance.ts";
 import { consumerWiringOperations, packageOperations } from "../plan/scaffold.ts";
 import { appendConsumerOperations } from "../plan/build-phases.ts";
+import { parseJsonFile, stringifyJson, writeOperation } from "../plan/scaffold-shared.ts";
 import type { PublicModule } from "../plan/manifest.ts";
 import { graphDigest, renderGates } from "../plan/build-support.ts";
 import { resolveCommit } from "../util/git.ts";
@@ -207,6 +208,7 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
         operations.push({ kind: "lockfile-importer", lockfile, packageRoot: donor.root, block, mode: "delete", preconditionHash: context.state(lockfile), resultHash: hashText("") });
       }
     }
+    operations.push(...retirementDependencyOperations({ context, packageManager, donorNames: candidate.donors.map((donor) => donor.name), owners: [".", packageRoot] }));
   }
 
   // Consumer rewrites must run while donor paths still exist: the codemod
@@ -293,6 +295,44 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
     },
     gates: renderGates(config, config.gates, { ...commitVars, consumerOwners, taskRunner, rootDir }),
   };
+}
+
+function retirementDependencyOperations(input: {
+  readonly context: WorkspaceContext;
+  readonly packageManager: ReturnType<typeof createPackageManagerAdapter>;
+  readonly donorNames: readonly string[];
+  readonly owners: readonly string[];
+}): PlanOperation[] {
+  const operations: PlanOperation[] = [];
+  const lockfile = input.packageManager.lockfileName;
+  let lockfileText = input.context.exists(lockfile) ? input.context.text(lockfile) : "";
+  for (const owner of [...new Set(input.owners)].sort()) {
+    const manifestPath = owner === "." ? "package.json" : `${owner}/package.json`;
+    if (!input.context.exists(manifestPath)) continue;
+    const manifest = parseJsonFile(input.context.text(manifestPath), manifestPath) as Record<string, unknown>;
+    let changed = false;
+    const next = { ...manifest };
+    for (const section of ["dependencies", "devDependencies", "optionalDependencies"] as const) {
+      const values = next[section] as Record<string, string> | undefined;
+      if (!values) continue;
+      const retained = Object.fromEntries(Object.entries(values).filter(([name]) => !input.donorNames.includes(name)));
+      if (Object.keys(retained).length !== Object.keys(values).length) changed = true;
+      if (Object.keys(retained).length === 0) delete next[section]; else next[section] = retained;
+    }
+    if (!changed) continue;
+    const contents = stringifyJson(next);
+    operations.push(writeOperation(input.context, manifestPath, contents, "consolidation:retire-donor-dependency"));
+    const block = input.packageManager.importerBlock(lockfileText, owner);
+    if (block !== undefined) {
+      let nextBlock = block;
+      for (const name of input.donorNames) nextBlock = input.packageManager.removeBlockDependency(nextBlock, name);
+      if (nextBlock !== block) {
+        operations.push({ kind: "lockfile-importer", lockfile, packageRoot: owner, block: nextBlock, mode: "replace", preconditionHash: input.context.state(lockfile), resultHash: hashText(nextBlock) });
+        lockfileText = input.packageManager.applyImporter(lockfileText, owner, nextBlock, "replace");
+      }
+    }
+  }
+  return operations;
 }
 
 function operationPathsOf(operation: PlanOperation): string[] {
