@@ -157,7 +157,7 @@ function validateProvenance(manifest: ExtractionManifest, options: ValidatePlanO
   const expected = buildPlanProvenance({
     config: options.config,
     profileGates: profile.gates,
-    scaffoldTemplates: profile.scaffoldTemplates,
+    scaffoldTemplates: manifest.target.publicSurface === undefined ? profile.scaffoldTemplates : { ...profile.scaffoldTemplates, publicSurface: manifest.target.publicSurface },
     packageManager,
     taskRunner,
     ...(existsSync(rootManifest) ? { rootPackageJson: readFileSync(rootManifest, "utf8") } : {}),

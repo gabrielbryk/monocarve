@@ -23,7 +23,7 @@ export function validatePublicModules(
       ? resolveExtractionProfile(options.config, application, manifest.target.profile.name).scaffoldTemplates
       : scaffoldFor(options.config, application);
     const actual = manifest.target.publicModules ?? [];
-    const publicSurface = templates.publicSurface;
+    const publicSurface = manifest.target.publicSurface ?? templates.publicSurface;
     const existingEntrypoint = new WorkspaceContext(options.config, options.rootDir).exists(`${manifest.target.packageRoot}/${manifest.target.entrypoint}`);
     if (publicSurface.mode === "barrel" && manifest.modulePromotion === undefined && !existingEntrypoint) {
       // An explicit planner surface override may intentionally select

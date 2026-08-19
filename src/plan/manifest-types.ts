@@ -1,4 +1,5 @@
 import type { EvaluationEffectKind } from "../codemod/side-effects.ts";
+import type { PublicSurfaceConfig } from "../config.ts";
 import type { FileState, Sha256 } from "../util/hash.ts";
 import type { ExportSurface } from "./public-surface.ts";
 import type { ImportRewrite, PlanOperation } from "./manifest-operations.ts";
@@ -44,6 +45,8 @@ export interface PlanTarget {
   readonly profile?: { readonly name: string; readonly candidateName: string };
   readonly requiredExports: readonly ExportSurface[];
   readonly publicModules?: readonly PublicModule[];
+  /** Explicit planner override for the package's public module surface. */
+  readonly publicSurface?: PublicSurfaceConfig;
 }
 export interface PlanSource {
   readonly files: readonly string[];
