@@ -24,10 +24,16 @@ export function validatePublicModules(
       : scaffoldFor(options.config, application);
     const actual = manifest.target.publicModules ?? [];
     const publicSurface = templates.publicSurface;
-    if (publicSurface.mode === "barrel" && manifest.modulePromotion === undefined) {
+    const existingEntrypoint = new WorkspaceContext(options.config, options.rootDir).exists(`${manifest.target.packageRoot}/${manifest.target.entrypoint}`);
+    if (publicSurface.mode === "barrel" && manifest.modulePromotion === undefined && !existingEntrypoint) {
       if (actual.length > 0) issues.add("target-subpaths", "barrel surface config must not declare public modules");
       return;
     }
+    // An existing package may be extended with an explicit, namespaced
+    // subpath surface even when the application defaults to a barrel. The
+    // consolidation planner owns that surface and package.json records it;
+    // there is no extraction template to re-render here.
+    if (publicSurface.mode === "barrel" && existingEntrypoint && actual.length > 0 && manifest.modulePromotion === undefined) return;
     const context = new WorkspaceContext(options.config, options.rootDir);
     const moves = new Map(
       manifest.operations

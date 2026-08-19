@@ -56,7 +56,7 @@ export function buildConsolidationCandidate(options: ConsolidationCandidateOptio
   for (const donor of donors) {
     const donorRoot = donor.root.replace(/\/+$/, "");
     const donorFiles = graph.paths.filter(
-      (path) => path.startsWith(`${donorRoot}/`) && path !== donorRoot && !path.endsWith(".test.ts") && !path.endsWith(".test.tsx"),
+      (path) => path.startsWith(`${donorRoot}/`) && path !== donorRoot && !path.endsWith(".test.ts") && !path.endsWith(".test.tsx") && graph.nodes.get(path)?.isAsset !== true,
     );
     const donorTests = graph.paths.filter(
       (path) => path.startsWith(`${donorRoot}/`) && (path.endsWith(".test.ts") || path.endsWith(".test.tsx")),

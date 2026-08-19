@@ -81,7 +81,8 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
 
   const publicModules: PublicModule[] = candidate.files.map((file) => {
     const target = `${packageRoot}/${relativePath(file)}`;
-    const exported = relativePath(file).slice("src/".length).replace(/\.[cm]?[jt]sx?$/u, "");
+    const donorRelative = file.slice((donorFor(file)?.root.length ?? 0) + 1);
+    const exported = `${donorFor(file)!.slug}/${donorRelative.replace(/^src\//u, "").replace(/\.[cm]?[jt]sx?$/u, "")}`;
     return {
       source: file,
       target,
@@ -92,6 +93,9 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
     };
   });
   const publicSpecifierFor = new Map(publicModules.map((module) => [module.source, module.specifier]));
+  const tests = context.repositorySources().filter((path) =>
+    candidate.donors.some((donor) => path.startsWith(`${donor.root}/`)) && context.isTest(path),
+  ).sort();
 
   for (const file of candidate.files) {
     const targetFile = `${packageRoot}/${relativePath(file)}`;
@@ -104,10 +108,11 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
   };
 
   // Move tests.
-  for (const test of candidate.tests) {
+  for (const test of tests) {
     const targetTest = `${packageRoot}/${relativePath(test)}`;
     const preconditionHash = context.state(test);
     if (preconditionHash === "missing") continue;
+    sourceBlobs[test] = preconditionHash;
     operations.push({ kind: "move", source: test, target: targetTest, preconditionHash, resultHash: preconditionHash });
   }
 
@@ -116,19 +121,34 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
     const targetAsset = `${packageRoot}/${relativePath(asset)}`;
     const preconditionHash = context.state(asset);
     if (preconditionHash === "missing") continue;
+    sourceBlobs[asset] = preconditionHash;
     operations.push({ kind: "move", source: asset, target: targetAsset, preconditionHash, resultHash: preconditionHash });
   }
 
   // Infer dependencies.
   const dependencies = inferDependencies(context, graph, candidate.files, packageName);
 
-  appendConsumerOperations({
+  const consumerAnalysis = appendConsumerOperations({
     context,
-    sources: [...candidate.files, ...candidate.tests, ...candidate.assets],
+    sources: [...candidate.files, ...tests, ...candidate.assets],
     packageName,
     publicSpecifierFor,
     operations,
+    excludedFiles: new Set(context.repositorySources().filter((path) => candidate.donors.some((donor) => path.startsWith(`${donor.root}/`)))),
   });
+  const consumers = consumerAnalysis.consumers.length > 0 ? consumerAnalysis.consumers : candidate.consumers.map((consumer) => ({
+    package: consumer.owner,
+    file: consumer.file,
+    expectedImporter: consumer.specifiers[0] ?? "",
+    rewrites: consumer.specifiers.map((specifier) => ({ from: specifier, to: packageName, donor: candidate.files[0] ?? "" })),
+    donors: [...candidate.files],
+    dependencySection: "runtime" as const,
+  }));
+  const consumerSections = new Map<string, "runtime" | "dev">();
+  for (const consumer of consumers) {
+    const current = consumerSections.get(consumer.package);
+    consumerSections.set(consumer.package, current === "runtime" || consumer.dependencySection === "runtime" ? "runtime" : "dev");
+  }
 
   // Build consumer rewrites.
   const consumerOps = consumerWiringOperations({
@@ -141,12 +161,14 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
     packageRoot,
     projectId,
     production: candidate.files,
-    tests: candidate.tests,
+    tests,
     assets: candidate.assets,
     dependencies,
     publicModules,
-    consumerOwners: candidate.consumers.map((c) => ({ owner: c.owner, dependencySection: "runtime" as const })),
-    lockfileText: "",
+    consumerOwners: consumers
+      .filter((consumer) => consumer.package !== packageRoot && !candidate.donors.some((donor) => consumer.package === donor.root))
+      .map((consumer) => ({ owner: consumer.package, dependencySection: consumer.dependencySection })),
+    lockfileText: context.exists(packageManager.lockfileName) ? context.text(packageManager.lockfileName) : "",
   });
   operations.push(...consumerOps);
 
@@ -161,7 +183,7 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
     packageRoot,
     projectId,
     production: candidate.files,
-    tests: candidate.tests,
+    tests,
     assets: candidate.assets,
     dependencies,
     publicModules,
@@ -169,8 +191,17 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
   });
   operations.push(...packageOps);
 
+  // Consumer rewrites must run while donor paths still exist: the codemod
+  // resolves each donor's baseline module to identify the exact declaration
+  // span. Extraction plans already establish this ordering; consolidation
+  // assembles its operations manually, so make the invariant explicit.
+  const rewrites = operations.filter((operation) => operation.kind === "rewrite-import");
+  const moves = operations.filter((operation) => operation.kind === "move" || operation.kind === "move-with-rewrite");
+  const remainder = operations.filter((operation) => operation.kind !== "rewrite-import" && operation.kind !== "move" && operation.kind !== "move-with-rewrite");
+  operations.splice(0, operations.length, ...rewrites, ...moves, ...remainder);
+
   // Build the manifest.
-  const consumerOwners = candidate.consumers.map((c) => c.owner);
+  const consumerOwners = consumers.map((c) => c.package);
   const commitVars = {
     package: packageName,
     packageRoot,
@@ -207,27 +238,31 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
     },
     source: {
       files: candidate.files,
-      tests: candidate.tests,
+      tests,
       ...(candidate.assets.length > 0 ? { assets: candidate.assets } : {}),
-      sccs: Object.fromEntries(candidate.sccs.map((scc) => [scc.id, scc.members])),
+    sccs: Object.keys(candidate.sccs).length > 0
+      ? Object.fromEntries(candidate.sccs.map((scc) => [scc.id, scc.members]))
+      : { "scc-consolidation": candidate.files },
     },
     dependencies,
     sourceBlobs,
     operations,
-    consumers: candidate.consumers.map((consumer) => ({
+    consumers: consumers
+      .filter((consumer) => !candidate.donors.some((donor) => consumer.package === donor.root))
+      .map((consumer) => ({
       file: consumer.file,
-      owner: consumer.owner,
-      expectedImporter: "",
-      specifiers: consumer.specifiers.map((spec) => ({ from: spec, to: packageName })),
+      owner: consumer.package,
+      expectedImporter: consumer.expectedImporter,
+      specifiers: consumer.rewrites.map((rewrite) => ({ from: rewrite.from, to: rewrite.to, donor: rewrite.donor })),
       external: false,
-      dependencySection: "runtime",
+      dependencySection: consumerSections.get(consumer.package) ?? consumer.dependencySection,
     })),
     generatedFiles: [],
     changedFiles: [...new Set(operations.flatMap((op) => operationPathsOf(op)))].sort(),
     expectedDynamicImportDelta: { added: [], removed: [] },
     evaluationEffects: [],
     metrics: {
-      movedFiles: candidate.files.length + candidate.tests.length + candidate.assets.length,
+      movedFiles: candidate.files.length + tests.length + candidate.assets.length,
       movedLines: candidate.lineCount,
       applicationLinesBefore: 0,
       applicationLinesAfter: 0,

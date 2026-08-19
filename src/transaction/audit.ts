@@ -191,6 +191,11 @@ export function auditPlanSync(options: AuditOptions): AuditReport {
     if (!existsSync(resolve(rootDir, consumer.file))) {
       consumerFailures.push(`declared consumer no longer exists: ${consumer.file}`);
     }
+    // A retained file inside the target package may need its donor import
+    // rewritten to a target subpath, but the target package must not declare
+    // a dependency on itself. Keep the rewrite proof above and skip only the
+    // package-dependency section check below.
+    if (consumer.owner === manifest.target.packageRoot) continue;
     // Retained tests are consumers too, but the runtime package must not leak
     // into their owner's production graph.  The manifest makes this claim
     // explicit, so verify the landed owner manifest rather than trusting the
