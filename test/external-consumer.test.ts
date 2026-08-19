@@ -156,6 +156,23 @@ describe("external consumer compile proof", () => {
     expect(result.diagnostics).toEqual([]);
   });
 
+  test("includes ambient declarations discovered through the application tsconfig", () => {
+    const fixture = proofFixture();
+    write(fixture.root, "apps/donor/vite-env.d.ts", 'declare module "*?url" { const url: string; export default url; }\n');
+    write(fixture.root, "apps/donor/tsconfig.json", packageJson({ compilerOptions: {}, include: ["src", "vite-env.d.ts"] }));
+    write(fixture.root, "libs/carved/src/index.ts", [
+      'import workerUrl from "./worker.js?url";',
+      'export const combined = workerUrl;',
+      "",
+    ].join("\n"));
+    write(fixture.root, "libs/carved/src/worker.js", "export default true;\n");
+
+    const result = run(fixture.root, fixture.config, fixture.manifest);
+
+    expect(result.passed).toBe(true);
+    expect(result.diagnostics).toEqual([]);
+  });
+
   test("fails when a workspace package stops declaring the imported export subpath", () => {
     const fixture = proofFixture();
     write(

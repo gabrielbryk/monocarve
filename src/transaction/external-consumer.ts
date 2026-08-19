@@ -48,13 +48,14 @@ export function compileExternalConsumer(options: CompileExternalConsumerOptions)
     const compilerOptions = compilerOptionsFor(config, manifest, rootDir, installedRoot);
     const application = getApplication(config, manifest.application);
     const configured = configuredTypes(rootDir, application.tsconfig);
+    const configuredAmbientFiles = configuredAmbientDeclarationFiles(rootDir, application.tsconfig);
     const declaredTypes = partitionTypes(
       [...new Set([...application.compilerProfile.types, ...configured])],
       installedRoot,
       compilerOptions,
     );
     const configuredAmbient = configured.flatMap((name) => resolveTypeFile(name, installedRoot, compilerOptions));
-    const program = ts.createProgram([fixture, ...declaredTypes.ambient, ...configuredAmbient], {
+    const program = ts.createProgram([fixture, ...declaredTypes.ambient, ...configuredAmbient, ...configuredAmbientFiles], {
       ...compilerOptions,
       ...(application.compilerProfile.types.length > 0 ? { types: application.compilerProfile.types } : {}),
     });
@@ -162,6 +163,21 @@ function resolveTypeFile(name: string, installedRoot: string, options: ts.Compil
 function configuredTypes(rootDir: string, tsconfig: string): string[] {
   const types = configuredCompilerOption(rootDir, tsconfig, "types");
   return Array.isArray(types) ? types.filter((type): type is string => typeof type === "string") : [];
+}
+
+/**
+ * Preserve repository-owned ambient declarations discovered by the app
+ * tsconfig. Vite-style projects commonly expose asset-query modules through
+ * an included `vite-env.d.ts`, which is not represented by compilerOptions
+ * `types` and therefore cannot be inferred from the package alone.
+ */
+function configuredAmbientDeclarationFiles(rootDir: string, tsconfig: string): string[] {
+  const configPath = resolve(rootDir, tsconfig);
+  const parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, {
+    ...ts.sys,
+    onUnRecoverableConfigFileDiagnostic: () => undefined,
+  });
+  return parsed?.fileNames.filter((file) => file.endsWith(".d.ts")) ?? [];
 }
 
 function configuredCompilerOption(rootDir: string, tsconfig: string, name: string): unknown[] {
