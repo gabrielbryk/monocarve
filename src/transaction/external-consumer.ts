@@ -118,6 +118,7 @@ function compilerOptionsFor(
   const application = getApplication(config, manifest.application);
   const profile = application.compilerProfile;
   const entrypoint = resolve(rootDir, manifest.target.packageRoot, manifest.target.entrypoint);
+  const configuredLib = configuredCompilerOption(rootDir, application.tsconfig, "lib");
   // The synthetic consumer compiles the extracted package sources directly;
   // it cannot inherit the package tsconfig. A moved TSX module therefore
   // requires JSX support even when the application profile omitted an
@@ -127,7 +128,7 @@ function compilerOptionsFor(
     : profile.jsx;
   return {
     target: ts.ScriptTarget.ES2022,
-    lib: [...profile.lib],
+    lib: profile.lib.length > 0 ? [...profile.lib] : configuredLib.filter((value): value is string => typeof value === "string"),
     ...moduleOptions(profile.moduleResolution),
     strict: true,
     noEmit: true,
@@ -155,9 +156,14 @@ function resolveTypeFile(name: string, installedRoot: string, options: ts.Compil
 }
 
 function configuredTypes(rootDir: string, tsconfig: string): string[] {
-  const read = ts.readConfigFile(resolve(rootDir, tsconfig), ts.sys.readFile);
-  const types = read.error === undefined ? read.config?.compilerOptions?.types : undefined;
+  const types = configuredCompilerOption(rootDir, tsconfig, "types");
   return Array.isArray(types) ? types.filter((type): type is string => typeof type === "string") : [];
+}
+
+function configuredCompilerOption(rootDir: string, tsconfig: string, name: string): unknown[] {
+  const read = ts.readConfigFile(resolve(rootDir, tsconfig), ts.sys.readFile);
+  const value = read.error === undefined ? read.config?.compilerOptions?.[name] : undefined;
+  return Array.isArray(value) ? value : [];
 }
 
 function moduleOptions(moduleResolution: "nodenext" | "bundler"): Pick<ts.CompilerOptions, "module" | "moduleResolution"> {
