@@ -180,7 +180,13 @@ function entrypointOperation(input: ScaffoldInput, templates: ReturnType<typeof 
   if (input.production.length > 1 || (barrel && !scaffolding)) assertNoBarrelExportCollisions(input, path);
   const missing = input.production.map((source) => renderTemplate(templates.barrelExport, {
     ...templateVars(input, templates), specifier: barrelSpecifier(templates, input.context.targetRelativePath(source)),
-  })).filter((line) => !barrel.includes(line));
+  })).flatMap((line, index) => {
+    const source = input.production[index]!;
+    const specifier = barrelSpecifier(templates, input.context.targetRelativePath(source));
+    const typeExports = sourceExportsFromFile(input.context.absolute(source), source).filter((entry) => entry.typeOnly);
+    return [line, ...typeExports.map((entry) => `export type { ${entry.name} } from ${JSON.stringify(specifier)};`)]
+      .filter((candidate) => !barrel.includes(candidate));
+  });
   if (missing.length === 0 && (!scaffolding || input.context.exists(path))) return undefined;
   const separator = barrel && !barrel.endsWith("\n") ? "\n" : "";
   const contents = missing.length > 0 ? `${barrel}${separator}${missing.join("\n")}\n` : "";
