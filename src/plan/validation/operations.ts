@@ -110,10 +110,11 @@ function validateOperation(
       validateMove(operation, index, options, issues, context, moved, mutated, workspacePackages);
       return;
     case "rewrite-import":
-      if (movePaths.has(operation.file)) {
+      const crossDonorMove = movePaths.has(operation.file) && operation.donors.some((donor) => donor !== operation.file && movePaths.has(donor));
+      if (movePaths.has(operation.file) && !crossDonorMove) {
         issues.add("multiple-mutations", `multiple operations mutate ${operation.file}`, { operationIndex: index });
       }
-      validateRewrite(operation, index, issues, context, mutated);
+      validateRewrite(operation, index, issues, context, mutated, crossDonorMove);
       return;
     case "rewrite-fs-reference":
       if (movePaths.has(operation.file)) {
@@ -334,10 +335,11 @@ function validateRewrite(
   issues: Issues,
   context: OperationContext,
   mutated: Set<string>,
+  allowMovedRewrite = false,
 ): void {
   const at = { operationIndex: index, operationKind: operation.kind, path: operation.file };
   if (!context.consumers.has(operation.file)) issues.add("rewrite-consumer", `rewrite has no declared consumer ${operation.file}`, at);
-  if (mutated.has(operation.file)) issues.add("multiple-mutations", `multiple operations mutate ${operation.file}`, at);
+  if (mutated.has(operation.file) && !allowMovedRewrite) issues.add("multiple-mutations", `multiple operations mutate ${operation.file}`, at);
   if (operation.donors.length === 0) issues.add("rewrite-donor", "rewrite must declare at least one donor", at);
   for (const rewrite of operation.rewrites) {
     if (!context.rewriteTargets.has(rewrite.to)) {

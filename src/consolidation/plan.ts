@@ -268,7 +268,6 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
     sourceBlobs,
     operations,
     consumers: consumers
-      .filter((consumer) => !candidate.donors.some((donor) => consumer.package === donor.root))
       .map((consumer) => ({
       file: consumer.file,
       owner: consumer.package,
