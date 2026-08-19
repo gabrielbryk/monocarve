@@ -136,7 +136,6 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
     packageName,
     publicSpecifierFor,
     operations,
-    excludedFiles: new Set(context.repositorySources().filter((path) => candidate.donors.some((donor) => path.startsWith(`${donor.root}/`)))),
   });
   const consumers = consumerAnalysis.consumers.length > 0 ? consumerAnalysis.consumers : candidate.consumers.map((consumer) => ({
     package: consumer.owner,
