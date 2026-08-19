@@ -118,7 +118,13 @@ function compilerOptionsFor(
   const application = getApplication(config, manifest.application);
   const profile = application.compilerProfile;
   const entrypoint = resolve(rootDir, manifest.target.packageRoot, manifest.target.entrypoint);
-  const jsx = profile.jsx && manifest.operations.some((operation) => operation.kind === "move" && operation.target.endsWith(".tsx"));
+  // The synthetic consumer compiles the extracted package sources directly;
+  // it cannot inherit the package tsconfig. A moved TSX module therefore
+  // requires JSX support even when the application profile omitted an
+  // explicit jsx field and relied on its root tsconfig.
+  const jsx = manifest.operations.some((operation) => operation.kind === "move" && operation.target.endsWith(".tsx"))
+    ? (profile.jsx || ts.JsxEmit.ReactJSX)
+    : profile.jsx;
   return {
     target: ts.ScriptTarget.ES2022,
     lib: [...profile.lib],
