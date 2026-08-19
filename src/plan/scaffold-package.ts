@@ -163,6 +163,10 @@ function templateDevDependencies(input: ScaffoldInput, templates: ReturnType<typ
 
 function entrypointOperation(input: ScaffoldInput, templates: ReturnType<typeof templatesFor>, scaffolding: boolean): PlanOperation | undefined {
   const path = `${input.packageRoot}/${templates.entrypoint}`;
+  // Consolidation and other existing-package extensions may expose moved
+  // modules through explicit subpaths while retaining the package's existing
+  // barrel. Never append an ambiguous export-star barrel in that case.
+  if (input.publicModules?.length && input.context.exists(path)) return undefined;
   const entrypointOwners = input.publicModules?.filter((module) => module.target === path) ?? [];
   if (entrypointOwners.length > 1) {
     throw new PlanningError(`multiple production modules claim package entrypoint ${path}: ${entrypointOwners.map((module) => module.source).join(", ")}`);

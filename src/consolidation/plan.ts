@@ -11,14 +11,16 @@ import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapter
 import { GENERATOR } from "../branding.ts";
 import { getApplication, packageNameMatcher, type MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
-import { byCodeUnit, type Sha256 } from "../util/hash.ts";
+import type { Sha256 } from "../util/hash.ts";
 import { renderTemplate } from "../util/template.ts";
 import { PlanningError, WorkspaceContext } from "../plan/context.ts";
 import { inferDependencies } from "../plan/dependencies.ts";
 import { PLAN_SCHEMA_VERSION, type ExtractionManifest, type PlanOperation } from "../plan/manifest.ts";
-import { sourceExportsFromFile, type ExportSurface } from "../plan/public-surface.ts";
+import { sourceExportsFromFile } from "../plan/public-surface.ts";
 import { buildPlanProvenance } from "../plan/provenance.ts";
 import { consumerWiringOperations, packageOperations } from "../plan/scaffold.ts";
+import { appendConsumerOperations } from "../plan/build-phases.ts";
+import type { PublicModule } from "../plan/manifest.ts";
 import { graphDigest, renderGates } from "../plan/build-support.ts";
 import { resolveCommit } from "../util/git.ts";
 import type { ConsolidationCandidate } from "./candidate.ts";
@@ -60,31 +62,50 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
   // Compute the relative path from each donor root to the file.
   const donorRoots = new Set(candidate.donors.map((d) => d.root));
   
-  const relativePath = (filePath: string): string => {
+  const donorFor = (filePath: string): { root: string; slug: string } | undefined => {
     for (const donorRoot of donorRoots) {
       const stripped = donorRoot.replace(/\/+$/, "");
-      if (filePath.startsWith(`${stripped}/`)) {
-        return filePath.slice(stripped.length + 1);
-      }
+      if (filePath.startsWith(`${stripped}/`)) return { root: stripped, slug: donorSlug(candidate.donors.find((donor) => donor.root === donorRoot)!.name) };
     }
-    return filePath;
+    return undefined;
   };
 
+  // Namespace every donor beneath the target package. This preserves each
+  // donor's relative imports while making same-named files (especially the
+  // several src/index.ts barrels) unambiguous and publicly addressable.
+  const relativePath = (filePath: string): string => {
+    const donor = donorFor(filePath);
+    if (!donor) throw new PlanningError(`consolidation source is outside every donor: ${filePath}`);
+    return `src/${donor.slug}/${filePath.slice(donor.root.length + 1)}`;
+  };
+
+  const publicModules: PublicModule[] = candidate.files.map((file) => {
+    const target = `${packageRoot}/${relativePath(file)}`;
+    const exported = relativePath(file).slice("src/".length).replace(/\.[cm]?[jt]sx?$/u, "");
+    return {
+      source: file,
+      target,
+      specifier: `${packageName}/${exported}`,
+      exportKey: `./${exported}`,
+      exportTarget: `./${relativePath(file)}`,
+      requiredExports: sourceExportsFromFile(context.absolute(file), file),
+    };
+  });
+  const publicSpecifierFor = new Map(publicModules.map((module) => [module.source, module.specifier]));
+
   for (const file of candidate.files) {
-    const rel = relativePath(file);
-    const targetFile = `${packageRoot}/${rel}`;
+    const targetFile = `${packageRoot}/${relativePath(file)}`;
     const preconditionHash = context.state(file);
     if (preconditionHash === "missing") {
       throw new PlanningError(`consolidation source does not exist: ${file}`);
     }
     sourceBlobs[file] = preconditionHash;
     operations.push({ kind: "move", source: file, target: targetFile, preconditionHash, resultHash: preconditionHash });
-  }
+  };
 
   // Move tests.
   for (const test of candidate.tests) {
-    const rel = relativePath(test);
-    const targetTest = `${packageRoot}/${rel}`;
+    const targetTest = `${packageRoot}/${relativePath(test)}`;
     const preconditionHash = context.state(test);
     if (preconditionHash === "missing") continue;
     operations.push({ kind: "move", source: test, target: targetTest, preconditionHash, resultHash: preconditionHash });
@@ -92,8 +113,7 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
 
   // Move assets.
   for (const asset of candidate.assets) {
-    const rel = relativePath(asset);
-    const targetAsset = `${packageRoot}/${rel}`;
+    const targetAsset = `${packageRoot}/${relativePath(asset)}`;
     const preconditionHash = context.state(asset);
     if (preconditionHash === "missing") continue;
     operations.push({ kind: "move", source: asset, target: targetAsset, preconditionHash, resultHash: preconditionHash });
@@ -101,6 +121,14 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
 
   // Infer dependencies.
   const dependencies = inferDependencies(context, graph, candidate.files, packageName);
+
+  appendConsumerOperations({
+    context,
+    sources: [...candidate.files, ...candidate.tests, ...candidate.assets],
+    packageName,
+    publicSpecifierFor,
+    operations,
+  });
 
   // Build consumer rewrites.
   const consumerOps = consumerWiringOperations({
@@ -116,7 +144,7 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
     tests: candidate.tests,
     assets: candidate.assets,
     dependencies,
-    publicModules: [],
+    publicModules,
     consumerOwners: candidate.consumers.map((c) => ({ owner: c.owner, dependencySection: "runtime" as const })),
     lockfileText: "",
   });
@@ -136,7 +164,7 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
     tests: candidate.tests,
     assets: candidate.assets,
     dependencies,
-    publicModules: [],
+    publicModules,
     templates: config.scaffoldTemplates,
   });
   operations.push(...packageOps);
@@ -174,7 +202,8 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
       packageName,
       packageRoot,
       entrypoint: config.scaffoldTemplates.entrypoint,
-      requiredExports: dedupeExports(candidate.files.flatMap((source) => sourceExportsFromFile(context.absolute(source), source))),
+      requiredExports: [],
+      publicModules,
     },
     source: {
       files: candidate.files,
@@ -231,11 +260,6 @@ function operationPathsOf(operation: PlanOperation): string[] {
   }
 }
 
-function dedupeExports(entries: readonly ExportSurface[]): ExportSurface[] {
-  const seen = new Set<string>();
-  return entries.filter((entry) => {
-    if (seen.has(entry.name)) return false;
-    seen.add(entry.name);
-    return true;
-  }).sort((left, right) => byCodeUnit(left.name, right.name));
+function donorSlug(name: string): string {
+  return name.replace(/^@[^/]+\//u, "").replace(/[^a-zA-Z0-9_-]+/gu, "-");
 }

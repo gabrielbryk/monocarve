@@ -241,9 +241,9 @@ describe("consolidation plan", () => {
     const moveOps = manifest.operations.filter((op) => op.kind === "move");
     expect(moveOps).toHaveLength(2);
     expect(moveOps[0]!.source).toBe("libs/donor1/src/handler.ts");
-    expect(moveOps[0]!.target).toBe("libs/target/src/handler.ts");
+    expect(moveOps[0]!.target).toBe("libs/target/src/donor1/src/handler.ts");
     expect(moveOps[1]!.source).toBe("libs/donor1/src/service.ts");
-    expect(moveOps[1]!.target).toBe("libs/target/src/service.ts");
+    expect(moveOps[1]!.target).toBe("libs/target/src/donor1/src/service.ts");
   });
 
   test("records source blobs", () => {
