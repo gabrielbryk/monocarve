@@ -129,7 +129,8 @@ function compilerOptionsFor(
   return {
     target: ts.ScriptTarget.ES2022,
     lib: [...new Set([
-      ...configuredLib.filter((value): value is string => typeof value === "string").map((value) => value.toLowerCase()),
+      ...configuredLib.filter((value): value is string => typeof value === "string").map((value) =>
+        value.toLowerCase().startsWith("lib.") ? value.toLowerCase() : `lib.${value.toLowerCase()}.d.ts`),
       ...profile.lib,
     ])],
     ...moduleOptions(profile.moduleResolution),
