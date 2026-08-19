@@ -6,7 +6,7 @@ import { relative, resolve } from "node:path";
 import type { LockfileImporterMode } from "../plan/manifest.ts";
 import { hashText, type Sha256 } from "../util/hash.ts";
 import { relativePosix } from "../util/paths.ts";
-import { importerBlock, insertImporter, replaceImporter } from "./pnpm-importers.ts";
+import { deleteImporter, importerBlock, insertImporter, replaceImporter } from "./pnpm-importers.ts";
 import { addBlockDependencies, addBlockDependency, removeBlockDependency, renderImporterBlock } from "./pnpm-render.ts";
 import { missingResolutions } from "./pnpm-resolutions.ts";
 import { listPackages, workspaceManifestEdit } from "./pnpm-workspace.ts";
@@ -53,6 +53,7 @@ function declaredPackageManagerVersion(text: string, name: string): string | und
 }
 
 function applyImporter(text: string, root: string, block: string, mode?: LockfileImporterMode): string {
+  if (mode === "delete") return deleteImporter(text, root);
   return mode === "replace" ? replaceImporter(text, root, block) : insertImporter(text, root, block);
 }
 

@@ -203,6 +203,11 @@ function applyLockfileImporter(
   const lockfile = resolve(root, operation.lockfile);
   const current = readFileSync(lockfile, "utf8");
   const next = adapter.applyImporter(current, operation.packageRoot, operation.block, operation.mode);
+  if (operation.mode === "delete") {
+    if (adapter.lockfileImporterHash(next, operation.packageRoot) !== undefined) throw new JournalError(`lockfile importer deletion did not remove ${operation.packageRoot}`);
+    writeFileSync(resolve(root, operation.lockfile), next);
+    return;
+  }
   if (adapter.lockfileImporterHash(next, operation.packageRoot) !== hashText(operation.block)) {
     throw new JournalError(`lockfile importer block mismatch: ${operation.packageRoot}`);
   }

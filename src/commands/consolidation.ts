@@ -44,7 +44,8 @@ async function consolidate(args: ParsedArgs): Promise<void> {
     donors: packages.donors,
   });
 
-  if (candidate.files.length === 0) {
+  const retireDonors = flagBool(args, "retire-donors");
+  if (candidate.files.length === 0 && !retireDonors) {
     throw new UsageError(`consolidation of ${donorNames.join(", ")} into ${targetName} has no files to move`);
   }
 
@@ -57,6 +58,7 @@ async function consolidate(args: ParsedArgs): Promise<void> {
     candidate,
     baselineCommit: loaded.graph.commit ?? "HEAD",
     ...(packageRoot ? { packageRoot } : {}),
+    ...(retireDonors ? { retireDonors } : {}),
   });
 
   const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
@@ -83,8 +85,8 @@ async function consolidate(args: ParsedArgs): Promise<void> {
 export const consolidationCommands: Record<string, CommandSpec> = {
   consolidate: {
     summary: "merge multiple packages into a target domain package",
-    usage: "consolidate --target <package-name> --donor <package-name> [--donor <...>] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]",
-    details: "Read-only by default. Moves files FROM multiple existing packages INTO one target package. --target is the destination domain package. --donor is repeatable and names each source package. --package-root overrides the target package root. Compiles the ordinary immutable plan; --write exclusively creates that one manifest and never edits source files.",
+    usage: "consolidate --target <package-name> --donor <package-name> [--donor <...>] [--retire-donors] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]",
+    details: "Read-only by default. Moves files FROM multiple existing packages INTO one target package. --retire-donors additionally removes verified donor package scaffolds and lockfile importer blocks after the move, or can retire already-empty donors. --target is the destination domain package. --donor is repeatable and names each source package.",
     run: consolidate,
   },
 };

@@ -11,7 +11,7 @@ import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapter
 import { GENERATOR } from "../branding.ts";
 import { getApplication, packageNameMatcher, type MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
-import type { Sha256 } from "../util/hash.ts";
+import { hashText, type Sha256 } from "../util/hash.ts";
 import { renderTemplate } from "../util/template.ts";
 import { PlanningError, WorkspaceContext } from "../plan/context.ts";
 import { inferDependencies } from "../plan/dependencies.ts";
@@ -32,6 +32,7 @@ export interface BuildConsolidationPlanOptions {
   readonly candidate: ConsolidationCandidate;
   readonly baselineCommit: string;
   readonly packageRoot?: string;
+  readonly retireDonors?: boolean;
 }
 
 export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): ExtractionManifest {
@@ -190,6 +191,23 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
     templates: config.scaffoldTemplates,
   });
   operations.push(...packageOps);
+
+  if (options.retireDonors) {
+    const retirementFiles = ["package.json", "tsconfig.json", "moon.yml", "README.md"];
+    for (const donor of candidate.donors) {
+      for (const name of retirementFiles) {
+        const path = `${donor.root}/${name}`;
+        const preconditionHash = context.state(path);
+        if (preconditionHash === "missing") continue;
+        operations.push({ kind: "delete-file", path, file: path, source: path, target: path, preconditionHash, resultHash: "missing" });
+      }
+      const lockfile = packageManager.lockfileName;
+      const block = context.exists(lockfile) ? packageManager.importerBlock(context.text(lockfile), donor.root) : undefined;
+      if (block !== undefined) {
+        operations.push({ kind: "lockfile-importer", lockfile, packageRoot: donor.root, block, mode: "delete", preconditionHash: context.state(lockfile), resultHash: hashText("") });
+      }
+    }
+  }
 
   // Consumer rewrites must run while donor paths still exist: the codemod
   // resolves each donor's baseline module to identify the exact declaration

@@ -129,6 +129,8 @@ function validateOperation(
       return;
     case "delete-file":
       if (operation.preconditionHash === "missing") issues.add("invalid-precondition", `cannot delete missing file ${operation.path}`, { operationIndex: index });
+      if (!isFileState(operation.preconditionHash) || !isFileState(operation.resultHash) || operation.resultHash !== "missing") issues.add("delete-hash", "delete result must be the missing file state", { operationIndex: index, operationKind: operation.kind, path: operation.path });
+      mutated.add(operation.path);
       return;
     case "lockfile-importer":
       validateLockfileImporter(operation, index, options, issues, manifest, mutated);
@@ -472,6 +474,13 @@ function validateLockfileImporter(
     const text = existsSync(lockfile) ? readFileSyncSafe(lockfile) : undefined;
     if (text !== undefined && adapter.importerBlock(text, operation.packageRoot) === undefined) {
       issues.add("lockfile-replace", `lockfile importer replace has no existing block for ${operation.packageRoot}`, at);
+    }
+  }
+  if (mode === "delete" && !options.offline) {
+    const lockfile = resolve(options.rootDir, operation.lockfile);
+    const text = existsSync(lockfile) ? readFileSyncSafe(lockfile) : undefined;
+    if (text !== undefined && adapter.importerBlock(text, operation.packageRoot) === undefined) {
+      issues.add("lockfile-delete", `lockfile importer delete has no existing block for ${operation.packageRoot}`, at);
     }
   }
   const echo = manifest.lockfileImporter;

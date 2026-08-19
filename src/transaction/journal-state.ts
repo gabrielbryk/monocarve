@@ -35,6 +35,7 @@ export function isCompleted(adapter: PackageManagerAdapter, operation: PlanOpera
   if (isAnyMove(operation)) return stateAt(root, operation.source) === MISSING && stateAt(root, operation.target) === operation.resultHash;
   if (operation.kind === "delete-file") return stateAt(root, operation.path) === MISSING;
   if (operation.kind === "lockfile-importer") {
+    if (operation.mode === "delete") return blockState(adapter, operation, root).current === undefined;
     const state = blockState(adapter, operation, root);
     return state.current === state.expected;
   }
@@ -45,6 +46,7 @@ export function isAtPrecondition(adapter: PackageManagerAdapter, operation: Plan
   if (isAnyMove(operation)) return stateAt(root, operation.source) === operation.preconditionHash && stateAt(root, operation.target) === MISSING;
   if (operation.kind === "delete-file") return stateAt(root, operation.path) === operation.preconditionHash;
   if (operation.kind === "lockfile-importer") {
+    if (operation.mode === "delete") return blockState(adapter, operation, root).current !== undefined;
     const state = blockState(adapter, operation, root);
     return operation.mode === "replace" ? state.current !== undefined && state.current !== state.expected : state.current === undefined;
   }

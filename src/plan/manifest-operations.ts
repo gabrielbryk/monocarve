@@ -95,10 +95,10 @@ export interface DeleteFileOperation {
   readonly source: string;
   readonly target: string;
   readonly preconditionHash: FileState;
-  readonly resultHash: Sha256;
+  readonly resultHash: FileState;
 }
 
-export type LockfileImporterMode = "insert" | "replace";
+export type LockfileImporterMode = "insert" | "replace" | "delete";
 
 export interface LockfileImporterOperation {
   readonly kind: "lockfile-importer";

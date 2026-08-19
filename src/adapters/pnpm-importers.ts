@@ -120,3 +120,12 @@ export function replaceImporter(lockfileText: string, packageRoot: string, block
   lines.splice(entry.start, entry.end - entry.start, ...block.replace(/\n$/, "").split("\n"));
   return lines.join("\n");
 }
+
+export function deleteImporter(lockfileText: string, packageRoot: string): string {
+  const parsed = parseImporters(lockfileText);
+  const entry = parsed.entries.find((candidate) => candidate.root === packageRoot);
+  if (!entry) throw new LockfileError(`lockfile has no importer block to delete for ${packageRoot}`);
+  const lines = [...parsed.lines];
+  lines.splice(entry.start, entry.end - entry.start);
+  return lines.join("\n");
+}

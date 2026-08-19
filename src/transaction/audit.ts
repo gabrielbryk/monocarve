@@ -396,7 +396,8 @@ export function auditPlanSync(options: AuditOptions): AuditReport {
     lockfileChecks += 1;
     const text = textAt(rootDir, operation.lockfile);
     const current = text === "" ? undefined : adapter.lockfileImporterHash(text, operation.packageRoot);
-    if (current !== hashText(operation.block)) {
+    const expected = operation.mode === "delete" ? undefined : hashText(operation.block);
+    if (current !== expected) {
       lockfileFailures.push(`lockfile importer block does not match the worktree: ${operation.packageRoot}`);
     }
   }
