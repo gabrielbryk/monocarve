@@ -117,7 +117,7 @@ function compilerOptions(importerPath: string, boundary?: string): ts.CompilerOp
       if (cached) return cached;
       const config = ts.readConfigFile(configPath, (path) => readFileSync(path, "utf8"));
       if (!config.error) {
-        const options = ts.parseJsonConfigFileContent(config.config, ts.sys, directory).options;
+        const options = ts.parseJsonConfigFileContent(config.config, ts.sys, dirname(configPath)).options;
         optionsCache.set(key, options);
         return options;
       }
@@ -179,11 +179,31 @@ function resolveWithTypeScript(
   specifier: string,
   boundary?: string,
 ): string | null {
-  const module = ts.resolveModuleName(specifier, importerPath, compilerOptions(importerPath, boundary), ts.sys)
+  const options = compilerOptions(importerPath, boundary);
+  const module = ts.resolveModuleName(specifier, importerPath, options, ts.sys)
     .resolvedModule;
-  const result = module ? resolve(module.resolvedFileName) : null;
+  const result = module ? resolve(module.resolvedFileName) : resolvePathAlias(options, specifier, importerPath);
   resolutionCache.set(key, result);
   return result;
+}
+
+function resolvePathAlias(options: ts.CompilerOptions, specifier: string, importerPath: string): string | null {
+  for (const [pattern, targets] of Object.entries(options.paths ?? {})) {
+    const marker = pattern.indexOf("*");
+    const prefix = marker < 0 ? pattern : pattern.slice(0, marker);
+    const suffix = marker < 0 ? "" : pattern.slice(marker + 1);
+    if (!specifier.startsWith(prefix) || !specifier.endsWith(suffix)) continue;
+    const wildcard = marker < 0 ? "" : specifier.slice(prefix.length, specifier.length - suffix.length);
+    const target = targets[0];
+    if (target === undefined) continue;
+    const baseDirectory = typeof options.baseUrl === "string" ? options.baseUrl
+      : typeof options.pathsBasePath === "string" ? options.pathsBasePath : dirname(importerPath);
+    const base = resolve(baseDirectory, target.replace("*", wildcard));
+    if (existsSync(base)) return base;
+    const source = SUFFIXES.map((extension) => base + extension).find(existsSync);
+    return source ?? base + ".ts";
+  }
+  return null;
 }
 
 /**
@@ -203,12 +223,40 @@ function matchesDonor(importerPath: string, specifier: string, donorPath: string
   const javascriptBase = JAVASCRIPT_SOURCE_EXTENSIONS.includes(extname(base) as typeof JAVASCRIPT_SOURCE_EXTENSIONS[number])
     ? base.slice(0, -extname(base).length)
     : base;
-  return [
+  const formerPaths = [
     base,
     ...SUFFIXES.map((suffix) => base + suffix),
     ...SUFFIXES.map((suffix) => javascriptBase + suffix),
     ...SUFFIXES.map((suffix) => resolve(base, `index${suffix}`)),
-  ].some((candidate) => candidate === resolve(donorPath));
+  ];
+  // Path aliases stop resolving as soon as the donor is moved, so the normal
+  // TypeScript resolver cannot prove that an alias used to name the donor.
+  // Reconstruct the pre-move path from the importer's compiler options before
+  // falling back to the relative-path candidates above.
+  const options = compilerOptions(importerPath, boundary);
+  for (const [pattern, targets] of Object.entries(options.paths ?? {})) {
+    const marker = pattern.indexOf("*");
+    if (marker < 0) {
+      if (specifier !== pattern) continue;
+    } else if (!specifier.startsWith(pattern.slice(0, marker)) || !specifier.endsWith(pattern.slice(marker + 1))) {
+      continue;
+    }
+    const suffixLength = marker < 0 ? 0 : pattern.length - marker - 1;
+    const wildcard = marker < 0 ? "" : specifier.slice(marker + 1, specifier.length - suffixLength);
+    for (const target of targets) {
+      const substituted = target.replace("*", wildcard);
+      const baseDirectory = typeof options.baseUrl === "string" ? options.baseUrl
+        : typeof options.pathsBasePath === "string" ? options.pathsBasePath : dirname(importerPath);
+      const aliasBase = resolve(baseDirectory, substituted);
+      // Alias candidates are compared against the donor's former absolute path.
+      formerPaths.push(
+        aliasBase,
+        ...SUFFIXES.map((suffix) => aliasBase + suffix),
+        ...SUFFIXES.map((suffix) => resolve(aliasBase, `index${suffix}`)),
+      );
+    }
+  }
+  return formerPaths.some((candidate) => candidate === resolve(donorPath));
 }
 
 /**
@@ -410,7 +458,9 @@ export function rewriteResolvedImportSpecifier(
   cssImportExtensions: readonly string[] = [],
 ): string {
   const replacements: Replacement[] = [];
-  for (const reference of inventoryModuleReferences(source, importerPath, false, boundary, moduleSpecifierCalls, resolutionExtensions, cssImportExtensions)) {
+  // Include non-relative references here: tsconfig path aliases are non-relative
+  // at the syntax level but can still name a donor that was moved.
+  for (const reference of inventoryModuleReferences(source, importerPath, true, boundary, moduleSpecifierCalls, resolutionExtensions, cssImportExtensions)) {
     const span = reference.specifierSpan;
     if (!reference.specifier || !span) continue;
     if (!matchesDonor(importerPath, reference.specifier, donorPath, boundary, resolutionExtensions)) continue;

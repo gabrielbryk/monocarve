@@ -121,6 +121,28 @@ describe("import rewriting", () => {
     )).toBe('vi.mock("@acme/helpers", () => ({ value: 2 }));\n');
   });
 
+  test("rewrites a tsconfig path alias after its donor has been removed", () => {
+    const directory = mkdtempSync(join(tmpdir(), "monocarve-alias-rewrite-"));
+    scratch.push(directory);
+    mkdirSync(join(directory, "src", "features", "agent-graph"), { recursive: true });
+    writeFileSync(join(directory, "tsconfig.json"), JSON.stringify({
+      compilerOptions: { baseUrl: ".", paths: { "#/*": ["./src/*"] } },
+    }));
+    const donor = join(directory, "src", "features", "agent-graph", "graph-schema.ts");
+    writeFileSync(donor, "export const value = 1;\n");
+    rmSync(donor);
+    const importer = join(directory, "src", "consumer.ts");
+    const source = 'import { value } from "#/features/agent-graph/graph-schema";\n';
+
+    expect(rewriteResolvedImportSpecifier(
+      source,
+      importer,
+      donor,
+      "@acme/agent-graph",
+      directory,
+    )).toBe('import { value } from "@acme/agent-graph";\n');
+  });
+
   test("rewrites a type-position import after the donor has been removed", () => {
     const source = 'type Row = import("./helpers").TimingEntry;\n';
     expect(
