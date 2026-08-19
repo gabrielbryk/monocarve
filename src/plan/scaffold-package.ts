@@ -115,6 +115,14 @@ function assetSideEffects(input: ScaffoldInput, declared: unknown): unknown {
 function publicExports(input: ScaffoldInput, exports: unknown, packageFile: string): Record<string, unknown> {
   if (!input.publicModules?.length) return {};
   const next = { ...packageExportsMap(exports, packageFile) };
+  // Adding an exports map to an existing package must preserve its historical
+  // root import. Otherwise every existing `import "pkg"` becomes unresolved
+  // as soon as the first explicit subpath is added.
+  if (next["."] === undefined) {
+    const entrypoint = templatesFor(input).entrypoint;
+    const entrypointPath = `${input.packageRoot}/${entrypoint}`;
+    if (input.context.exists(entrypointPath)) next["."] = `./${entrypoint}`;
+  }
   for (const module of input.publicModules) {
     const existing = next[module.exportKey];
     if (existing !== undefined && !exportTargetMatches(existing, module.exportTarget)) {
