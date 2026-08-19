@@ -136,6 +136,7 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
     packageName,
     publicSpecifierFor,
     operations,
+    includeDonorFiles: true,
   });
   const consumers = consumerAnalysis.consumers.length > 0 ? consumerAnalysis.consumers : candidate.consumers.map((consumer) => ({
     package: consumer.owner,

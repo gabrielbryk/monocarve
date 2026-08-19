@@ -140,8 +140,9 @@ export function appendConsumerOperations(args: {
   readonly publicSpecifierFor: ReadonlyMap<string, string>;
   readonly operations: PlanOperation[];
   readonly excludedFiles?: ReadonlySet<string>;
+  readonly includeDonorFiles?: boolean;
 }): { readonly consumers: Consumer[]; readonly dynamicImportDelta: { readonly added: string[]; readonly removed: string[] } } {
-  const consumers = findConsumers(args.context, args.sources, args.packageName, args.publicSpecifierFor)
+  const consumers = findConsumers(args.context, args.sources, args.packageName, args.publicSpecifierFor, args.includeDonorFiles)
     .filter((consumer) => !args.excludedFiles?.has(consumer.file))
     .map((consumer) => args.context.isTest(consumer.file) ? { ...consumer, dependencySection: "dev" as const } : consumer);
   for (const consumer of consumers) for (const donor of consumer.donors) {

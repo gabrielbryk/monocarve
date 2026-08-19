@@ -68,12 +68,13 @@ export function findConsumers(
   donors: readonly string[],
   packageName: string,
   publicSpecifierFor: ReadonlyMap<string, string> = new Map(),
+  includeDonorFiles = false,
 ): Consumer[] {
   const absoluteDonors = donors.map((donor) => context.absolute(donor));
   const donorSet = new Set(donors);
   const index = context.consumerIndex();
   const candidates = [...new Set(absoluteDonors.flatMap((donor) => index.get(donor) ?? []))].filter(
-    (file) => !donorSet.has(file),
+    (file) => includeDonorFiles || !donorSet.has(file),
   );
 
   return candidates
