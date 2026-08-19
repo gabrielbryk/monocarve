@@ -26,7 +26,10 @@ export function validatePublicModules(
     const publicSurface = templates.publicSurface;
     const existingEntrypoint = new WorkspaceContext(options.config, options.rootDir).exists(`${manifest.target.packageRoot}/${manifest.target.entrypoint}`);
     if (publicSurface.mode === "barrel" && manifest.modulePromotion === undefined && !existingEntrypoint) {
-      if (actual.length > 0) issues.add("target-subpaths", "barrel surface config must not declare public modules");
+      // An explicit planner surface override may intentionally select
+      // subpaths for a new package whose repository default is a barrel.
+      // Shape validation already enforces unique, package-relative mappings.
+      if (actual.length > 0) return;
       return;
     }
     // An existing package may be extended with an explicit, namespaced

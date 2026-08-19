@@ -2,7 +2,7 @@
 import { statSync } from "node:fs";
 import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapters/registry.ts";
 import { GENERATOR } from "../branding.ts";
-import { applicationOwner, getApplication, packageNameMatcher, packageNameOf, renderExtractionProfile, resolveExtractionProfile, triggeredArtifacts, triggeredPostJournalPreparers, type MonocarveConfig } from "../config.ts";
+import { applicationOwner, getApplication, packageNameMatcher, packageNameOf, renderExtractionProfile, resolveExtractionProfile, triggeredArtifacts, triggeredPostJournalPreparers, type MonocarveConfig, type PublicSurfaceConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import { sccId } from "../graph/components.ts";
 import type { PortfolioCandidate } from "../portfolio/types.ts";
@@ -25,13 +25,14 @@ export interface BuildPlanOptions {
   readonly config: MonocarveConfig; readonly rootDir: string; readonly graph: DependencyGraph; readonly candidate: PortfolioCandidate;
   readonly baselineCommit: string; readonly packageName?: string; readonly packageRoot?: string; readonly profile?: string; readonly context?: WorkspaceContext;
   readonly modulePromotion?: ExtractionManifest["modulePromotion"];
+  readonly publicSurface?: PublicSurfaceConfig;
   readonly evacuationProvenance?: NonNullable<NonNullable<ExtractionManifest["provenance"]>["evacuation"]>;
 }
 export async function buildPlan(options: BuildPlanOptions): Promise<ExtractionManifest> { return buildPlanSync(options); }
 
 export function buildPlanSync(options: BuildPlanOptions): ExtractionManifest {
   const state = prepareBuild(options);
-  const selection = selectExtractionSources({ context: state.context, candidate: state.candidate, packageRoot: state.packageRoot, entrypoint: state.templates.entrypoint, packageName: state.packageName, publicSurface: state.templates.publicSurface, ...(options.modulePromotion === undefined ? {} : { targetModule: options.modulePromotion.targetModule }) });
+  const selection = selectExtractionSources({ context: state.context, candidate: state.candidate, packageRoot: state.packageRoot, entrypoint: state.templates.entrypoint, packageName: state.packageName, publicSurface: options.publicSurface ?? state.templates.publicSurface, ...(options.modulePromotion === undefined ? {} : { targetModule: options.modulePromotion.targetModule }) });
   assertAssetImportersReachable(state.graph, selection.production, selection.assets);
   const rewrites = escapeRewritesFor(state.candidate);
   const operations = buildJournal(state, selection, rewrites);
@@ -59,7 +60,8 @@ function prepareBuild(options: BuildPlanOptions): BuildState {
   if (!packageNameMatcher(config).test(packageName)) throw new PlanningError(`package name ${JSON.stringify(packageName)} does not match the configured pattern`);
   const packageRoot = profile.name === undefined ? (options.packageRoot ?? derivePackageRoot(config, graph, packageName)) : rendered.packageRoot;
   const taskRunner = createTaskRunnerAdapter(config);
-  return { options, config, graph, candidate, baseline: baselineOf(options), context, application, packageManager: createPackageManagerAdapter(config), taskRunner, profile, templates: profile.scaffoldTemplates, candidateName, packageName, packageRoot, projectId: rendered.projectId ?? taskRunner.projectIdFor(packageName, packageRoot), pathMigrationNoops: [] };
+  const templates = options.publicSurface === undefined ? profile.scaffoldTemplates : { ...profile.scaffoldTemplates, publicSurface: options.publicSurface };
+  return { options, config, graph, candidate, baseline: baselineOf(options), context, application, packageManager: createPackageManagerAdapter(config), taskRunner, profile, templates, candidateName, packageName, packageRoot, projectId: rendered.projectId ?? taskRunner.projectIdFor(packageName, packageRoot), pathMigrationNoops: [] };
 }
 
 function buildJournal(state: BuildState, selection: ReturnType<typeof selectExtractionSources>, rewrites: ReadonlyMap<string, readonly EscapeRewrite[]>): PlanOperation[] {

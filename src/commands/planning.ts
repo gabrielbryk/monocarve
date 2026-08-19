@@ -43,12 +43,15 @@ async function plan(args: ParsedArgs): Promise<void> {
   }
   const packageRoot = flagString(args, "package-root");
   const profile = flagString(args, "profile");
+  const publicSurface = flagString(args, "public-surface");
+  if (publicSurface !== undefined && publicSurface !== "subpaths") throw new UsageError("--public-surface currently supports only subpaths");
   const manifest = buildPlanSync({
     config: loaded.config, rootDir: loaded.rootDir, graph: loaded.graph, context: loaded.context,
     candidate: narrowed, baselineCommit: loaded.graph.commit ?? "HEAD",
     ...(packageName === undefined ? {} : { packageName }),
     ...(packageRoot === undefined ? {} : { packageRoot }),
     ...(profile === undefined ? {} : { profile }),
+    ...(publicSurface === undefined ? {} : { publicSurface: { mode: "subpaths" as const, keyTemplate: "./{pathNoExtension}", targetTemplate: "./src/{path}" } }),
   });
   const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
   const written = flagBool(args, "write");
@@ -308,7 +311,7 @@ export function approvalGuidance(out: string, evidence: ManifestApprovalEvidence
 }
 
 export const planningCommands: Record<string, CommandSpec> = {
-  plan: { summary: "compile a hash-journaled extraction plan", usage: "plan --candidate <id> [--source <path> ...] [--profile <name> | --package-name <name> [--package-root <path>]] [--force] [--verify-lockfile] [--out <path>] [--write [--commit-approval]] [--json | --verbose]", details: "Prints the bounded operator review by default; --json or --verbose emits the full proof manifest. Repeat --source to intentionally narrow a multi-SCC candidate. --package-name resolves a known workspace package root automatically; --package-root is an explicit override. A root containing package.json is extended, otherwise a new package is scaffolded. Low-confidence recommendations require an explicit target. --write reports exact review, approval, and apply actions; --commit-approval explicitly creates only the manifest approval commit.", run: plan },
+  plan: { summary: "compile a hash-journaled extraction plan", usage: "plan --candidate <id> [--source <path> ...] [--profile <name> | --package-name <name> [--package-root <path>]] [--public-surface subpaths] [--force] [--verify-lockfile] [--out <path>] [--write [--commit-approval]] [--json | --verbose]", details: "Prints the bounded operator review by default; --json or --verbose emits the full proof manifest. Repeat --source to intentionally narrow a multi-SCC candidate. --package-name resolves a known workspace package root automatically; --package-root is an explicit override. --public-surface subpaths selects deterministic per-module exports when a barrel would have ambiguous bindings. A root containing package.json is extended, otherwise a new package is scaffolded. Low-confidence recommendations require an explicit target. --write reports exact review, approval, and apply actions; --commit-approval explicitly creates only the manifest approval commit.", run: plan },
   scope: { summary: "resolve a stable source path and review its current plan", usage: "scope --path <source> --package-name <name> [--app <name>] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]", details: "Resolves the current principal SCC candidate from a stable source path. It requires an intentional target, prints a concise review by default, and never writes unless --write is explicit.", run: scope },
   "plan-review": { summary: "render the deterministic operator review for a plan", usage: "plan-review --plan <path> [--approval-subject <subject>] [--json]", details: "Reads the manifest and its Git baseline without changing the workspace. The review exposes exact move targets, wiring and public-surface changes, generated outputs, gates, warnings, and the subject/path inputs used for approval.", run: reviewPlan },
   explain: { summary: "explain why a plan changes one dependency or artifact", usage: "explain --plan <path> (--dependency <name> | --artifact <path>) [--json]", details: "Read-only. Reports persisted dependency source/reason evidence or the exact operation chain and projected final hash for an artifact.", run: explainPlan },
