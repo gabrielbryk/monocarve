@@ -184,7 +184,8 @@ function entrypointOperation(input: ScaffoldInput, templates: ReturnType<typeof 
     const source = input.production[index]!;
     const specifier = barrelSpecifier(templates, input.context.targetRelativePath(source));
     const typeExports = sourceExportsFromFile(input.context.absolute(source), source).filter((entry) => entry.typeOnly);
-    return [line, ...typeExports.map((entry) => `export type { ${entry.name} } from ${JSON.stringify(specifier)};`)]
+    const typeSpecifier = specifier.startsWith(".") ? specifier : `./${specifier}`;
+    return [line, ...typeExports.map((entry) => `export type { ${entry.name} } from ${JSON.stringify(typeSpecifier)};`)]
       .filter((candidate) => !barrel.includes(candidate));
   });
   if (missing.length === 0 && (!scaffolding || input.context.exists(path))) return undefined;
