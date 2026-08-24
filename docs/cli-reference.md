@@ -21,7 +21,7 @@ where supported.
 
 | command | usage and boundary |
 | --- | --- |
-| `plan` | `plan --candidate <id> ... [--verify-lockfile] [--out <path>] [--write] [--commit-approval] [--json] [--verbose]` — compile deterministically; terminals get the concise review while pipes and explicit machine modes retain the complete manifest. |
+| `plan` | `plan --candidate <id> [--source <path> ...] [--profile <name> | --package-name <name> [--package-root <path>]] [--public-surface subpaths] [--force] [--verify-lockfile] [--out <path>] [--write [--commit-approval]] [--json | --verbose]` — compile deterministically; terminals get the concise review while pipes and explicit machine modes retain the complete manifest. `--public-surface subpaths` exports each entry as its own subpath instead of one barrel. |
 | `scan` | `scan [--app <name>] [--no-cache] [--include-extracted] [--out <path>] [--report-out <path>]` — build the configured dependency model without editing the workspace; `--report-out` writes the raw scanner report for the selected app for later `--graph` replay. |
 | `visualize` | `visualize [--app <name>] [--port <number>] [--no-open] [--no-cache] [--include-extracted]` — serve the current SCC-level dependency graph as an interactive loopback-only web UI. Search and edge-kind filters are local; Rescan rebuilds the read-only graph. |
 | `layers` | `layers [--app <name>] [--out <path>]` — report domains, components, and dependency-first layers. |
@@ -135,6 +135,7 @@ does not infer new reasons from the current checkout.
 
 | command | usage and boundary |
 | --- | --- |
+| `consolidate` | `consolidate --target <package-name> --donor <package-name> [--donor <...>] [--retire-donors] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]` — merge multiple packages into a target domain package. Compiles a plan like `plan` does; `--write` persists it and `--retire-donors` removes the donors once their contents have moved. |
 | `approve` | `approve --plan <path> [--commit]` — validate and display exact approval evidence without mutation; `--commit` explicitly commits only the manifest. |
 | `verify` | `verify --plan <path>` — read-only manifest validation plus apply preflight. |
 | `doctor` | `doctor --plan <path> [--verify-lockfile]` — replay, audit, and run repository gates in a disposable worktree. |
