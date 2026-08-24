@@ -22,7 +22,17 @@ const targets = process.argv.slice(2).filter((a) => a !== '--json');
 if (targets.length === 0) targets.push('.');
 const PLAT = repoRoot();
 
-import { classifyArchetype, cognitiveOf, lineIndexer } from './complexity-ast.ts';
+import {
+  classifyArchetype,
+  cognitiveOf,
+  DECISION,
+  decoratorNames,
+  type Fn,
+  lineIndexer,
+  NEST,
+  RESOLVER_DECORATORS,
+  type Signals,
+} from './complexity-ast.ts';
 function analyzeFile(path: string, src: string) {
   const lineAt = lineIndexer(src);
   const lineCount = src.split('\n').length;
@@ -346,8 +356,11 @@ const results: Result[] = [];
 for (const f of files) {
   try {
     results.push(analyzeFile(f, readFileSync(f, 'utf8')));
-  } catch {
-    /* skip */
+  } catch (error) {
+    // A swallowed per-file error made the tool print an empty table with no
+    // diagnostic, which reads as "nothing to report" rather than "nothing was
+    // analysed". Report and keep going.
+    console.error(`complexity: skipped ${f}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 

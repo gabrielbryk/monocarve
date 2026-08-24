@@ -16,7 +16,7 @@ export function lineIndexer(src: string) {
   };
 }
 // FTA cyclomatic: +1 per if/for/while/do/for-in/for-of/catch/ternary, +1 per && ||, +cases per switch
-const DECISION = new Set([
+export const DECISION = new Set([
   'IfStatement',
   'ForStatement',
   'WhileStatement',
@@ -26,7 +26,7 @@ const DECISION = new Set([
   'CatchClause',
   'ConditionalExpression',
 ]);
-const NEST = new Set([
+export const NEST = new Set([
   'BlockStatement',
   'IfStatement',
   'ForStatement',
@@ -38,7 +38,7 @@ const NEST = new Set([
   'TryStatement',
 ]);
 
-type Fn = {
+export type Fn = {
   cyclo: number;
   maxNest: number;
   loc: number;
@@ -169,7 +169,7 @@ export function cognitiveOf(body: any, fnName: string): number {
   return score;
 }
 // per-file signals used for archetype classification
-type Signals = {
+export type Signals = {
   hasResolverDecorator: boolean;
   superClasses: Set<string>;
   hasJSX: boolean;
@@ -179,7 +179,7 @@ type Signals = {
   hasPrivateCtor: boolean;
 };
 
-function decoratorNames(decorators: any): string[] {
+export function decoratorNames(decorators: any): string[] {
   if (!Array.isArray(decorators)) return [];
   return decorators
     .map((d) => {
@@ -193,7 +193,7 @@ function decoratorNames(decorators: any): string[] {
     .filter(Boolean);
 }
 
-const RESOLVER_DECORATORS = new Set([
+export const RESOLVER_DECORATORS = new Set([
   'Resolver',
   'Query',
   'Mutation',
