@@ -4,7 +4,16 @@ import type { FileState, Sha256 } from "../util/hash.ts";
 import type { ExportSurface } from "./public-surface.ts";
 import type { ImportRewrite, PlanOperation } from "./manifest-operations.ts";
 
-/** v2 requires dependency sections; v3 adds compiler provenance; v4 persists architectural assessment. */
+/**
+ * v2 requires dependency sections; v3 adds compiler provenance; v4 persists
+ * architectural assessment.
+ *
+ * `boundaryBaseline` is additive within v4 and carries no version of its own:
+ * every reader that predates it treats a manifest carrying it exactly as it
+ * treats one without, and every reader that knows it treats an absent field as
+ * the older, stricter behaviour of an empty baseline. Nothing can be misread,
+ * so nothing needs a new version to be told apart.
+ */
 export const LEGACY_PLAN_SCHEMA_VERSION = 2 as const;
 export const PREVIOUS_PLAN_SCHEMA_VERSION = 3 as const;
 export const PLAN_SCHEMA_VERSION = 4 as const;
@@ -36,6 +45,20 @@ export interface PublicModule {
   readonly exportKey: string;
   readonly exportTarget: string;
   readonly requiredExports: readonly ExportSurface[];
+}
+/** One import from a package-owned file into application code. */
+export interface BoundaryEdge {
+  readonly file: string;
+  readonly target: string;
+}
+/**
+ * Boundary violations already present at the plan's baseline, reviewed and
+ * approved with it. See `boundary-baseline.ts` for identity and audit meaning;
+ * an absent record is an empty baseline, not a waiver.
+ */
+export interface BoundaryBaselineRecord {
+  readonly digest: Sha256;
+  readonly edges: readonly BoundaryEdge[];
 }
 export interface PlanTarget {
   readonly packageName: string;
@@ -188,6 +211,13 @@ export interface ExtractionManifest {
       readonly introducedApplicationDependencies: readonly string[];
     };
   };
+  /**
+   * Boundary violations that already existed at `baselineCommit`, recorded so
+   * the audit fails only on edges this plan introduced. Absent on manifests
+   * compiled before the baseline existed, which the audit reads as an empty
+   * baseline — the strict, pre-existing behaviour.
+   */
+  readonly boundaryBaseline?: BoundaryBaselineRecord;
   readonly target: PlanTarget;
   readonly source: PlanSource;
   readonly dependencies: PlanDependencies;

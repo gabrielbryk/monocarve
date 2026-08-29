@@ -508,7 +508,7 @@ function extractionAudit(plan: CampaignChildPlan): AuditReport {
     byteFidelity: proof(), consumerCompleteness: proof(), boundaryRules: proof(), externalConsumerCompile: proof(), codemodReplay: proof(),
     entrypointClosure: proof(), lockfileIntegrity: proof(), generatedArtifacts: proof(),
     sourceConservation: { ...proof(), plannedFiles: 1, plannedTests: 0, plannedAssets: 0, landedFiles: 1, landedTests: 0, landedAssets: 0 },
-    graphEvidence: { dynamicImportDelta: { added: [], removed: [] }, movedPathEdges: [], passed: true }, failures: [],
+    boundaryBaseline: { recorded: 0, observed: [], cleared: [] }, graphEvidence: { dynamicImportDelta: { added: [], removed: [] }, movedPathEdges: [], passed: true }, failures: [],
   };
 }
 

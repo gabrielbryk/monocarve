@@ -44,6 +44,7 @@ function extractionReport(planId: string, baselineCommit = BASELINE, passed = tr
     byteFidelity: proof,
     consumerCompleteness: proof,
     boundaryRules: proof,
+    boundaryBaseline: { recorded: 0, observed: [], cleared: [] },
     externalConsumerCompile: proof,
     codemodReplay: proof,
     entrypointClosure: proof,

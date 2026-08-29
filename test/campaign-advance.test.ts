@@ -74,6 +74,7 @@ function extractionAudit(plan: CampaignChildPlan): AuditReport {
     byteFidelity: proof(),
     consumerCompleteness: proof(),
     boundaryRules: proof(),
+    boundaryBaseline: { recorded: 0, observed: [], cleared: [] },
     externalConsumerCompile: proof(),
     codemodReplay: proof(),
     entrypointClosure: proof(),

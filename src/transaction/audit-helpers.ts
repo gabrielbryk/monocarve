@@ -8,6 +8,7 @@ import { LEGACY_PLAN_SCHEMA_VERSION, PREVIOUS_PLAN_SCHEMA_VERSION, PLAN_SCHEMA_V
 import type { MonocarveConfig } from "../config.ts";
 import { showBaseline } from "../util/git.ts";
 import type { AuditReport, ProofResult } from "./audit-types.ts";
+import { boundaryBaselineDefects } from "../plan/boundary-baseline.ts";
 import { evacuationId } from "../evacuation/candidate.ts";
 import { isCompositionRoot } from "../graph/layers.ts";
 
@@ -77,6 +78,20 @@ export function unauditableManifest(config: MonocarveConfig, manifest: Extractio
   require("expectedDynamicImportDelta", isRecord("expectedDynamicImportDelta"), "an object");
   if (isRecord("expectedDynamicImportDelta")) { const delta = value["expectedDynamicImportDelta"] as Record<string, unknown>; require("expectedDynamicImportDelta.added", Array.isArray(delta["added"]), "an array"); require("expectedDynamicImportDelta.removed", Array.isArray(delta["removed"]), "an array"); }
   if (!config.applications.some((app) => app.name === value["application"])) failures.push(`[application] manifest application ${JSON.stringify(value["application"] ?? null)} is not configured`);
+  // A recorded baseline is the one manifest field that makes the audit accept
+  // something, so an unreadable one must stop the audit rather than be treated
+  // as an empty set — which would silently turn a widened baseline into a
+  // strict run whose failures nobody expected, or an empty one into no proof.
+  if ("boundaryBaseline" in value) {
+    const record = value["boundaryBaseline"];
+    if (!isRecord("boundaryBaseline") || !Array.isArray((record as { edges?: unknown }).edges) || typeof (record as { digest?: unknown }).digest !== "string") {
+      failures.push("[boundary-baseline] boundaryBaseline must be an object with a digest and an edges array");
+    } else if ((record as { edges: unknown[] }).edges.some((edge) => typeof edge !== "object" || edge === null || typeof (edge as { file?: unknown }).file !== "string" || typeof (edge as { target?: unknown }).target !== "string")) {
+      failures.push("[boundary-baseline] every recorded boundary edge must carry a file and a target string");
+    } else {
+      for (const defect of boundaryBaselineDefects(manifest.boundaryBaseline)) failures.push(`[boundary-baseline] ${defect}`);
+    }
+  }
   const evacuation = manifest.provenance?.evacuation;
   if (evacuation !== undefined) {
     const sourceFiles = isRecord("source") && Array.isArray((value["source"] as Record<string, unknown>)["files"])
@@ -109,5 +124,5 @@ export function unauditableManifest(config: MonocarveConfig, manifest: Extractio
 export function unauditableReport(manifest: ExtractionManifest, rootDir: string, failures: readonly string[]): AuditReport {
   const notRun: ProofResult = { passed: false, checked: 0, failures: [] };
   const value = manifest as unknown as Record<string, unknown>; const text = (key: string): string => typeof value[key] === "string" ? value[key] as string : "";
-  return { planId: text("planId"), baselineCommit: text("baselineCommit"), auditedRoot: rootDir, passed: false, byteFidelity: notRun, consumerCompleteness: notRun, boundaryRules: notRun, externalConsumerCompile: notRun, codemodReplay: notRun, entrypointClosure: notRun, lockfileIntegrity: notRun, generatedArtifacts: notRun, sourceConservation: { ...notRun, plannedFiles: 0, plannedTests: 0, plannedAssets: 0, landedFiles: 0, landedTests: 0, landedAssets: 0 }, graphEvidence: { dynamicImportDelta: { added: [], removed: [] }, movedPathEdges: [], passed: false }, failures: [...failures], unauditable: [...failures] };
+  return { planId: text("planId"), baselineCommit: text("baselineCommit"), auditedRoot: rootDir, passed: false, byteFidelity: notRun, consumerCompleteness: notRun, boundaryRules: notRun, externalConsumerCompile: notRun, codemodReplay: notRun, entrypointClosure: notRun, lockfileIntegrity: notRun, generatedArtifacts: notRun, sourceConservation: { ...notRun, plannedFiles: 0, plannedTests: 0, plannedAssets: 0, landedFiles: 0, landedTests: 0, landedAssets: 0 }, boundaryBaseline: { recorded: Array.isArray(manifest.boundaryBaseline?.edges) ? manifest.boundaryBaseline.edges.length : 0, observed: [], cleared: [] }, graphEvidence: { dynamicImportDelta: { added: [], removed: [] }, movedPathEdges: [], passed: false }, failures: [...failures], unauditable: [...failures] };
 }

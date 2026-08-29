@@ -60,9 +60,25 @@ export interface AuditReport {
     readonly landedTests: number;
     readonly landedAssets: number;
   };
+  /**
+   * What became of the boundary violations the reviewed plan recorded as
+   * pre-existing. Informational by construction: these edges never fail the
+   * audit, which is the whole point of recording them, and `boundaryRules`
+   * still fails on every edge outside the recorded set.
+   */
+  readonly boundaryBaseline: BoundaryBaselineEvidence;
   readonly graphEvidence: GraphEvidence;
   readonly failures: readonly string[];
   readonly unauditable?: readonly string[];
+}
+
+export interface BoundaryBaselineEvidence {
+  /** Edges the manifest recorded. Zero for a plan compiled without a baseline. */
+  readonly recorded: number;
+  /** Recorded edges still present in the audited tree. */
+  readonly observed: readonly string[];
+  /** Recorded edges the transaction happened to remove. */
+  readonly cleared: readonly string[];
 }
 
 export interface AuditOptions {

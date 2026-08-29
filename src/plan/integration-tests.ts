@@ -16,6 +16,7 @@ import { inferDependencies } from "./dependencies.ts";
 import { renderGates, graphDigest, moveOperation } from "./build.ts";
 import { PlanningError, WorkspaceContext } from "./context.ts";
 import { operationPaths, PLAN_SCHEMA_VERSION, type ExtractionManifest, type PlanOperation } from "./manifest.ts";
+import { boundaryBaselineOf } from "./boundary-baseline.ts";
 import { buildPlanProvenance } from "./provenance.ts";
 import { packageOperations } from "./scaffold.ts";
 import { collectIntegrationTestClosure, selectIntegrationTestRoots } from "./integration-test-closure.ts";
@@ -109,6 +110,7 @@ export function buildIntegrationTestPlanSync(options: BuildIntegrationTestPlanOp
     baselineCommit: baseline.commit,
     graphDigest: graphDigest(graph),
     application: application.name,
+    boundaryBaseline: boundaryBaselineOf({ config, rootDir: options.rootDir, files: context.repositorySources(), referencesOf: (file) => context.moduleReferences(file) }),
     target: {
       packageName: rendered.packageName,
       packageRoot: rendered.packageRoot,
