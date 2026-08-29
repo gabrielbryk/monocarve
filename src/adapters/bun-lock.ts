@@ -65,6 +65,23 @@ export function workspaceEntry(parsed: ParsedBunLock, packageRoot: string): Lock
   return parsed.workspaces.entries.find((entry) => entry.key === key);
 }
 
+/**
+ * The `name` a `workspaces` entry declares, or undefined when it declares none.
+ *
+ * Absence is meaningful rather than incidental: bun writes `name` when it
+ * creates an entry and preserves whatever it finds when it updates one, so a
+ * root entry without a name stays without one forever. Both the block reader
+ * and the block renderer have to agree on that, which is why the line is parsed
+ * in one place.
+ */
+export function entryName(parsed: ParsedBunLock, start: number, end: number): string | undefined {
+  for (let index = start + 1; index < end; index += 1) {
+    const match = parsed.lines[index]!.match(/^ {6}"name": ("(?:[^"\\]|\\.)*"),$/u);
+    if (match) return JSON.parse(match[1]!) as string;
+  }
+  return undefined;
+}
+
 /** The `packages` entry for a package *name*, or undefined when it has none. */
 export function packageEntry(parsed: ParsedBunLock, packageName: string): LockEntry | undefined {
   return parsed.packages?.entries.find((entry) => entry.key === packageName);

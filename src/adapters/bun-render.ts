@@ -12,7 +12,7 @@ import {
   sectionRange,
   serializeBlock,
 } from "./bun-block.ts";
-import { importerKey, jsonString, ROOT_IMPORTER_KEY } from "./bun-lock.ts";
+import { entryName, importerKey, jsonString, parseBunLock, ROOT_IMPORTER_KEY, workspaceEntry } from "./bun-lock.ts";
 import { LockfileError } from "./lockfile-error.ts";
 import type { ConsumerDependencySection, RenderImporterInput } from "./types.ts";
 
@@ -24,7 +24,9 @@ import type { ConsumerDependencySection, RenderImporterInput } from "./types.ts"
  * resolution out of `lockfileText` the way the pnpm renderer must. What it does
  * need, and what `RenderImporterInput` historically did not carry, is the
  * package's own name and version: they are two of the fields bun writes, and
- * the `packages` entry is keyed by the name.
+ * the `packages` entry is keyed by the name. `lockfileText` is still read, for
+ * one field only — see `nameField`, which mirrors the root entry's identity
+ * rather than the manifest's.
  *
  * The result deliberately has no trailing newline. The planner appends the
  * `\n\n` separator, which makes what it stores byte-identical to what
@@ -32,18 +34,14 @@ import type { ConsumerDependencySection, RenderImporterInput } from "./types.ts"
  */
 export function renderImporterBlock(input: RenderImporterInput): string {
   const key = importerKey(input.packageRoot);
-  const name = input.packageName;
-  if (name === undefined || name === "") {
-    throw new LockfileError(`cannot render a bun.lock importer for ${input.packageRoot} without its package name`);
-  }
   const workspaceLines = [
     `    ${jsonString(key)}: {`,
-    `      ${jsonString("name")}: ${jsonString(name)},`,
+    ...nameField(key, input),
     ...versionField(key, input.packageVersion),
     ...renderSections(input),
     ENTRY_CLOSE,
   ];
-  return serializeBlock({ workspaceLines, packageLine: packageLine(key, name) }).replace(/\n+$/u, "");
+  return serializeBlock({ workspaceLines, packageLine: packageLine(key, input) }).replace(/\n+$/u, "");
 }
 
 export function addBlockDependency(
@@ -96,6 +94,54 @@ export function removeBlockDependency(block: string, name: string): string {
 }
 
 /**
+ * The root entry's `name`, which the *lockfile* decides rather than the manifest.
+ *
+ * Measured against bun 1.3.14, not inferred. When bun creates a `workspaces`
+ * entry it writes `name` for every package that declares one, root included.
+ * When it updates an entry that already exists it rewrites the dependency
+ * sections and leaves the identity fields exactly as it found them — so a root
+ * entry that reached the file without a `name` never gains one, no matter how
+ * many installs follow. Both halves were reproduced directly: deleting a real
+ * repository's `bun.lock` and regenerating it produced `"name": "agent-html"`,
+ * while adding a dependency to that same repository with its shipped lockfile
+ * in place rewrote the entry and left the `name` absent.
+ *
+ * So the root is rendered to match the lockfile in front of us: this adapter
+ * only ever splices into an existing file, and requiring the manifest's name
+ * there would demand a byte bun itself will never write back. Every other
+ * member is unconditional — bun always writes their `name`, and the key of
+ * their `packages` link is that name.
+ *
+ * A lockfile with no root entry at all is a creation, which is the one case
+ * where bun does write the name from the manifest.
+ */
+function nameField(key: string, input: RenderImporterInput): string[] {
+  if (key === ROOT_IMPORTER_KEY && !rootEntryDeclaresName(input.lockfileText)) return [];
+  return [`      ${jsonString("name")}: ${jsonString(requireName(input))},`];
+}
+
+function rootEntryDeclaresName(lockfileText: string): boolean {
+  let parsed: ReturnType<typeof parseBunLock>;
+  try {
+    parsed = parseBunLock(lockfileText);
+  } catch {
+    // No readable lockfile to mirror — treat it as a creation, which is what
+    // the caller is doing if it is rendering against nothing.
+    return true;
+  }
+  const entry = workspaceEntry(parsed, ROOT_IMPORTER_KEY);
+  return entry === undefined || entryName(parsed, entry.start, entry.end) !== undefined;
+}
+
+function requireName(input: RenderImporterInput): string {
+  const name = input.packageName;
+  if (name === undefined || name === "") {
+    throw new LockfileError(`cannot render a bun.lock importer for ${input.packageRoot} without its package name`);
+  }
+  return name;
+}
+
+/**
  * bun omits `version` from the root entry even when the root manifest declares
  * one, and writes it for every other member. Rendering it either way round
  * produces a file the next install rewrites.
@@ -106,8 +152,9 @@ function versionField(key: string, version: string | undefined): string[] {
 }
 
 /** The workspace root has no `packages` entry; every other member has one. */
-function packageLine(key: string, name: string): string | undefined {
+function packageLine(key: string, input: RenderImporterInput): string | undefined {
   if (key === ROOT_IMPORTER_KEY) return undefined;
+  const name = requireName(input);
   return `    ${jsonString(name)}: [${jsonString(`${name}@workspace:${key}`)}],`;
 }
 

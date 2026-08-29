@@ -11,6 +11,7 @@
 
 import { parseBlock } from "./bun-block.ts";
 import {
+  entryName,
   importerKey,
   packageEntry,
   packageInsertion,
@@ -148,14 +149,6 @@ function removeEntry(lines: readonly string[], start: number, end: number): stri
   else if (start > 0 && (next[start - 1] ?? "").trim() === "") next.splice(start - 1, end - start + 1);
   else next.splice(start, end - start);
   return next;
-}
-
-function entryName(parsed: ParsedBunLock, start: number, end: number): string | undefined {
-  for (let index = start + 1; index < end; index += 1) {
-    const match = parsed.lines[index]!.match(/^ {6}"name": ("(?:[^"\\]|\\.)*"),$/u);
-    if (match) return JSON.parse(match[1]!) as string;
-  }
-  return undefined;
 }
 
 function requiredDependencies(parsed: ParsedBunLock, start: number, end: number): [string, string][] {
