@@ -33,6 +33,8 @@ export interface PlanReviewSummary {
     readonly name: string;
     readonly entrypoint: string;
     readonly projectId?: string;
+    /** Explicit destination directory inside the package, when the plan declares one. */
+    readonly subpath?: string;
   };
   /**
    * Boundary violations the plan recorded as already present, which the audit
@@ -178,6 +180,7 @@ export function summarizePlanReview(manifest: ExtractionManifest, context: PlanR
       name: manifest.target.packageName,
       entrypoint: manifest.target.entrypoint,
       ...(manifest.target.projectId ? { projectId: manifest.target.projectId } : {}),
+      ...(manifest.target.targetSubpath === undefined ? {} : { subpath: manifest.target.targetSubpath }),
     },
     boundaryBaseline: {
       recorded: manifest.boundaryBaseline !== undefined,
@@ -226,7 +229,7 @@ export function formatPlanReview(summary: PlanReviewSummary): string {
   ];
   const lines = [
     `Plan ${summary.planId}`,
-    `Target: ${summary.target.name} (${summary.target.mode}) at ${summary.target.root}`,
+    `Target: ${summary.target.name} (${summary.target.mode}) at ${summary.target.root}${summary.target.subpath === undefined ? "" : ` into ${summary.target.subpath}/`}`,
     ...(summary.assessment === undefined ? [] : [
       `Recommendation: ${summary.assessment.status}; cohesion=${summary.assessment.cohesion}`,
       `  selected ${summary.assessment.selectedTarget.action}: ${summary.assessment.selectedTarget.packageName}`,

@@ -12,6 +12,7 @@ import type { PlanOperation } from "./manifest.ts";
 import { barrelSpecifier, type ScaffoldInput } from "./scaffold.ts";
 import { sourceExportsFromFile } from "./public-surface.ts";
 import { parseJsonFile, render, stringifyJson, templateVars, templatesFor, writeOperation } from "./scaffold-shared.ts";
+import { packageModulePath } from "./target-layout.ts";
 
 /** Operations creating (or extending) the target package. */
 export function packageOperations(input: ScaffoldInput): PlanOperation[] {
@@ -191,10 +192,10 @@ function entrypointOperation(input: ScaffoldInput, templates: ReturnType<typeof 
   const barrel = input.context.exists(path) ? input.context.text(path) : "";
   if (input.production.length > 1 || (barrel && !scaffolding)) assertNoBarrelExportCollisions(input, path);
   const missing = input.production.map((source) => renderTemplate(templates.barrelExport, {
-    ...templateVars(input, templates), specifier: barrelSpecifier(templates, input.context.targetRelativePath(source)),
+    ...templateVars(input, templates), specifier: barrelSpecifier(templates, packageModulePath(input.context, source, input.targetSubpath)),
   })).flatMap((line, index) => {
     const source = input.production[index]!;
-    const specifier = barrelSpecifier(templates, input.context.targetRelativePath(source));
+    const specifier = barrelSpecifier(templates, packageModulePath(input.context, source, input.targetSubpath));
     const typeExports = sourceExportsFromFile(input.context.absolute(source), source).filter((entry) => entry.typeOnly);
     const typeSpecifier = specifier.startsWith(".") ? specifier : `./${specifier}`;
     return [line, ...typeExports.map((entry) => `export type { ${entry.name} } from ${JSON.stringify(typeSpecifier)};`)]

@@ -63,6 +63,7 @@ export function refreshExtractionPlan(options: RefreshPlanOptions): RefreshPlanR
     graph: options.graph,
     candidate,
     baselineCommit: currentHead,
+    ...(existing.target.targetSubpath === undefined ? {} : { targetSubpath: existing.target.targetSubpath }),
     ...(profile === undefined
       ? { packageName: existing.target.packageName, packageRoot: existing.target.packageRoot }
       : { profile }),
@@ -99,8 +100,11 @@ function loadManifest(rootDir: string, input: ExtractionManifest | string): Extr
 }
 
 function targetIdentity(manifest: ExtractionManifest): unknown {
-  const { packageName, packageRoot, entrypoint, projectId, profile } = manifest.target;
-  return { packageName, packageRoot, entrypoint, projectId, profile };
+  // `targetSubpath` belongs here rather than in the semantic diff: it decides
+  // every move target, so a refresh that dropped it would relocate the whole
+  // extraction while still claiming only HEAD had advanced.
+  const { packageName, packageRoot, entrypoint, projectId, profile, targetSubpath } = manifest.target;
+  return { packageName, packageRoot, entrypoint, projectId, profile, targetSubpath };
 }
 
 function assertSame(label: string, before: unknown, after: unknown): void {

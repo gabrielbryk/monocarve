@@ -43,6 +43,7 @@ async function plan(args: ParsedArgs): Promise<void> {
   }
   const packageRoot = flagString(args, "package-root");
   const profile = flagString(args, "profile");
+  const targetSubpath = flagString(args, "target-subpath");
   const publicSurface = flagString(args, "public-surface");
   if (publicSurface !== undefined && publicSurface !== "subpaths") throw new UsageError("--public-surface currently supports only subpaths");
   const manifest = buildPlanSync({
@@ -51,6 +52,7 @@ async function plan(args: ParsedArgs): Promise<void> {
     ...(packageName === undefined ? {} : { packageName }),
     ...(packageRoot === undefined ? {} : { packageRoot }),
     ...(profile === undefined ? {} : { profile }),
+    ...(targetSubpath === undefined ? {} : { targetSubpath }),
     ...(publicSurface === undefined ? {} : { publicSurface: { mode: "subpaths" as const, keyTemplate: "./{pathNoExtension}", targetTemplate: "./src/{path}" } }),
   });
   const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
@@ -118,10 +120,12 @@ async function scope(args: ParsedArgs): Promise<void> {
     throw new UsageError(`candidate ${candidate.id} is not eligible: ${candidate.rejectionReasons.map(({ detail }) => detail).join("; ")}`);
   }
   const packageRoot = flagString(args, "package-root");
+  const targetSubpath = flagString(args, "target-subpath");
   const manifest = buildPlanSync({
     config: loaded.config, rootDir: loaded.rootDir, graph: loaded.graph, context: loaded.context,
     candidate, baselineCommit: loaded.graph.commit ?? "HEAD", packageName,
     ...(packageRoot === undefined ? {} : { packageRoot }),
+    ...(targetSubpath === undefined ? {} : { targetSubpath }),
   });
   const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
   assertPlannableTree(loaded, manifest, out, args);
@@ -311,8 +315,8 @@ export function approvalGuidance(out: string, evidence: ManifestApprovalEvidence
 }
 
 export const planningCommands: Record<string, CommandSpec> = {
-  plan: { summary: "compile a hash-journaled extraction plan", usage: "plan --candidate <id> [--source <path> ...] [--profile <name> | --package-name <name> [--package-root <path>]] [--public-surface subpaths] [--force] [--verify-lockfile] [--out <path>] [--write [--commit-approval]] [--json | --verbose]", details: "Prints the bounded operator review by default; --json or --verbose emits the full proof manifest. Repeat --source to intentionally narrow a multi-SCC candidate. --package-name resolves a known workspace package root automatically; --package-root is an explicit override. --public-surface subpaths selects deterministic per-module exports when a barrel would have ambiguous bindings. A root containing package.json is extended, otherwise a new package is scaffolded. Low-confidence recommendations require an explicit target. --write reports exact review, approval, and apply actions; --commit-approval explicitly creates only the manifest approval commit.", run: plan },
-  scope: { summary: "resolve a stable source path and review its current plan", usage: "scope --path <source> --package-name <name> [--app <name>] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]", details: "Resolves the current principal SCC candidate from a stable source path. It requires an intentional target, prints a concise review by default, and never writes unless --write is explicit.", run: scope },
+  plan: { summary: "compile a hash-journaled extraction plan", usage: "plan --candidate <id> [--source <path> ...] [--profile <name> | --package-name <name> [--package-root <path>]] [--target-subpath <dir>] [--public-surface subpaths] [--force] [--verify-lockfile] [--out <path>] [--write [--commit-approval]] [--json | --verbose]", details: "Prints the bounded operator review by default; --json or --verbose emits the full proof manifest. Repeat --source to intentionally narrow a multi-SCC candidate. --package-name resolves a known workspace package root automatically; --package-root is an explicit override. --target-subpath lands every moved file directly in that directory of an existing package, by basename, instead of preserving the path it had below the application source root; it must be src or a directory below it, and colliding basenames are refused. --public-surface subpaths selects deterministic per-module exports when a barrel would have ambiguous bindings. A root containing package.json is extended, otherwise a new package is scaffolded. Low-confidence recommendations require an explicit target. --write reports exact review, approval, and apply actions; --commit-approval explicitly creates only the manifest approval commit.", run: plan },
+  scope: { summary: "resolve a stable source path and review its current plan", usage: "scope --path <source> --package-name <name> [--app <name>] [--package-root <path>] [--target-subpath <dir>] [--verify-lockfile] [--out <path>] [--write] [--json]", details: "Resolves the current principal SCC candidate from a stable source path. It requires an intentional target, prints a concise review by default, and never writes unless --write is explicit. --target-subpath names the destination directory inside an existing package, overriding the structure-preserving default.", run: scope },
   "plan-review": { summary: "render the deterministic operator review for a plan", usage: "plan-review --plan <path> [--approval-subject <subject>] [--json]", details: "Reads the manifest and its Git baseline without changing the workspace. The review exposes exact move targets, wiring and public-surface changes, generated outputs, gates, warnings, and the subject/path inputs used for approval.", run: reviewPlan },
   explain: { summary: "explain why a plan changes one dependency or artifact", usage: "explain --plan <path> (--dependency <name> | --artifact <path>) [--json]", details: "Read-only. Reports persisted dependency source/reason evidence or the exact operation chain and projected final hash for an artifact.", run: explainPlan },
   "relocate-tests": { summary: "compile a configured integration-test package", usage: "relocate-tests --suite <name> [--out <path>] [--write]", details: "The suite and all target/scaffold policy come from configuration.", run: relocateTests },

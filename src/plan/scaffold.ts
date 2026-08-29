@@ -25,6 +25,8 @@ export interface ScaffoldInput {
   readonly assets?: readonly string[];
   readonly dependencies: InferredDependencies;
   readonly publicModules?: readonly PublicModule[];
+  /** Destination directory inside the package; see `target-layout.ts`. */
+  readonly targetSubpath?: string;
   readonly workspaceDependencyRoots?: Readonly<Record<string, string>>;
 }
 

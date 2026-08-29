@@ -21,6 +21,7 @@ import type {
 import { renderPublicModulePaths } from "./public-modules.ts";
 import { sourceExportsFromFile } from "./public-surface.ts";
 import { findStaticFsReferences, relativeFsLiteral, rewriteStaticFsReference } from "./static-fs-references.ts";
+import { packageModulePath, packageTargetPath } from "./target-layout.ts";
 
 export interface SourceSelection {
   readonly production: string[];
@@ -42,6 +43,8 @@ export function selectExtractionSources(args: {
   readonly packageName: string;
   readonly publicSurface: MonocarveConfig["scaffoldTemplates"]["publicSurface"];
   readonly targetModule?: string;
+  /** Explicit destination directory inside the package; see `target-layout.ts`. */
+  readonly targetSubpath?: string;
 }): SourceSelection {
   const production = withAmbientAugmentations(
     args.context,
@@ -51,7 +54,8 @@ export function selectExtractionSources(args: {
   const partition = partitionTests(args.context, production, [...args.candidate.tests].sort(), assets);
   const tests = [...partition.travelling];
   const sources = [...production, ...tests];
-  const targetOf = (source: string): string => `${args.packageRoot}/src/${args.context.targetRelativePath(source)}`;
+  const moduleOf = (source: string): string => packageModulePath(args.context, source, args.targetSubpath);
+  const targetOf = (source: string): string => packageTargetPath(args.packageRoot, moduleOf(source));
   const entrypointPath = `${args.packageRoot}/${args.entrypoint}`;
   const directEntrypointPromotion = args.targetModule === "index" && production.length === 1;
   const targets = sources.map((source, index) => directEntrypointPromotion && index === 0 ? entrypointPath : targetOf(source));
@@ -65,10 +69,7 @@ export function selectExtractionSources(args: {
   }
   const moduleSources = [...production, ...assets];
   const moduleTargets = [...targets.slice(0, production.length), ...assetTargets];
-  const rendered = renderPublicModulePaths(
-    args.publicSurface,
-    moduleSources.map((source) => args.context.targetRelativePath(source)),
-  );
+  const rendered = renderPublicModulePaths(args.publicSurface, moduleSources.map(moduleOf));
   const publicModules = rendered.map(({ exportKey, exportTarget }, index) => ({
     source: moduleSources[index]!,
     target: moduleTargets[index]!,
