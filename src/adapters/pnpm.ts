@@ -6,6 +6,7 @@ import { relative, resolve } from "node:path";
 import type { LockfileImporterMode } from "../plan/manifest.ts";
 import { hashText, type Sha256 } from "../util/hash.ts";
 import { relativePosix } from "../util/paths.ts";
+import { declaredPackageManagerVersion } from "./package-manager-version.ts";
 import { deleteImporter, importerBlock, insertImporter, replaceImporter } from "./pnpm-importers.ts";
 import { addBlockDependencies, addBlockDependency, removeBlockDependency, renderImporterBlock } from "./pnpm-render.ts";
 import { missingResolutions } from "./pnpm-resolutions.ts";
@@ -27,6 +28,7 @@ export const pnpmAdapter: PackageManagerAdapter = {
   listPackages: (rootDir) => listPackages(rootDir, WORKSPACE_MANIFEST),
   renderImporterBlock: (input) => renderImporterBlock(input, pnpmAdapter.linkVersion),
   importerBlock,
+  blockDeclaresImporter: (block, root) => block.includes(`  ${root}:`),
   insertImporter,
   replaceImporter,
   applyImporter: (text, root, block, mode) => applyImporter(text, root, block, mode),
@@ -40,17 +42,6 @@ export const pnpmAdapter: PackageManagerAdapter = {
   installCommand: () => ["pnpm", "install", "--frozen-lockfile"],
   lockfileOnlyCommand: () => ["pnpm", "install", "--lockfile-only"],
 };
-
-function declaredPackageManagerVersion(text: string, name: string): string | undefined {
-  try {
-    const value = (JSON.parse(text) as { packageManager?: unknown }).packageManager;
-    if (typeof value !== "string" || !value.startsWith(`${name}@`)) return undefined;
-    const version = value.slice(name.length + 1);
-    return version === "" ? undefined : version;
-  } catch {
-    return undefined;
-  }
-}
 
 function applyImporter(text: string, root: string, block: string, mode?: LockfileImporterMode): string {
   if (mode === "delete") return deleteImporter(text, root);

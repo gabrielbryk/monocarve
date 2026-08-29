@@ -29,7 +29,7 @@ export function packageOperations(input: ScaffoldInput): PlanOperation[] {
   const projected = packageManifest?.kind === "write-file"
     ? parseJsonFile(packageManifest.contents, packageManifest.path)
     : parseJsonFile(input.context.text(`${input.packageRoot}/package.json`), `${input.packageRoot}/package.json`);
-  const importer = lockfileImporterOperation(input, record(projected.dependencies), record(projected.devDependencies), scaffolding);
+  const importer = lockfileImporterOperation(input, projectedImporter(projected), scaffolding);
   if (!scaffolding) return [...operations, ...(importer ? [importer] : [])];
   return [...operations, ...registrationOperations(input), importer].filter(
     (operation): operation is PlanOperation => operation !== undefined,
@@ -445,27 +445,43 @@ function requiredEditOperation(input: ScaffoldInput, path: string, outcome: Adap
   return writeOperation(input.context, path, outcome.contents, generator);
 }
 
-function lockfileImporterOperation(input: ScaffoldInput, dependencies: Readonly<Record<string, string>>, devDependencies: Readonly<Record<string, string>>, scaffolding: boolean): PlanOperation | undefined {
+/**
+ * The dependency sections and identity the projected manifest declares.
+ *
+ * Identity fields stay absent when the manifest omits them, so an adapter that
+ * keys its lockfile purely by directory sees the input it always saw.
+ */
+function projectedImporter(projected: Record<string, unknown>): ProjectedImporter {
+  return {
+    dependencies: record(projected.dependencies),
+    devDependencies: record(projected.devDependencies),
+    ...(typeof projected.name === "string" ? { packageName: projected.name } : {}),
+    ...(typeof projected.version === "string" ? { packageVersion: projected.version } : {}),
+  };
+}
+
+interface ProjectedImporter {
+  readonly dependencies: Readonly<Record<string, string>>;
+  readonly devDependencies: Readonly<Record<string, string>>;
+  readonly packageName?: string;
+  readonly packageVersion?: string;
+}
+
+function lockfileImporterOperation(input: ScaffoldInput, projected: ProjectedImporter, scaffolding: boolean): PlanOperation | undefined {
   if (!scaffolding && Object.keys(input.dependencies.runtime).length === 0 && Object.keys(input.dependencies.dev).length === 0) return undefined;
   const lockfile = input.packageManager.lockfileName;
   if (!input.context.exists(lockfile)) throw new PlanningError(`${lockfile} is required to add an importer for ${input.packageRoot}`);
   const current = input.context.text(lockfile);
   const existing = input.packageManager.importerBlock(current, input.packageRoot);
+  const renderInput = { packageRoot: input.packageRoot, ...projected, lockfileText: current, workspaceRoots: workspaceRootsFor(input) };
   if (!scaffolding) {
     if (existing === undefined) throw new PlanningError(`${lockfile} has no importer entry for existing package ${input.packageRoot}; the lockfile is out of date with the workspace`);
-    const block = input.packageManager.addBlockDependencies(existing, {
-      packageRoot: input.packageRoot,
-      dependencies,
-      devDependencies,
-      lockfileText: current,
-      workspaceRoots: workspaceRootsFor(input),
-    });
+    const block = input.packageManager.addBlockDependencies(existing, renderInput);
     if (block === existing) return undefined;
     return { kind: "lockfile-importer", lockfile, packageRoot: input.packageRoot, block, mode: "replace", preconditionHash: hashText(current), resultHash: hashText(input.packageManager.replaceImporter(current, input.packageRoot, block)) };
   }
   if (existing !== undefined) throw new PlanningError(`${lockfile} already has an importer for ${input.packageRoot}, but ${input.packageRoot}/package.json is absent`);
-  const workspaceRoots = workspaceRootsFor(input);
-  const block = `${input.packageManager.renderImporterBlock({ packageRoot: input.packageRoot, dependencies, devDependencies, lockfileText: current, workspaceRoots })}\n\n`;
+  const block = `${input.packageManager.renderImporterBlock(renderInput)}\n\n`;
   return { kind: "lockfile-importer", lockfile, packageRoot: input.packageRoot, block, mode: "insert", preconditionHash: hashText(current), resultHash: hashText(input.packageManager.insertImporter(current, input.packageRoot, block)) };
 }
 
