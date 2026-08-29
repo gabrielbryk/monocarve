@@ -85,3 +85,41 @@ test("does not add a project reference to an ordinary noEmit application config"
   expect(operations.some((operation) => operation.kind === "write-file" && operation.path === "package.json")).toBe(true);
   expect(operations.some((operation) => operation.kind === "write-file" && operation.path === "./tsconfig.json")).toBe(false);
 });
+
+/**
+ * A project reference is a path, not a string. `./libs/new-package` and
+ * `libs/new-package` name one project; inserting a second spelling produces a
+ * tsconfig TypeScript rejects as a duplicate reference. The negative below is
+ * the other half: a genuinely absent reference must still be inserted, or this
+ * would be a comparison that never says no.
+ */
+test("recognises an existing project reference written with a different but equivalent path", () => {
+  const lockfile = "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n";
+  const wiring = (referencePath: string) => {
+    const root = fixtureRepo({
+      "package.json": '{"name":"@acme/app","private":true}\n',
+      "tsconfig.json": `${JSON.stringify({ compilerOptions: { composite: true }, references: [{ path: referencePath }] }, null, 2)}\n`,
+      "pnpm-lock.yaml": lockfile,
+    });
+    const config = fixtureConfig(root);
+    return consumerWiringOperations({
+      context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
+      packageManager: pnpmAdapter, taskRunner: moonAdapter, packageName: "@acme/new-package",
+      packageRoot: "libs/new-package", projectId: "new-package", production: [],
+      dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+      consumerOwners: [{ owner: ".", dependencySection: "runtime" }], lockfileText: lockfile,
+    });
+  };
+  const wroteTsconfig = (operations: ReturnType<typeof wiring>) =>
+    operations.some((operation) => operation.kind === "write-file" && operation.path === "tsconfig.json");
+
+  for (const equivalent of ["./libs/new-package", "libs/new-package", "libs/new-package/", "./libs/../libs/new-package"]) {
+    expect(wroteTsconfig(wiring(equivalent))).toBe(false);
+  }
+  // The negative: a different project is not this one, and is still inserted.
+  const inserted = wiring("./libs/other-package");
+  expect(wroteTsconfig(inserted)).toBe(true);
+  const operation = inserted.find((entry) => entry.kind === "write-file" && entry.path === "tsconfig.json");
+  const references = JSON.parse(operation?.kind === "write-file" ? operation.contents : "{}") as { references: { path: string }[] };
+  expect(references.references.map((entry) => entry.path)).toEqual(["./libs/other-package", "libs/new-package"]);
+});

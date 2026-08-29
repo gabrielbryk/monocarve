@@ -91,7 +91,13 @@ function consumerReferenceOperation(input: ConsumerWiringInput, owner: string): 
   if (tsconfig.compilerOptions?.composite !== true && !Array.isArray(tsconfig.references)) return undefined;
   const target = relativePosix(resolve("/", owner), resolve("/", input.packageRoot));
   const references = tsconfig.references ?? [];
-  if (references.some((reference) => reference.path === target)) return undefined;
+  // Compare where each reference points, not how it is spelled. `./libs/x`,
+  // `libs/x` and `libs/x/` are one project reference; a string comparison sees
+  // three, and inserting a fourth spelling of the same path is a duplicate
+  // TypeScript then rejects. Resolution is lexical against the owner directory,
+  // so it stays a pure function of the plan.
+  const targetPath = resolve("/", owner, target);
+  if (references.some((reference) => typeof reference.path === "string" && resolve("/", owner, reference.path) === targetPath)) return undefined;
   const index = references.findIndex((reference) => target < (reference.path ?? ""));
   const next = index < 0 ? [...references, { path: target }] : [...references.slice(0, index), { path: target }, ...references.slice(index)];
   return writeOperation(input.context, path, stringifyJson({ ...tsconfig, references: next }), "wiring:consumer-project-references");
