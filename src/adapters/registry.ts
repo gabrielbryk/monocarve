@@ -5,6 +5,7 @@
 
 import type { MonocarveConfig } from "../config.ts";
 import { NotYetPortedError } from "../errors.ts";
+import { bunAdapter } from "./bun.ts";
 import { moonAdapter, noneTaskRunner } from "./moon.ts";
 import { pnpmAdapter } from "./pnpm.ts";
 import type { PackageManagerAdapter, TaskRunnerAdapter } from "./types.ts";
@@ -14,7 +15,7 @@ export function createPackageManagerAdapter(config: MonocarveConfig): PackageMan
     case "pnpm":
       return pnpmAdapter;
     case "bun":
-      throw new NotYetPortedError("adapters/registry: bun package-manager adapter");
+      return bunAdapter;
     case "npm":
       throw new NotYetPortedError("adapters/registry: npm package-manager adapter");
     case "yarn":

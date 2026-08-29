@@ -7,10 +7,16 @@ and paths. Replace them with values declared by the target workspace's own
 ## Scope and prerequisites
 
 Monocarve v1.0.0 is a Bun-only CLI. Run it with Bun from a committed checkout.
-Its currently implemented workspace integrations are the pnpm package-manager
-adapter and the moon or `none` task-runner adapters. A configuration that selects
-another adapter fails at its explicit `not yet ported` seam; it does not fall
-back to a plausible command.
+Its currently implemented workspace integrations are the pnpm and bun
+package-manager adapters and the moon or `none` task-runner adapters. A
+configuration that selects another adapter fails at its explicit `not yet
+ported` seam; it does not fall back to a plausible command.
+
+The bun adapter declares workspace membership in the root `package.json`
+`workspaces` array and edits `bun.lock`. A package occupies two places in that
+file — an entry in `workspaces` mirroring its manifest, and an entry in
+`packages` declaring the workspace link — and the plan moves both together. Set
+`packageManager: "bun"` and nothing else changes about the loop below.
 
 Before the first extraction, make the workspace configuration complete:
 

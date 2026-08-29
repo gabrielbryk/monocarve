@@ -1,0 +1,45 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "bun-monorepo",
+    },
+    "apps/api": {
+      "name": "@acme/api",
+      "version": "0.0.0",
+      "dependencies": {
+        "@acme/format": "workspace:*",
+        "@acme/logger": "workspace:*",
+      },
+    },
+    "apps/web": {
+      "name": "@acme/web",
+      "version": "0.0.0",
+      "dependencies": {
+        "@acme/format": "workspace:*",
+        "@acme/logger": "workspace:*",
+        "left-pad": "1.3.0",
+      },
+    },
+    "libs/format": {
+      "name": "@acme/format",
+      "version": "0.0.0",
+    },
+    "libs/logger": {
+      "name": "@acme/logger",
+      "version": "0.0.0",
+    },
+  },
+  "packages": {
+    "@acme/api": ["@acme/api@workspace:apps/api"],
+
+    "@acme/format": ["@acme/format@workspace:libs/format"],
+
+    "@acme/logger": ["@acme/logger@workspace:libs/logger"],
+
+    "@acme/web": ["@acme/web@workspace:apps/web"],
+
+    "left-pad": ["left-pad@1.3.0", "", {}, "sha512-XI5MPzVNApjAyhQzphX8BkmKsKUxD4LdyK24iZeQGinBN9yTQT3bFlCBy/aVx2HrNcqQGsdot8ghrjyrvMCoEA=="],
+  }
+}

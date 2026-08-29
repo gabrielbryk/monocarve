@@ -45,7 +45,10 @@ describe("adapters", () => {
     const config = (await loadConfig({ cwd: FIXTURE })).config;
     expect(createPackageManagerAdapter(config).id).toBe("pnpm");
     expect(createTaskRunnerAdapter(config).id).toBe("moon");
-    for (const packageManager of ["bun", "npm", "yarn"] as const) {
+    // A ported adapter is resolved, not refused. Without this line the loop
+    // below would still pass if the registry had thrown for every manager.
+    expect(createPackageManagerAdapter({ ...config, packageManager: "bun" }).id).toBe("bun");
+    for (const packageManager of ["npm", "yarn"] as const) {
       expect(() => createPackageManagerAdapter({ ...config, packageManager })).toThrow(`not yet ported: adapters/registry: ${packageManager} package-manager adapter`);
     }
     for (const taskRunner of ["nx", "turbo"] as const) {
