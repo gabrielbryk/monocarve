@@ -173,10 +173,41 @@ export function read(root: string, path: string): string {
 
 const created: string[] = [];
 
+/*
+ * Cleanup that survives an interrupted or killed run.
+ *
+ * `cleanupFixtures` from an `afterEach`/`afterAll` covers a failing assertion,
+ * but not the two ways a run actually dies: someone interrupting `bun test`,
+ * and the process being killed. Each fixture is a real git repository worth
+ * hundreds of inodes, and the development host's `/tmp` is tmpfs with an inode
+ * cap it hits long before it runs out of bytes -- so a killed run leaves an
+ * expensive orphan behind. These handlers close both paths.
+ */
+let exitHandlersInstalled = false;
+
+function installExitHandlers(): void {
+  if (exitHandlersInstalled) return;
+  exitHandlersInstalled = true;
+  process.on("exit", cleanupFixtures);
+  // `once` so re-raising the signal after cleanup falls through to the default
+  // disposition and the process still dies the way the sender asked it to.
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+    process.once(signal, () => {
+      cleanupFixtures();
+      process.kill(process.pid, signal);
+    });
+  }
+}
+
+function register(path: string): string {
+  installExitHandlers();
+  created.push(path);
+  return path;
+}
+
 /** A committed git repository containing `files`. Registered for cleanup. */
 export function fixtureRepo(files: Record<string, string>, branch = "extraction-fixture"): string {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "monocarve-fixture-")));
-  created.push(root);
+  const root = register(realpathSync(mkdtempSync(join(tmpdir(), "monocarve-fixture-"))));
   fixtureGit(root, "init", "-q", "-b", branch);
   fixtureGit(root, "config", "user.email", "fixture@example.invalid");
   fixtureGit(root, "config", "user.name", "Monocarve Fixture");
@@ -188,14 +219,19 @@ export function fixtureRepo(files: Record<string, string>, branch = "extraction-
 }
 
 export function cleanupFixtures(): void {
-  while (created.length > 0) rmSync(created.pop()!, { recursive: true, force: true });
+  while (created.length > 0) {
+    try {
+      rmSync(created.pop()!, { recursive: true, force: true, maxRetries: 3 });
+    } catch {
+      // Best effort: one stubborn fixture must not strand the rest, mask a
+      // test result, or turn an interrupt into a crash.
+    }
+  }
 }
 
 /** A temporary directory outside every repository, for simulation worktrees. */
 export function scratchDirectory(): string {
-  const path = realpathSync(mkdtempSync(join(tmpdir(), "monocarve-scratch-")));
-  created.push(path);
-  return path;
+  return register(realpathSync(mkdtempSync(join(tmpdir(), "monocarve-scratch-"))));
 }
 
 /** Validated config for a fixture repository, written into it as JSON. */
