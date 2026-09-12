@@ -204,7 +204,7 @@ function entrypointOperation(input: ScaffoldInput, templates: ReturnType<typeof 
   });
   if (missing.length === 0 && (!scaffolding || input.context.exists(path))) return undefined;
   const separator = barrel && !barrel.endsWith("\n") ? "\n" : "";
-  const contents = missing.length > 0 ? `${barrel}${separator}${missing.join("\n")}\n` : "";
+  const contents = missing.length > 0 ? `${barrel}${separator}${missing.map((line) => line.trimEnd()).join("\n")}\n` : "";
   return writeOperation(input.context, path, contents, "scaffold:entrypoint");
 }
 

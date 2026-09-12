@@ -1,12 +1,38 @@
 import { afterAll, expect, test } from "bun:test";
 
-import { moonAdapter } from "../src/adapters/moon.ts";
+import { moonAdapter, noneTaskRunner } from "../src/adapters/moon.ts";
 import { pnpmAdapter } from "../src/adapters/pnpm.ts";
 import { WorkspaceContext } from "../src/plan/context.ts";
-import { consumerWiringOperations } from "../src/plan/scaffold.ts";
+import { consumerWiringOperations, packageOperations } from "../src/plan/scaffold.ts";
 import { cleanupFixtures, fixtureConfig, fixtureRepo } from "./support/fixture-repo.ts";
 
 afterAll(cleanupFixtures);
+
+test("normalizes generated barrel statements to one trailing newline", () => {
+  const root = fixtureRepo({
+    "apps/api/src/Widget.ts": "export const Widget = 1;\n",
+    "pnpm-workspace.yaml": "packages:\n  - apps/*\n  - libs/*\n",
+    "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n",
+  });
+  const config = fixtureConfig(root, {
+    scaffoldTemplates: {
+      packageJson: { contents: '{"name":"{package}"}\n' },
+      barrelExport: "export * from './{specifier}';\n\n",
+    },
+  });
+  const operation = packageOperations({
+    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
+    packageManager: pnpmAdapter, taskRunner: noneTaskRunner, packageName: "@acme/new-package",
+    packageRoot: "libs/new-package", projectId: "new-package", production: ["apps/api/src/Widget.ts"],
+    dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+  }).find((entry) => entry.kind === "write-file" && entry.path === "libs/new-package/src/index.ts");
+
+  expect(operation).toMatchObject({
+    kind: "write-file",
+    contents: "export * from './Widget.ts';\n",
+  });
+  expect(operation?.kind === "write-file" ? operation.contents.endsWith("\n\n") : false).toBe(false);
+});
 
 test("wires retained-test consumers as dev dependencies and promotes a mixed owner to runtime", () => {
   const lockfile = "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\n  apps/api: {}\n";
@@ -113,13 +139,13 @@ test("recognises an existing project reference written with a different but equi
   const wroteTsconfig = (operations: ReturnType<typeof wiring>) =>
     operations.some((operation) => operation.kind === "write-file" && operation.path === "tsconfig.json");
 
-  for (const equivalent of ["./libs/new-package", "libs/new-package", "libs/new-package/", "./libs/../libs/new-package"]) {
+  for (const equivalent of ["./libs/new-package/tsconfig.json", "libs/new-package/tsconfig.json", "libs/new-package/./tsconfig.json", "./libs/../libs/new-package/tsconfig.json"]) {
     expect(wroteTsconfig(wiring(equivalent))).toBe(false);
   }
   // The negative: a different project is not this one, and is still inserted.
-  const inserted = wiring("./libs/other-package");
+  const inserted = wiring("./libs/other-package/tsconfig.json");
   expect(wroteTsconfig(inserted)).toBe(true);
   const operation = inserted.find((entry) => entry.kind === "write-file" && entry.path === "tsconfig.json");
   const references = JSON.parse(operation?.kind === "write-file" ? operation.contents : "{}") as { references: { path: string }[] };
-  expect(references.references.map((entry) => entry.path)).toEqual(["./libs/other-package", "libs/new-package"]);
+  expect(references.references.map((entry) => entry.path)).toEqual(["./libs/other-package/tsconfig.json", "libs/new-package/tsconfig.json"]);
 });
