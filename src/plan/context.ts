@@ -46,10 +46,25 @@ export class PlanningError extends MonocarveError {
 
 const NODE_BUILTINS = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
 
-/** Node and Bun builtins. Never a dependency of a generated package. */
+// Bun's own `node:module` builtinModules list omits some Node built-ins it
+// still resolves at runtime (e.g. `node:test`, confirmed missing under Bun
+// 1.x even though `bun test`-adjacent code can import it). List them
+// explicitly rather than trusting the host runtime's builtinModules to be
+// complete.
+const RUNTIME_BUILTIN_GAPS = new Set(["node:test", "test"]);
+
+/**
+ * Node and Bun builtins, plus runtime-ambient modules with no installable
+ * package. `cloudflare:*` (e.g. `cloudflare:workers`, `cloudflare:sockets`)
+ * is the Workers runtime's own ambient namespace — never an npm package and
+ * never a real cross-package dependency, so it's treated the same as a
+ * Node/Bun builtin rather than an uninstalled-package blocker.
+ */
 export function isBuiltinModule(name: string): boolean {
   return (
     name.startsWith("bun:") ||
+    name.startsWith("cloudflare:") ||
+    RUNTIME_BUILTIN_GAPS.has(name) ||
     NODE_BUILTINS.has(name) ||
     NODE_BUILTINS.has(name.startsWith("node:") ? name.slice(5) : `node:${name}`)
   );
