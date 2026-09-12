@@ -67,8 +67,9 @@ export function compileExternalConsumer(options: CompileExternalConsumerOptions)
     // workspace package's own declared `types` so the same globals a real
     // build would see are available here too.
     const workspaceTypes = workspacePackageTypes(config, rootDir);
+    const requestedTypes = [...new Set([...application.compilerProfile.types, ...configured, ...workspaceTypes])];
     const declaredTypes = partitionTypes(
-      [...new Set([...application.compilerProfile.types, ...configured, ...workspaceTypes])],
+      requestedTypes,
       installedRoot,
       compilerOptions,
       owners,
@@ -86,7 +87,7 @@ export function compileExternalConsumer(options: CompileExternalConsumerOptions)
       // ambient) is a root file above, and re-requesting it as a `types`
       // entry sends it back through plain typeRoots resolution, which is
       // exactly the lookup that just failed for it.
-      ...(unresolvedTypes.length > 0 ? { types: unresolvedTypes } : {}),
+      ...(requestedTypes.length > 0 ? { types: unresolvedTypes } : {}),
     });
     const diagnostics = [
       ...ts.getPreEmitDiagnostics(program).map(formatDiagnostic),
