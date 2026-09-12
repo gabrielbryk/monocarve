@@ -198,7 +198,8 @@ function entrypointOperation(input: ScaffoldInput, templates: ReturnType<typeof 
     const specifier = barrelSpecifier(templates, packageModulePath(input.context, source, input.targetSubpath));
     const typeExports = sourceExportsFromFile(input.context.absolute(source), source).filter((entry) => entry.typeOnly);
     const typeSpecifier = specifier.startsWith(".") ? specifier : `./${specifier}`;
-    return [line, ...typeExports.map((entry) => `export type { ${entry.name} } from ${JSON.stringify(typeSpecifier)};`)]
+    const quote = templates.barrelExport.includes("'") ? "'" : '"';
+    return [line, ...typeExports.map((entry) => `export type { ${entry.name} } from ${quote}${typeSpecifier}${quote};`)]
       .filter((candidate) => !barrel.includes(candidate));
   });
   if (missing.length === 0 && (!scaffolding || input.context.exists(path))) return undefined;

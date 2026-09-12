@@ -7,6 +7,7 @@ import {
   EMPTY_MAP,
   IMPORTER_KEY,
   importerBlock,
+  parseImporters,
   pnpmSection,
   type PnpmDependencySection,
   yamlKey,
@@ -54,16 +55,37 @@ function renderDependency(
   const version = specifier.startsWith("workspace:") ? workspaceVersion(name, input, linkVersion) : dependencyVersion(input.lockfileText, name, specifier);
   // pnpm can persist a catalog request as its selected concrete range in an
   // existing importer (notably when an override supplies that selection).
-  // Preserve that byte-level spelling when projecting the same importer; new
-  // importers still render the package.json specifier verbatim.
-  const persistedSpecifier = specifier === "catalog:" ? existingSpecifier(input, name) ?? specifier : specifier;
+  // Preserve that byte-level spelling when projecting the same importer. A
+  // brand-new importer has no block of its own to copy from, but when every
+  // *other* importer in this lockfile already persists the same name as one
+  // consistent concrete range (this workspace does that for every catalog
+  // dependency, always, never the literal `catalog:` text), the new importer
+  // must borrow that same spelling too: `pnpm install --frozen-lockfile`
+  // recomputes the manifest's `catalog:` specifier to its resolved concrete
+  // version and rejects a lockfile entry that still reads `catalog:` verbatim
+  // as a mismatch, the moment any importer in the file changes.
+  const persistedSpecifier =
+    specifier === "catalog:" ? existingSpecifier(input, name) ?? anyImporterSpecifier(input.lockfileText, name) ?? specifier : specifier;
   return [`      ${yamlKey(name)}:`, `        specifier: ${yamlValue(persistedSpecifier)}`, `        version: ${version}`];
 }
 
 function existingSpecifier(input: RenderImporterInput, name: string): string | undefined {
   const block = importerBlock(input.lockfileText, input.packageRoot);
   if (block === undefined) return undefined;
-  const lines = block.replace(/\n$/u, "").split("\n");
+  return blockSpecifier(block.replace(/\n$/u, "").split("\n"), name);
+}
+
+function anyImporterSpecifier(lockfileText: string, name: string): string | undefined {
+  const { lines, entries } = parseImporters(lockfileText);
+  const seen = new Map<string, string>();
+  for (const entry of entries) {
+    const specifier = blockSpecifier(lines.slice(entry.start, entry.end), name);
+    if (specifier !== undefined && specifier !== "catalog:") seen.set(specifier, entry.root);
+  }
+  return seen.size === 1 ? [...seen.keys()][0] : undefined;
+}
+
+function blockSpecifier(lines: readonly string[], name: string): string | undefined {
   const dependency = blockDependencies(lines).find((entry) => entry.name === name);
   if (dependency === undefined) return undefined;
   for (const line of lines.slice(dependency.start + 1, dependency.end)) {
