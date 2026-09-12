@@ -50,7 +50,6 @@ export function compileExternalConsumer(options: CompileExternalConsumerOptions)
     // TypeScript resolves `compilerOptions.types` from the tsconfig owner's
     // node_modules. The synthetic consumer lives outside the workspace, so
     // resolving from installedRoot would skip a direct application dependency.
-    const applicationRoot = resolve(installedRoot, applicationOwner(application));
     const configured = configuredTypes(rootDir, application.tsconfig);
     const configuredAmbientFiles = configuredAmbientDeclarationFiles(rootDir, application.tsconfig);
     const owners = ownerRootsFor(config, manifest);
