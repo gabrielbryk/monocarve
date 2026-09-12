@@ -294,6 +294,23 @@ describe("simulation worktree node_modules", () => {
     expect(result.unlinkedDependencies).toEqual(["@acme/nowhere"]);
   }, 180_000);
 
+  test("simulation audit resolves configured types from an existing application importer", async () => {
+    const root = fixtureRepo(workspaceFiles());
+    write(root, "apps/api/package.json", `${JSON.stringify({ name: "@acme/api", private: true, devDependencies: { "direct-types": "1.0.0" } })}\n`);
+    write(root, "apps/api/tsconfig.json", `${JSON.stringify({ compilerOptions: { types: ["direct-types"] }, include: ["src"] })}\n`);
+    write(root, DONOR, "export const widgetValue = directWorkerSignal ? 1 : 0;\n");
+    write(root, "apps/api/node_modules/direct-types/package.json", `${JSON.stringify({ name: "direct-types", types: "./index.d.ts" })}\n`);
+    write(root, "apps/api/node_modules/direct-types/index.d.ts", "declare const directWorkerSignal: boolean;\n");
+    fixtureGit(root, "add", "-A");
+    fixtureGit(root, "commit", "-qm", "test: add an application-owned configured type");
+    const config = fixtureConfig(root, { transaction: { worktreeRoot: scratchDirectory(), nodeModules: "symlink", cleanup: true, simulateGates: true } });
+
+    const result = await simulatePlan({ config, rootDir: root, manifest: simulationManifest(root) });
+
+    expect(result.ok).toBe(true);
+    expect(result.failure).toBeUndefined();
+  }, 180_000);
+
   test("install mode runs the command it is given, in the worktree", async () => {
     const root = fixtureRepo(workspaceFiles());
 

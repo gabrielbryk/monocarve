@@ -47,6 +47,10 @@ export function compileExternalConsumer(options: CompileExternalConsumerOptions)
   try {
     const compilerOptions = compilerOptionsFor(config, manifest, rootDir, installedRoot);
     const application = getApplication(config, manifest.application);
+    // TypeScript resolves `compilerOptions.types` from the tsconfig owner's
+    // node_modules. The synthetic consumer lives outside the workspace, so
+    // resolving from installedRoot would skip a direct application dependency.
+    const applicationRoot = resolve(installedRoot, applicationOwner(application));
     const configured = configuredTypes(rootDir, application.tsconfig);
     const configuredAmbientFiles = configuredAmbientDeclarationFiles(rootDir, application.tsconfig);
     const owners = ownerRootsFor(config, manifest);
@@ -70,15 +74,20 @@ export function compileExternalConsumer(options: CompileExternalConsumerOptions)
       compilerOptions,
       owners,
     );
+    const resolvedTypesByName = new Map(
+      declaredTypes.types.map((name) => [name, resolveTypeFile(name, installedRoot, compilerOptions, owners)] as const),
+    );
+    const ownerResolvedTypes = [...resolvedTypesByName.values()].flat();
+    const unresolvedTypes = declaredTypes.types.filter((name) => resolvedTypesByName.get(name)?.length === 0);
     const configuredAmbient = configured.flatMap((name) => resolveTypeFile(name, installedRoot, compilerOptions, owners));
-    const program = ts.createProgram([fixture, ...declaredTypes.ambient, ...configuredAmbient, ...configuredAmbientFiles], {
+    const program = ts.createProgram([fixture, ...declaredTypes.ambient, ...ownerResolvedTypes, ...configuredAmbient, ...configuredAmbientFiles], {
       ...compilerOptions,
       // Only the names partitionTypes could not resolve as a real ambient
       // module belong here — an entry it already resolved (declaredTypes.
       // ambient) is a root file above, and re-requesting it as a `types`
       // entry sends it back through plain typeRoots resolution, which is
       // exactly the lookup that just failed for it.
-      ...(declaredTypes.types.length > 0 ? { types: declaredTypes.types } : {}),
+      ...(unresolvedTypes.length > 0 ? { types: unresolvedTypes } : {}),
     });
     const diagnostics = [
       ...ts.getPreEmitDiagnostics(program).map(formatDiagnostic),

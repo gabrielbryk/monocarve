@@ -173,6 +173,34 @@ describe("external consumer compile proof", () => {
     expect(result.diagnostics).toEqual([]);
   });
 
+  test("resolves a configured type package from the application's direct devDependencies", () => {
+    const fixture = proofFixture();
+    write(fixture.root, "apps/donor/package.json", packageJson({
+      name: "@acme/donor",
+      devDependencies: { "direct-types": "1.0.0" },
+      dependencies: {
+        "adjacent-declarations": "1.0.0",
+        "legacy-default": "1.0.0",
+        "legacy-typed": "1.0.0",
+        "plain-runtime": "1.0.0",
+      },
+    }));
+    write(fixture.root, "apps/donor/tsconfig.json", packageJson({ compilerOptions: { types: ["direct-types"] }, include: ["src"] }));
+    write(fixture.root, "apps/donor/node_modules/direct-types/package.json", packageJson({ name: "direct-types", types: "./index.d.ts" }));
+    write(fixture.root, "apps/donor/node_modules/direct-types/index.d.ts", "declare const directTypeSignal: string;\n");
+    write(fixture.root, "libs/carved/src/index.ts", 'import { feature } from "@acme/utility/feature";\nexport const combined = `${feature}:${directTypeSignal}`;\n');
+
+    const result = run(fixture.root, fixture.config, fixture.manifest);
+
+    expect(result.passed).toBe(true);
+    expect(result.diagnostics).toEqual([]);
+
+    rmSync(`${fixture.root}/apps/donor/node_modules/direct-types`, { recursive: true, force: true });
+    const missing = run(fixture.root, fixture.config, fixture.manifest);
+    expect(missing.passed).toBe(false);
+    expect(missing.diagnostics.join("\n")).toContain("directTypeSignal");
+  });
+
   test("fails when a workspace package stops declaring the imported export subpath", () => {
     const fixture = proofFixture();
     write(
