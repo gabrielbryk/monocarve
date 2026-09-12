@@ -364,6 +364,34 @@ describe("adapters", () => {
     expect(render(single)).toContain("        version: 1.0.0(react@18.0.0)");
   });
 
+  test("projects an existing importer from its own peer-context resolution", () => {
+    const lockfileText = disagreeing("1.0.0(react@17.0.0)", "1.0.0(react@18.0.0)");
+    const block = pnpmAdapter.renderImporterBlock({
+      packageRoot: "apps/admin",
+      dependencies: { pluggable: "^1.0.0" },
+      devDependencies: {},
+      lockfileText,
+      workspaceRoots: {},
+    });
+
+    expect(block).toContain("        version: 1.0.0(react@17.0.0)");
+    expect(block).not.toContain("        version: 1.0.0(react@18.0.0)");
+  });
+
+  test("projects an existing catalog importer from its own peer-context resolution", () => {
+    const lockfileText = disagreeing("1.0.0(react@17.0.0)", "1.0.0(react@18.0.0)").replaceAll("specifier: ^1.0.0", "specifier: catalog:");
+    const block = pnpmAdapter.renderImporterBlock({
+      packageRoot: "apps/admin",
+      dependencies: { pluggable: "catalog:" },
+      devDependencies: {},
+      lockfileText,
+      workspaceRoots: {},
+    });
+
+    expect(block).toContain("        version: 1.0.0(react@17.0.0)");
+    expect(block).not.toContain("        version: 1.0.0(react@18.0.0)");
+  });
+
   test("edits workspace membership only when the globs do not already cover it", () => {
     const manifest = "packages:\n  - apps/*\n  - libs/*\n";
     expect(pnpmAdapter.workspaceManifestEdit(manifest, "libs/chart")).toEqual({ kind: "already-satisfied" });
