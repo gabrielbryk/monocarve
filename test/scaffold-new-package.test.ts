@@ -24,6 +24,56 @@ function newPackage(root: string, taskRunner = noneTaskRunner, tests: readonly s
   });
 }
 
+test("resolves scaffold-only workspace devDependencies from configured package roots", () => {
+  const root = fixtureRepo({
+    "pnpm-workspace.yaml": "packages:\n  - libs/*\n  - tools/*\n",
+    "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n",
+    "tools/vitest-config/package.json": '{"name":"@acme/vitest-config"}\n',
+    "tools/vitest-config/tsconfig.json": '{"compilerOptions":{"composite":true}}\n',
+  });
+  const config = fixtureConfig(root, {
+    packageRoots: ["libs", "tools"],
+    scaffoldTemplates: {
+      packageJson: { contents: '{"name":"{package}","devDependencies":{"@acme/vitest-config":"workspace:*"}}\n' },
+      tsconfig: { contents: '{"compilerOptions":{"composite":true},"references":[]}\n' },
+    },
+  });
+  const operations = packageOperations({
+    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
+    packageManager: pnpmAdapter, taskRunner: noneTaskRunner, packageName: "@acme/new-package",
+    packageRoot: "libs/new-package", projectId: "new-package", production: [],
+    dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+  });
+  const importer = operations.find((operation) => operation.kind === "lockfile-importer");
+  expect(importer).toMatchObject({
+    kind: "lockfile-importer",
+    block: expect.stringContaining("version: link:../../tools/vitest-config"),
+  });
+  const tsconfig = operations.find((operation) => operation.kind === "write-file" && operation.path === "libs/new-package/tsconfig.json");
+  expect(tsconfig?.kind === "write-file" ? JSON.parse(tsconfig.contents).references : undefined).toEqual([
+    { path: "../../tools/vitest-config/tsconfig.json" },
+  ]);
+});
+
+test("refuses an unknown scaffold workspace dependency", () => {
+  const root = fixtureRepo({
+    "pnpm-workspace.yaml": "packages:\n  - libs/*\n",
+    "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n",
+  });
+  const config = fixtureConfig(root, {
+    scaffoldTemplates: {
+      packageJson: { contents: '{"name":"{package}","devDependencies":{"@acme/missing":"workspace:*"}}\n' },
+    },
+  });
+
+  expect(() => packageOperations({
+    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
+    packageManager: pnpmAdapter, taskRunner: noneTaskRunner, packageName: "@acme/new-package",
+    packageRoot: "libs/new-package", projectId: "new-package", production: [],
+    dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+  })).toThrow("workspace dependency has no package reference: @acme/missing");
+});
+
 test("generates a Moon empty-suite override only for an explicitly test-less move", () => {
   const root = fixtureRepo({
     ".moon/workspace.yml": "projects:\n  globs:\n    - 'libs/*'\n",

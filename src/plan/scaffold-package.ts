@@ -3,6 +3,7 @@
 import { resolve } from "node:path";
 import ts from "typescript";
 
+import { LockfileError } from "../adapters/lockfile-error.ts";
 import type { AdapterEditResult } from "../adapters/types.ts";
 import { hashText } from "../util/hash.ts";
 import { relativePosix } from "../util/paths.ts";
@@ -19,22 +20,49 @@ export function packageOperations(input: ScaffoldInput): PlanOperation[] {
   const templates = templatesFor(input);
   const scaffolding = !input.context.exists(`${input.packageRoot}/package.json`);
   const packageManifest = packageManifestOperation(input, scaffolding);
-  const operations = [
-    packageManifest,
-    entrypointOperation(input, templates, scaffolding),
-    ...tsconfigOperations(input, templates),
-    taskFileOperation(input, templates, scaffolding),
-    knipWorkspaceOperation(input, scaffolding),
-    ...extraFileOperations(input, templates),
-  ].filter((operation): operation is PlanOperation => operation !== undefined);
   const projected = packageManifest?.kind === "write-file"
     ? parseJsonFile(packageManifest.contents, packageManifest.path)
     : parseJsonFile(input.context.text(`${input.packageRoot}/package.json`), `${input.packageRoot}/package.json`);
-  const importer = lockfileImporterOperation(input, projectedImporter(projected), scaffolding);
+  const scaffoldInput = withScaffoldWorkspaceReferences(input, projected, scaffolding);
+  const operations = [
+    packageManifest,
+    entrypointOperation(scaffoldInput, templates, scaffolding),
+    ...tsconfigOperations(scaffoldInput, templates),
+    taskFileOperation(scaffoldInput, templates, scaffolding),
+    knipWorkspaceOperation(scaffoldInput, scaffolding),
+    ...extraFileOperations(scaffoldInput, templates),
+  ].filter((operation): operation is PlanOperation => operation !== undefined);
+  const importer = lockfileImporterOperation(scaffoldInput, projectedImporter(projected), scaffolding);
   if (!scaffolding) return [...operations, ...(importer ? [importer] : [])];
-  return [...operations, ...registrationOperations(input), importer].filter(
+  return [...operations, ...registrationOperations(scaffoldInput), importer].filter(
     (operation): operation is PlanOperation => operation !== undefined,
   );
+}
+
+function withScaffoldWorkspaceReferences(input: ScaffoldInput, projected: Record<string, unknown>, scaffolding: boolean): ScaffoldInput {
+  if (!scaffolding) return input;
+  const roots = workspaceRootsFor(input);
+  const packageReferences = new Set(input.dependencies.packageReferences);
+  for (const [, values] of workspaceDependencySections(projected)) {
+    for (const [name, specifier] of Object.entries(values)) {
+      if (!specifier.startsWith("workspace:")) continue;
+      const owner = roots[name];
+      if (owner === undefined) throw new LockfileError(`workspace dependency has no package reference: ${name}`);
+      packageReferences.add(owner);
+    }
+  }
+  return {
+    ...input,
+    dependencies: { ...input.dependencies, packageReferences: [...packageReferences].sort() },
+  };
+}
+
+function workspaceDependencySections(projected: Record<string, unknown>): [string, Record<string, string>][] {
+  return ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"].flatMap((section) => {
+    const values = projected[section];
+    if (values === null || typeof values !== "object" || Array.isArray(values)) return [];
+    return [[section, values as Record<string, string>]] as [string, Record<string, string>][];
+  });
 }
 
 /** Register a newly scaffolded package with Knip when the repository uses its
@@ -457,6 +485,7 @@ function projectedImporter(projected: Record<string, unknown>): ProjectedImporte
   return {
     dependencies: record(projected.dependencies),
     devDependencies: record(projected.devDependencies),
+    optionalDependencies: record(projected.optionalDependencies),
     ...(typeof projected.name === "string" ? { packageName: projected.name } : {}),
     ...(typeof projected.version === "string" ? { packageVersion: projected.version } : {}),
   };
@@ -465,6 +494,7 @@ function projectedImporter(projected: Record<string, unknown>): ProjectedImporte
 interface ProjectedImporter {
   readonly dependencies: Readonly<Record<string, string>>;
   readonly devDependencies: Readonly<Record<string, string>>;
+  readonly optionalDependencies: Readonly<Record<string, string>>;
   readonly packageName?: string;
   readonly packageVersion?: string;
 }
@@ -492,5 +522,5 @@ function workspaceRootsFor(input: ScaffoldInput): Record<string, string> {
     const name = input.context.manifest(owner).name;
     return name ? [[name, owner]] : [];
   }));
-  return { ...roots, ...input.workspaceDependencyRoots };
+  return { ...input.context.workspacePackageRoots(), ...roots, ...input.workspaceDependencyRoots };
 }
