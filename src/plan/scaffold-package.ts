@@ -505,7 +505,13 @@ function lockfileImporterOperation(input: ScaffoldInput, projected: ProjectedImp
   if (!input.context.exists(lockfile)) throw new PlanningError(`${lockfile} is required to add an importer for ${input.packageRoot}`);
   const current = input.context.text(lockfile);
   const existing = input.packageManager.importerBlock(current, input.packageRoot);
-  const renderInput = { packageRoot: input.packageRoot, ...projected, lockfileText: current, workspaceRoots: workspaceRootsFor(input) };
+  const renderInput = {
+    packageRoot: input.packageRoot,
+    ...projected,
+    lockfileText: current,
+    workspaceRoots: workspaceRootsFor(input),
+    ...(input.dependencies.resolutionRoots === undefined ? {} : { resolutionRoots: input.dependencies.resolutionRoots }),
+  };
   if (!scaffolding) {
     if (existing === undefined) throw new PlanningError(`${lockfile} has no importer entry for existing package ${input.packageRoot}; the lockfile is out of date with the workspace`);
     const block = input.packageManager.addBlockDependencies(existing, renderInput);

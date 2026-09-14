@@ -378,6 +378,50 @@ describe("adapters", () => {
     expect(block).not.toContain("        version: 1.0.0(react@18.0.0)");
   });
 
+  test("projects a new importer from its donating importer resolution", () => {
+    const lockfileText = disagreeing("1.0.0(react@17.0.0)", "1.0.0(react@18.0.0)");
+    const block = pnpmAdapter.renderImporterBlock({
+      packageRoot: "libs/chart",
+      dependencies: { pluggable: "^1.0.0" },
+      devDependencies: {},
+      lockfileText,
+      workspaceRoots: {},
+      resolutionRoots: { pluggable: ["apps/admin"] },
+    });
+
+    expect(block).toContain("        version: 1.0.0(react@17.0.0)");
+    expect(block).not.toContain("        version: 1.0.0(react@18.0.0)");
+  });
+
+  test("projects a new catalog importer from its donating importer resolution", () => {
+    const lockfileText = disagreeing("1.0.0(react@17.0.0)", "1.0.0(react@18.0.0)").replaceAll("specifier: ^1.0.0", "specifier: catalog:");
+    const block = pnpmAdapter.renderImporterBlock({
+      packageRoot: "libs/chart",
+      dependencies: {},
+      devDependencies: { pluggable: "catalog:" },
+      lockfileText,
+      workspaceRoots: {},
+      resolutionRoots: { pluggable: ["apps/admin"] },
+    });
+
+    expect(block).toContain("specifier: 'catalog:'");
+    expect(block).toContain("        version: 1.0.0(react@17.0.0)");
+    expect(block).not.toContain("        version: 1.0.0(react@18.0.0)");
+  });
+
+  test("refuses a new importer whose owner contexts disagree", () => {
+    const lockfileText = disagreeing("1.0.0(react@17.0.0)", "1.0.0(react@18.0.0)");
+
+    expect(() => pnpmAdapter.renderImporterBlock({
+      packageRoot: "libs/chart",
+      dependencies: { pluggable: "^1.0.0" },
+      devDependencies: {},
+      lockfileText,
+      workspaceRoots: {},
+      resolutionRoots: { pluggable: ["apps/admin", "apps/web"] },
+    })).toThrow("lockfile resolves pluggable@^1.0.0 to more than one version");
+  });
+
   test("projects an existing catalog importer from its own peer-context resolution", () => {
     const lockfileText = disagreeing("1.0.0(react@17.0.0)", "1.0.0(react@18.0.0)").replaceAll("specifier: ^1.0.0", "specifier: catalog:");
     const block = pnpmAdapter.renderImporterBlock({

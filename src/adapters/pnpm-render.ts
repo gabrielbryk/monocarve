@@ -54,7 +54,7 @@ function renderDependency(
 ): string[] {
   const version = specifier.startsWith("workspace:")
     ? workspaceVersion(name, input, linkVersion)
-    : dependencyVersion(input.lockfileText, name, specifier, input.packageRoot);
+    : dependencyVersion(input.lockfileText, name, specifier, input.resolutionRoots?.[name] ?? input.packageRoot);
   // pnpm can persist a catalog request as its selected concrete range in an
   // existing importer (notably when an override supplies that selection).
   // Preserve that byte-level spelling when projecting the same importer. A
@@ -133,7 +133,7 @@ export function addBlockDependencies(
       if (blockHasSpecifier(next, name, specifier, section)) continue;
       const version = specifier.startsWith("workspace:")
         ? workspaceVersion(name, input, linkVersion)
-        : dependencyVersion(input.lockfileText, name, specifier, input.packageRoot);
+        : dependencyVersion(input.lockfileText, name, specifier, input.resolutionRoots?.[name] ?? input.packageRoot);
       next = addBlockDependency(next, name, specifier, version, section);
     }
   }

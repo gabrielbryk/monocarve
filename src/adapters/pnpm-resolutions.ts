@@ -12,7 +12,7 @@ interface ImporterDependency {
 
 const REGISTRY_VERSION = /^\d/;
 
-export function dependencyVersion(text: string, name: string, specifier: string, importerRoot?: string): string {
+export function dependencyVersion(text: string, name: string, specifier: string, importerRoot?: string | readonly string[]): string {
   const existing = existingDependencyVersion(text, name, specifier, importerRoot);
   if (existing) return existing;
   if (REGISTRY_VERSION.test(specifier) && lockfileAttests(text, name, specifier)) return specifier;
@@ -31,10 +31,11 @@ export function missingResolutions(lockfileText: string): readonly string[] {
     .map((dependency) => `${dependency.root} declares ${dependency.name}@${dependency.version}, and the lockfile has no entry for it`);
 }
 
-function existingDependencyVersion(text: string, name: string, specifier: string, importerRoot?: string): string | undefined {
+function existingDependencyVersion(text: string, name: string, specifier: string, importerRoot?: string | readonly string[]): string | undefined {
   const dependencies = importerDependencies(text);
   if (importerRoot !== undefined) {
-    const local = dependencies.filter((dependency) => dependency.root === importerRoot && dependency.name === name);
+    const roots = typeof importerRoot === "string" ? [importerRoot] : importerRoot;
+    const local = dependencies.filter((dependency) => roots.includes(dependency.root) && dependency.name === name);
     const exactLocal = uniqueImporterVersion(local, name, specifier, (dependency) => dependency.specifier === specifier);
     if (exactLocal !== undefined) return exactLocal;
     if (specifier === "catalog:") {
