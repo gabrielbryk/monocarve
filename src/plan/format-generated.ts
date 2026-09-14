@@ -2,7 +2,7 @@
 
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { extname, resolve } from "node:path";
+import { basename, extname, resolve } from "node:path";
 
 import { PlanningError } from "./context.ts";
 
@@ -19,7 +19,7 @@ export function formatGeneratedText(rootDir: string, path: string, contents: str
   if (!PRETTIER_EXTENSIONS.has(extname(path).toLowerCase())) return contents;
   const executable = prettierExecutable(rootDir);
   if (executable === undefined) return contents;
-  const result = spawnSync(process.execPath, [executable, "--stdin-filepath", path], {
+  const result = spawnSync(javascriptRuntime(), [executable, "--stdin-filepath", path], {
     cwd: rootDir,
     input: contents,
     encoding: "utf8",
@@ -30,6 +30,20 @@ export function formatGeneratedText(rootDir: string, path: string, contents: str
     throw new PlanningError(`Prettier could not format ${path}${detail === "" ? "" : `: ${detail}`}`);
   }
   return result.stdout;
+}
+
+/**
+ * A compiled Bun executable reports itself as `process.execPath`. That binary
+ * is MonoCarve's CLI, not a JavaScript launcher, so passing Prettier's CJS
+ * entrypoint to it makes the entrypoint look like an unknown CLI command.
+ * Prefer a real runtime from PATH and retain the current executable only when
+ * it already is a JS runtime or no runtime lookup is available.
+ */
+function javascriptRuntime(): string {
+  const current = process.execPath;
+  const name = basename(current).toLowerCase();
+  if (name === "node" || name === "node.exe" || name === "bun" || name === "bun.exe") return current;
+  return Bun.which("node") ?? Bun.which("bun") ?? current;
 }
 
 function prettierExecutable(rootDir: string): string | undefined {

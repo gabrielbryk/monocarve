@@ -1,4 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
+import { chmodSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { hashText } from "../src/util/hash.ts";
 import { moonAdapter, noneTaskRunner } from "../src/adapters/moon.ts";
@@ -24,6 +26,21 @@ function installFormatter(root: string): void {
     "",
   ].join("\n"));
 }
+
+test("launches a CJS formatter through a runtime when the current executable is compiled", () => {
+  const root = fixtureRepo({ "pnpm-lock.yaml": "lockfileVersion: '9.0'\n" });
+  installFormatter(root);
+  const compiledSelf = resolve(root, "monocarve");
+  write(root, "monocarve", "#!/bin/sh\nprintf '%s\\n' 'unknown command' >&2\nexit 64\n");
+  chmodSync(compiledSelf, 0o755);
+  const originalExecPath = process.execPath;
+  Object.defineProperty(process, "execPath", { configurable: true, value: compiledSelf });
+  try {
+    expect(formatGeneratedText(root, "package.json", '{\n  "name": "fixture"\n}\n')).toBe('{"name":"fixture"}\n');
+  } finally {
+    Object.defineProperty(process, "execPath", { configurable: true, value: originalExecPath });
+  }
+});
 
 test("formats generated JSON, MJS, and rewritten tsconfig bytes before hashing", () => {
   const root = fixtureRepo({
