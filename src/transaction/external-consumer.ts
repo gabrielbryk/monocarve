@@ -177,7 +177,7 @@ function compilerOptionsFor(
     ...(jsx ? { jsx: ts.JsxEmit.ReactJSX } : {}),
     paths: {
       ...externalDependencyPaths(config, installedRoot),
-      ...workspacePaths(config, rootDir),
+      ...workspacePaths(config, rootDir, installedRoot),
       [manifest.target.packageName]: [relativePosix(rootDir, entrypoint)],
     },
   };

@@ -148,6 +148,21 @@ describe("simulation worktree node_modules", () => {
     expect(fixtureGit(root, "worktree", "list")).not.toContain(worktree.path);
   }, 60_000);
 
+  test("symlink mode preserves dependencies of packages nested below a package root", async () => {
+    const nestedPackage = "libs/shared/contracts";
+    const root = fixtureRepo({
+      ...workspaceFiles(),
+      [`${nestedPackage}/package.json`]: packageManifest("@acme/contracts", { "left-pad": "^1.0.0" }),
+    });
+    const store = installPackage(root, nestedPackage, "left-pad");
+    const worktree = await symlinkedWorktree(root);
+
+    const linked = join(worktree.workspacePath, nestedPackage, "node_modules", "left-pad");
+    expect(realpathSync(linked)).toBe(store);
+
+    await worktree.dispose();
+  }, 60_000);
+
   /**
    * A worktree borrows its repository's common git dir, so `worktree add` runs
    * the *shared* `post-checkout` hook. Hooks written for a developer's worktree

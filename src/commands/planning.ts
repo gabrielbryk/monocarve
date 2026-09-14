@@ -94,15 +94,35 @@ async function plan(args: ParsedArgs): Promise<void> {
   }
 }
 
-function narrowCandidate(candidate: Awaited<ReturnType<typeof portfolioFor>>["candidates"][number], sources: readonly string[], graph: LoadedGraph["graph"]) {
+export function narrowCandidate(candidate: Awaited<ReturnType<typeof portfolioFor>>["candidates"][number], sources: readonly string[], graph: LoadedGraph["graph"]) {
   const wanted = new Set(sources);
   const files = candidate.files.filter((file) => wanted.has(file));
   if (files.length !== sources.length) throw new UsageError(`--source must name candidate production files; requested ${sources.join(", ")}`);
   const missing = [...new Set(files.flatMap((file) => (graph.outgoing.get(file) ?? []).filter((target) => candidate.files.includes(target) && !wanted.has(target))))].sort();
   if (missing.length > 0) throw new UsageError(`--source selection is not closed; also select required candidate files: ${missing.join(", ")}`);
   const tests = candidate.tests.filter((test) => test.startsWith(`${files[0]?.replace(/\.tsx?$/, "") ?? ""}`) || files.some((file) => test.startsWith(file.replace(/\.tsx?$/, ""))));
+  const selected = new Set([...files, ...tests]);
+  const reachableAssets = new Set<string>();
+  const pending = [...files];
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const source = pending.pop()!;
+    if (visited.has(source)) continue;
+    visited.add(source);
+    for (const target of graph.outgoing.get(source) ?? []) {
+      if (candidate.assets.includes(target)) reachableAssets.add(target);
+      else if (wanted.has(target)) pending.push(target);
+    }
+  }
   const sccs = candidate.sccs.filter((scc) => scc.members.some((member) => wanted.has(member)));
-  return { ...candidate, files, tests, sccs };
+  return {
+    ...candidate,
+    files,
+    tests,
+    assets: candidate.assets.filter((asset) => reachableAssets.has(asset)),
+    rewriteEscapes: candidate.rewriteEscapes.filter((escape) => selected.has(escape.file)),
+    sccs,
+  };
 }
 
 async function scope(args: ParsedArgs): Promise<void> {

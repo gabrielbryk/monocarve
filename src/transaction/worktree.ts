@@ -175,7 +175,7 @@ function disposeWorktree(rootDir: string, path: string): void {
  * multi-minute install this design exists to avoid.
  */
 function linkNodeModules(worktree: string, root: string): void {
-  for (const directory of nodeModulesDirectories(root, ".", 2)) {
+  for (const directory of nodeModulesDirectories(root, ".")) {
     const source = resolve(root, directory);
     const target = resolve(worktree, directory);
     if (existsSync(target)) continue;
@@ -231,15 +231,14 @@ function isRealDirectory(path: string): boolean {
   return lstatSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
 }
 
-function nodeModulesDirectories(root: string, relativeDirectory: string, depth: number): string[] {
+function nodeModulesDirectories(root: string, relativeDirectory: string): string[] {
   const here = join(root, relativeDirectory);
   if (!existsSync(here)) return [];
   const found = existsSync(join(here, "node_modules")) ? [join(relativeDirectory, "node_modules")] : [];
-  if (depth === 0) return found;
   const entries = readdirSync(here, { withFileTypes: true }).filter(
     (entry) => entry.isDirectory() && entry.name !== "node_modules" && !entry.name.startsWith("."),
   );
-  return [...found, ...entries.flatMap((entry) => nodeModulesDirectories(root, join(relativeDirectory, entry.name), depth - 1))];
+  return [...found, ...entries.flatMap((entry) => nodeModulesDirectories(root, join(relativeDirectory, entry.name)))];
 }
 
 /**
