@@ -22,6 +22,7 @@ import { boundaryBaselineOf } from "./boundary-baseline.ts";
 import { normalizeTargetSubpath } from "./target-layout.ts";
 import { assertCompiledOperationInvariants, projectedArtifactEvidence } from "./projected-workspace.ts";
 import { baselineOf, derivePackageRoot, generatedFilesFor, graphDigest, moveOperation, pathMigrationOperations, pathReferenceRewriteOperations, renderGates } from "./build-support.ts";
+import { formatGeneratedText } from "./format-generated.ts";
 
 export interface BuildPlanOptions {
   readonly config: MonocarveConfig; readonly rootDir: string; readonly graph: DependencyGraph; readonly candidate: PortfolioCandidate;
@@ -82,7 +83,7 @@ function buildJournal(state: BuildState, selection: ReturnType<typeof selectExtr
   const promotion = state.options.modulePromotion;
   if (promotion !== undefined && !promotion.retireSource) {
     const specifier = promotion.targetModule === "index" ? state.packageName : `${state.packageName}/${promotion.targetModule.replace(/^\.\//, "")}`;
-    const contents = `export * from ${JSON.stringify(specifier)};\n`;
+    const contents = formatGeneratedText(state.context.rootDir, promotion.source, `export * from ${JSON.stringify(specifier)};\n`);
     operations.push({ kind: "write-file", path: promotion.source, contents, preconditionHash: "missing", resultHash: hashText(contents), generator: "module-promotion:compatibility-reexport" });
   }
   // Documents must be rewritten before any preparer or artifact regeneration

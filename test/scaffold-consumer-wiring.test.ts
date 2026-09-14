@@ -1,12 +1,83 @@
 import { afterAll, expect, test } from "bun:test";
 
+import { hashText } from "../src/util/hash.ts";
 import { moonAdapter, noneTaskRunner } from "../src/adapters/moon.ts";
 import { pnpmAdapter } from "../src/adapters/pnpm.ts";
 import { WorkspaceContext } from "../src/plan/context.ts";
+import { formatGeneratedText } from "../src/plan/format-generated.ts";
+import { ProjectedWorkspace } from "../src/plan/projected-workspace.ts";
 import { consumerWiringOperations, packageOperations } from "../src/plan/scaffold.ts";
-import { cleanupFixtures, fixtureConfig, fixtureRepo } from "./support/fixture-repo.ts";
+import { cleanupFixtures, fixtureConfig, fixtureRepo, write } from "./support/fixture-repo.ts";
 
 afterAll(cleanupFixtures);
+
+function installFormatter(root: string): void {
+  write(root, "package.json", '{"name":"fixture-workspace"}\n');
+  write(root, "node_modules/prettier/package.json", '{"name":"prettier","version":"fixture"}\n');
+  write(root, "node_modules/prettier/bin/prettier.cjs", [
+    'const { readFileSync } = require("node:fs");',
+    'const input = readFileSync(0, "utf8");',
+    'const flag = process.argv.indexOf("--stdin-filepath");',
+    'const path = flag < 0 ? "" : process.argv[flag + 1] ?? "";',
+    'const output = path.endsWith(".json") ? JSON.stringify(JSON.parse(input)) + "\\n" : input.trim().replace(/\\n{2,}/gu, "\\n") + (input.trim() === "" ? "" : "\\n");',
+    'process.stdout.write(output);',
+    "",
+  ].join("\n"));
+}
+
+test("formats generated JSON, MJS, and rewritten tsconfig bytes before hashing", () => {
+  const root = fixtureRepo({
+    "pnpm-workspace.yaml": "packages:\n  - libs/*\n  - apps/*\n",
+    "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\n  apps/api: {}\n",
+    "apps/api/package.json": '{"name":"@acme/api"}\n',
+    "apps/api/tsconfig.json": '{"compilerOptions":{"composite":true},"references":[]}\n',
+  });
+  installFormatter(root);
+  const config = fixtureConfig(root, {
+    scaffoldTemplates: {
+      packageJson: { contents: '{"name":"{package}","files":["src"]}\n' },
+      extraFiles: { "eslint.config.mjs": { contents: "const config = {\n\n  plugins: [],\n};\n" } },
+    },
+  });
+  const context = new WorkspaceContext(config, root);
+  expect(formatGeneratedText(root, "tsconfig.json", '{\n  "include": [\n    "src"\n  ]\n}\n')).toBe('{"include":["src"]}\n');
+  expect(formatGeneratedText(root, "eslint.config.mjs", "const config = {\n\n  plugins: [],\n};\n")).toBe("const config = {\n  plugins: [],\n};\n");
+
+  const packageWrites = packageOperations({
+    context, config, application: config.applications[0]!, packageManager: pnpmAdapter, taskRunner: noneTaskRunner,
+    packageName: "@acme/new-package", packageRoot: "libs/new-package", projectId: "new-package", production: [],
+    dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+  }).filter((operation) => operation.kind === "write-file");
+  const packageJson = packageWrites.find((operation) => operation.path === "libs/new-package/package.json");
+  expect(packageJson).toMatchObject({ contents: '{"name":"@acme/new-package","files":["src"],"dependencies":{},"devDependencies":{}}\n' });
+  const eslint = packageWrites.find((operation) => operation.path === "libs/new-package/eslint.config.mjs");
+  expect(eslint).toMatchObject({ contents: "const config = {\n  plugins: [],\n};\n" });
+  for (const operation of [packageJson, eslint]) {
+    expect(operation?.kind === "write-file" ? operation.resultHash : undefined).toBe(
+      operation?.kind === "write-file" ? hashText(operation.contents) : undefined,
+    );
+  }
+  const projected = new ProjectedWorkspace(context, pnpmAdapter, packageWrites);
+  projected.transformJson("libs/new-package/package.json", "test:projection", (value) => ({ ...value, description: "formatted" }));
+  const projectedPackageJson = projected.finalize().find((operation) => operation.kind === "write-file" && operation.path === "libs/new-package/package.json");
+  expect(projectedPackageJson).toMatchObject({ contents: '{"name":"@acme/new-package","files":["src"],"dependencies":{},"devDependencies":{},"description":"formatted"}\n' });
+  expect(projectedPackageJson?.kind === "write-file" ? projectedPackageJson.resultHash : undefined).toBe(
+    projectedPackageJson?.kind === "write-file" ? hashText(projectedPackageJson.contents) : undefined,
+  );
+
+  const wiring = consumerWiringOperations({
+    context, config, application: config.applications[0]!, packageManager: pnpmAdapter, taskRunner: noneTaskRunner,
+    packageName: "@acme/new-package", packageRoot: "libs/new-package", projectId: "new-package", production: [],
+    dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+    consumerOwners: [{ owner: "apps/api", dependencySection: "runtime" }],
+    lockfileText: context.text("pnpm-lock.yaml"),
+  });
+  const tsconfig = wiring.find((operation) => operation.kind === "write-file" && operation.path === "apps/api/tsconfig.json");
+  expect(tsconfig).toMatchObject({ contents: '{"compilerOptions":{"composite":true},"references":[{"path":"../../libs/new-package/tsconfig.json"}]}\n' });
+  expect(tsconfig?.kind === "write-file" ? tsconfig.resultHash : undefined).toBe(
+    tsconfig?.kind === "write-file" ? hashText(tsconfig.contents) : undefined,
+  );
+});
 
 test("normalizes generated barrel statements to one trailing newline", () => {
   const root = fixtureRepo({

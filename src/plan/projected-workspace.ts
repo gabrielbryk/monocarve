@@ -4,6 +4,7 @@ import type { PackageManagerAdapter } from "../adapters/types.ts";
 import { byCodeUnit, hashText } from "../util/hash.ts";
 import { PlanningError, type WorkspaceContext } from "./context.ts";
 import type { PlanOperation, ProjectedArtifactEvidence } from "./manifest.ts";
+import { formatGeneratedText } from "./format-generated.ts";
 import { parseJsonFile, stringifyJson, writeOperation } from "./scaffold-shared.ts";
 
 type Write = Extract<PlanOperation, { kind: "write-file" }>;
@@ -23,7 +24,7 @@ export class ProjectedWorkspace {
   transformJson(path: string, label: string, transform: (value: Record<string, unknown>) => Record<string, unknown>): void {
     const index = this.operations.findLastIndex((operation) => operation.kind === "write-file" && operation.path === path);
     const projected = index < 0 ? this.context.text(path) : (this.operations[index] as Write).contents;
-    const contents = stringifyJson(transform(parseJsonFile(projected, path)));
+    const contents = formatGeneratedText(this.context.rootDir, path, stringifyJson(transform(parseJsonFile(projected, path))));
     if (index < 0) this.operations.push(writeOperation(this.context, path, contents, label));
     else {
       const current = this.operations[index] as Write;
