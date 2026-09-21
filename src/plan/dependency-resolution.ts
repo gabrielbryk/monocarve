@@ -71,10 +71,14 @@ export function resolveDependencies(
   graph: DependencyGraph,
   evidence: DependencyEvidence,
 ): InferredDependencies {
-  const result: InferredDependencies = { runtime: {}, dev: {}, packageReferences: [] };
+  const resolutionRoots: Record<string, readonly string[]> = {};
+  const result: InferredDependencies = { runtime: {}, dev: {}, packageReferences: [], resolutionRoots };
   const packageReferences = new Set<string>();
   for (const [name, section] of [...evidence.sections].sort(([left], [right]) => byCodeUnit(left, right))) {
     resolveDependency(context, graph, evidence, name, section, result, packageReferences);
+    const owners = [...(evidence.owners.get(name) ?? [])].sort(byCodeUnit);
+    if (owners.length > 0) resolutionRoots[name] = owners;
+    else if (context.declaredVersion("", name) !== undefined) resolutionRoots[name] = ["."];
   }
   result.packageReferences = [...packageReferences].sort();
   return result;

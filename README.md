@@ -12,8 +12,8 @@ before and after, and which commits result. That manifest is then simulated in a
 disposable worktree, replayed into the real checkout, and audited for byte
 fidelity afterwards.
 
-> **Status: v1 is Bun-only.** The supported workspace adapters are pnpm for
-> package management and moon or `none` for task-runner integration. See
+> **Status: v1 is Bun-only.** The supported workspace adapters are pnpm and bun
+> for package management and moon or `none` for task-runner integration. See
 > [the operator guide](docs/operator-guide.md) before applying a plan.
 
 Monocarve is intentionally conservative. Start with `scan`, `portfolio`, and
@@ -86,7 +86,7 @@ flowchart TD
     end
 
     CFG[["monocarve.config.ts<br/>every workspace assumption"]]
-    ADPT[["implemented adapters<br/>pnpm · moon · none"]]
+    ADPT[["implemented adapters<br/>pnpm · bun · moon · none"]]
 
     SCAN --> PORT --> PLAN --> SIM --> APPLY --> AUDIT
     APPLY -. "any failure" .-> RB["rollback<br/>exact restore or loud residue"]
@@ -537,11 +537,13 @@ src/
                      builder, validator, public-surface analysis
   transaction/       worktree, journal, simulate, apply, audit, rollback,
                      artifact regeneration, external-consumer compile proof
-  adapters/          package-manager + task-runner interfaces, pnpm + moon/none impls
+  adapters/          package-manager + task-runner interfaces, pnpm + bun +
+                     moon/none impls
   checks/            repository checks (`check import-extensions`)
   cli.ts             subcommands
 fixtures/
   basic-monorepo/    synthetic moon + pnpm workspace used by tests
+  bun-monorepo/      synthetic moon + bun workspace used by tests
 test/
 ```
 
@@ -559,8 +561,9 @@ Honest accounting:
 | transaction: journal, disposable-worktree simulation, apply, rollback | implemented |
 | audit: byte fidelity, consumers, boundary, compile proof, codemod replay, entrypoint closure | implemented |
 | pnpm package-manager adapter (lockfile importers); moon and `none` task-runner adapters | implemented |
+| bun package-manager adapter (composite `bun.lock` importers, `workspaces` membership) | implemented |
 | `check import-extensions` | implemented |
-| nx, turbo, npm, yarn, bun adapters | **not started** (interfaces exist) |
+| nx, turbo, npm, yarn adapters | **not started** (interfaces exist) |
 
 An unimplemented adapter exits 3 with the seam it hit. Nothing pretends to
 succeed.
@@ -576,9 +579,9 @@ proof to notice.
    drive a real extraction with it, config-first.
 2. **Second consumer.** A workspace whose conventions differ from the first's.
    Two real consumers is the bar for calling the config schema general.
-3. **More adapters.** Bun is the v1 runtime; pnpm plus moon or `none` are the
-   supported workspace adapters. Other declared adapter seams intentionally
-   refuse until they are implemented and tested.
+3. **More adapters.** Bun is the v1 runtime; pnpm or bun, plus moon or `none`,
+   are the supported workspace adapters. Other declared adapter seams
+   intentionally refuse until they are implemented and tested.
 
 ## Contributing and security
 

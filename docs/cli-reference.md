@@ -21,14 +21,14 @@ where supported.
 
 | command | usage and boundary |
 | --- | --- |
-| `plan` | `plan --candidate <id> [--source <path> ...] [--profile <name> | --package-name <name> [--package-root <path>]] [--public-surface subpaths] [--force] [--verify-lockfile] [--out <path>] [--write [--commit-approval]] [--json | --verbose]` — compile deterministically; terminals get the concise review while pipes and explicit machine modes retain the complete manifest. `--public-surface subpaths` exports each entry as its own subpath instead of one barrel. |
+| `plan` | `plan --candidate <id> [--source <path> ...] [--profile <name> | --package-name <name> [--package-root <path>]] [--target-subpath <dir>] [--public-surface subpaths] [--force] [--verify-lockfile] [--out <path>] [--write [--commit-approval]] [--json | --verbose]` — compile deterministically; terminals get the concise review while pipes and explicit machine modes retain the complete manifest. `--target-subpath` overrides where moved files land inside an existing package. `--public-surface subpaths` exports each entry as its own subpath instead of one barrel. |
 | `scan` | `scan [--app <name>] [--no-cache] [--include-extracted] [--out <path>] [--report-out <path>]` — build the configured dependency model without editing the workspace; `--report-out` writes the raw scanner report for the selected app for later `--graph` replay. |
 | `visualize` | `visualize [--app <name>] [--port <number>] [--no-open] [--no-cache] [--include-extracted]` — serve the current SCC-level dependency graph as an interactive loopback-only web UI. Search and edge-kind filters are local; Rescan rebuilds the read-only graph. |
 | `layers` | `layers [--app <name>] [--out <path>]` — report domains, components, and dependency-first layers. |
 | `portfolio` | `portfolio [--app <name>] [--limit <n>] [--recommendation <status>] [--strategy <cohesive\|max-loc\|low-risk\|campaign\|preparation>] [--include-extracted] [--communities] [--hub-inbound-threshold <n>] [--out <path>]` — show one representative per near-equivalent group; defaults to architecturally recommended candidates. |
 | `candidates` | `candidates [--candidate <id> \| --equivalence-group <id>] [--path <path>] [--eligibility <all\|eligible\|blocked>] [--app <name>] [--include-extracted] [--out <path>]` — inspect candidate details, expand a grouped set of variants, or filter by claimed path and eligibility. |
 | `evacuate` | `evacuate --app <name> --source <file\|directory\|glob> [--source <...>] --package-name <name> [--authorize-protected <configured-root>] [--include-composition <selected-root>] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]` — bounded domain analysis and ordinary immutable-plan compilation. Read-only by default; `--write` exclusively creates one manifest only after eligibility passes and every boundary cut has a configured remedy. The repeatable `--authorize-protected` escape hatch applies only here: each value must exactly equal a configured protected root contained by the selected application and requested evacuation. The evacuation-only, repeatable `--include-composition` flag may name only an exact composition root already matched by the selectors in that application. Its entire SCC moves; outbound application dependencies remain ordinary reported cuts. Omitted composition roots retain the default behavior. Canonical authorizations and inclusions are recorded in the report and immutable manifest provenance and change its plan identity. Tests and assets remain blocked unless they are beneath an explicitly authorized selected root. Multiple route and wiring roots may be included in one evacuation by repeating both `--source` and `--include-composition`. |
-| `scope` | `scope --path <source> --package-name <name> [--app <name>] [--verify-lockfile] [--out <path>] [--write] [--json]` — resolve a stable principal path, compile its current plan, and show the concise review without writing by default. |
+| `scope` | `scope --path <source> --package-name <name> [--app <name>] [--package-root <path>] [--target-subpath <dir>] [--verify-lockfile] [--out <path>] [--write] [--json]` — resolve a stable principal path, compile its current plan, and show the concise review without writing by default. |
 | `backlog` | `backlog [--app <name>] [--limit <n>] [--include-extracted] [--marginal] [--out <path>]` — explain blocked candidates; marginal mode is only a one-blocker lower bound. |
 | `config-doctor` | `config-doctor` — report the discovered config and root, effective value provenance, application and package resolution, adapter availability, compiler profiles, generated and path-keyed artifacts, configured module calls, protected and dirty paths, and preparation coverage. It is strictly read-only: no gates, generators, installers, or preparers run. JSON configs report `explicit` versus `default` provenance; dynamically loaded configs report `unknown` where the original shape is not safely recoverable. |
 | `explain` | `explain --plan <path> (--dependency <name> \| --artifact <path>) [--json]` — read persisted provenance for one dependency decision or the exact operation chain and final hash for one artifact. |
@@ -48,6 +48,7 @@ where supported.
 ```text
 plan --candidate <id>
      [--profile <name> | --package-name <name> [--package-root <path>]]
+     [--target-subpath <dir>]
      [--force] [--out <path>] [--write [--commit-approval]]
 ```
 
@@ -60,6 +61,15 @@ validation, preconditions, simulation, branch policy, and audit remain mandatory
 The result names `targetMode` (`existing` or `new`) and `targetPackageRoot` so
 automation does not need to infer topology from scaffold operations. `next`
 reports the same fields.
+
+By default a moved file keeps the path it had below its application source
+root, so `<app>/build/detect.ts` lands at `<packageRoot>/src/build/detect.ts`.
+`--target-subpath <dir>` overrides that for a package whose own layout is
+different: every selected file lands directly in `<dir>` under its own
+basename. It applies only when an existing package is being extended, must name
+`src` or a directory below it, and refuses two selected files whose basenames
+would collide. The chosen directory is recorded on the plan target, so it is
+part of the reviewed bytes and survives `refresh`.
 
 With `--write`, the result also reports the exact manifest path, rendered
 approval subject, `git add` argument vector, explicit `approve` command, and
@@ -89,7 +99,8 @@ the package.
 Run `monocarve plan-review --plan <path>` before approval for a human-readable
 review of target mode, exact top-level and nested move targets, operation counts,
 dependency and consumer wiring, public exports, generated outputs, repository
-gates, and warnings. Add `--json` for its stable structured form. The approval
+gates, warnings, and the pre-existing boundary violations recorded with the plan
+(see *Reviewed boundary baseline* below). Add `--json` for its stable structured form. The approval
 section records the manifest path and defaults its subject to `commits.plan`;
 `--approval-subject` supplies a different exact proposed subject for review.
 
@@ -148,6 +159,31 @@ does not infer new reasons from the current checkout.
 | `reconcile` | `reconcile --plan <path> --reason <text> --approval-subject <subject> [--out <path>] [--write]` — compile a separate immutable record for declared byte/generated drift without changing the approved plan. |
 | `reconcile-approve` | `reconcile-approve --record <path> [--commit]` — inspect or create the exact record-only approval commit. |
 | `receipt` | `receipt --plan <path> [--reconciliation <approved-record>] [--out <path>] [--write]` — compile an immutable passing-audit receipt linked to the exact application and, when supplied, approved reconciliation. |
+
+### Reviewed boundary baseline
+
+The post-apply audit proves that no package-owned file imports application
+code. That proof is repository-wide, and a workspace part-way through a
+decomposition usually already violates it somewhere the plan never touches.
+Rather than weaken the proof with a flag, each plan records the violating edges
+that already exist at its baseline commit:
+
+- `plan`, `scope`, `next`, `evacuate` and `consolidate` record
+  `boundaryBaseline` — a sorted, deduplicated, digested list of
+  `file -> imported application file` pairs — into the immutable manifest;
+- `plan-review` prints the count, the digest prefix, and every edge, and raises
+  the `boundary-baseline-recorded` warning: approving the plan approves them;
+- `audit` fails on every violation edge *outside* that list and reports the
+  recorded ones under `boundaryBaseline` as `observed` (still present) or
+  `cleared` (removed by this transaction). `boundaryRules` still fails on
+  anything new.
+
+The set cannot drift after approval: the approval commit covers the manifest
+bytes, a plan applies only at its own baseline commit, and moving to a newer
+`HEAD` means `refresh`, which recompiles the baseline and shows any change in
+its semantic diff. A manifest with no `boundaryBaseline` — anything compiled
+before this existed — is read as an empty baseline, so it still fails on every
+violation edge.
 
 `--skip-simulation` is explicitly refused. `--resume` accepts only a verified
 transaction boundary. `--skip-gates` does not bypass validation, journal,

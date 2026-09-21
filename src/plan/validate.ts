@@ -18,6 +18,7 @@ import { isSha256, stableStringify } from "../util/hash.ts";
 import { relativeWorkspacePath } from "../util/paths.ts";
 import { readManifest } from "../graph/workspace.ts";
 import { LEGACY_PLAN_SCHEMA_VERSION, PREVIOUS_PLAN_SCHEMA_VERSION, PLAN_SCHEMA_VERSION, isSupportedExtractionManifestVersion, operationPaths, type ExtractionManifest } from "./manifest.ts";
+import { boundaryBaselineDefects } from "./boundary-baseline.ts";
 import { projectedArtifactEvidence } from "./projected-workspace.ts";
 import { buildPlanProvenance } from "./provenance.ts";
 import { evacuationId } from "../evacuation/candidate.ts";
@@ -369,6 +370,15 @@ function validateConsumers(
 }
 
 function validateMetadata(manifest: ExtractionManifest, issues: Issues, containedPath: (path: string, rule: string) => boolean): void {
+  // The recorded baseline is the only field that makes a proof accept
+  // something, so it must be canonical before anything is applied: a duplicate,
+  // an unsorted entry, or a digest that does not describe the edges beside it
+  // means the bytes under review are not the bytes the compiler produces.
+  for (const defect of boundaryBaselineDefects(manifest.boundaryBaseline)) issues.add("boundary-baseline", defect);
+  for (const edge of manifest.boundaryBaseline?.edges ?? []) {
+    containedPath(edge.file, "boundary-baseline");
+    containedPath(edge.target, "boundary-baseline");
+  }
   const projected = manifest.projectedArtifacts;
   if (projected !== undefined && stableStringify(projected) !== stableStringify(projectedArtifactEvidence(manifest.operations ?? []))) {
     issues.add("projected-artifacts", "projectedArtifacts must exactly describe the final structured operation outputs");

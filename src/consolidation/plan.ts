@@ -16,6 +16,7 @@ import { renderTemplate } from "../util/template.ts";
 import { PlanningError, WorkspaceContext } from "../plan/context.ts";
 import { inferDependencies } from "../plan/dependencies.ts";
 import { PLAN_SCHEMA_VERSION, type ExtractionManifest, type PlanOperation } from "../plan/manifest.ts";
+import { boundaryBaselineOf } from "../plan/boundary-baseline.ts";
 import { sourceExportsFromFile } from "../plan/public-surface.ts";
 import { buildPlanProvenance } from "../plan/provenance.ts";
 import { consumerWiringOperations, packageOperations } from "../plan/scaffold.ts";
@@ -249,6 +250,7 @@ export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): 
     baselineCommit: baselineCommitHash,
     graphDigest: graphDigest(graph),
     application: application.name,
+    boundaryBaseline: boundaryBaselineOf({ config, rootDir, files: context.repositorySources(), referencesOf: (file) => context.moduleReferences(file) }),
     target: {
       packageName,
       packageRoot,

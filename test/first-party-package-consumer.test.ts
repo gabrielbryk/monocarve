@@ -19,6 +19,7 @@ import { buildPortfolio } from "../src/portfolio/rank.ts";
 import { buildPlanSync, serializeManifest } from "../src/plan/build.ts";
 import { applyPlan } from "../src/transaction/apply.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
+import { boundaryBaselineDigest } from "../src/plan/boundary-baseline.ts";
 import { cleanupFixtures, fixtureGit, fixtureRepo, scratchDirectory, write } from "./support/fixture-repo.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -38,6 +39,7 @@ const SHARED_PACKAGE_JSON = `${JSON.stringify(
   2,
 )}\n`;
 const SHARED_INDEX = 'export const SHARED_LABEL = "shared";\n';
+const EMPTY_BASELINE_DIGEST = boundaryBaselineDigest([]);
 
 const CHART_WITH_SHARED_IMPORT = `import { formatNumber } from "@acme/format";
 import { SHARED_LABEL } from "@acme/shared";
@@ -158,9 +160,25 @@ describe("firstPartyPackages", () => {
       baselineCommit: graph.commit!, packageName: "@acme/chart-shared-violation",
     });
 
+    const edge = { file: "shared/index.ts", target: "apps/web/src/widgets/chart.ts" };
+    // The violation is older than the plan, so the compiler records it and the
+    // audit reports it as evidence instead of vetoing an extraction that never
+    // went near it.
+    expect(manifest.boundaryBaseline?.edges).toContainEqual(edge);
     const report = auditPlanSync({ config, rootDir: root, manifest });
-    expect(report.failures).toContain("shared/index.ts imports application code: ../apps/web/src/widgets/chart.ts");
-    expect(report.passed).toBe(false);
+    expect(report.failures).not.toContain("shared/index.ts imports application code: ../apps/web/src/widgets/chart.ts");
+    expect(report.boundaryBaseline.observed).toContain("shared/index.ts -> apps/web/src/widgets/chart.ts");
+
+    // The negative half, in the same tree: the identical edge against a plan
+    // that did not record it — every plan compiled before the violation
+    // existed — is exactly the failure the rule is for.
+    const withoutBaseline = auditPlanSync({
+      config,
+      rootDir: root,
+      manifest: { ...manifest, boundaryBaseline: { digest: EMPTY_BASELINE_DIGEST, edges: [] } },
+    });
+    expect(withoutBaseline.failures).toContain("shared/index.ts imports application code: ../apps/web/src/widgets/chart.ts");
+    expect(withoutBaseline.passed).toBe(false);
   }, 300_000);
 
   test("assigns the exact root as owner and a package zone to a reached graph node", () => {

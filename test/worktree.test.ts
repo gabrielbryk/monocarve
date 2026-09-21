@@ -148,6 +148,21 @@ describe("simulation worktree node_modules", () => {
     expect(fixtureGit(root, "worktree", "list")).not.toContain(worktree.path);
   }, 60_000);
 
+  test("symlink mode preserves dependencies of packages nested below a package root", async () => {
+    const nestedPackage = "libs/shared/contracts";
+    const root = fixtureRepo({
+      ...workspaceFiles(),
+      [`${nestedPackage}/package.json`]: packageManifest("@acme/contracts", { "left-pad": "^1.0.0" }),
+    });
+    const store = installPackage(root, nestedPackage, "left-pad");
+    const worktree = await symlinkedWorktree(root);
+
+    const linked = join(worktree.workspacePath, nestedPackage, "node_modules", "left-pad");
+    expect(realpathSync(linked)).toBe(store);
+
+    await worktree.dispose();
+  }, 60_000);
+
   /**
    * A worktree borrows its repository's common git dir, so `worktree add` runs
    * the *shared* `post-checkout` hook. Hooks written for a developer's worktree
@@ -292,6 +307,23 @@ describe("simulation worktree node_modules", () => {
     // the default mode less usable than the silent version it replaces.
     expect(result.ok).toBe(true);
     expect(result.unlinkedDependencies).toEqual(["@acme/nowhere"]);
+  }, 180_000);
+
+  test("simulation audit resolves configured types from an existing application importer", async () => {
+    const root = fixtureRepo(workspaceFiles());
+    write(root, "apps/api/package.json", `${JSON.stringify({ name: "@acme/api", private: true, devDependencies: { "direct-types": "1.0.0" } })}\n`);
+    write(root, "apps/api/tsconfig.json", `${JSON.stringify({ compilerOptions: { types: ["direct-types"] }, include: ["src"] })}\n`);
+    write(root, DONOR, "export const widgetValue = directWorkerSignal ? 1 : 0;\n");
+    write(root, "apps/api/node_modules/direct-types/package.json", `${JSON.stringify({ name: "direct-types", types: "./index.d.ts" })}\n`);
+    write(root, "apps/api/node_modules/direct-types/index.d.ts", "declare const directWorkerSignal: boolean;\n");
+    fixtureGit(root, "add", "-A");
+    fixtureGit(root, "commit", "-qm", "test: add an application-owned configured type");
+    const config = fixtureConfig(root, { transaction: { worktreeRoot: scratchDirectory(), nodeModules: "symlink", cleanup: true, simulateGates: true } });
+
+    const result = await simulatePlan({ config, rootDir: root, manifest: simulationManifest(root) });
+
+    expect(result.ok).toBe(true);
+    expect(result.failure).toBeUndefined();
   }, 180_000);
 
   test("install mode runs the command it is given, in the worktree", async () => {

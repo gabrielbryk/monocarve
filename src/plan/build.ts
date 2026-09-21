@@ -18,21 +18,26 @@ import { PLAN_SCHEMA_VERSION, type EscapeRewrite, type ExtractionManifest, type 
 import { sourceExportsFromFile, type ExportSurface } from "./public-surface.ts";
 import { buildPlanProvenance } from "./provenance.ts";
 import { appendConsumerOperations, appendStaticFsReferenceOperations, consumerApplications, escapeRewritesFor, evaluationEffectsFor, selectExtractionSources } from "./build-phases.ts";
+import { boundaryBaselineOf } from "./boundary-baseline.ts";
+import { normalizeTargetSubpath } from "./target-layout.ts";
 import { assertCompiledOperationInvariants, projectedArtifactEvidence } from "./projected-workspace.ts";
 import { baselineOf, derivePackageRoot, generatedFilesFor, graphDigest, moveOperation, pathMigrationOperations, pathReferenceRewriteOperations, renderGates } from "./build-support.ts";
+import { formatGeneratedText } from "./format-generated.ts";
 
 export interface BuildPlanOptions {
   readonly config: MonocarveConfig; readonly rootDir: string; readonly graph: DependencyGraph; readonly candidate: PortfolioCandidate;
   readonly baselineCommit: string; readonly packageName?: string; readonly packageRoot?: string; readonly profile?: string; readonly context?: WorkspaceContext;
   readonly modulePromotion?: ExtractionManifest["modulePromotion"];
   readonly publicSurface?: PublicSurfaceConfig;
+  /** Destination directory inside the target package for every moved file. */
+  readonly targetSubpath?: string;
   readonly evacuationProvenance?: NonNullable<NonNullable<ExtractionManifest["provenance"]>["evacuation"]>;
 }
 export async function buildPlan(options: BuildPlanOptions): Promise<ExtractionManifest> { return buildPlanSync(options); }
 
 export function buildPlanSync(options: BuildPlanOptions): ExtractionManifest {
   const state = prepareBuild(options);
-  const selection = selectExtractionSources({ context: state.context, candidate: state.candidate, packageRoot: state.packageRoot, entrypoint: state.templates.entrypoint, packageName: state.packageName, publicSurface: options.publicSurface ?? state.templates.publicSurface, ...(options.modulePromotion === undefined ? {} : { targetModule: options.modulePromotion.targetModule }) });
+  const selection = selectExtractionSources({ context: state.context, candidate: state.candidate, packageRoot: state.packageRoot, entrypoint: state.templates.entrypoint, packageName: state.packageName, publicSurface: options.publicSurface ?? state.templates.publicSurface, ...(options.modulePromotion === undefined ? {} : { targetModule: options.modulePromotion.targetModule }), ...(state.targetSubpath === undefined ? {} : { targetSubpath: state.targetSubpath }) });
   assertAssetImportersReachable(state.graph, selection.production, selection.assets);
   const rewrites = escapeRewritesFor(state.candidate);
   const operations = buildJournal(state, selection, rewrites);
@@ -44,7 +49,7 @@ interface BuildState {
   readonly baseline: ReturnType<typeof baselineOf>; readonly context: WorkspaceContext; readonly application: ReturnType<typeof getApplication>;
   readonly packageManager: ReturnType<typeof createPackageManagerAdapter>; readonly taskRunner: ReturnType<typeof createTaskRunnerAdapter>;
   readonly profile: ReturnType<typeof resolveExtractionProfile>; readonly templates: MonocarveConfig["scaffoldTemplates"];
-  readonly candidateName: string; readonly packageName: string; readonly packageRoot: string; readonly projectId: string;
+  readonly candidateName: string; readonly packageName: string; readonly packageRoot: string; readonly projectId: string; readonly targetSubpath: string | undefined;
   readonly pathMigrationNoops: Array<NonNullable<ExtractionManifest["pathMigrationNoops"]>[number]>;
 }
 function prepareBuild(options: BuildPlanOptions): BuildState {
@@ -61,7 +66,15 @@ function prepareBuild(options: BuildPlanOptions): BuildState {
   const packageRoot = profile.name === undefined ? (options.packageRoot ?? derivePackageRoot(config, graph, packageName)) : rendered.packageRoot;
   const taskRunner = createTaskRunnerAdapter(config);
   const templates = options.publicSurface === undefined ? profile.scaffoldTemplates : { ...profile.scaffoldTemplates, publicSurface: options.publicSurface };
-  return { options, config, graph, candidate, baseline: baselineOf(options), context, application, packageManager: createPackageManagerAdapter(config), taskRunner, profile, templates, candidateName, packageName, packageRoot, projectId: rendered.projectId ?? taskRunner.projectIdFor(packageName, packageRoot), pathMigrationNoops: [] };
+  // Normalized here, once, so every later derivation — move targets, the
+  // barrel, the public surface, the recorded target — reads the same value the
+  // reviewer approved, and so an invalid subpath fails before any operation is
+  // compiled from it.
+  const targetSubpath = options.targetSubpath === undefined ? undefined : normalizeTargetSubpath(options.targetSubpath);
+  if (targetSubpath !== undefined && !graph.workspace.owners.includes(packageRoot)) {
+    throw new PlanningError(`--target-subpath applies only when extending an existing package; ${packageRoot} is created by this plan`);
+  }
+  return { options, config, graph, candidate, baseline: baselineOf(options), context, application, packageManager: createPackageManagerAdapter(config), taskRunner, profile, templates, candidateName, packageName, packageRoot, projectId: rendered.projectId ?? taskRunner.projectIdFor(packageName, packageRoot), targetSubpath, pathMigrationNoops: [] };
 }
 
 function buildJournal(state: BuildState, selection: ReturnType<typeof selectExtractionSources>, rewrites: ReadonlyMap<string, readonly EscapeRewrite[]>): PlanOperation[] {
@@ -70,7 +83,7 @@ function buildJournal(state: BuildState, selection: ReturnType<typeof selectExtr
   const promotion = state.options.modulePromotion;
   if (promotion !== undefined && !promotion.retireSource) {
     const specifier = promotion.targetModule === "index" ? state.packageName : `${state.packageName}/${promotion.targetModule.replace(/^\.\//, "")}`;
-    const contents = `export * from ${JSON.stringify(specifier)};\n`;
+    const contents = formatGeneratedText(state.context.rootDir, promotion.source, `export * from ${JSON.stringify(specifier)};\n`);
     operations.push({ kind: "write-file", path: promotion.source, contents, preconditionHash: "missing", resultHash: hashText(contents), generator: "module-promotion:compatibility-reexport" });
   }
   // Documents must be rewritten before any preparer or artifact regeneration
@@ -87,7 +100,7 @@ function buildJournal(state: BuildState, selection: ReturnType<typeof selectExtr
   const { consumers } = appendConsumerOperations({ context: state.context, sources: [...selection.sources, ...selection.assets], packageName: state.packageName, publicSpecifierFor: selection.publicSpecifierFor, operations, excludedFiles: generatedOwners });
   appendStaticFsReferenceOperations({ context: state.context, donorTargets: donorTargetsOf(selection), operations, excludedFiles: generatedOwners });
   const dependencies = dependenciesFor(state, selection.sources, rewrites);
-  const input = { context: state.context, config: state.config, application: state.application, packageManager: state.packageManager, taskRunner: state.taskRunner, packageName: state.packageName, packageRoot: state.packageRoot, projectId: state.projectId, templates: state.templates, production: selection.production, tests: selection.tests, assets: selection.assets, dependencies, publicModules: selection.publicModules };
+  const input = { context: state.context, config: state.config, application: state.application, packageManager: state.packageManager, taskRunner: state.taskRunner, packageName: state.packageName, packageRoot: state.packageRoot, projectId: state.projectId, templates: state.templates, production: selection.production, tests: selection.tests, assets: selection.assets, dependencies, publicModules: selection.publicModules, ...(state.targetSubpath === undefined ? {} : { targetSubpath: state.targetSubpath }) };
   const packageWiring = packageOperations(input);
   operations.push(...packageWiring, ...consumerWiringOperations({ ...input, consumerOwners: consumerDependencyOwners(consumers), lockfileText: projectedLockfile(state.context, state.packageManager, packageWiring) }));
   if (state.config.dependencyPruning.mode === "apply") {
@@ -180,7 +193,8 @@ function buildManifest(state: BuildState, selection: ReturnType<typeof selectExt
     ...(state.options.evacuationProvenance === undefined ? {} : { evacuation: state.options.evacuationProvenance }),
   };
   return { schemaVersion: PLAN_SCHEMA_VERSION, planId: profilePlanId(state.candidate.id, state.profile.name), createdAt: state.baseline.committedAt, generator: { ...GENERATOR }, provenance, baselineCommit: state.baseline.commit, graphDigest: graphDigest(state.graph), application: state.candidate.application, ...(state.candidate.recommendation === undefined ? {} : { assessment: { status: state.candidate.recommendation.status, cohesion: state.candidate.recommendation.cohesion, reasons: state.candidate.recommendation.reasons, compatibilityShims: (state.candidate.compatibilityShims ?? []).map(({ path, packageName, replacementSpecifier, productionConsumers, testConsumers }) => ({ path, packageName, replacementSpecifier, productionConsumers, testConsumers })), targetOptions: state.candidate.recommendation.targetOptions, selectedTarget: { packageName: state.packageName, packageRoot: state.packageRoot, action: state.graph.workspace.owners.includes(state.packageRoot) ? "extend" as const : "create" as const } } }), ...(state.options.modulePromotion === undefined ? {} : { modulePromotion: state.options.modulePromotion }),
-    target: { packageName: state.packageName, packageRoot: state.packageRoot, entrypoint: state.templates.entrypoint, projectId: state.projectId, ...(state.profile.name === undefined ? {} : { profile: { name: state.profile.name, candidateName: state.candidateName } }), ...(state.options.publicSurface === undefined ? {} : { publicSurface: state.options.publicSurface }), requiredExports: selection.publicModules.length > 0 ? [] : dedupeExports(selection.production.flatMap((source) => sourceExportsFromFile(state.context.absolute(source), source))), ...(selection.publicModules.length > 0 ? { publicModules: selection.publicModules } : {}) },
+    boundaryBaseline: boundaryBaselineOf({ config: state.config, rootDir: state.options.rootDir, files: state.context.repositorySources(), referencesOf: (file) => state.context.moduleReferences(file) }),
+    target: { packageName: state.packageName, packageRoot: state.packageRoot, entrypoint: state.templates.entrypoint, projectId: state.projectId, ...(state.targetSubpath === undefined ? {} : { targetSubpath: state.targetSubpath }), ...(state.profile.name === undefined ? {} : { profile: { name: state.profile.name, candidateName: state.candidateName } }), ...(state.options.publicSurface === undefined ? {} : { publicSurface: state.options.publicSurface }), requiredExports: selection.publicModules.length > 0 ? [] : dedupeExports(selection.production.flatMap((source) => sourceExportsFromFile(state.context.absolute(source), source))), ...(selection.publicModules.length > 0 ? { publicModules: selection.publicModules } : {}) },
     source: { files: selection.production, tests: selection.tests, ...(selection.assets.length > 0 ? { assets: selection.assets } : {}), sccs: productionSccs(state.candidate.sccs, selection.production) }, dependencies, dependencyDecisions, projectedArtifacts: projectedArtifactEvidence(operations), ...(pruningCandidates.length === 0 ? {} : { donorDependencyPruning: { mode: state.config.dependencyPruning.mode, candidates: pruningCandidates } }), sourceBlobs, operations, ...(state.pathMigrationNoops.length === 0 ? {} : { pathMigrationNoops: [...state.pathMigrationNoops].sort((left, right) => byCodeUnit(left.path, right.path)) }),
     consumers: consumers.map((consumer) => ({ file: consumer.file, owner: consumer.package, expectedImporter: consumer.expectedImporter, specifiers: consumer.rewrites, external: state.graph.nodes.get(consumer.file)?.application !== state.candidate.application, dependencySection: sections.get(consumer.package) ?? "runtime" })), generatedFiles, ...(postJournalPreparers.length === 0 ? {} : { postJournalPreparers }),
     changedFiles: [...new Set([...operations.flatMap(operationPathsOf), ...generatedFiles.filter((generated) => generated.regenerateOnApply).map((generated) => generated.path), ...postJournalPreparers.flatMap((preparer) => preparer.outputs)])].sort(), ...(lockOperation ? { lockfileImporter: { packageRoot: state.packageRoot, hash: hashText(lockOperation.block) } } : currentLockHash ? { lockfileImporter: { packageRoot: state.packageRoot, hash: currentLockHash } } : {}),

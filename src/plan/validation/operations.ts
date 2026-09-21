@@ -466,7 +466,7 @@ function validateLockfileImporter(
   if (!(isPackage || (mode === "replace" && isApplicationOwner)) || operation.packageRoot.includes("..")) {
     issues.add("lockfile-target", "lockfile importer must target a workspace package", at);
   }
-  if (!operation.block || !operation.block.includes(`  ${operation.packageRoot}:`)) {
+  if (!operation.block || !adapter.blockDeclaresImporter(operation.block, operation.packageRoot)) {
     issues.add("lockfile-block", `lockfile importer block must declare ${operation.packageRoot}`, at);
   }
   if (!isFileState(operation.preconditionHash) || !isSha256(operation.resultHash)) issues.add("lockfile-hash", "lockfile importer hashes must be SHA-256", at);

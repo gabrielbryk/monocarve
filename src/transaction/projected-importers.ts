@@ -55,6 +55,7 @@ export async function verifyPackageImporters(
     try {
       expected = adapter.renderImporterBlock({
         packageRoot,
+        ...identity(parsed),
         dependencies: stringRecord(parsed.dependencies),
         devDependencies: stringRecord(parsed.devDependencies),
         optionalDependencies: stringRecord(parsed.optionalDependencies),
@@ -70,6 +71,19 @@ export async function verifyPackageImporters(
     }
   }
   return { ok: differences.length === 0, checked, differences };
+}
+
+/**
+ * The manifest's own name and version, for lockfiles that record them.
+ *
+ * Absent fields stay absent rather than becoming `undefined` keys, so an
+ * adapter that ignores identity sees exactly the input it always saw.
+ */
+function identity(parsed: Record<string, unknown>): { packageName?: string; packageVersion?: string } {
+  return {
+    ...(typeof parsed.name === "string" ? { packageName: parsed.name } : {}),
+    ...(typeof parsed.version === "string" ? { packageVersion: parsed.version } : {}),
+  };
 }
 
 function stringRecord(value: unknown): Record<string, string> {

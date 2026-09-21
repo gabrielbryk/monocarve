@@ -4,7 +4,17 @@ import type { FileState, Sha256 } from "../util/hash.ts";
 import type { ExportSurface } from "./public-surface.ts";
 import type { ImportRewrite, PlanOperation } from "./manifest-operations.ts";
 
-/** v2 requires dependency sections; v3 adds compiler provenance; v4 persists architectural assessment. */
+/**
+ * v2 requires dependency sections; v3 adds compiler provenance; v4 persists
+ * architectural assessment.
+ *
+ * `boundaryBaseline` and `target.targetSubpath` are additive within v4 and
+ * carry no version of their own: every reader that predates them treats a
+ * manifest carrying them exactly as it treats one without, and every reader
+ * that knows them treats an absent field as the older, stricter behaviour
+ * (empty baseline, structure-preserving targets). Nothing can be misread, so
+ * nothing needs a new version to be told apart.
+ */
 export const LEGACY_PLAN_SCHEMA_VERSION = 2 as const;
 export const PREVIOUS_PLAN_SCHEMA_VERSION = 3 as const;
 export const PLAN_SCHEMA_VERSION = 4 as const;
@@ -37,10 +47,31 @@ export interface PublicModule {
   readonly exportTarget: string;
   readonly requiredExports: readonly ExportSurface[];
 }
+/** One import from a package-owned file into application code. */
+export interface BoundaryEdge {
+  readonly file: string;
+  readonly target: string;
+}
+/**
+ * Boundary violations already present at the plan's baseline, reviewed and
+ * approved with it. See `boundary-baseline.ts` for identity and audit meaning;
+ * an absent record is an empty baseline, not a waiver.
+ */
+export interface BoundaryBaselineRecord {
+  readonly digest: Sha256;
+  readonly edges: readonly BoundaryEdge[];
+}
 export interface PlanTarget {
   readonly packageName: string;
   readonly packageRoot: string;
   readonly entrypoint: string;
+  /**
+   * Reviewer-declared destination directory inside the package for every moved
+   * file, replacing the structure-preserving default. Recorded here because it
+   * determines every move target, so a refresh that lost it would silently
+   * relocate the extraction.
+   */
+  readonly targetSubpath?: string;
   readonly projectId?: string;
   readonly profile?: { readonly name: string; readonly candidateName: string };
   readonly requiredExports: readonly ExportSurface[];
@@ -188,6 +219,13 @@ export interface ExtractionManifest {
       readonly introducedApplicationDependencies: readonly string[];
     };
   };
+  /**
+   * Boundary violations that already existed at `baselineCommit`, recorded so
+   * the audit fails only on edges this plan introduced. Absent on manifests
+   * compiled before the baseline existed, which the audit reads as an empty
+   * baseline — the strict, pre-existing behaviour.
+   */
+  readonly boundaryBaseline?: BoundaryBaselineRecord;
   readonly target: PlanTarget;
   readonly source: PlanSource;
   readonly dependencies: PlanDependencies;

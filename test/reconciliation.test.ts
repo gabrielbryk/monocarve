@@ -64,6 +64,7 @@ function audit(overrides: Partial<AuditReport> = {}): AuditReport {
     byteFidelity: proof(false), consumerCompleteness: proof(), boundaryRules: proof(), externalConsumerCompile: proof(),
     codemodReplay: proof(), entrypointClosure: proof(), lockfileIntegrity: proof(), generatedArtifacts: proof(false),
     sourceConservation: { ...proof(), plannedFiles: 1, plannedTests: 0, plannedAssets: 0, landedFiles: 1, landedTests: 0, landedAssets: 0 },
+    boundaryBaseline: { recorded: 0, observed: [], cleared: [] },
     graphEvidence: { dynamicImportDelta: { added: [], removed: [] }, movedPathEdges: [], passed: true },
     failures: ["synthetic byte drift"],
     ...overrides,

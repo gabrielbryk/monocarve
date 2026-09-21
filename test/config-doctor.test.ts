@@ -52,10 +52,16 @@ describe("config doctor", () => {
     mkdirSync(join(root, "apps/consumer/src"), { recursive: true });
     writeFileSync(join(root, "apps/consumer/tsconfig.json"), "{}\n");
     fixtureGit(root, "init", "-q");
-    const config = parseConfig({ applications: [{ name: "consumer", sourceRoot: "apps/consumer/src", tsconfig: "apps/consumer/tsconfig.json" }], packageRoots: ["packages"], packageManager: "bun", taskRunner: "nx", scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } } });
+    const config = parseConfig({ applications: [{ name: "consumer", sourceRoot: "apps/consumer/src", tsconfig: "apps/consumer/tsconfig.json" }], packageRoots: ["packages"], packageManager: "npm", taskRunner: "nx", scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } } });
     const report = await inspectConfig({ config, configPath: join(root, "config.ts"), rootDir: root });
 
-    expect(report.adapters.packageManager).toMatchObject({ configured: "bun", status: "not-yet-ported" });
+    expect(report.adapters.packageManager).toMatchObject({ configured: "npm", status: "not-yet-ported" });
+    // The other half of the same claim: a *ported* adapter has to report
+    // `available`, or "not-yet-ported" would be the only answer the doctor
+    // knows how to give and reporting it would prove nothing.
+    const portedSource = { applications: [{ name: "consumer", sourceRoot: "apps/consumer/src", tsconfig: "apps/consumer/tsconfig.json" }], packageRoots: ["packages"], packageManager: "bun", taskRunner: "nx", scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } } };
+    const ported = await inspectConfig({ config: parseConfig(portedSource), configPath: join(root, "config.ts"), rootDir: root });
+    expect(ported.adapters.packageManager).toMatchObject({ configured: "bun", status: "available" });
     expect(report.adapters.taskRunner).toMatchObject({ configured: "nx", status: "not-yet-ported" });
     expect(report.workspaceResolution.status).toBe("unavailable");
     expect(report.effective.every((item) => item.source === "unknown")).toBe(true);

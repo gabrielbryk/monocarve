@@ -8,6 +8,7 @@ import { sourceExportsFromBaseline } from "../public-surface.ts";
 import { hashText } from "../../util/hash.ts";
 import { showBaseline } from "../../util/git.ts";
 import { packageOperations } from "../scaffold.ts";
+import { packageModulePath } from "../target-layout.ts";
 import type { ValidatePlanOptions } from "./shared.ts";
 import { Issues } from "./shared.ts";
 
@@ -46,7 +47,7 @@ export function validatePublicModules(
     const moduleSources = [...manifest.source.files, ...(manifest.source.assets ?? [])];
     const rendered = renderPublicModulePaths(
       publicSurface,
-      moduleSources.map((source) => context.targetRelativePath(source)),
+      moduleSources.map((source) => packageModulePath(context, source, manifest.target.targetSubpath)),
     );
     const expected = moduleSources.flatMap((source, index) => {
       const paths = rendered[index];
@@ -190,6 +191,7 @@ function validateProfilePackageOperations(
       tests: manifest.source.tests,
       assets: manifest.source.assets ?? [],
       publicModules: manifest.target.publicModules ?? [],
+      ...(manifest.target.targetSubpath === undefined ? {} : { targetSubpath: manifest.target.targetSubpath }),
       dependencies: {
         runtime: { ...manifest.dependencies.runtime },
         dev: { ...manifest.dependencies.dev },

@@ -29,6 +29,18 @@ export interface WorkspacePackage {
 export interface RenderImporterInput {
   /** Directory the block describes, workspace-relative. */
   readonly packageRoot: string;
+  /**
+   * Declared name of the package at `packageRoot`, when the caller has read it.
+   *
+   * Optional because a lockfile keyed purely by directory has no use for it —
+   * pnpm's importers are one such. A lockfile that also records the package's
+   * identity (bun writes `name` and `version` into its `workspaces` entry, and
+   * keys the workspace link by the name) cannot render a block without it, and
+   * refuses rather than inventing one.
+   */
+  readonly packageName?: string;
+  /** Declared version of the package at `packageRoot`, when it has one. */
+  readonly packageVersion?: string;
   readonly dependencies: Readonly<Record<string, string>>;
   readonly devDependencies: Readonly<Record<string, string>>;
   /**
@@ -38,6 +50,8 @@ export interface RenderImporterInput {
    * does not pass them gets a block missing a section its manifest declares.
    */
   readonly optionalDependencies?: Readonly<Record<string, string>>;
+  /** Existing importer roots that supplied each dependency's locked version. */
+  readonly resolutionRoots?: Readonly<Record<string, readonly string[]>>;
   /**
    * Current lockfile text; versions are resolved against it, never invented.
    *
@@ -77,9 +91,10 @@ export interface PackageManagerAdapter {
   readonly lockfileName: string;
 
   /**
-   * Workspace membership manifest, when the manager uses one
-   * (`pnpm-workspace.yaml`). `null` when membership is declared in the root
-   * `package.json` (`workspaces`), which the adapter then edits instead.
+   * File declaring workspace membership — a file of the manager's own
+   * (`pnpm-workspace.yaml`) or the root `package.json` when membership lives in
+   * its `workspaces` array. `null` only for a manager with no membership
+   * declaration at all, which makes registration a no-op the scaffolder skips.
    */
   readonly workspaceManifestName: string | null;
 
@@ -94,6 +109,18 @@ export interface PackageManagerAdapter {
 
   /** The block currently present for `packageRoot`, or undefined when it has none. */
   importerBlock(lockfileText: string, packageRoot: string): string | undefined;
+
+  /**
+   * Whether a block held on its own really is the block for `packageRoot`.
+   *
+   * Plan validation asks this of the text a manifest carries, with no lockfile
+   * around it to read the block back out of, so it cannot go through
+   * `importerBlock`. It is a question about the lockfile's grammar and
+   * therefore adapter-owned: the caller may not know that one manager keys an
+   * importer by a bare directory and another by a JSON string, still less that
+   * the workspace root is spelled `.` in one and `""` in the other.
+   */
+  blockDeclaresImporter(block: string, packageRoot: string): boolean;
 
   /**
    * Insert `block` at its deterministic (sorted) position. A no-op when the

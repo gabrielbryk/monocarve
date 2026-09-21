@@ -52,13 +52,20 @@ function manifest(requiredExports: ExtractionManifest["target"]["requiredExports
   };
 }
 
-function config(moduleResolution: "nodenext" | "bundler" = "bundler", types: readonly string[] = ["ambient-only"], interop = false): MonocarveConfig {
+function config(
+  moduleResolution: "nodenext" | "bundler" = "bundler",
+  types: readonly string[] = ["ambient-only"],
+  interop = false,
+  ownerRoot?: string,
+  nodeModules: "none" | "symlink" = "none",
+): MonocarveConfig {
   return parseConfig(
     {
       applications: [
         {
           name: "donor",
           sourceRoot: "apps/donor/src",
+          ...(ownerRoot === undefined ? {} : { ownerRoot }),
           tsconfig: "apps/donor/tsconfig.json",
           packageName: "@acme/donor",
           compositionRoots: [],
@@ -73,7 +80,7 @@ function config(moduleResolution: "nodenext" | "bundler" = "bundler", types: rea
       gates: { package: [], project: [], workspace: [] },
       commitTemplates: { plan: "plan {planId}", move: "move {package}", wiring: "wire {package}", trailer: "" },
       scaffoldTemplates: { packageJson: { contents: "{}\n" } },
-      transaction: { worktreeRoot: ".scratch", nodeModules: "none", cleanup: true, simulateGates: true },
+      transaction: { worktreeRoot: ".scratch", nodeModules, cleanup: true, simulateGates: true },
     },
     "<external-consumer-fixture>",
   );
@@ -156,6 +163,40 @@ describe("external consumer compile proof", () => {
     expect(result.diagnostics).toEqual([]);
   });
 
+  test("preserves an existing workspace dependency when the simulation copy lacks generated exports", () => {
+    const files = {
+      "package.json": packageJson({ name: "fixture-root", private: true }),
+      "apps/donor/package.json": packageJson({ name: "@acme/donor", private: true }),
+      "apps/donor/tsconfig.json": packageJson({ compilerOptions: {}, include: ["src"] }),
+      "libs/carved/package.json": packageJson({
+        name: TARGET_NAME,
+        type: "module",
+        exports: { ".": { types: "./src/index.ts", import: "./src/index.ts" } },
+      }),
+      "libs/carved/src/index.ts": 'import { feature } from "@acme/utility/feature";\nexport const combined = feature;\n',
+      "libs/utility/package.json": packageJson({
+        name: "@acme/utility",
+        exports: { "./feature": { types: "./dist/feature.d.ts", import: "./dist/feature.js" } },
+      }),
+    };
+    const installedRoot = fixtureRepo({
+      ...files,
+      "libs/utility/dist/feature.js": "export const feature = 1;\n",
+      "libs/utility/dist/feature.d.ts": "export declare const feature: number;\n",
+    });
+    const simulationRoot = fixtureRepo(files);
+    const fixtureConfig = config("bundler", []);
+
+    const result = compileExternalConsumer({ config: fixtureConfig, manifest: manifest(), rootDir: simulationRoot, installedRoot });
+    expect(result.passed).toBe(true);
+    expect(result.diagnostics).toEqual([]);
+
+    rmSync(`${installedRoot}/libs/utility/dist`, { recursive: true, force: true });
+    const missing = compileExternalConsumer({ config: fixtureConfig, manifest: manifest(), rootDir: simulationRoot, installedRoot });
+    expect(missing.passed).toBe(false);
+    expect(missing.diagnostics.join("\n")).toContain("TS2307");
+  });
+
   test("includes ambient declarations discovered through the application tsconfig", () => {
     const fixture = proofFixture();
     write(fixture.root, "apps/donor/vite-env.d.ts", 'declare module "*?url" { const url: string; export default url; }\n');
@@ -171,6 +212,35 @@ describe("external consumer compile proof", () => {
 
     expect(result.passed).toBe(true);
     expect(result.diagnostics).toEqual([]);
+  });
+
+  test("resolves owner types in symlink-mode simulation from the application's direct devDependencies", () => {
+    const fixture = proofFixture();
+    const fixtureConfig = config("bundler", ["direct-types"], false, "apps/donor", "symlink");
+    write(fixture.root, "apps/donor/package.json", packageJson({
+      name: "@acme/donor",
+      devDependencies: { "direct-types": "1.0.0" },
+      dependencies: {
+        "adjacent-declarations": "1.0.0",
+        "legacy-default": "1.0.0",
+        "legacy-typed": "1.0.0",
+        "plain-runtime": "1.0.0",
+      },
+    }));
+    write(fixture.root, "apps/donor/tsconfig.json", packageJson({ compilerOptions: { types: ["direct-types"] }, include: ["src"] }));
+    write(fixture.root, "apps/donor/node_modules/direct-types/package.json", packageJson({ name: "direct-types", types: "./index.d.ts" }));
+    write(fixture.root, "apps/donor/node_modules/direct-types/index.d.ts", "declare const directTypeSignal: string;\n");
+    write(fixture.root, "libs/carved/src/index.ts", 'import { feature } from "@acme/utility/feature";\nexport const combined = `${feature}:${directTypeSignal}`;\n');
+
+    const result = run(fixture.root, fixtureConfig, fixture.manifest);
+
+    expect(result.passed).toBe(true);
+    expect(result.diagnostics).toEqual([]);
+
+    rmSync(`${fixture.root}/apps/donor/node_modules/direct-types`, { recursive: true, force: true });
+    const missing = run(fixture.root, fixtureConfig, fixture.manifest);
+    expect(missing.passed).toBe(false);
+    expect(missing.diagnostics.join("\n")).toContain("TS2688");
   });
 
   test("fails when a workspace package stops declaring the imported export subpath", () => {

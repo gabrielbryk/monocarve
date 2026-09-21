@@ -3,6 +3,7 @@
 import { resolve } from "node:path";
 
 import type { ConsumerDependencySection, PackageManagerAdapter } from "../adapters/types.ts";
+import { applicationOwner } from "../config.ts";
 import { byCodeUnit, hashText } from "../util/hash.ts";
 import { relativePosix } from "../util/paths.ts";
 import { PlanningError, type WorkspaceContext } from "./context.ts";
@@ -82,16 +83,25 @@ function devManifest(manifest: ManifestDependencies, dev: Record<string, string>
 }
 
 function consumerReferenceOperation(input: ConsumerWiringInput, owner: string): PlanOperation | undefined {
-  const path = ownerPath(owner, "tsconfig.json");
+  const applicationConsumer = owner === applicationOwner(input.application);
+  const path = applicationConsumer ? input.application.tsconfig : ownerPath(owner, "tsconfig.json");
   if (!input.context.exists(path)) return undefined;
   const tsconfig = parseJsonFile(input.context.text(path), path) as Record<string, unknown> & { references?: { path?: string }[]; compilerOptions?: { composite?: unknown } };
   // A project reference is valid only for a composite build project (or an
-  // existing solution config). Ordinary application configs commonly use
-  // noEmit and must remain typecheck-only consumers.
-  if (tsconfig.compilerOptions?.composite !== true && !Array.isArray(tsconfig.references)) return undefined;
-  const target = relativePosix(resolve("/", owner), resolve("/", input.packageRoot));
+  // existing solution config), except when the application explicitly names
+  // its consumer tsconfig in configuration. Ordinary package configs commonly
+  // use noEmit and must remain typecheck-only consumers.
+  if (!applicationConsumer && tsconfig.compilerOptions?.composite !== true && !Array.isArray(tsconfig.references)) return undefined;
+  const dependencyTarget = input.templates?.projectReferences.dependencyTarget ?? "tsconfig.json";
+  const target = relativePosix(resolve("/", owner), resolve("/", input.packageRoot, dependencyTarget));
   const references = tsconfig.references ?? [];
-  if (references.some((reference) => reference.path === target)) return undefined;
+  // Compare where each reference points, not how it is spelled. `./libs/x`,
+  // `libs/x` and `libs/x/` are one project reference; a string comparison sees
+  // three, and inserting a fourth spelling of the same path is a duplicate
+  // TypeScript then rejects. Resolution is lexical against the owner directory,
+  // so it stays a pure function of the plan.
+  const targetPath = resolve("/", owner, target);
+  if (references.some((reference) => typeof reference.path === "string" && resolve("/", owner, reference.path) === targetPath)) return undefined;
   const index = references.findIndex((reference) => target < (reference.path ?? ""));
   const next = index < 0 ? [...references, { path: target }] : [...references.slice(0, index), { path: target }, ...references.slice(index)];
   return writeOperation(input.context, path, stringifyJson({ ...tsconfig, references: next }), "wiring:consumer-project-references");

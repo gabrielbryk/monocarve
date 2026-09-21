@@ -12,8 +12,8 @@ interface ImporterDependency {
 
 const REGISTRY_VERSION = /^\d/;
 
-export function dependencyVersion(text: string, name: string, specifier: string): string {
-  const existing = existingDependencyVersion(text, name, specifier);
+export function dependencyVersion(text: string, name: string, specifier: string, importerRoot?: string | readonly string[]): string {
+  const existing = existingDependencyVersion(text, name, specifier, importerRoot);
   if (existing) return existing;
   if (REGISTRY_VERSION.test(specifier) && lockfileAttests(text, name, specifier)) return specifier;
   throw new LockfileError(
@@ -31,8 +31,18 @@ export function missingResolutions(lockfileText: string): readonly string[] {
     .map((dependency) => `${dependency.root} declares ${dependency.name}@${dependency.version}, and the lockfile has no entry for it`);
 }
 
-function existingDependencyVersion(text: string, name: string, specifier: string): string | undefined {
+function existingDependencyVersion(text: string, name: string, specifier: string, importerRoot?: string | readonly string[]): string | undefined {
   const dependencies = importerDependencies(text);
+  if (importerRoot !== undefined) {
+    const roots = typeof importerRoot === "string" ? [importerRoot] : importerRoot;
+    const local = dependencies.filter((dependency) => roots.includes(dependency.root) && dependency.name === name);
+    const exactLocal = uniqueImporterVersion(local, name, specifier, (dependency) => dependency.specifier === specifier);
+    if (exactLocal !== undefined) return exactLocal;
+    if (specifier === "catalog:") {
+      const persistedLocal = uniqueImporterVersion(local, name, specifier, () => true);
+      if (persistedLocal !== undefined) return persistedLocal;
+    }
+  }
   const exact = uniqueImporterVersion(dependencies, name, specifier, (dependency) => dependency.specifier === specifier);
   if (exact !== undefined || specifier !== "catalog:") return exact;
   // pnpm may materialize a catalog request in an importer as the selected

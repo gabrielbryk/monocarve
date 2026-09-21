@@ -4,6 +4,7 @@ import type { PackageManagerAdapter } from "../adapters/types.ts";
 import { byCodeUnit, hashText } from "../util/hash.ts";
 import { PlanningError, type WorkspaceContext } from "./context.ts";
 import type { PlanOperation, ProjectedArtifactEvidence } from "./manifest.ts";
+import { formatGeneratedText } from "./format-generated.ts";
 import { parseJsonFile, stringifyJson, writeOperation } from "./scaffold-shared.ts";
 
 type Write = Extract<PlanOperation, { kind: "write-file" }>;
@@ -23,7 +24,7 @@ export class ProjectedWorkspace {
   transformJson(path: string, label: string, transform: (value: Record<string, unknown>) => Record<string, unknown>): void {
     const index = this.operations.findLastIndex((operation) => operation.kind === "write-file" && operation.path === path);
     const projected = index < 0 ? this.context.text(path) : (this.operations[index] as Write).contents;
-    const contents = stringifyJson(transform(parseJsonFile(projected, path)));
+    const contents = formatGeneratedText(this.context.rootDir, path, stringifyJson(transform(parseJsonFile(projected, path))));
     if (index < 0) this.operations.push(writeOperation(this.context, path, contents, label));
     else {
       const current = this.operations[index] as Write;
@@ -33,9 +34,36 @@ export class ProjectedWorkspace {
 
   transformImporter(packageRoot: string, transform: (block: string) => string): void {
     const index = this.operations.findIndex((operation) => operation.kind === "lockfile-importer" && operation.packageRoot === packageRoot);
-    if (index < 0) throw new PlanningError(`cannot transform ${this.packageManager.lockfileName}: no planned importer mutation for ${packageRoot}`);
-    const current = this.operations[index] as Importer;
-    this.operations[index] = { ...current, block: transform(current.block) };
+    if (index < 0) {
+      // No prior step queued a mutation for this importer — the common case
+      // is dependency pruning against a donor application that this plan
+      // otherwise never touches (nothing else added or removed one of its
+      // own workspace references). `transformJson` already falls back to
+      // `this.context.text(path)` for exactly this reason; an importer block
+      // deserves the same fallback rather than a hard refusal, since the
+      // block plainly exists in the lockfile the plan is compiling against.
+      const lockfileText = this.context.text(this.packageManager.lockfileName);
+      const current = this.packageManager.importerBlock(lockfileText, packageRoot);
+      if (current === undefined) {
+        throw new PlanningError(`cannot transform ${this.packageManager.lockfileName}: no planned importer mutation for ${packageRoot}`);
+      }
+      // Hashes are placeholders: `rehashImporters` below recomputes every
+      // lockfile-importer operation's precondition/result hash from a fresh
+      // read of the lockfile, in operation order, so whatever is written
+      // here does not need to be correct on its own.
+      this.operations.push({
+        kind: "lockfile-importer",
+        lockfile: this.packageManager.lockfileName,
+        packageRoot,
+        block: transform(current),
+        mode: "replace",
+        preconditionHash: hashText(lockfileText),
+        resultHash: hashText(lockfileText),
+      });
+    } else {
+      const current = this.operations[index] as Importer;
+      this.operations[index] = { ...current, block: transform(current.block) };
+    }
     this.rehashImporters();
   }
 

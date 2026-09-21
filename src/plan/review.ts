@@ -33,6 +33,19 @@ export interface PlanReviewSummary {
     readonly name: string;
     readonly entrypoint: string;
     readonly projectId?: string;
+    /** Explicit destination directory inside the package, when the plan declares one. */
+    readonly subpath?: string;
+  };
+  /**
+   * Boundary violations the plan recorded as already present, which the audit
+   * will therefore not fail on. Approving the plan approves this list.
+   * `recorded: false` means the manifest carries no baseline at all, so the
+   * audit fails on every violation edge it finds.
+   */
+  readonly boundaryBaseline: {
+    readonly recorded: boolean;
+    readonly digest?: string;
+    readonly edges: readonly { readonly file: string; readonly target: string }[];
   };
   readonly moves: readonly PlanReviewMove[];
   readonly rewrittenDocuments: readonly RewrittenDocument[];
@@ -124,6 +137,16 @@ function warnings(manifest: ExtractionManifest, context: PlanReviewContext): Pla
   if (!context.baselinePaths) result.push({ code: "target-mode-unknown", message: "Baseline paths were not supplied; target existence is unproven." });
   if (!context.manifestPath) result.push({ code: "approval-path-missing", message: "No manifest path was supplied for approval." });
   if (!(context.approvalSubject ?? manifest.commits.plan?.subject)) result.push({ code: "approval-subject-missing", message: "No approval commit subject was supplied." });
+  // Approving the plan approves this set: the post-apply audit will not fail on
+  // these edges. It has to be a warning, not a footnote, because it is the one
+  // part of the manifest that makes a proof accept something.
+  const baselineEdges = manifest.boundaryBaseline?.edges ?? [];
+  if (baselineEdges.length > 0) {
+    result.push({
+      code: "boundary-baseline-recorded",
+      message: `${baselineEdges.length} pre-existing boundary violation edge${baselineEdges.length === 1 ? "" : "s"} are recorded as reviewed; the audit will accept exactly these and fail on any other. Approving this plan approves them.`,
+    });
+  }
   if (manifest.gates.package.length + manifest.gates.project.length + manifest.gates.workspace.length === 0) {
     result.push({ code: "no-gates", message: "The plan records no repository gates." });
   }
@@ -157,6 +180,12 @@ export function summarizePlanReview(manifest: ExtractionManifest, context: PlanR
       name: manifest.target.packageName,
       entrypoint: manifest.target.entrypoint,
       ...(manifest.target.projectId ? { projectId: manifest.target.projectId } : {}),
+      ...(manifest.target.targetSubpath === undefined ? {} : { subpath: manifest.target.targetSubpath }),
+    },
+    boundaryBaseline: {
+      recorded: manifest.boundaryBaseline !== undefined,
+      ...(manifest.boundaryBaseline === undefined ? {} : { digest: manifest.boundaryBaseline.digest }),
+      edges: (manifest.boundaryBaseline?.edges ?? []).map((edge) => ({ file: edge.file, target: edge.target })),
     },
     moves: collectMoves(manifest),
     rewrittenDocuments: collectRewrittenDocuments(manifest),
@@ -200,13 +229,17 @@ export function formatPlanReview(summary: PlanReviewSummary): string {
   ];
   const lines = [
     `Plan ${summary.planId}`,
-    `Target: ${summary.target.name} (${summary.target.mode}) at ${summary.target.root}`,
+    `Target: ${summary.target.name} (${summary.target.mode}) at ${summary.target.root}${summary.target.subpath === undefined ? "" : ` into ${summary.target.subpath}/`}`,
     ...(summary.assessment === undefined ? [] : [
       `Recommendation: ${summary.assessment.status}; cohesion=${summary.assessment.cohesion}`,
       `  selected ${summary.assessment.selectedTarget.action}: ${summary.assessment.selectedTarget.packageName}`,
       ...summary.assessment.targetOptions.map((target) => `  target ${target.action}: ${target.packageName} (${target.confidence}, ${target.compatibility})`),
     ]),
     ...(summary.warnings.length === 0 ? [] : ["Warnings:", ...summary.warnings.map((warning) => `  [${warning.code}] ${warning.message}`)]),
+    summary.boundaryBaseline.recorded
+      ? `Pre-existing boundary violations: ${summary.boundaryBaseline.edges.length} (baseline ${summary.boundaryBaseline.digest?.slice(0, 12) ?? "unknown"})`
+      : "Pre-existing boundary violations: none recorded (the audit fails on every violation)",
+    ...summary.boundaryBaseline.edges.map((edge) => `  ${edge.file} -> ${edge.target}`),
     `Moves: ${summary.moves.length}`,
     ...summary.moves.map((move) => `  ${move.source} -> ${move.target}`),
     ...(summary.rewrittenDocuments.length > 0

@@ -5,11 +5,15 @@ import { resolve } from "node:path";
 
 import { createPackageManagerAdapter } from "../adapters/registry.ts";
 import { inventoryModuleReferences, resetCodemodCaches } from "../codemod/imports.ts";
-import { isFirstPartyPackagePath, isPackageOwner } from "../config.ts";
+import {
+  applicationTargetOf,
+  boundaryEdgeKey,
+  formatBoundaryEdge,
+  isBoundaryGovernedFile,
+  recordedBoundaryEdgeKeys,
+} from "../plan/boundary-baseline.ts";
 import { showBaseline } from "../util/git.ts";
 import { hashText, MISSING } from "../util/hash.ts";
-import { relativePosix } from "../util/paths.ts";
-import { sourceExportsFromFile } from "../plan/public-surface.ts";
 import {
   isAnyMove,
   type MoveWithRewriteOperation,
@@ -17,9 +21,9 @@ import {
 } from "../plan/manifest.ts";
 import { findStaticFsReferences } from "../plan/static-fs-references.ts";
 import { compileExternalConsumer } from "./external-consumer.ts";
+import { entrypointSurfaceFailures, publicSubpathFailures } from "./audit-target-surface.ts";
 import { sourceConservation as proveSourceConservation } from "./audit-conservation.ts";
 import {
-  firstExportTarget,
   relativeCandidates,
   repositorySources,
   showBaselineHash,
@@ -125,6 +129,8 @@ export function auditPlanSync(options: AuditOptions): AuditReport {
   const consumerFailures: string[] = [];
   const boundaryFailures: string[] = [];
   const movedPathEdges: string[] = [];
+  const baselineKeys = recordedBoundaryEdgeKeys(manifest.boundaryBaseline);
+  const observedBaselineKeys = new Set<string>();
 
   const sources = repositorySources(config, rootDir);
   for (const file of sources) {
@@ -133,13 +139,21 @@ export function auditPlanSync(options: AuditOptions): AuditReport {
     const current = readFileSync(absolute, "utf8");
     const references = inventoryModuleReferences(current, absolute, true, rootDir, config.moduleSpecifierCalls);
 
-    if (isPackageOwner(config, file) || isFirstPartyPackagePath(config, file)) {
+    // Boundary edges the reviewed plan recorded as already present are
+    // evidence, not failures: the audit's job is to prove this transaction
+    // introduced none, not to re-litigate debt the reviewer approved with the
+    // plan. An absent record is an empty baseline, so a manifest compiled
+    // before the baseline existed still fails on every edge.
+    if (isBoundaryGovernedFile(config, file)) {
       for (const reference of references) {
-        if (!reference.resolved) continue;
-        const inApplication = config.applications.some((app) =>
-          resolve(reference.resolved!).startsWith(`${resolve(rootDir, app.sourceRoot)}/`),
-        );
-        if (inApplication) boundaryFailures.push(`${file} imports application code: ${reference.specifier}`);
+        const target = applicationTargetOf(config, rootDir, reference);
+        if (target === undefined) continue;
+        const key = boundaryEdgeKey({ file, target });
+        if (baselineKeys.has(key)) {
+          observedBaselineKeys.add(key);
+          continue;
+        }
+        boundaryFailures.push(`${file} imports application code: ${reference.specifier}`);
       }
     }
 
@@ -237,62 +251,7 @@ export function auditPlanSync(options: AuditOptions): AuditReport {
 
   /* -- 3. boundary rules ------------------------------------------------- */
 
-  const entrypoint = resolve(rootDir, manifest.target.packageRoot, manifest.target.entrypoint);
-  if (!existsSync(entrypoint)) {
-    boundaryFailures.push(`target entrypoint does not exist: ${manifest.target.entrypoint}`);
-  } else {
-    try {
-      const entrypointDeclared = manifest.operations.some(
-        (operation) =>
-          operation.kind === "write-file" &&
-          operation.path === `${manifest.target.packageRoot}/${manifest.target.entrypoint}`,
-      );
-      // When the plan wrote the barrel, it alone defines the surface. When it
-      // did not — extraction into a package that already had one — the moved
-      // modules are inspected too.
-      const moduleTargets = moves
-        .filter((move) => /\.[cm]?[jt]sx?$/.test(move.target))
-        .map((move) => resolve(rootDir, move.target));
-      const files = [entrypoint, ...(entrypointDeclared ? [] : moduleTargets)].filter(existsSync);
-      const actual = files.flatMap((file) => sourceExportsFromFile(file));
-      for (const required of manifest.target.requiredExports) {
-        if (!actual.some((entry) => entry.name === required.name && entry.typeOnly === required.typeOnly)) {
-          boundaryFailures.push(`target entrypoint does not expose ${required.name}`);
-        }
-      }
-    } catch (error) {
-      boundaryFailures.push(`target surface could not be read: ${(error as Error).message}`);
-    }
-  }
-  const packageManifestPath = resolve(rootDir, manifest.target.packageRoot, "package.json");
-  if ((manifest.target.publicModules?.length ?? 0) > 0 && existsSync(packageManifestPath)) {
-    try {
-      const packageManifest = JSON.parse(readFileSync(packageManifestPath, "utf8")) as { exports?: unknown };
-      const exportsMap = packageManifest.exports && typeof packageManifest.exports === "object" && !Array.isArray(packageManifest.exports)
-        ? packageManifest.exports as Record<string, unknown>
-        : {};
-      for (const module of manifest.target.publicModules ?? []) {
-        const declared = firstExportTarget(exportsMap[module.exportKey]);
-        if (declared !== module.exportTarget) {
-          boundaryFailures.push(`package subpath ${module.exportKey} does not target ${module.exportTarget}`);
-          continue;
-        }
-        const resolved = relativePosix(rootDir, resolve(rootDir, manifest.target.packageRoot, declared));
-        if (resolved !== module.target) {
-          boundaryFailures.push(`package subpath ${module.exportKey} resolves to ${resolved}, not ${module.target}`);
-          continue;
-        }
-        const actual = sourceExportsFromFile(resolve(rootDir, module.target), module.target);
-        for (const required of module.requiredExports) {
-          if (!actual.some((entry) => entry.name === required.name && entry.typeOnly === required.typeOnly)) {
-            boundaryFailures.push(`package subpath ${module.exportKey} does not expose ${required.name}`);
-          }
-        }
-      }
-    } catch (error) {
-      boundaryFailures.push(`package subpaths could not be read: ${(error as Error).message}`);
-    }
-  }
+  boundaryFailures.push(...entrypointSurfaceFailures(rootDir, manifest, moves), ...publicSubpathFailures(rootDir, manifest));
   const boundaryRules = proof(
     [...new Set(boundaryFailures)],
     manifest.target.requiredExports.length + (manifest.target.publicModules?.length ?? 0),
@@ -323,6 +282,7 @@ export function auditPlanSync(options: AuditOptions): AuditReport {
   /* -- 6. entrypoint evaluation closure ---------------------------------- */
 
   const entrypointRelative = `${manifest.target.packageRoot}/${manifest.target.entrypoint}`;
+  const entrypoint = resolve(rootDir, entrypointRelative);
   const closureFailures: string[] = [];
   let closureChecks = 0;
   // "The entrypoint exists" belongs to proof 3; failing here too would only
@@ -482,12 +442,20 @@ export function auditPlanSync(options: AuditOptions): AuditReport {
     ...(deltaMatches ? [] : ["dynamic-import evidence does not match the declared plan"]),
   ];
 
+  const recordedEdges = manifest.boundaryBaseline?.edges ?? [];
+  const boundaryBaseline = {
+    recorded: recordedEdges.length,
+    observed: recordedEdges.filter((edge) => observedBaselineKeys.has(boundaryEdgeKey(edge))).map(formatBoundaryEdge),
+    cleared: recordedEdges.filter((edge) => !observedBaselineKeys.has(boundaryEdgeKey(edge))).map(formatBoundaryEdge),
+  };
+
   return {
     planId: manifest.planId,
     baselineCommit: manifest.baselineCommit,
     auditedRoot: rootDir,
     passed: failures.length === 0,
     ...proofs,
+    boundaryBaseline,
     graphEvidence,
     failures,
   };

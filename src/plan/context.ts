@@ -38,7 +38,7 @@ import { fileState, isFile, isSourceModulePath, sourceFiles } from "../util/file
 import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
 import type { FileState } from "../util/hash.ts";
 import { importKinds, type ImportKind } from "../graph/syntax.ts";
-import { packageEntrypoint, readManifest, type PackageManifest } from "../graph/workspace.ts";
+import { packageEntrypoint, readManifest, workspaceInventory, type PackageManifest } from "../graph/workspace.ts";
 
 export class PlanningError extends MonocarveError {
   override readonly name = "PlanningError";
@@ -93,6 +93,7 @@ export class WorkspaceContext {
   private readonly manifestCache = new Map<string, PackageManifest>();
   private readonly installedManifestCache = new Map<string, PackageManifest | undefined>();
   private readonly installedCache = new Map<string, boolean>();
+  private workspacePackageRootsCache: Readonly<Record<string, string>> | undefined;
   private sourceListCache: string[] | undefined;
   private consumerIndexCache: Map<string, string[]> | undefined;
 
@@ -129,6 +130,13 @@ export class WorkspaceContext {
 
   state(path: string): FileState {
     return fileState(this.absolute(path));
+  }
+
+  /** Configured workspace package names, including packages with no source files. */
+  workspacePackageRoots(): Readonly<Record<string, string>> {
+    if (this.workspacePackageRootsCache !== undefined) return this.workspacePackageRootsCache;
+    this.workspacePackageRootsCache = Object.fromEntries(workspaceInventory(this.config, this.rootDir).packageNames);
+    return this.workspacePackageRootsCache;
   }
 
   /* ---------------------------------------------------------------------- */

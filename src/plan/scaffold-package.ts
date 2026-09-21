@@ -3,6 +3,7 @@
 import { resolve } from "node:path";
 import ts from "typescript";
 
+import { LockfileError } from "../adapters/lockfile-error.ts";
 import type { AdapterEditResult } from "../adapters/types.ts";
 import { hashText } from "../util/hash.ts";
 import { relativePosix } from "../util/paths.ts";
@@ -12,28 +13,56 @@ import type { PlanOperation } from "./manifest.ts";
 import { barrelSpecifier, type ScaffoldInput } from "./scaffold.ts";
 import { sourceExportsFromFile } from "./public-surface.ts";
 import { parseJsonFile, render, stringifyJson, templateVars, templatesFor, writeOperation } from "./scaffold-shared.ts";
+import { packageModulePath } from "./target-layout.ts";
 
 /** Operations creating (or extending) the target package. */
 export function packageOperations(input: ScaffoldInput): PlanOperation[] {
   const templates = templatesFor(input);
   const scaffolding = !input.context.exists(`${input.packageRoot}/package.json`);
   const packageManifest = packageManifestOperation(input, scaffolding);
-  const operations = [
-    packageManifest,
-    entrypointOperation(input, templates, scaffolding),
-    ...tsconfigOperations(input, templates),
-    taskFileOperation(input, templates, scaffolding),
-    knipWorkspaceOperation(input, scaffolding),
-    ...extraFileOperations(input, templates),
-  ].filter((operation): operation is PlanOperation => operation !== undefined);
   const projected = packageManifest?.kind === "write-file"
     ? parseJsonFile(packageManifest.contents, packageManifest.path)
     : parseJsonFile(input.context.text(`${input.packageRoot}/package.json`), `${input.packageRoot}/package.json`);
-  const importer = lockfileImporterOperation(input, record(projected.dependencies), record(projected.devDependencies), scaffolding);
+  const scaffoldInput = withScaffoldWorkspaceReferences(input, projected, scaffolding);
+  const operations = [
+    packageManifest,
+    entrypointOperation(scaffoldInput, templates, scaffolding),
+    ...tsconfigOperations(scaffoldInput, templates),
+    taskFileOperation(scaffoldInput, templates, scaffolding),
+    knipWorkspaceOperation(scaffoldInput, scaffolding),
+    ...extraFileOperations(scaffoldInput, templates),
+  ].filter((operation): operation is PlanOperation => operation !== undefined);
+  const importer = lockfileImporterOperation(scaffoldInput, projectedImporter(projected), scaffolding);
   if (!scaffolding) return [...operations, ...(importer ? [importer] : [])];
-  return [...operations, ...registrationOperations(input), importer].filter(
+  return [...operations, ...registrationOperations(scaffoldInput), importer].filter(
     (operation): operation is PlanOperation => operation !== undefined,
   );
+}
+
+function withScaffoldWorkspaceReferences(input: ScaffoldInput, projected: Record<string, unknown>, scaffolding: boolean): ScaffoldInput {
+  if (!scaffolding) return input;
+  const roots = workspaceRootsFor(input);
+  const packageReferences = new Set(input.dependencies.packageReferences);
+  for (const [, values] of workspaceDependencySections(projected)) {
+    for (const [name, specifier] of Object.entries(values)) {
+      if (!specifier.startsWith("workspace:")) continue;
+      const owner = roots[name];
+      if (owner === undefined) throw new LockfileError(`workspace dependency has no package reference: ${name}`);
+      packageReferences.add(owner);
+    }
+  }
+  return {
+    ...input,
+    dependencies: { ...input.dependencies, packageReferences: [...packageReferences].sort() },
+  };
+}
+
+function workspaceDependencySections(projected: Record<string, unknown>): [string, Record<string, string>][] {
+  return ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"].flatMap((section) => {
+    const values = projected[section];
+    if (values === null || typeof values !== "object" || Array.isArray(values)) return [];
+    return [[section, values as Record<string, string>]] as [string, Record<string, string>][];
+  });
 }
 
 /** Register a newly scaffolded package with Knip when the repository uses its
@@ -191,18 +220,19 @@ function entrypointOperation(input: ScaffoldInput, templates: ReturnType<typeof 
   const barrel = input.context.exists(path) ? input.context.text(path) : "";
   if (input.production.length > 1 || (barrel && !scaffolding)) assertNoBarrelExportCollisions(input, path);
   const missing = input.production.map((source) => renderTemplate(templates.barrelExport, {
-    ...templateVars(input, templates), specifier: barrelSpecifier(templates, input.context.targetRelativePath(source)),
+    ...templateVars(input, templates), specifier: barrelSpecifier(templates, packageModulePath(input.context, source, input.targetSubpath)),
   })).flatMap((line, index) => {
     const source = input.production[index]!;
-    const specifier = barrelSpecifier(templates, input.context.targetRelativePath(source));
+    const specifier = barrelSpecifier(templates, packageModulePath(input.context, source, input.targetSubpath));
     const typeExports = sourceExportsFromFile(input.context.absolute(source), source).filter((entry) => entry.typeOnly);
     const typeSpecifier = specifier.startsWith(".") ? specifier : `./${specifier}`;
-    return [line, ...typeExports.map((entry) => `export type { ${entry.name} } from ${JSON.stringify(typeSpecifier)};`)]
+    const quote = templates.barrelExport.includes("'") ? "'" : '"';
+    return [line, ...typeExports.map((entry) => `export type { ${entry.name} } from ${quote}${typeSpecifier}${quote};`)]
       .filter((candidate) => !barrel.includes(candidate));
   });
   if (missing.length === 0 && (!scaffolding || input.context.exists(path))) return undefined;
   const separator = barrel && !barrel.endsWith("\n") ? "\n" : "";
-  const contents = missing.length > 0 ? `${barrel}${separator}${missing.join("\n")}\n` : "";
+  const contents = missing.length > 0 ? `${barrel}${separator}${missing.map((line) => line.trimEnd()).join("\n")}\n` : "";
   return writeOperation(input.context, path, contents, "scaffold:entrypoint");
 }
 
@@ -445,27 +475,51 @@ function requiredEditOperation(input: ScaffoldInput, path: string, outcome: Adap
   return writeOperation(input.context, path, outcome.contents, generator);
 }
 
-function lockfileImporterOperation(input: ScaffoldInput, dependencies: Readonly<Record<string, string>>, devDependencies: Readonly<Record<string, string>>, scaffolding: boolean): PlanOperation | undefined {
+/**
+ * The dependency sections and identity the projected manifest declares.
+ *
+ * Identity fields stay absent when the manifest omits them, so an adapter that
+ * keys its lockfile purely by directory sees the input it always saw.
+ */
+function projectedImporter(projected: Record<string, unknown>): ProjectedImporter {
+  return {
+    dependencies: record(projected.dependencies),
+    devDependencies: record(projected.devDependencies),
+    optionalDependencies: record(projected.optionalDependencies),
+    ...(typeof projected.name === "string" ? { packageName: projected.name } : {}),
+    ...(typeof projected.version === "string" ? { packageVersion: projected.version } : {}),
+  };
+}
+
+interface ProjectedImporter {
+  readonly dependencies: Readonly<Record<string, string>>;
+  readonly devDependencies: Readonly<Record<string, string>>;
+  readonly optionalDependencies: Readonly<Record<string, string>>;
+  readonly packageName?: string;
+  readonly packageVersion?: string;
+}
+
+function lockfileImporterOperation(input: ScaffoldInput, projected: ProjectedImporter, scaffolding: boolean): PlanOperation | undefined {
   if (!scaffolding && Object.keys(input.dependencies.runtime).length === 0 && Object.keys(input.dependencies.dev).length === 0) return undefined;
   const lockfile = input.packageManager.lockfileName;
   if (!input.context.exists(lockfile)) throw new PlanningError(`${lockfile} is required to add an importer for ${input.packageRoot}`);
   const current = input.context.text(lockfile);
   const existing = input.packageManager.importerBlock(current, input.packageRoot);
+  const renderInput = {
+    packageRoot: input.packageRoot,
+    ...projected,
+    lockfileText: current,
+    workspaceRoots: workspaceRootsFor(input),
+    ...(input.dependencies.resolutionRoots === undefined ? {} : { resolutionRoots: input.dependencies.resolutionRoots }),
+  };
   if (!scaffolding) {
     if (existing === undefined) throw new PlanningError(`${lockfile} has no importer entry for existing package ${input.packageRoot}; the lockfile is out of date with the workspace`);
-    const block = input.packageManager.addBlockDependencies(existing, {
-      packageRoot: input.packageRoot,
-      dependencies,
-      devDependencies,
-      lockfileText: current,
-      workspaceRoots: workspaceRootsFor(input),
-    });
+    const block = input.packageManager.addBlockDependencies(existing, renderInput);
     if (block === existing) return undefined;
     return { kind: "lockfile-importer", lockfile, packageRoot: input.packageRoot, block, mode: "replace", preconditionHash: hashText(current), resultHash: hashText(input.packageManager.replaceImporter(current, input.packageRoot, block)) };
   }
   if (existing !== undefined) throw new PlanningError(`${lockfile} already has an importer for ${input.packageRoot}, but ${input.packageRoot}/package.json is absent`);
-  const workspaceRoots = workspaceRootsFor(input);
-  const block = `${input.packageManager.renderImporterBlock({ packageRoot: input.packageRoot, dependencies, devDependencies, lockfileText: current, workspaceRoots })}\n\n`;
+  const block = `${input.packageManager.renderImporterBlock(renderInput)}\n\n`;
   return { kind: "lockfile-importer", lockfile, packageRoot: input.packageRoot, block, mode: "insert", preconditionHash: hashText(current), resultHash: hashText(input.packageManager.insertImporter(current, input.packageRoot, block)) };
 }
 
@@ -474,5 +528,5 @@ function workspaceRootsFor(input: ScaffoldInput): Record<string, string> {
     const name = input.context.manifest(owner).name;
     return name ? [[name, owner]] : [];
   }));
-  return { ...roots, ...input.workspaceDependencyRoots };
+  return { ...input.context.workspacePackageRoots(), ...roots, ...input.workspaceDependencyRoots };
 }
