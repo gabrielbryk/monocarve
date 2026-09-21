@@ -13,6 +13,7 @@ import type { PreparationManifest } from "../prepare/manifest-types.ts";
 import { runPreparationPostJournalPreparers } from "../prepare/post-journal.ts";
 import { preparationFilesystemOperations, simulatePreparation } from "../prepare/simulate.ts";
 import { createWorktree } from "../transaction/worktree.ts";
+import { packageContainerRoots } from "../config.ts";
 
 export interface PortfolioImpactSnapshot {
   readonly applicationLines: number;
@@ -47,7 +48,7 @@ export async function analyzePreparationImpact(options: {
   const worktree = await createWorktree({
     rootDir: options.rootDir,
     commit: options.manifest.baseline.commit,
-    worktreeRoot: options.config.transaction.worktreeRoot,
+    worktreeRoot: options.config.transaction.worktreeRoot, packageRoots: packageContainerRoots(options.config),
     nodeModules: options.config.transaction.nodeModules,
     installCommand: packageManager.installCommand(),
     label: `${options.manifest.planId}-impact`,

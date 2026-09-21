@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 
-import { triggeredArtifacts, type MonocarveConfig, type PreparerConfig } from "../config.ts";
+import { triggeredArtifacts, type MonocarveConfig, type PreparerConfig, packageContainerRoots } from "../config.ts";
 import type { ExtractionManifest, MoveOperation } from "../plan/manifest.ts";
 import { executePreparationJournal, finalizeCompletedPreparationJournal, rollbackCompletedPreparationJournal } from "../prepare/journal.ts";
 import { createPackageManagerAdapter } from "../adapters/registry.ts";
@@ -75,7 +75,7 @@ export async function compilePreparerManifest(input: CompilePreparerInput): Prom
   const worktree = await createWorktree({
     rootDir: input.rootDir,
     commit: resolved.commit,
-    worktreeRoot: input.config.transaction.worktreeRoot,
+    worktreeRoot: input.config.transaction.worktreeRoot, packageRoots: packageContainerRoots(input.config),
     nodeModules: input.config.transaction.nodeModules,
     installCommand: adapter.installCommand(),
     label: `prepare-${policy.id}`,
@@ -238,7 +238,7 @@ export async function applyPreparerManifest(options: {
 export async function simulatePreparerManifest(options: { readonly rootDir: string; readonly config: MonocarveConfig; readonly manifest: PreparerManifest }): Promise<void> {
   assertPreparerManifest(options.config, options.manifest);
   const adapter = createPackageManagerAdapter(options.config);
-  const worktree = await createWorktree({ rootDir: options.rootDir, commit: options.manifest.baseline.commit, worktreeRoot: options.config.transaction.worktreeRoot, nodeModules: options.config.transaction.nodeModules, installCommand: adapter.installCommand(), label: options.manifest.planId });
+  const worktree = await createWorktree({ rootDir: options.rootDir, commit: options.manifest.baseline.commit, worktreeRoot: options.config.transaction.worktreeRoot, packageRoots: packageContainerRoots(options.config), nodeModules: options.config.transaction.nodeModules, installCommand: adapter.installCommand(), label: options.manifest.planId });
   try { await applyPreparerManifest({ rootDir: worktree.workspacePath, config: options.config, manifest: options.manifest, verify: true }); }
   finally { await worktree.dispose(); }
 }

@@ -59,6 +59,24 @@ export function firstPartyRoots(config: MonocarveConfig): string[] {
   ].sort((left, right) => right.length - left.length);
 }
 
+/**
+ * Directory subtrees that may contain a workspace package's own `node_modules`.
+ *
+ * Deliberately not the workspace inventory: that scans every source file under
+ * every package root to answer a question about directories, which costs far
+ * more than the search it would be bounding. These four config fields name the
+ * same subtrees without reading a single source file, and a consumer may nest
+ * packages inside them to any depth.
+ */
+export function packageContainerRoots(config: MonocarveConfig): string[] {
+  return [...new Set([
+    ...config.applications.map(applicationOwner),
+    ...config.packageRoots,
+    ...config.firstPartyRoots,
+    ...config.firstPartyPackages.map((pkg) => pkg.root),
+  ].filter((root) => root !== "" && root !== "."))].sort();
+}
+
 /** Roots a file may be moved OUT of: applications and existing packages. */
 export function movableRoots(config: MonocarveConfig): string[] {
   return [

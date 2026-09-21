@@ -1,10 +1,8 @@
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { z } from "zod";
 
-import { TOOL_NAME } from "../branding.ts";
 import { regexSource, relativePath } from "./primitives.ts";
 import type { MonocarveConfig } from "./schema.ts";
+import { scratchPath } from "../util/scratch-root.ts";
 
 export const generatedArtifacts = z.strictObject({
   provenance: z
@@ -239,9 +237,12 @@ export const transaction = z.strictObject({
   /**
    * Where disposable simulation worktrees are created. Absolute, or
    * repo-relative — in which case it must be gitignored, since `apply` refuses
-   * to run against a dirty tree. Defaults outside the repository for that reason.
+   * to run against a dirty tree. Defaults outside the repository for that
+   * reason: a cache directory under `MONOCARVE_SCRATCH_ROOT`, `XDG_CACHE_HOME`
+   * or `~/.cache`. The default is resolved per parse, so the environment a run
+   * actually has is the environment it honours.
    */
-  worktreeRoot: z.string().min(1).default(join(tmpdir(), `${TOOL_NAME}-worktrees`)),
+  worktreeRoot: z.string().min(1).default(() => scratchPath("worktrees")),
   /**
    * How the simulation worktree gets `node_modules`. `symlink` is the default
    * because a full install per simulation is minutes of wall clock for no added

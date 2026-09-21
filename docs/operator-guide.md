@@ -741,3 +741,31 @@ When in doubt, stop after a refusal or failed simulation, inspect `git status`
 and the reported plan/worktree, correct the cause, and repeat the safe loop from
 plan review. Do not run internal transaction flags or manually stage a partial
 journal as a recovery shortcut.
+
+## Where disposable state lives
+
+Simulation worktrees, the external-consumer proof fixture, the preparer
+bootstrap index and path-migration command directories all have to live outside
+the repository: `apply` refuses to run against a dirty tree, so scratch state
+inside the checkout would block the very command it exists to support.
+
+The parent directory is resolved per run, first hit wins:
+
+1. `MONOCARVE_SCRATCH_ROOT`, when set to an absolute path.
+2. `$XDG_CACHE_HOME/monocarve`.
+3. `~/.cache/monocarve`.
+4. `$TMPDIR/monocarve`, only when the home directory cannot be determined.
+
+`transaction.worktreeRoot` still overrides all of this for worktrees
+specifically, and remains the right knob when simulations need a particular
+filesystem — a larger disk, or one with different `noexec`/quota behaviour.
+
+A cache directory rather than `/tmp` is deliberate. On most Linux hosts `/tmp`
+is tmpfs: RAM-backed, cleared on reboot, and budgeted in inodes as much as in
+bytes. A simulation worktree is a full checkout plus a mirrored `node_modules`,
+which is thousands of inodes apiece — enough that a host can exhaust `/tmp`
+while `df` still reports it half empty, and enough that an interrupted run's
+evidence would vanish at the next reboot.
+
+Interrupted runs leave worktrees behind, since no `finally` survives `SIGKILL`.
+Reclaim them with `monocarve prune-worktrees`.

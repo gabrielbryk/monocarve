@@ -14,11 +14,11 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 
 import { scrubbedGitEnv } from "../../src/util/git.ts";
 import { parseConfig, type MonocarveConfig, type MonocarveUserConfig } from "../../src/config.ts";
-import { CONFIG_BASENAME } from "../../src/branding.ts";
+import { CONFIG_BASENAME, SCRATCH_ROOT_ENV, TOOL_NAME } from "../../src/branding.ts";
 
 export function fixtureGit(root: string, ...args: string[]): string {
   // `cwd` is still set for commands and hooks that need the fixture's files,
@@ -207,7 +207,7 @@ function register(path: string): string {
 
 /** A committed git repository containing `files`. Registered for cleanup. */
 export function fixtureRepo(files: Record<string, string>, branch = "extraction-fixture"): string {
-  const root = register(realpathSync(mkdtempSync(join(tmpdir(), "monocarve-fixture-"))));
+  const root = register(realpathSync(mkdtempSync(join(testScratchRoot(), "monocarve-fixture-"))));
   fixtureGit(root, "init", "-q", "-b", branch);
   fixtureGit(root, "config", "user.email", "fixture@example.invalid");
   fixtureGit(root, "config", "user.name", "Monocarve Fixture");
@@ -230,8 +230,42 @@ export function cleanupFixtures(): void {
 }
 
 /** A temporary directory outside every repository, for simulation worktrees. */
+
+/**
+ * Test fixtures stay on `os.tmpdir()`, deliberately, where the product's own
+ * disposable state does not.
+ *
+ * The product moved to a cache directory because a simulation worktree is a
+ * checkout that outlives its run when interrupted, and tmpfs charges that
+ * against RAM and inodes. A fixture repository is the opposite on both counts:
+ * it is torn down by `cleanupFixtures` in an `afterEach`, and the suite creates
+ * hundreds of them serially, so the git operations against it are firmly on the
+ * critical path. Running them against disk instead of RAM made this suite 2.4x
+ * slower and pushed several tests past their timeouts.
+ *
+ * `MONOCARVE_SCRATCH_ROOT` still redirects them, for a host whose `/tmp` is too
+ * small or is mounted `noexec`.
+ */
+function testScratchRoot(): string {
+  const override = process.env[SCRATCH_ROOT_ENV]?.trim();
+  if (override && isAbsolute(override)) {
+    mkdirSync(override, { recursive: true });
+    return override;
+  }
+  // Pin the variable rather than only reading it. The CLI proofs run the real
+  // binary through `Bun.spawn`, which inherits this process's environment, and
+  // the fixture configs they copy do not pin `transaction.worktreeRoot` — so
+  // without this every spawned run would build its simulation worktree under
+  // the product default on disk. That is correct behaviour for a user and the
+  // wrong tradeoff for a suite that creates them by the hundred.
+  const root = join(tmpdir(), `${TOOL_NAME}-test-scratch`);
+  mkdirSync(root, { recursive: true });
+  process.env[SCRATCH_ROOT_ENV] = root;
+  return root;
+}
+
 export function scratchDirectory(): string {
-  return register(realpathSync(mkdtempSync(join(tmpdir(), "monocarve-scratch-"))));
+  return register(realpathSync(mkdtempSync(join(testScratchRoot(), "monocarve-scratch-"))));
 }
 
 /** Validated config for a fixture repository, written into it as JSON. */

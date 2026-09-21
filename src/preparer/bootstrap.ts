@@ -1,6 +1,5 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { MonocarveConfig } from "../config.ts";
@@ -12,6 +11,7 @@ import { fileState } from "../util/files.ts";
 import { workspacePath } from "../util/paths.ts";
 import type { PreparerManifest } from "./manifest.ts";
 import { assertApprovedPreparerManifest, assertPreparerManifest, PreparerError, simulatePreparerManifest } from "./core.ts";
+import { ensureScratchDir } from "../util/scratch-root.ts";
 
 /** Commit a new preparer configuration and its approval while hooks observe its reviewed outputs. */
 export async function commitPreparerBootstrap(rootDir: string, config: MonocarveConfig, path: string, manifest: PreparerManifest, subject: string): Promise<string> {
@@ -66,7 +66,7 @@ function assertInitialState(rootDir: string, path: string, manifest: PreparerMan
  * alone are staged and become the commit snapshot.
  */
 function createTemporaryIndex(rootDir: string, outputs: readonly string[]): { readonly run: (...args: string[]) => string; readonly dispose: () => void } {
-  const directory = mkdtempSync(join(tmpdir(), "monocarve-bootstrap-index-"));
+  const directory = mkdtempSync(ensureScratchDir("bootstrap-index-"));
   const index = join(directory, "index");
   const excludes = join(directory, "exclude");
   copyFileSync(git({ cwd: rootDir }, "rev-parse", "--path-format=absolute", "--git-path", "index"), index);
