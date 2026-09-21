@@ -28,7 +28,7 @@ import {
   symlinkSync,
   unlinkSync,
 } from "node:fs";
-import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { MonocarveError } from "../errors.ts";
 import { failedGateOutput } from "./gate-diagnostics.ts";
@@ -89,6 +89,7 @@ export async function createWorktree(options: CreateWorktreeOptions): Promise<Wo
   const parent = isAbsolute(options.worktreeRoot)
     ? options.worktreeRoot
     : resolve(options.rootDir, options.worktreeRoot);
+  assertWorktreeRootIsNotNested(options.rootDir, parent);
   mkdirSync(parent, { recursive: true });
 
   const path = realpathSync(mkdtempSync(join(parent, `${options.label ?? "simulation"}-`)));
@@ -117,6 +118,47 @@ export async function createWorktree(options: CreateWorktreeOptions): Promise<Wo
     else rmSync(path, { recursive: true, force: true });
     throw error;
   }
+}
+
+/**
+ * A linked worktree is a complete checkout. Creating disposable worktrees
+ * beneath one makes them look like nested worktrees on disk, causes discovery
+ * tools to recurse through every checkout, and leaves the owning checkout
+ * unusable while its contents are being removed. The primary worktree is the
+ * one intentional exception: repo-relative `.worktrees/...` destinations
+ * belong there.
+ */
+function assertWorktreeRootIsNotNested(rootDir: string, parent: string): void {
+  const worktrees = git({ cwd: rootDir }, "worktree", "list", "--porcelain")
+    .split("\n")
+    .filter((line) => line.startsWith("worktree "))
+    .map((line) => canonicalPath(line.slice("worktree ".length)));
+  const primary = worktrees[0];
+  if (!primary) return;
+
+  const destination = canonicalPath(parent);
+  const nestedIn = worktrees.slice(1).find((worktree) => isPathInside(worktree, destination));
+  if (nestedIn) {
+    throw new WorktreeError(`worktreeRoot ${parent} is inside registered worktree ${nestedIn}; choose a sibling or an external directory`);
+  }
+}
+
+/** Resolve a path even when its final components have not been created yet. */
+function canonicalPath(path: string): string {
+  const unresolved: string[] = [];
+  let existing = resolve(path);
+  while (!existsSync(existing)) {
+    unresolved.unshift(basename(existing));
+    const next = dirname(existing);
+    if (next === existing) return resolve(path);
+    existing = next;
+  }
+  return resolve(realpathSync(existing), ...unresolved);
+}
+
+function isPathInside(parent: string, candidate: string): boolean {
+  const path = relative(parent, candidate);
+  return path === "" || isInside(path);
 }
 
 /** Run the configured install against the tree as it exists at this moment. */
