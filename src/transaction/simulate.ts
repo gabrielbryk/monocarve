@@ -19,6 +19,7 @@ import { regenerateArtifacts, type RegenerationReport } from "./regenerate.ts";
 // `runGateTiers` from `simulate.ts` keeps working unchanged.
 import { runGateTiers } from "./simulate-gates.ts";
 import { createWorktree, installWorkspaceDependencies, linkPlannedPackage } from "./worktree.ts";
+import { packageContainerRoots } from "../config.ts";
 
 export { runGateTiers } from "./simulate-gates.ts";
 export type { GateTierOptions, GateTierRun } from "./simulate-gates.ts";
@@ -120,7 +121,7 @@ export async function simulatePlan(options: SimulateOptions): Promise<Simulation
   const worktree = await createWorktree({
     rootDir,
     commit: manifest.baselineCommit,
-    worktreeRoot: config.transaction.worktreeRoot,
+    worktreeRoot: config.transaction.worktreeRoot, packageRoots: packageContainerRoots(config),
     nodeModules: config.transaction.nodeModules,
     installCommand: packageManager.installCommand(),
     label: manifest.planId,

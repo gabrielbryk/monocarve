@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 
 import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapters/registry.ts";
-import { renderPreparationPolicy, type MonocarveConfig, type PreparationPolicyRenderInput } from "../config.ts";
+import { renderPreparationPolicy, type MonocarveConfig, type PreparationPolicyRenderInput, packageContainerRoots } from "../config.ts";
 import { MonocarveError } from "../errors.ts";
 import { scanDependencyGraph } from "../graph/cruiser.ts";
 import { graphDigest } from "../plan/build.ts";
@@ -98,7 +98,7 @@ export async function scanPreparationManifestBaseline(options: {
   const worktree = await createWorktree({
     rootDir: options.rootDir,
     commit: options.manifest.baseline.commit,
-    worktreeRoot: options.config.transaction.worktreeRoot,
+    worktreeRoot: options.config.transaction.worktreeRoot, packageRoots: packageContainerRoots(options.config),
     nodeModules: options.config.transaction.nodeModules,
     installCommand: packageManager.installCommand(),
     label: options.manifest.planId,
@@ -228,7 +228,7 @@ export async function simulatePreparation(options: SimulatePreparationOptions): 
   const worktree = await createWorktree({
     rootDir,
     commit: manifest.baseline.commit,
-    worktreeRoot: config.transaction.worktreeRoot,
+    worktreeRoot: config.transaction.worktreeRoot, packageRoots: packageContainerRoots(config),
     nodeModules: config.transaction.nodeModules,
     installCommand: packageManager.installCommand(),
     label: manifest.planId,

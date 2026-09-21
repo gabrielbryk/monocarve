@@ -43,6 +43,7 @@ export {
   domainFor,
   firstPartyRoots,
   getApplication,
+  packageContainerRoots,
   isApplicationOwner,
   isAssetPath,
   isFirstPartyPackageOwner,

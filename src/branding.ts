@@ -10,6 +10,9 @@ export const TOOL_NAME = "monocarve" as const;
 export const SIMULATION_GIT_IDENTITY = { name: TOOL_NAME, email: `${TOOL_NAME}@invalid` } as const;
 export const FAIL_OPERATION_ENV = "MONOCARVE_FAIL_OPERATION" as const;
 
+/** Overrides where disposable worktrees and scratch directories are created. */
+export const SCRATCH_ROOT_ENV = "MONOCARVE_SCRATCH_ROOT" as const;
+
 /** Human-facing display name used in CLI banners and generated commit trailers. */
 export const TOOL_DISPLAY_NAME = TOOL_NAME;
 

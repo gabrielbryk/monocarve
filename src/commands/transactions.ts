@@ -11,6 +11,7 @@ import { inspectGateEffects } from "../transaction/gate-inspection.ts";
 import { verifyAppliedPlan } from "../transaction/verify.ts";
 import { assertPreparerManifest, type PreparerManifest } from "../preparer/index.ts";
 import { simulatePlan } from "../transaction/simulate.ts";
+import { pruneWorktrees } from "../transaction/worktree.ts";
 import { applyTransactionStatus, recoverApplyTransaction } from "../transaction/apply-state.ts";
 import type { CommandSpec } from "./types.ts";
 import { load, loadManifest, print } from "./shared.ts";
@@ -127,6 +128,32 @@ async function check(args: ParsedArgs): Promise<void> {
   if (result.violations.length > 0) process.exitCode = 1;
 }
 
+
+/**
+ * Durations accepted by `--older-than`: a bare number of hours, or an explicit
+ * `<n>(m|h|d)`. Deliberately small — this guards a destructive sweep, so the
+ * spelling should be obvious at a glance in shell history.
+ */
+function ageMilliseconds(value: string): number {
+  const match = /^(\d+(?:\.\d+)?)(m|h|d)?$/u.exec(value.trim());
+  if (!match?.[1]) throw new UsageError(`--older-than expects <n>[m|h|d], got ${JSON.stringify(value)}`);
+  const unit = { m: 60_000, h: 3_600_000, d: 86_400_000 }[match[2] ?? "h"];
+  return Number(match[1]) * (unit ?? 3_600_000);
+}
+
+async function pruneWorktreesCommand(args: ParsedArgs): Promise<void> {
+  const { config, rootDir } = await load(args);
+  // A shared worktree root may hold a simulation running in another terminal
+  // right now, so the sweep is age-bounded unless --all is explicit.
+  const olderThan = flagString(args, "older-than");
+  if (olderThan !== undefined && flagBool(args, "all")) {
+    throw new UsageError("--all and --older-than are mutually exclusive");
+  }
+  const minimumAgeMs = flagBool(args, "all") ? 0 : ageMilliseconds(olderThan ?? "1h");
+  const result = await pruneWorktrees(rootDir, config.transaction.worktreeRoot, { minimumAgeMs });
+  print({ worktreeRoot: config.transaction.worktreeRoot, ...result }, args);
+}
+
 export const transactionCommands: Record<string, CommandSpec> = {
   "inspect-gates": { summary: "attribute gate-created files in isolation", usage: "inspect-gates --plan <path>", details: "Runs every declared repository gate separately against a landed plan in a disposable worktree, reports exact repository-visible changed and undeclared paths, and suggests generated-artifact declarations without editing the checkout or configuration.", run: inspectGates },
   approve: { summary: "inspect or commit one reviewed plan manifest", usage: "approve --plan <path> [--commit]", details: "Without --commit, validates the exact written bytes and baseline and reports the approval action without mutation. --commit explicitly creates a commit containing only that manifest and refuses guarded branches, wrong HEAD, staged paths, or any unrelated dirt.", run: approve },
@@ -136,5 +163,6 @@ export const transactionCommands: Record<string, CommandSpec> = {
   doctor: { summary: "replay a manifest and its gates in isolation", usage: "doctor --plan <path> [--verify-lockfile]", details: "Validates, journals, audits, and runs configured gates in a disposable worktree without changing the checkout.", run: doctor },
   audit: { summary: "audit the tree produced by an applied plan", usage: "audit --plan <path> [--skip-compile-proof]", details: "Checks declared bytes, boundaries, replay evidence, public surfaces, lockfile state, and generated artifacts. Audit immediately after apply, before another extraction changes owned paths.", run: audit },
   verify: { summary: "validate a plan and run apply preflight", usage: "verify --plan <path>", details: "Read-only validation of manifest semantics, branch/checkout state, journal preconditions, and approved-plan provenance.", run: verify },
+  "prune-worktrees": { summary: "reclaim simulation worktrees left by interrupted runs", usage: "prune-worktrees [--older-than <n>[m|h|d]] [--all]", details: "A run disposes its own worktree, including on failure; nothing survives SIGKILL or a closed terminal, and those leftovers accumulate in transaction.worktreeRoot. Defaults to --older-than 1h because that root is shared with any simulation running concurrently; --all removes every one regardless of age.", run: pruneWorktreesCommand },
   check: { summary: "run repository policy checks", usage: "check import-extensions", details: "Currently supported check: import-extensions.", run: check },
 };

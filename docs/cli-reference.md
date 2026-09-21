@@ -154,6 +154,7 @@ does not infer new reasons from the current checkout.
 | `apply` | `apply --plan <path> [--commit] [--resume] [--skip-gates] [--verify-lockfile]` — use `--commit` as the default landing path; it performs one mandatory simulation and then applies. Without `--commit`, this is an evidence-only feasibility/review run and the checkout is unchanged. |
 | `apply-status` | `apply-status` — read-only durable phase and owner evidence for a committing apply. |
 | `apply-recover` | `apply-recover --plan <path>` — release only a stopped matching owner, then print the verified apply/resume argv. |
+| `prune-worktrees` | `prune-worktrees [--older-than <n>[m|h|d]] [--all]` — reclaim simulation worktrees left behind by interrupted runs. A run disposes its own worktree on success and on failure alike, but nothing survives `SIGKILL` or a closed terminal. Defaults to `--older-than 1h`, because `transaction.worktreeRoot` is shared with any simulation running concurrently; `--all` ignores age. |
 | `audit` | `audit --plan <path> [--skip-compile-proof]` — independently verify the tree produced by the plan. Run it immediately after apply. |
 | `status` | `status [--plan <path>] [--receipt <path>] [--reconciliation <path>]` — classify exact approval/application evidence, current audit state, and optional immutable evidence, then print one safe next command. |
 | `reconcile` | `reconcile --plan <path> --reason <text> --approval-subject <subject> [--out <path>] [--write]` — compile a separate immutable record for declared byte/generated drift without changing the approved plan. |

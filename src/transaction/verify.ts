@@ -8,6 +8,7 @@ import { inspectCommitChain } from "./commit-evidence.ts";
 import { regenerateArtifacts } from "./regenerate.ts";
 import { createWorktree } from "./worktree.ts";
 import { currentGeneratorManifest, type GeneratorEvolution } from "./generator-evolution.ts";
+import { packageContainerRoots } from "../config.ts";
 
 export interface AppliedVerification {
   readonly lifecycle: "applied";
@@ -45,7 +46,7 @@ export async function verifyAppliedPlan(options: {
   const worktree = await createWorktree({
     rootDir: options.rootDir,
     commit,
-    worktreeRoot: options.config.transaction.worktreeRoot,
+    worktreeRoot: options.config.transaction.worktreeRoot, packageRoots: packageContainerRoots(options.config),
     nodeModules: options.config.transaction.nodeModules,
     installCommand: packageManager.installCommand(),
     label: `${options.manifest.planId}-verify`,

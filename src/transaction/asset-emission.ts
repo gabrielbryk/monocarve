@@ -7,6 +7,7 @@ import type { ExtractionManifest } from "../plan/manifest.ts";
 import { byCodeUnit } from "../util/hash.ts";
 import { createWorktree } from "./worktree.ts";
 import { cssRuleSurface } from "./css-surface.ts";
+import { packageContainerRoots } from "../config.ts";
 
 export interface AssetEmissionCheck {
   readonly id: string;
@@ -35,7 +36,7 @@ export async function compareAssetEmission(input: {
   const baseline = await createWorktree({
     rootDir: input.rootDir,
     commit: input.manifest.baselineCommit,
-    worktreeRoot: input.config.transaction.worktreeRoot,
+    worktreeRoot: input.config.transaction.worktreeRoot, packageRoots: packageContainerRoots(input.config),
     nodeModules: input.config.transaction.nodeModules,
     installCommand: createPackageManagerAdapter(input.config).installCommand(),
     label: `${input.manifest.planId}-asset-baseline`,

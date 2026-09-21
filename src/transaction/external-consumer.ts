@@ -8,7 +8,6 @@
  */
 
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import ts from "typescript";
@@ -23,6 +22,7 @@ import { partitionTypes } from "./external-consumer/ambient-types.ts";
 import { externalDependencyPaths } from "./external-consumer/dependency-paths.ts";
 import { writeExternalConsumerFixture } from "./external-consumer/fixture.ts";
 import { workspacePaths } from "./external-consumer/workspace-paths.ts";
+import { ensureScratchDir } from "../util/scratch-root.ts";
 
 export interface ExternalConsumerProof {
   readonly passed: boolean;
@@ -42,7 +42,7 @@ export interface CompileExternalConsumerOptions {
 export function compileExternalConsumer(options: CompileExternalConsumerOptions): ExternalConsumerProof {
   const { config, manifest, rootDir } = options;
   const installedRoot = options.installedRoot ?? rootDir;
-  const fixtureRoot = mkdtempSync(join(tmpdir(), `${TOOL_NAME}-external-consumer-`));
+  const fixtureRoot = mkdtempSync(ensureScratchDir("external-consumer-"));
   const fixture = writeExternalConsumerFixture(fixtureRoot, manifest.target);
   try {
     const compilerOptions = compilerOptionsFor(config, manifest, rootDir, installedRoot);

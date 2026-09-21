@@ -8,6 +8,7 @@ import { commitSimulatedExtraction, runGateTiers, type GateResult } from "./simu
 import { createWorktree, installWorkspaceDependencies, linkPlannedPackage } from "./worktree.ts";
 import { statusEntries } from "../util/git.ts";
 import { byCodeUnit } from "../util/hash.ts";
+import { packageContainerRoots } from "../config.ts";
 
 export interface GateEffect {
   readonly tier: GateResult["tier"];
@@ -39,7 +40,7 @@ export async function inspectGateEffects(options: { config: MonocarveConfig; roo
 async function inspectOne(options: { config: MonocarveConfig; rootDir: string; manifest: ExtractionManifest }, tier: GateResult["tier"], command: string, index: number): Promise<GateEffect> {
   const { config, rootDir, manifest } = options;
   const packageManager = createPackageManagerAdapter(config); const taskRunner = createTaskRunnerAdapter(config);
-  const worktree = await createWorktree({ rootDir, commit: manifest.baselineCommit, worktreeRoot: config.transaction.worktreeRoot, nodeModules: config.transaction.nodeModules, installCommand: packageManager.installCommand(), label: `${manifest.planId}-inspect-${index}` });
+  const worktree = await createWorktree({ rootDir, commit: manifest.baselineCommit, worktreeRoot: config.transaction.worktreeRoot, packageRoots: packageContainerRoots(config), nodeModules: config.transaction.nodeModules, installCommand: packageManager.installCommand(), label: `${manifest.planId}-inspect-${index}` });
   try {
     preflightJournal(config, manifest, worktree.workspacePath);
     await executeJournal({ config, treeRoot: worktree.workspacePath, manifest });
