@@ -18,7 +18,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 
 import { scrubbedGitEnv } from "../../src/util/git.ts";
 import { parseConfig, type MonocarveConfig, type MonocarveUserConfig } from "../../src/config.ts";
-import { CONFIG_BASENAME, SCRATCH_ROOT_ENV } from "../../src/branding.ts";
+import { CONFIG_BASENAME, SCRATCH_ROOT_ENV, TOOL_NAME } from "../../src/branding.ts";
 
 export function fixtureGit(root: string, ...args: string[]): string {
   // `cwd` is still set for commands and hooks that need the fixture's files,
@@ -252,7 +252,16 @@ function testScratchRoot(): string {
     mkdirSync(override, { recursive: true });
     return override;
   }
-  return tmpdir();
+  // Pin the variable rather than only reading it. The CLI proofs run the real
+  // binary through `Bun.spawn`, which inherits this process's environment, and
+  // the fixture configs they copy do not pin `transaction.worktreeRoot` — so
+  // without this every spawned run would build its simulation worktree under
+  // the product default on disk. That is correct behaviour for a user and the
+  // wrong tradeoff for a suite that creates them by the hundred.
+  const root = join(tmpdir(), `${TOOL_NAME}-test-scratch`);
+  mkdirSync(root, { recursive: true });
+  process.env[SCRATCH_ROOT_ENV] = root;
+  return root;
 }
 
 export function scratchDirectory(): string {
