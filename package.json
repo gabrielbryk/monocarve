@@ -52,7 +52,7 @@
     "cli": "bun run ./src/cli.ts",
     "build": "bun run ./scripts/build.ts",
     "build:bundle": "bun run ./scripts/build.ts --bundle-only",
-    "test": "bun test --timeout 60000",
+    "test": "MONOCARVE_SCRATCH_ROOT=\"${MONOCARVE_SCRATCH_ROOT:-${TMPDIR:-/tmp}/monocarve-test-scratch}\" bun test --timeout 60000",
     "typecheck": "tsc --noEmit",
     "max-file-lines": "bun run scripts/quality/max-file-lines.ts",
     "complexity": "bun run scripts/quality/complexity-check.ts",
