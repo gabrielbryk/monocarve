@@ -8,6 +8,7 @@ import { hashJson, MISSING, type FileState } from "../util/hash.ts";
 import type { PreparationManifest } from "./manifest-types.ts";
 import { preparationOperationPaths } from "./manifest.ts";
 import { applyFileCreates, applyTextReplacements } from "../preparer/declarative.ts";
+import { PreparationApplyError } from "./apply-error.ts";
 
 export interface PreparationPreparerReport {
   readonly ok: boolean;
@@ -152,26 +153,19 @@ function verifyPreparerRecord(record: PostJournalPreparerRecord, rootDir: string
 }
 
 /**
- * Collect the post-run hash of every declared output. Throws (does not return a
- * failure) when an output is missing, matching the original inline `forEach`
- * behavior.
- *
- * The bare `Error` is deliberate for now, and wrong in a way worth recording:
- * it reaches the CLI's internal backstop, which tells the operator this is "a
- * defect in monocarve" when a preparer simply did not write an output it
- * declared. Typing it properly is blocked on prepare/'s error taxonomy —
- * `PreparationApplyError` lives in `apply.ts`, which already imports this
- * module (a cycle), and like every other `Preparation*Error` it extends
- * `Error` rather than `MonocarveError`, so it would not reach the CLI's domain
- * handling either. Fixing this means giving prepare/ a leaf error module whose
- * classes extend `MonocarveError`, which is its own change.
+ * Collect the post-run hash of every declared output. Throws (does not
+ * return a failure) when an output is missing, matching the original
+ * inline `forEach` behavior exactly. The thrown `PreparationApplyError`
+ * is the same apply-stage class `apply.ts` raises for the rest of this
+ * pipeline; it lives in `./apply-error.ts` so this module can use it
+ * without importing `apply.ts`, which already imports this module.
  */
 function collectPreparerOutputs(record: PostJournalPreparerRecord, before: readonly FileState[], rootDir: string): { hashes: Record<string, FileState>; changed: boolean } {
   const hashes: Record<string, FileState> = {};
   let changed = false;
   record.outputs.forEach((path, index) => {
     const after = fileState(`${rootDir}/${path}`);
-    if (after === MISSING) throw new Error(`preparation post-journal preparer ${record.id} produced no declared output: ${path}`);
+    if (after === MISSING) throw new PreparationApplyError(`preparation post-journal preparer ${record.id} produced no declared output: ${path}`);
     if (after !== before[index]) changed = true;
     hashes[path] = after;
   });
