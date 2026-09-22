@@ -18,7 +18,7 @@ const dependencyCruiserReporterPlugin: BunPlugin = {
   setup(build) {
     build.onLoad({ filter: /dependency-cruiser\/src\/report\/index\.mjs$/ }, ({ path }) => {
       const source = readFileSync(path, "utf8");
-      const dynamicFallback = `    const lModuleToImport = TYPE2MODULE.get(pOutputType) ?? "./identity.mjs";\n    const lModule = await import(lModuleToImport);\n    lReturnValue = lModule.default;`;
+      const dynamicFallback = `\t\tconst lModuleToImport = TYPE2MODULE.get(pOutputType) ?? "./identity.mjs";\n\t\tconst lModule = await import(lModuleToImport);\n\t\tlReturnValue = lModule.default;`;
       if (!source.includes(dynamicFallback)) throw new Error("dependency-cruiser reporter integration changed; update the bundle adapter");
       return {
         loader: "js",
@@ -29,7 +29,7 @@ const dependencyCruiserReporterPlugin: BunPlugin = {
           )
           .replace(
             dynamicFallback,
-            `    const lModuleToImport = TYPE2MODULE.get(pOutputType);\n    if (lModuleToImport) {\n      const lModule = await import(lModuleToImport);\n      lReturnValue = lModule.default;\n    } else {\n      lReturnValue = identityReporter;\n    }`,
+            `\t\tconst lModuleToImport = TYPE2MODULE.get(pOutputType);\n\t\tif (lModuleToImport) {\n\t\t\tconst lModule = await import(lModuleToImport);\n\t\t\tlReturnValue = lModule.default;\n\t\t} else {\n\t\t\tlReturnValue = identityReporter;\n\t\t}`,
           ),
       };
     });
