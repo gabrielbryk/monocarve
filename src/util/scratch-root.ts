@@ -61,9 +61,32 @@ export function scratchPath(...segments: string[]): string {
  * `os.tmpdir()` always exists, so the callers this replaces could pass a
  * template straight to `mkdtempSync`. A cache directory need not exist yet on a
  * first run, and `mkdtempSync` does not create parents.
+ *
+ * Robustness: if the resolved root cannot be created (read-only HOME, container
+ * with no writable cache directory, permissions problem), falls back to tmpdir
+ * unless the override was explicit. An explicit `${SCRATCH_ROOT_ENV}` that
+ * cannot be created is an error: the operator needs to know they set an
+ * unreachable path, not silently scatter state to tmpdir instead.
  */
 export function ensureScratchDir(prefix: string): string {
+  const override = process.env[SCRATCH_ROOT_ENV]?.trim();
   const root = scratchRoot();
-  mkdirSync(root, { recursive: true });
+
+  try {
+    mkdirSync(root, { recursive: true });
+  } catch (error) {
+    // Explicit override that failed: report it loudly.
+    if (override && isAbsolute(override)) {
+      throw new Error(
+        `Failed to create ${SCRATCH_ROOT_ENV} directory at ${root}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+
+    // No explicit override: fall back to tmpdir.
+    const fallback = join(tmpdir(), TOOL_NAME);
+    mkdirSync(fallback, { recursive: true });
+    return join(fallback, prefix);
+  }
+
   return join(root, prefix);
 }

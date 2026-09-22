@@ -74,7 +74,7 @@ with a partial implementation that returns plausible data.
 ```bash
 bun install
 bun run typecheck   # tsc --noEmit, strict + noUncheckedIndexedAccess
-bun test            # test/ only; fixtures/ contains a *.test.ts on purpose
+bun run test        # test/ only; fixtures/ contains a *.test.ts on purpose; wrapper sets scratch root and timeout
 bun run cli -- --help
 ```
 

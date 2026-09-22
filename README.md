@@ -294,7 +294,9 @@ method-size, fan-out, and composite structural thresholds. Both checks print
 the exact files and metrics to fix; they have no baseline exemptions.
 
 Bun-only: the config may be a `.ts` file, the CLI is a `.ts` entrypoint, and the
-test runner is `bun test`. A JSON config changes the config format, not the
+test runner is `bun run test` (the wrapper sets the scratch root and timeout;
+bare `bun test` scatters scratch directories and uses a 5s timeout that several
+subprocess-backed tests exceed). A JSON config changes the config format, not the
 runtime support policy.
 
 For the complete safe operating sequence, including manifest review, the
