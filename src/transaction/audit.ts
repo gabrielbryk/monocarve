@@ -130,17 +130,3 @@ export function auditPlanSync(options: AuditOptions): AuditReport {
     observedBaselineKeys: evidence.observedBaselineKeys,
   });
 }
-
-/**
- * A module identity that three different sources can be reduced to and
- * compared: a specifier written in the entrypoint, a specifier written in the
- * *baseline* entrypoint, and a target path the plan declares.
- *
- * Extensionless and lexically normalised, because the same module is written
- * `./widget/widget.ts`, `./widget/widget.js` and `./widget/widget` depending on
- * the configured barrel style, and none of those is more true than the others.
- * Deliberately lexical: it touches no filesystem, so it means the same thing for
- * the baseline blob — whose targets may no longer exist — as for the landed one.
- * (Describes `entrypointRelativeKey` / `moduleKey`, which live in
- * `audit-graph.ts`; proof 6 in `audit-closure.ts` is their only caller here.)
- */

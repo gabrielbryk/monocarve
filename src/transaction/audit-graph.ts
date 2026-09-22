@@ -9,6 +9,17 @@ import { showBaseline } from "../util/git.ts";
 import { isAnyMove, type DynamicImportDelta, type ExtractionManifest, type MoveOperation, type MoveWithRewriteOperation } from "../plan/manifest.ts";
 import { textAt } from "./audit-helpers.ts";
 
+/**
+ * A module identity that three different sources can be reduced to and
+ * compared: a specifier written in the entrypoint, a specifier written in the
+ * *baseline* entrypoint, and a target path the plan declares.
+ *
+ * Extensionless and lexically normalised, because the same module is written
+ * `./widget/widget.ts`, `./widget/widget.js` and `./widget/widget` depending on
+ * the configured barrel style, and none of those is more true than the others.
+ * Deliberately lexical: it touches no filesystem, so it means the same thing for
+ * the baseline blob — whose targets may no longer exist — as for the landed one.
+ */
 function moduleKey(specifier: string): string { return posix.normalize(specifier.replace(/[?#].*$/u, "").replace(/\.[cm]?[jt]sx?$/u, "")); }
 export function entrypointRelativeKey(entrypointRelative: string, target: string): string { return moduleKey(posix.relative(posix.dirname(entrypointRelative), target)); }
 export function evaluatedModuleKeys(source: string, path: string): Set<string> {

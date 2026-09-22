@@ -142,7 +142,8 @@ function ageMilliseconds(value: string): number {
 }
 
 async function pruneWorktreesCommand(args: ParsedArgs): Promise<void> {
-  const { config, rootDir } = await load(args);
+  const worktreeRootOverride = flagString(args, "worktree-root");
+  const { config, rootDir } = worktreeRootOverride === undefined ? await load(args) : { config: undefined, rootDir: process.cwd() };
   // A shared worktree root may hold a simulation running in another terminal
   // right now, so the sweep is age-bounded unless --all is explicit.
   const olderThan = flagString(args, "older-than");
@@ -150,8 +151,9 @@ async function pruneWorktreesCommand(args: ParsedArgs): Promise<void> {
     throw new UsageError("--all and --older-than are mutually exclusive");
   }
   const minimumAgeMs = flagBool(args, "all") ? 0 : ageMilliseconds(olderThan ?? "1h");
-  const result = await pruneWorktrees(rootDir, config.transaction.worktreeRoot, { minimumAgeMs });
-  print({ worktreeRoot: config.transaction.worktreeRoot, ...result }, args);
+  const worktreeRoot = worktreeRootOverride ?? config!.transaction.worktreeRoot;
+  const result = await pruneWorktrees(rootDir, worktreeRoot, { minimumAgeMs });
+  print({ worktreeRoot, ...result }, args);
 }
 
 export const transactionCommands: Record<string, CommandSpec> = {
@@ -163,6 +165,6 @@ export const transactionCommands: Record<string, CommandSpec> = {
   doctor: { summary: "replay a manifest and its gates in isolation", usage: "doctor --plan <path> [--verify-lockfile]", details: "Validates, journals, audits, and runs configured gates in a disposable worktree without changing the checkout.", run: doctor },
   audit: { summary: "audit the tree produced by an applied plan", usage: "audit --plan <path> [--skip-compile-proof]", details: "Checks declared bytes, boundaries, replay evidence, public surfaces, lockfile state, and generated artifacts. Audit immediately after apply, before another extraction changes owned paths.", run: audit },
   verify: { summary: "validate a plan and run apply preflight", usage: "verify --plan <path>", details: "Read-only validation of manifest semantics, branch/checkout state, journal preconditions, and approved-plan provenance.", run: verify },
-  "prune-worktrees": { summary: "reclaim simulation worktrees left by interrupted runs", usage: "prune-worktrees [--older-than <n>[m|h|d]] [--all]", details: "A run disposes its own worktree, including on failure; nothing survives SIGKILL or a closed terminal, and those leftovers accumulate in transaction.worktreeRoot. Defaults to --older-than 1h because that root is shared with any simulation running concurrently; --all removes every one regardless of age.", run: pruneWorktreesCommand },
+  "prune-worktrees": { summary: "reclaim simulation worktrees left by interrupted runs", usage: "prune-worktrees [--worktree-root <path>] [--older-than <n>[m|h|d]] [--all]", details: "A run disposes its own worktree, including on failure; nothing survives SIGKILL or a closed terminal, and those leftovers accumulate in transaction.worktreeRoot. Defaults to --older-than 1h because that root is shared with any simulation running concurrently; --all removes every one regardless of age. --worktree-root <path> sweeps that directory instead and does not require a config.", run: pruneWorktreesCommand },
   check: { summary: "run repository policy checks", usage: "check import-extensions", details: "Currently supported check: import-extensions.", run: check },
 };
