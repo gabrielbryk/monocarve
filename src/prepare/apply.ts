@@ -6,7 +6,6 @@ import { PreflightError } from "../errors.ts";
 import { disallowedDirtyPaths } from "../util/dirty-tree.ts";
 import { fileState } from "../util/files.ts";
 import { currentBranch, git, headCommit, showBaseline, tryGit } from "../util/git.ts";
-import { hashJson } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";
 import { rollback } from "../transaction/rollback.ts";
 import { snapshotPaths } from "../transaction/journal.ts";
@@ -24,6 +23,7 @@ import { assertPreparationManifestValid, serializePreparationManifest } from "./
 import type { PreparationManifest } from "./manifest-types.ts";
 import { assertPreparationPolicy, commitPreparationScope, preparationFilesystemOperations, simulatePreparation } from "./simulate.ts";
 import { runPreparationPostJournalPreparers } from "./post-journal.ts";
+import { configDigest } from "../config/digest.ts";
 
 export class PreparationApplyError extends Error {
   override readonly name = "PreparationApplyError";
@@ -113,7 +113,7 @@ function assertCommittedPreparationPreconditions(options: ApplyPreparationOption
 }
 
 function assertLivePreparationEvidence(options: ApplyPreparationOptions): void {
-  if (options.manifest.baseline.configDigest !== hashJson(options.config)) {
+  if (options.manifest.baseline.configDigest !== configDigest(options.config)) {
     throw new PreflightError("preparation manifest was compiled with a different resolved configuration");
   }
   const currentFiles = Object.fromEntries(

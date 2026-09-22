@@ -23,6 +23,7 @@ import { assertPreparationManifestValid, preparationOperationPaths } from "./man
 import type { PreparationFileMutation, PreparationManifest } from "./manifest-types.ts";
 import { createWorktree } from "../transaction/worktree.ts";
 import { runPreparationPostJournalPreparers } from "./post-journal.ts";
+import { configDigest } from "../config/digest.ts";
 
 export class PreparationSimulationError extends MonocarveError {
   override readonly name = "PreparationSimulationError";
@@ -221,7 +222,7 @@ export async function simulatePreparation(options: SimulatePreparationOptions): 
   const { config, manifest, rootDir } = options;
   assertPreparationManifestValid(manifest);
   assertPreparationPolicy(config, manifest);
-  if (manifest.baseline.configDigest !== hashJson(config)) {
+  if (manifest.baseline.configDigest !== configDigest(config)) {
     throw new PreparationSimulationError("preparation manifest was compiled with a different resolved configuration");
   }
   const packageManager = createPackageManagerAdapter(config);

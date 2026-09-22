@@ -3,11 +3,12 @@ import { ownerFor, triggeredArtifacts, type MonocarveConfig } from "../config.ts
 import type { DependencyGraph } from "../graph/model.ts";
 import { PlanningError } from "../plan/context.ts";
 import { git, resolveCommit, showBaseline } from "../util/git.ts";
-import { byCodeUnit, hashJson, hashText, type Sha256 } from "../util/hash.ts";
+import { byCodeUnit, hashText, type Sha256 } from "../util/hash.ts";
 import { baselineFileMode, type PreparationManifestRendering } from "./build.ts";
 import { createPreparationManifest, assertPreparationManifestValid, preparationOperationPaths } from "./manifest.ts";
 import type { PreparationManifest, PreparationReplayOperation } from "./manifest-types.ts";
 import { preparationPostJournalRecords } from "./post-journal.ts";
+import { configDigest } from "../config/digest.ts";
 
 export interface CompileGeneratedSourceAdoptionInput {
   readonly rootDir: string; readonly config: MonocarveConfig; readonly graph: DependencyGraph;
@@ -68,7 +69,7 @@ export function compileGeneratedSourceAdoption(input: CompileGeneratedSourceAdop
     .sort((left, right) => byCodeUnit(left.path, right.path));
   const postJournalPreparers = preparationPostJournalRecords(input.config, operationPaths);
   const changedFiles = [...new Set([...operationPaths, ...generatedArtifacts.map((item) => item.path), ...postJournalPreparers.flatMap((item) => item.outputs)])].sort(byCodeUnit);
-  const manifest = createPreparationManifest({ schemaVersion: 1, createdAt: baseline.committedAt, generator: { ...GENERATOR }, baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: hashJson(input.config) }, graphDigest: input.graphDigest, policyAnchor, declarations: [], operations: ordered, generatedArtifacts, postJournalPreparers, compatibilityReexports: [], changedFiles, commits: { prepare: input.rendering.commit }, gates: { package: [...input.rendering.gates.package].sort(byCodeUnit), project: [...input.rendering.gates.project].sort(byCodeUnit), workspace: [...input.rendering.gates.workspace].sort(byCodeUnit) } });
+  const manifest = createPreparationManifest({ schemaVersion: 1, createdAt: baseline.committedAt, generator: { ...GENERATOR }, baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: configDigest(input.config) }, graphDigest: input.graphDigest, policyAnchor, declarations: [], operations: ordered, generatedArtifacts, postJournalPreparers, compatibilityReexports: [], changedFiles, commits: { prepare: input.rendering.commit }, gates: { package: [...input.rendering.gates.package].sort(byCodeUnit), project: [...input.rendering.gates.project].sort(byCodeUnit), workspace: [...input.rendering.gates.workspace].sort(byCodeUnit) } });
   assertPreparationManifestValid(manifest);
   return manifest;
 }

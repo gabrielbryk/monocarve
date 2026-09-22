@@ -19,6 +19,7 @@ import type {
 import { renderTypeOnlyExtraction } from "./replay.ts";
 import { selectTypeOnlyDeclarations } from "./selectors.ts";
 import { preparationCompilerOptions } from "./compiler-policy.ts";
+import { configDigest } from "../config/digest.ts";
 
 export interface PreparationManifestRendering {
   /** Fully rendered repository gates. The compiler never invents commands. */
@@ -222,7 +223,7 @@ export function compilePreparationManifest(input: CompilePreparationManifestInpu
     schemaVersion: 1,
     createdAt: baseline.committedAt,
     generator: { ...GENERATOR },
-    baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: hashJson(input.config) },
+    baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: configDigest(input.config) },
     graphDigest: input.graphDigest,
     declarations: groups,
     operations: [{

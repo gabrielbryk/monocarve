@@ -152,9 +152,19 @@ function verifyPreparerRecord(record: PostJournalPreparerRecord, rootDir: string
 }
 
 /**
- * Collect the post-run hash of every declared output. Throws (does not
- * return a failure) when an output is missing, matching the original
- * inline `forEach` behavior exactly.
+ * Collect the post-run hash of every declared output. Throws (does not return a
+ * failure) when an output is missing, matching the original inline `forEach`
+ * behavior.
+ *
+ * The bare `Error` is deliberate for now, and wrong in a way worth recording:
+ * it reaches the CLI's internal backstop, which tells the operator this is "a
+ * defect in monocarve" when a preparer simply did not write an output it
+ * declared. Typing it properly is blocked on prepare/'s error taxonomy —
+ * `PreparationApplyError` lives in `apply.ts`, which already imports this
+ * module (a cycle), and like every other `Preparation*Error` it extends
+ * `Error` rather than `MonocarveError`, so it would not reach the CLI's domain
+ * handling either. Fixing this means giving prepare/ a leaf error module whose
+ * classes extend `MonocarveError`, which is its own change.
  */
 function collectPreparerOutputs(record: PostJournalPreparerRecord, before: readonly FileState[], rootDir: string): { hashes: Record<string, FileState>; changed: boolean } {
   const hashes: Record<string, FileState> = {};

@@ -15,6 +15,7 @@ import { applyFileCreates, applyTextReplacements, type FileCreate, type TextRepl
 import { runPreparerCommand } from "./run-command.ts";
 import { PREPARER_MANIFEST_SCHEMA_VERSION, type PreparerManifest, type PreparerMutation } from "./manifest.ts";
 import { PreparerError } from "./error.ts";
+import { configDigest } from "../config/digest.ts";
 import type { CompilePreparerInput } from "./core.ts";
 import {
   assertDistinctCreates,
@@ -117,7 +118,7 @@ export async function runPreparerCompilation(input: CompilePreparerInput, plan: 
   const draft = {
     schemaVersion: PREPARER_MANIFEST_SCHEMA_VERSION,
     createdAt: resolved.committedAt,
-    baseline: { commit: resolved.commit, configDigest: hashJson(input.config) },
+    baseline: { commit: resolved.commit, configDigest: configDigest(input.config) },
     extractionPlanId: input.extraction.planId,
     preparer: { id: policy.id, phase: policy.phase, ...(command === undefined ? {} : { command }), ...(replacements === undefined ? {} : { replacements }), ...(creates === undefined ? {} : { creates }), ...(verify === undefined ? {} : { verify }), commit: renderCommit(policy, vars) },
     binding: {

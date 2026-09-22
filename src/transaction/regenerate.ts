@@ -119,7 +119,7 @@ function undeclaredPreparerFailure(
   const rewrittenDocuments = manifest.operations
     .filter((operation) => operation.kind === "rewrite-path-reference")
     .map((operation) => operation.file);
-  const missingPreparers = triggeredPostJournalPreparers(config, [...manifest.source.files, ...rewrittenDocuments])
+  const missingPreparers = triggeredPostJournalPreparers(config, [...(manifest.source?.files ?? []), ...rewrittenDocuments])
     .filter((preparer) => !declaredPreparerIds.has(preparer.id))
     .map((preparer) => preparer.id);
   if (missingPreparers.length === 0) return undefined;

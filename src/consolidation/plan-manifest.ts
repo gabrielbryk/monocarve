@@ -87,7 +87,8 @@ export function buildConsolidationManifest(input: {
       files: candidate.files,
       tests,
       ...(candidate.assets.length > 0 ? { assets: candidate.assets } : {}),
-    sccs: Object.keys(candidate.sccs).length > 0
+    // `candidate.sccs` is an array; Object.keys would count its indices.
+    sccs: candidate.sccs.length > 0
       ? Object.fromEntries(candidate.sccs.map((scc) => [scc.id, scc.members]))
       : { "scc-consolidation": candidate.files },
     },

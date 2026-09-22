@@ -10,6 +10,7 @@ import { byCodeUnit, hashJson, hashText, MISSING } from "../util/hash.ts";
 import { renderTemplate } from "../util/template.ts";
 import { PREPARER_MANIFEST_SCHEMA_VERSION, type PreparerManifest } from "./manifest.ts";
 import { PreparerError } from "./error.ts";
+import { configDigest } from "../config/digest.ts";
 import {
   expandCreatesPolicy,
   expandDeclaredOutputs,
@@ -98,7 +99,7 @@ export function assertPreparerManifestShape(value: unknown): asserts value is Pr
 
 /** Configuration-consistency validation of an already shape-checked manifest. */
 export function assertPreparerManifestMatchesConfig(config: MonocarveConfig, manifest: PreparerManifest): void {
-  if (manifest.baseline.configDigest !== hashJson(config)) throw new PreparerError("preparer manifest configuration digest mismatch");
+  if (manifest.baseline.configDigest !== configDigest(config)) throw new PreparerError("preparer manifest configuration digest mismatch");
   const { planId: _planId, ...draft } = manifest;
   if (manifest.planId !== hashJson(draft)) throw new PreparerError("preparer manifest identity mismatch");
   const policy = findPolicy(config, manifest.preparer.id);
