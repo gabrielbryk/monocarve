@@ -23,3 +23,9 @@ tmp/
 .env
 .env.*
 !.env.example
+
+# sibling worktrees from `wt switch -c`. Only the global gitignore listed
+# these, which git honours but oxlint/oxfmt do not read - so a lint or format
+# run from the main checkout walked every sibling branch and re-reported its
+# findings as unbaselined.
+.worktrees/
