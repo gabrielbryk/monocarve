@@ -69,7 +69,7 @@
   "dependencies": {
     "dependency-cruiser": "^18.1.1",
     "elkjs": "^0.11.0",
-    "open": "^10.2.0",
+    "open": "^11.0.4",
     "typescript": "^5.9.0",
     "vis-network": "^10.1.0",
     "zod": "^4.0.0"
