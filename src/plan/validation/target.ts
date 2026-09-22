@@ -1,4 +1,4 @@
-import { applicationOwner, getApplication, renderExtractionProfile, resolveExtractionProfile, scaffoldFor } from "../../config.ts";
+import { applicationOwner, getApplication, isPackageOwner, packageNameMatcher, renderExtractionProfile, resolveExtractionProfile, scaffoldFor } from "../../config.ts";
 import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../../adapters/registry.ts";
 import { WorkspaceContext } from "../context.ts";
 import { renderGates } from "../build.ts";
@@ -9,8 +9,70 @@ import { hashText } from "../../util/hash.ts";
 import { showBaseline } from "../../util/git.ts";
 import { packageOperations } from "../scaffold.ts";
 import { packageModulePath } from "../target-layout.ts";
+import { validateIntegrationTestSuite } from "./integration.ts";
 import type { ValidatePlanOptions } from "./shared.ts";
 import { Issues } from "./shared.ts";
+
+/** Resolve and validate the target package shape, returning its identifying fields. */
+export function validateTarget(
+  manifest: ExtractionManifest,
+  options: ValidatePlanOptions,
+  issues: Issues,
+  files: readonly string[],
+  containedPath: (path: string, rule: string) => boolean,
+): { readonly packageName: string; readonly packageRoot: string; readonly entrypoint: string; readonly publicModules: NonNullable<ExtractionManifest["target"]["publicModules"]> } {
+  const target = manifest.target;
+  const packageName = target?.packageName ?? "";
+  const packageRoot = target?.packageRoot ?? "";
+  const entrypoint = target?.entrypoint ?? "";
+  if (!packageNameMatcher(options.config).test(packageName)) {
+    issues.add("target-name", `target package ${JSON.stringify(packageName)} does not match the configured pattern`);
+  }
+  if (!packageRoot || !isPackageOwner(options.config, packageRoot) || packageRoot.includes("..")) {
+    issues.add("target-root", "target.packageRoot must be a directory under a configured package root");
+  } else {
+    containedPath(packageRoot, "target-root");
+  }
+  if (!entrypoint) issues.add("target-entrypoint", "target.entrypoint must be a non-empty string");
+  validateTargetProfile(manifest, options, issues);
+  validateIntegrationTestSuite(manifest, options, issues);
+  for (const entry of target?.requiredExports ?? []) {
+    if (!entry.name || typeof entry.typeOnly !== "boolean") issues.add("target-exports", "each required export needs a name and a boolean typeOnly");
+  }
+  const publicModules = target?.publicModules ?? [];
+  validatePublicModuleShape(publicModules, files, packageName, issues);
+  if (!options.offline) validatePublicModules(manifest, options, issues);
+  return { packageName, packageRoot, entrypoint, publicModules };
+}
+
+function validatePublicModuleShape(
+  publicModules: NonNullable<ExtractionManifest["target"]["publicModules"]>,
+  files: readonly string[],
+  packageName: string,
+  issues: Issues,
+): void {
+  const publicKeys = new Set<string>();
+  const publicSources = new Set<string>();
+  for (const module of publicModules) {
+    const rootModule = module.exportKey === "." && module.specifier === packageName;
+    if (!files.includes(module.source) || !module.target || (!rootModule && !module.specifier.startsWith(`${packageName}/`))) {
+      issues.add("target-subpaths", `invalid public module mapping for ${module.source}`, { path: module.source });
+    }
+    if ((module.exportKey !== "." && !module.exportKey.startsWith("./")) || !module.exportTarget.startsWith("./")) {
+      issues.add("target-subpaths", `public module paths must be package-relative: ${module.exportKey}`, { path: module.source });
+    }
+    if (publicKeys.has(module.exportKey) || publicSources.has(module.source)) {
+      issues.add("target-subpaths", `duplicate public module mapping: ${module.exportKey}`, { path: module.source });
+    }
+    if (!Array.isArray(module.requiredExports)) {
+      issues.add("target-subpaths", `public module ${module.source} must declare required exports`, { path: module.source });
+    } else if (module.requiredExports.some((entry) => !entry.name || typeof entry.typeOnly !== "boolean")) {
+      issues.add("target-subpaths", `public module ${module.source} has an invalid required export`, { path: module.source });
+    }
+    publicKeys.add(module.exportKey);
+    publicSources.add(module.source);
+  }
+}
 
 /** Re-derive configured subpaths and the source export evidence they carry. */
 export function validatePublicModules(

@@ -18,7 +18,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 
 import { scrubbedGitEnv } from "../../src/util/git.ts";
 import { parseConfig, type MonocarveConfig, type MonocarveUserConfig } from "../../src/config.ts";
-import { CONFIG_BASENAME, SCRATCH_ROOT_ENV, TOOL_NAME } from "../../src/branding.ts";
+import { CONFIG_BASENAME, SCRATCH_ROOT_ENV } from "../../src/branding.ts";
 
 export function fixtureGit(root: string, ...args: string[]): string {
   // `cwd` is still set for commands and hooks that need the fixture's files,
@@ -240,11 +240,18 @@ export function cleanupFixtures(): void {
  * against RAM and inodes. A fixture repository is the opposite on both counts:
  * it is torn down by `cleanupFixtures` in an `afterEach`, and the suite creates
  * hundreds of them serially, so the git operations against it are firmly on the
- * critical path. Running them against disk instead of RAM made this suite 2.4x
- * slower and pushed several tests past their timeouts.
+ * critical path.
  *
- * `MONOCARVE_SCRATCH_ROOT` still redirects them, for a host whose `/tmp` is too
- * small or is mounted `noexec`.
+ * This function is READ-ONLY about the environment, and that matters more than
+ * it looks. `transaction.worktreeRoot` participates in `configDigest`
+ * (`hashJson(config)`), and its default is resolved per parse. Mutating
+ * `MONOCARVE_SCRATCH_ROOT` from in here would therefore change the effective
+ * config partway through a process: a plan compiled before the mutation and
+ * validated after it — or validated by a spawned CLI that inherited a different
+ * value — disagree on the digest, and the plan is rejected as forged. The
+ * variable is set once for the whole run by the `test` script in package.json,
+ * where the test process and every CLI it spawns observe the same value from
+ * the start.
  */
 function testScratchRoot(): string {
   const override = process.env[SCRATCH_ROOT_ENV]?.trim();
@@ -252,16 +259,7 @@ function testScratchRoot(): string {
     mkdirSync(override, { recursive: true });
     return override;
   }
-  // Pin the variable rather than only reading it. The CLI proofs run the real
-  // binary through `Bun.spawn`, which inherits this process's environment, and
-  // the fixture configs they copy do not pin `transaction.worktreeRoot` — so
-  // without this every spawned run would build its simulation worktree under
-  // the product default on disk. That is correct behaviour for a user and the
-  // wrong tradeoff for a suite that creates them by the hundred.
-  const root = join(tmpdir(), `${TOOL_NAME}-test-scratch`);
-  mkdirSync(root, { recursive: true });
-  process.env[SCRATCH_ROOT_ENV] = root;
-  return root;
+  return tmpdir();
 }
 
 export function scratchDirectory(): string {
