@@ -28,9 +28,7 @@ describe("simulation worktree nesting", () => {
     fixtureGit(root, "worktree", "add", "--detach", linked, head);
 
     try {
-      await expect(
-        createWorktree({ rootDir: root, commit: head, worktreeRoot: nested, nodeModules: "none" }),
-      ).rejects.toThrow(/inside registered worktree/);
+      await expect(createWorktree({ rootDir: root, commit: head, worktreeRoot: nested, nodeModules: "none" })).rejects.toThrow(/inside registered worktree/);
       expect(existsSync(nested)).toBe(false);
     } finally {
       fixtureGit(root, "worktree", "remove", "--force", linked);

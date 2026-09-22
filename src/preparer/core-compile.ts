@@ -5,18 +5,13 @@
 // inline in compilePreparerManifest — same computations, same order, same
 // short-circuiting and thrown messages.
 import type { PreparerConfig } from "../config.ts";
+import { configDigest } from "../config/digest.ts";
 import type { MoveOperation } from "../plan/manifest.ts";
+import { preparationPostJournalRecords, runPreparationPostJournalPreparers } from "../prepare/post-journal.ts";
 import type { ResolvedCommit } from "../util/git.ts";
+import { resolveCommit, statusEntries } from "../util/git.ts";
 import { byCodeUnit, hashJson } from "../util/hash.ts";
 import { renderTemplate } from "../util/template.ts";
-import { resolveCommit, statusEntries } from "../util/git.ts";
-import { preparationPostJournalRecords, runPreparationPostJournalPreparers } from "../prepare/post-journal.ts";
-import { applyFileCreates, applyTextReplacements, type FileCreate, type TextReplacement } from "./declarative.ts";
-import { runPreparerCommand } from "./run-command.ts";
-import { PREPARER_MANIFEST_SCHEMA_VERSION, type PreparerManifest, type PreparerMutation } from "./manifest.ts";
-import { PreparerError } from "./error.ts";
-import { configDigest } from "../config/digest.ts";
-import type { CompilePreparerInput } from "./core.ts";
 import {
   assertDistinctCreates,
   assertNoDuplicatePaths,
@@ -34,6 +29,11 @@ import {
   validatedPath,
   variables,
 } from "./core-support.ts";
+import type { CompilePreparerInput } from "./core.ts";
+import { applyFileCreates, applyTextReplacements, type FileCreate, type TextReplacement } from "./declarative.ts";
+import { PreparerError } from "./error.ts";
+import { PREPARER_MANIFEST_SCHEMA_VERSION, type PreparerManifest, type PreparerMutation } from "./manifest.ts";
+import { runPreparerCommand } from "./run-command.ts";
 
 /** Everything derived from configuration + the requested move, before any worktree work happens. */
 export interface CompiledPolicyPlan {
@@ -113,14 +113,23 @@ export async function runPreparerCompilation(input: CompilePreparerInput, plan: 
   const changedFiles = unique([...outputs, ...generatedPaths]);
   const undeclared = changed.filter((path) => !changedFiles.includes(path));
   if (undeclared.length > 0) throw new PreparerError(`preparer wrote undeclared repository-visible path(s): ${undeclared.join(", ")}`);
-  const mutations = [...initialMutations, ...generatedPaths.map((path): PreparerMutation => mutation(workspacePath, path, generatedBefore[path]!))]
-    .sort((left, right) => byCodeUnit(left.path, right.path));
+  const mutations = [...initialMutations, ...generatedPaths.map((path): PreparerMutation => mutation(workspacePath, path, generatedBefore[path]!))].sort(
+    (left, right) => byCodeUnit(left.path, right.path),
+  );
   const draft = {
     schemaVersion: PREPARER_MANIFEST_SCHEMA_VERSION,
     createdAt: resolved.committedAt,
     baseline: { commit: resolved.commit, configDigest: configDigest(input.config) },
     extractionPlanId: input.extraction.planId,
-    preparer: { id: policy.id, phase: policy.phase, ...(command === undefined ? {} : { command }), ...(replacements === undefined ? {} : { replacements }), ...(creates === undefined ? {} : { creates }), ...(verify === undefined ? {} : { verify }), commit: renderCommit(policy, vars) },
+    preparer: {
+      id: policy.id,
+      phase: policy.phase,
+      ...(command === undefined ? {} : { command }),
+      ...(replacements === undefined ? {} : { replacements }),
+      ...(creates === undefined ? {} : { creates }),
+      ...(verify === undefined ? {} : { verify }),
+      commit: renderCommit(policy, vars),
+    },
     binding: {
       application: input.extraction.application,
       packageName: input.extraction.target.packageName,

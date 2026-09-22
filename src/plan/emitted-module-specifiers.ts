@@ -10,7 +10,9 @@ export interface EmittedModuleSpecifierDeclaration {
   readonly resolutionBase: string;
 }
 
-function normalized(path: string): string { return posix.normalize(path).replace(/^\.\//, ""); }
+function normalized(path: string): string {
+  return posix.normalize(path).replace(/^\.\//, "");
+}
 function targetFrom(output: string, target: string): string {
   const relative = posix.relative(posix.dirname(output), target);
   return relative.startsWith(".") ? relative : `./${relative}`;

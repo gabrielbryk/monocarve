@@ -11,8 +11,8 @@ import { join, resolve } from "node:path";
 
 import type { MonocarveConfig } from "../config.ts";
 import { ownerFor } from "../config.ts";
-import { relativePosix } from "../util/paths.ts";
 import { isSourceModulePath, sourceFiles } from "../util/files.ts";
+import { relativePosix } from "../util/paths.ts";
 
 export interface WorkspaceInventory {
   /**
@@ -104,9 +104,7 @@ function exportTargets(value: ExportsField): string[] {
 function subpathTargets(manifest: PackageManifest, subpath: string): string[] {
   const exportsField = manifest.exports;
   if (exportsField === undefined || exportsField === null) {
-    return subpath === "."
-      ? [manifest.main, manifest.types].filter((entry): entry is string => typeof entry === "string")
-      : [];
+    return subpath === "." ? [manifest.main, manifest.types].filter((entry): entry is string => typeof entry === "string") : [];
   }
   if (typeof exportsField === "string" || Array.isArray(exportsField)) {
     return subpath === "." ? exportTargets(exportsField) : [];
@@ -175,9 +173,7 @@ export function packageEntrypoint(rootDir: string, owner: string): string | unde
       manifest.main,
       manifest.types,
     ].filter((value): value is string => typeof value === "string");
-    entry = candidates
-      .map((value) => `${owner}/${value.replace(/^\.\//, "")}`)
-      .find((path) => existsSync(resolve(rootDir, path)));
+    entry = candidates.map((value) => `${owner}/${value.replace(/^\.\//, "")}`).find((path) => existsSync(resolve(rootDir, path)));
   }
   entrypointCache.set(key, entry);
   return entry;
@@ -194,11 +190,7 @@ export interface GeneratedProvenance {
  * file that moves must carry this forward, or nobody can regenerate it at its
  * new location.
  */
-export function generatedProvenance(
-  config: MonocarveConfig,
-  rootDir: string,
-  path: string,
-): GeneratedProvenance | null {
+export function generatedProvenance(config: MonocarveConfig, rootDir: string, path: string): GeneratedProvenance | null {
   const absolute = resolve(rootDir, path);
   if (!existsSync(absolute)) return null;
   const settings = config.generatedArtifacts.provenance;

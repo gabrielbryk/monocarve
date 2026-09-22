@@ -1,6 +1,6 @@
 import { byCodeUnit, stableStringify } from "../util/hash.ts";
-import type { ExportSurface } from "./public-surface.ts";
 import type { ExtractionManifest, PlanOperationKind, WriteFileOperation } from "./manifest.ts";
+import type { ExportSurface } from "./public-surface.ts";
 
 export interface PlanReviewContext {
   /** Workspace-relative paths observed at the reviewed baseline. */
@@ -56,10 +56,7 @@ export interface PlanReviewSummary {
     readonly packageReferences: readonly string[];
   };
   readonly consumerRewrites: ExtractionManifest["consumers"];
-  readonly exports: {
-    readonly entrypoint: readonly ExportSurface[];
-    readonly publicModules: NonNullable<ExtractionManifest["target"]["publicModules"]>;
-  };
+  readonly exports: { readonly entrypoint: readonly ExportSurface[]; readonly publicModules: NonNullable<ExtractionManifest["target"]["publicModules"]> };
   readonly generatedOutputs: ExtractionManifest["generatedFiles"];
   readonly scaffoldOutputs: readonly { readonly path: string; readonly generator: string }[];
   readonly gates: ExtractionManifest["gates"];
@@ -97,13 +94,7 @@ function collectMoves(manifest: ExtractionManifest): PlanReviewMove[] {
       return [{ kind: operation.kind, source: operation.source, target: operation.target, operationIndex }];
     }
     if (operation.kind !== "migrate-path-keys") return [];
-    return operation.moves.map((move, nestedIndex) => ({
-      kind: "migrate-path-key",
-      source: move.source,
-      target: move.target,
-      operationIndex,
-      nestedIndex,
-    }));
+    return operation.moves.map((move, nestedIndex) => ({ kind: "migrate-path-key", source: move.source, target: move.target, operationIndex, nestedIndex }));
   });
 }
 
@@ -136,7 +127,8 @@ function warnings(manifest: ExtractionManifest, context: PlanReviewContext): Pla
   for (const reason of manifest.assessment?.reasons ?? []) result.push({ code: reason.code, message: reason.detail });
   if (!context.baselinePaths) result.push({ code: "target-mode-unknown", message: "Baseline paths were not supplied; target existence is unproven." });
   if (!context.manifestPath) result.push({ code: "approval-path-missing", message: "No manifest path was supplied for approval." });
-  if (!(context.approvalSubject ?? manifest.commits.plan?.subject)) result.push({ code: "approval-subject-missing", message: "No approval commit subject was supplied." });
+  if (!(context.approvalSubject ?? manifest.commits.plan?.subject))
+    result.push({ code: "approval-subject-missing", message: "No approval commit subject was supplied." });
   // Approving the plan approves this set: the post-apply audit will not fail on
   // these edges. It has to be a warning, not a footnote, because it is the one
   // part of the manifest that makes a proof accept something.
@@ -202,16 +194,10 @@ export function summarizePlanReview(manifest: ExtractionManifest, context: PlanR
     },
     generatedOutputs: [...manifest.generatedFiles].sort((a, b) => a.path.localeCompare(b.path)),
     scaffoldOutputs,
-    gates: {
-      package: [...manifest.gates.package],
-      project: [...manifest.gates.project],
-      workspace: [...manifest.gates.workspace],
-    },
+    gates: { package: [...manifest.gates.package], project: [...manifest.gates.project], workspace: [...manifest.gates.workspace] },
     warnings: warnings(manifest, context),
     approval: {
-      ...(context.approvalSubject ?? manifest.commits.plan?.subject
-        ? { subject: context.approvalSubject ?? manifest.commits.plan!.subject }
-        : {}),
+      ...((context.approvalSubject ?? manifest.commits.plan?.subject) ? { subject: context.approvalSubject ?? manifest.commits.plan!.subject } : {}),
       ...(context.manifestPath ? { manifestPath: context.manifestPath } : {}),
     },
   };
@@ -230,11 +216,15 @@ export function formatPlanReview(summary: PlanReviewSummary): string {
   const lines = [
     `Plan ${summary.planId}`,
     `Target: ${summary.target.name} (${summary.target.mode}) at ${summary.target.root}${summary.target.subpath === undefined ? "" : ` into ${summary.target.subpath}/`}`,
-    ...(summary.assessment === undefined ? [] : [
-      `Recommendation: ${summary.assessment.status}; cohesion=${summary.assessment.cohesion}`,
-      `  selected ${summary.assessment.selectedTarget.action}: ${summary.assessment.selectedTarget.packageName}`,
-      ...summary.assessment.targetOptions.map((target) => `  target ${target.action}: ${target.packageName} (${target.confidence}, ${target.compatibility})`),
-    ]),
+    ...(summary.assessment === undefined
+      ? []
+      : [
+          `Recommendation: ${summary.assessment.status}; cohesion=${summary.assessment.cohesion}`,
+          `  selected ${summary.assessment.selectedTarget.action}: ${summary.assessment.selectedTarget.packageName}`,
+          ...summary.assessment.targetOptions.map(
+            (target) => `  target ${target.action}: ${target.packageName} (${target.confidence}, ${target.compatibility})`,
+          ),
+        ]),
     ...(summary.warnings.length === 0 ? [] : ["Warnings:", ...summary.warnings.map((warning) => `  [${warning.code}] ${warning.message}`)]),
     summary.boundaryBaseline.recorded
       ? `Pre-existing boundary violations: ${summary.boundaryBaseline.edges.length} (baseline ${summary.boundaryBaseline.digest?.slice(0, 12) ?? "unknown"})`
@@ -245,17 +235,16 @@ export function formatPlanReview(summary: PlanReviewSummary): string {
     ...(summary.rewrittenDocuments.length > 0
       ? [
           `RewrittenDocuments: ${summary.rewrittenDocuments.length}`,
-          ...summary.rewrittenDocuments.flatMap((doc) => [
-            `  ${doc.path}`,
-            ...doc.rewrites.map((rewrite) => `    ${rewrite.from} -> ${rewrite.to}`),
-          ]),
+          ...summary.rewrittenDocuments.flatMap((doc) => [`  ${doc.path}`, ...doc.rewrites.map((rewrite) => `    ${rewrite.from} -> ${rewrite.to}`)]),
         ]
       : []),
     `Operations: ${OPERATION_KINDS.map((kind) => `${kind}=${summary.operationCounts[kind]}`).join(", ")}`,
     `Dependencies: runtime=${summary.dependencyAdditions.runtime.length}, dev=${summary.dependencyAdditions.dev.length}, references=${summary.dependencyAdditions.packageReferences.length}`,
     ...dependencies.map((entry) => `  ${entry}`),
     `Consumers: ${summary.consumerRewrites.length}`,
-    ...summary.consumerRewrites.map((consumer) => `  ${consumer.file} (${consumer.dependencySection}) -> ${consumer.specifiers.map((rewrite) => rewrite.to).join(", ")}`),
+    ...summary.consumerRewrites.map(
+      (consumer) => `  ${consumer.file} (${consumer.dependencySection}) -> ${consumer.specifiers.map((rewrite) => rewrite.to).join(", ")}`,
+    ),
     `Exports: entrypoint=${summary.exports.entrypoint.length}, public-modules=${summary.exports.publicModules.length}`,
     ...summary.exports.entrypoint.map((entry) => `  ${entry.typeOnly ? "type " : "value "}${entry.name}`),
     ...summary.exports.publicModules.map((entry) => `  ${entry.exportKey} -> ${entry.exportTarget}`),

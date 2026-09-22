@@ -8,40 +8,40 @@ where supported.
 
 ## Global options
 
-| option | meaning |
-| --- | --- |
-| `--config <path>` | Use an explicit config instead of discovering upward from `cwd`. |
-| `--cwd <path>` | Start workspace and config discovery from this directory. |
+| option                 | meaning                                                                                                                      |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `--config <path>`      | Use an explicit config instead of discovering upward from `cwd`.                                                             |
+| `--cwd <path>`         | Start workspace and config discovery from this directory.                                                                    |
 | `--graph <app>=<file>` | Replay a captured scanner report; repeat for multiple applications. Campaign commands that require fresh evidence refuse it. |
-| `--json`, `-j` | Request machine-readable output. |
-| `--help`, `-h` | Show top-level or command help. |
-| `--version`, `-v` | Print the CLI version. |
+| `--json`, `-j`         | Request machine-readable output.                                                                                             |
+| `--help`, `-h`         | Show top-level or command help.                                                                                              |
+| `--version`, `-v`      | Print the CLI version.                                                                                                       |
 
 ## Discovery and diagnosis
 
-| command | usage and boundary |
-| --- | --- |
-| `plan` | `plan --candidate <id> [--source <path> ...] [--profile <name> | --package-name <name> [--package-root <path>]] [--target-subpath <dir>] [--public-surface subpaths] [--force] [--verify-lockfile] [--out <path>] [--write [--commit-approval]] [--json | --verbose]` — compile deterministically; terminals get the concise review while pipes and explicit machine modes retain the complete manifest. `--target-subpath` overrides where moved files land inside an existing package. `--public-surface subpaths` exports each entry as its own subpath instead of one barrel. |
-| `scan` | `scan [--app <name>] [--no-cache] [--include-extracted] [--out <path>] [--report-out <path>]` — build the configured dependency model without editing the workspace; `--report-out` writes the raw scanner report for the selected app for later `--graph` replay. |
-| `visualize` | `visualize [--app <name>] [--port <number>] [--no-open] [--no-cache] [--include-extracted]` — serve the current SCC-level dependency graph as an interactive loopback-only web UI. Search and edge-kind filters are local; Rescan rebuilds the read-only graph. |
-| `layers` | `layers [--app <name>] [--out <path>]` — report domains, components, and dependency-first layers. |
-| `portfolio` | `portfolio [--app <name>] [--limit <n>] [--recommendation <status>] [--strategy <cohesive\|max-loc\|low-risk\|campaign\|preparation>] [--include-extracted] [--communities] [--hub-inbound-threshold <n>] [--out <path>]` — show one representative per near-equivalent group; defaults to architecturally recommended candidates. |
-| `candidates` | `candidates [--candidate <id> \| --equivalence-group <id>] [--path <path>] [--eligibility <all\|eligible\|blocked>] [--app <name>] [--include-extracted] [--out <path>]` — inspect candidate details, expand a grouped set of variants, or filter by claimed path and eligibility. |
-| `evacuate` | `evacuate --app <name> --source <file\|directory\|glob> [--source <...>] --package-name <name> [--authorize-protected <configured-root>] [--include-composition <selected-root>] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]` — bounded domain analysis and ordinary immutable-plan compilation. Read-only by default; `--write` exclusively creates one manifest only after eligibility passes and every boundary cut has a configured remedy. The repeatable `--authorize-protected` escape hatch applies only here: each value must exactly equal a configured protected root contained by the selected application and requested evacuation. The evacuation-only, repeatable `--include-composition` flag may name only an exact composition root already matched by the selectors in that application. Its entire SCC moves; outbound application dependencies remain ordinary reported cuts. Omitted composition roots retain the default behavior. Canonical authorizations and inclusions are recorded in the report and immutable manifest provenance and change its plan identity. Tests and assets remain blocked unless they are beneath an explicitly authorized selected root. Multiple route and wiring roots may be included in one evacuation by repeating both `--source` and `--include-composition`. |
-| `scope` | `scope --path <source> --package-name <name> [--app <name>] [--package-root <path>] [--target-subpath <dir>] [--verify-lockfile] [--out <path>] [--write] [--json]` — resolve a stable principal path, compile its current plan, and show the concise review without writing by default. |
-| `backlog` | `backlog [--app <name>] [--limit <n>] [--include-extracted] [--marginal] [--out <path>]` — explain blocked candidates; marginal mode is only a one-blocker lower bound. |
-| `config-doctor` | `config-doctor` — report the discovered config and root, effective value provenance, application and package resolution, adapter availability, compiler profiles, generated and path-keyed artifacts, configured module calls, protected and dirty paths, and preparation coverage. It is strictly read-only: no gates, generators, installers, or preparers run. JSON configs report `explicit` versus `default` provenance; dynamically loaded configs report `unknown` where the original shape is not safely recoverable. |
-| `explain` | `explain --plan <path> (--dependency <name> \| --artifact <path>) [--json]` — read persisted provenance for one dependency decision or the exact operation chain and final hash for one artifact. |
-| `symbols` | `symbols --file <path> [--out <path>]` — declaration graph, type/value spaces, merged groups, exact references, and SCCs for one file. |
-| `split-candidates` | `split-candidates --file <path> [--app <name>] [--out <path>]` — rank declaration SCCs using external consumers and domain affinity. |
-| `capabilities` | `capabilities --file <path> --type <interface> [--out <path>]` — group context properties by real TypeScript consumer affinity. |
-| `lazy-registry` | `lazy-registry --file <path> [--app <name>] [--out <path>]` — map resolved dynamic imports to domains and candidate targets. |
-| `hotspots` | `hotspots [--app <name>] [--limit <n>] [--out <path>]` — rank closure-inflating modules and preparation levers. |
-| `impact` | `impact --plan <preparation-manifest> [--app <name>] [--out <path>]` — gate and rescan a disposable counterfactual, then report exact deltas. |
-| `seams` | `seams --file <path> --candidate <id> [--target <path>] [--app <name>]` — propose one reviewed declaration seam and its safety blockers. |
-| `seams-multi` | `seams-multi --file <path> --file <path> [--app <name>]` — analyze exact symbol edges and SCCs across at least two explicit files. |
-| `conflicts` | `conflicts --plan <candidate>=<manifest> [--plan <candidate>=<manifest> ...]` — compare same-baseline path ownership. Every wave still requires replan between applied children. |
-| `check` | `check import-extensions` — run the configured package import-extension policy. |
+| command            | usage and boundary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plan`             | `plan --candidate <id> [--source <path> ...] [--profile <name>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | --package-name <name> [--package-root <path>]] [--target-subpath <dir>] [--public-surface subpaths] [--force] [--verify-lockfile] [--out <path>] [--write [--commit-approval]] [--json | --verbose]`— compile deterministically; terminals get the concise review while pipes and explicit machine modes retain the complete manifest.`--target-subpath`overrides where moved files land inside an existing package.`--public-surface subpaths` exports each entry as its own subpath instead of one barrel. |
+| `scan`             | `scan [--app <name>] [--no-cache] [--include-extracted] [--out <path>] [--report-out <path>]` — build the configured dependency model without editing the workspace; `--report-out` writes the raw scanner report for the selected app for later `--graph` replay.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `visualize`        | `visualize [--app <name>] [--port <number>] [--no-open] [--no-cache] [--include-extracted]` — serve the current SCC-level dependency graph as an interactive loopback-only web UI. Search and edge-kind filters are local; Rescan rebuilds the read-only graph.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `layers`           | `layers [--app <name>] [--out <path>]` — report domains, components, and dependency-first layers.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `portfolio`        | `portfolio [--app <name>] [--limit <n>] [--recommendation <status>] [--strategy <cohesive\|max-loc\|low-risk\|campaign\|preparation>] [--include-extracted] [--communities] [--hub-inbound-threshold <n>] [--out <path>]` — show one representative per near-equivalent group; defaults to architecturally recommended candidates.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `candidates`       | `candidates [--candidate <id> \| --equivalence-group <id>] [--path <path>] [--eligibility <all\|eligible\|blocked>] [--app <name>] [--include-extracted] [--out <path>]` — inspect candidate details, expand a grouped set of variants, or filter by claimed path and eligibility.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `evacuate`         | `evacuate --app <name> --source <file\|directory\|glob> [--source <...>] --package-name <name> [--authorize-protected <configured-root>] [--include-composition <selected-root>] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]` — bounded domain analysis and ordinary immutable-plan compilation. Read-only by default; `--write` exclusively creates one manifest only after eligibility passes and every boundary cut has a configured remedy. The repeatable `--authorize-protected` escape hatch applies only here: each value must exactly equal a configured protected root contained by the selected application and requested evacuation. The evacuation-only, repeatable `--include-composition` flag may name only an exact composition root already matched by the selectors in that application. Its entire SCC moves; outbound application dependencies remain ordinary reported cuts. Omitted composition roots retain the default behavior. Canonical authorizations and inclusions are recorded in the report and immutable manifest provenance and change its plan identity. Tests and assets remain blocked unless they are beneath an explicitly authorized selected root. Multiple route and wiring roots may be included in one evacuation by repeating both `--source` and `--include-composition`. |
+| `scope`            | `scope --path <source> --package-name <name> [--app <name>] [--package-root <path>] [--target-subpath <dir>] [--verify-lockfile] [--out <path>] [--write] [--json]` — resolve a stable principal path, compile its current plan, and show the concise review without writing by default.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `backlog`          | `backlog [--app <name>] [--limit <n>] [--include-extracted] [--marginal] [--out <path>]` — explain blocked candidates; marginal mode is only a one-blocker lower bound.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `config-doctor`    | `config-doctor` — report the discovered config and root, effective value provenance, application and package resolution, adapter availability, compiler profiles, generated and path-keyed artifacts, configured module calls, protected and dirty paths, and preparation coverage. It is strictly read-only: no gates, generators, installers, or preparers run. JSON configs report `explicit` versus `default` provenance; dynamically loaded configs report `unknown` where the original shape is not safely recoverable.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `explain`          | `explain --plan <path> (--dependency <name> \| --artifact <path>) [--json]` — read persisted provenance for one dependency decision or the exact operation chain and final hash for one artifact.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `symbols`          | `symbols --file <path> [--out <path>]` — declaration graph, type/value spaces, merged groups, exact references, and SCCs for one file.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `split-candidates` | `split-candidates --file <path> [--app <name>] [--out <path>]` — rank declaration SCCs using external consumers and domain affinity.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `capabilities`     | `capabilities --file <path> --type <interface> [--out <path>]` — group context properties by real TypeScript consumer affinity.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `lazy-registry`    | `lazy-registry --file <path> [--app <name>] [--out <path>]` — map resolved dynamic imports to domains and candidate targets.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `hotspots`         | `hotspots [--app <name>] [--limit <n>] [--out <path>]` — rank closure-inflating modules and preparation levers.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `impact`           | `impact --plan <preparation-manifest> [--app <name>] [--out <path>]` — gate and rescan a disposable counterfactual, then report exact deltas.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `seams`            | `seams --file <path> --candidate <id> [--target <path>] [--app <name>]` — propose one reviewed declaration seam and its safety blockers.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `seams-multi`      | `seams-multi --file <path> --file <path> [--app <name>]` — analyze exact symbol edges and SCCs across at least two explicit files.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `conflicts`        | `conflicts --plan <candidate>=<manifest> [--plan <candidate>=<manifest> ...]` — compare same-baseline path ownership. Every wave still requires replan between applied children.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `check`            | `check import-extensions` — run the configured package import-extension policy.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 ## Extraction planning
 
@@ -78,12 +78,12 @@ subsequent `apply` command. Nothing is approved implicitly. Add
 manifest; it requires `--write` and refuses any other staged, modified, or
 untracked path.
 
-| command | usage and boundary |
-| --- | --- |
-| `plan-review` | `plan-review --plan <path> [--approval-subject <subject>] [--json]` — render the deterministic, read-only operator review, including exact move targets and approval inputs. |
-| `next` | `next [--app <name>] [--profile <name>] [--package-name <name>] [--write] [--apply] [--verify-lockfile]` — choose the highest-ranked candidate; `--apply` simulates only. |
-| `relocate-tests` | `relocate-tests --suite <name> [--out <path>] [--write]` — compile a configured leaf integration-test package. |
-| `refresh` | `refresh --plan <path> [--out <new-path> --write [--commit-approval]]` — safely recompile a stale plan at current `HEAD` to a distinct immutable review artifact. |
+| command          | usage and boundary                                                                                                                                                           |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plan-review`    | `plan-review --plan <path> [--approval-subject <subject>] [--json]` — render the deterministic, read-only operator review, including exact move targets and approval inputs. |
+| `next`           | `next [--app <name>] [--profile <name>] [--package-name <name>] [--write] [--apply] [--verify-lockfile]` — choose the highest-ranked candidate; `--apply` simulates only.    |
+| `relocate-tests` | `relocate-tests --suite <name> [--out <path>] [--write]` — compile a configured leaf integration-test package.                                                               |
+| `refresh`        | `refresh --plan <path> [--out <new-path> --write [--commit-approval]]` — safely recompile a stale plan at current `HEAD` to a distinct immutable review artifact.            |
 
 To append a candidate to an existing package:
 
@@ -100,7 +100,7 @@ Run `monocarve plan-review --plan <path>` before approval for a human-readable
 review of target mode, exact top-level and nested move targets, operation counts,
 dependency and consumer wiring, public exports, generated outputs, repository
 gates, warnings, and the pre-existing boundary violations recorded with the plan
-(see *Reviewed boundary baseline* below). Add `--json` for its stable structured form. The approval
+(see _Reviewed boundary baseline_ below). Add `--json` for its stable structured form. The approval
 section records the manifest path and defaults its subject to `commits.plan`;
 `--approval-subject` supplies a different exact proposed subject for review.
 
@@ -144,22 +144,22 @@ does not infer new reasons from the current checkout.
 
 ## Extraction execution
 
-| command | usage and boundary |
-| --- | --- |
-| `consolidate` | `consolidate --target <package-name> --donor <package-name> [--donor <...>] [--retire-donors] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]` — merge multiple packages into a target domain package. Compiles a plan like `plan` does; `--write` persists it and `--retire-donors` removes the donors once their contents have moved. |
-| `approve` | `approve --plan <path> [--commit]` — validate and display exact approval evidence without mutation; `--commit` explicitly commits only the manifest. |
-| `verify` | `verify --plan <path>` — read-only manifest validation plus apply preflight. |
-| `doctor` | `doctor --plan <path> [--verify-lockfile]` — replay, audit, and run repository gates in a disposable worktree. |
-| `inspect-gates` | `inspect-gates --plan <path>` — run every declared gate separately against the landed plan, attributing exact repository-visible changed paths and suggesting missing generated-artifact declarations without changing the checkout. |
-| `apply` | `apply --plan <path> [--commit] [--resume] [--skip-gates] [--verify-lockfile]` — use `--commit` as the default landing path; it performs one mandatory simulation and then applies. Without `--commit`, this is an evidence-only feasibility/review run and the checkout is unchanged. |
-| `apply-status` | `apply-status` — read-only durable phase and owner evidence for a committing apply. |
-| `apply-recover` | `apply-recover --plan <path>` — release only a stopped matching owner, then print the verified apply/resume argv. |
-| `prune-worktrees` | `prune-worktrees [--worktree-root <path>] [--older-than <n>[m|h|d]] [--all]` — reclaim simulation worktrees left behind by interrupted runs. A run disposes its own worktree on success and on failure alike, but nothing survives `SIGKILL` or a closed terminal. Defaults to `--older-than 1h`, because `transaction.worktreeRoot` is shared with any simulation running concurrently; `--all` ignores age. `--worktree-root <path>` sweeps that directory instead and does not require a config. |
-| `audit` | `audit --plan <path> [--skip-compile-proof]` — independently verify the tree produced by the plan. Run it immediately after apply. |
-| `status` | `status [--plan <path>] [--receipt <path>] [--reconciliation <path>]` — classify exact approval/application evidence, current audit state, and optional immutable evidence, then print one safe next command. |
-| `reconcile` | `reconcile --plan <path> --reason <text> --approval-subject <subject> [--out <path>] [--write]` — compile a separate immutable record for declared byte/generated drift without changing the approved plan. |
-| `reconcile-approve` | `reconcile-approve --record <path> [--commit]` — inspect or create the exact record-only approval commit. |
-| `receipt` | `receipt --plan <path> [--reconciliation <approved-record>] [--out <path>] [--write]` — compile an immutable passing-audit receipt linked to the exact application and, when supplied, approved reconciliation. |
+| command             | usage and boundary                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `consolidate`       | `consolidate --target <package-name> --donor <package-name> [--donor <...>] [--retire-donors] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]` — merge multiple packages into a target domain package. Compiles a plan like `plan` does; `--write` persists it and `--retire-donors` removes the donors once their contents have moved. |
+| `approve`           | `approve --plan <path> [--commit]` — validate and display exact approval evidence without mutation; `--commit` explicitly commits only the manifest.                                                                                                                                                                                                                  |
+| `verify`            | `verify --plan <path>` — read-only manifest validation plus apply preflight.                                                                                                                                                                                                                                                                                          |
+| `doctor`            | `doctor --plan <path> [--verify-lockfile]` — replay, audit, and run repository gates in a disposable worktree.                                                                                                                                                                                                                                                        |
+| `inspect-gates`     | `inspect-gates --plan <path>` — run every declared gate separately against the landed plan, attributing exact repository-visible changed paths and suggesting missing generated-artifact declarations without changing the checkout.                                                                                                                                  |
+| `apply`             | `apply --plan <path> [--commit] [--resume] [--skip-gates] [--verify-lockfile]` — use `--commit` as the default landing path; it performs one mandatory simulation and then applies. Without `--commit`, this is an evidence-only feasibility/review run and the checkout is unchanged.                                                                                |
+| `apply-status`      | `apply-status` — read-only durable phase and owner evidence for a committing apply.                                                                                                                                                                                                                                                                                   |
+| `apply-recover`     | `apply-recover --plan <path>` — release only a stopped matching owner, then print the verified apply/resume argv.                                                                                                                                                                                                                                                     |
+| `prune-worktrees`   | `prune-worktrees [--worktree-root <path>] [--older-than <n>[m                                                                                                                                                                                                                                                                                                         | h   | d]] [--all]`— reclaim simulation worktrees left behind by interrupted runs. A run disposes its own worktree on success and on failure alike, but nothing survives`SIGKILL`or a closed terminal. Defaults to`--older-than 1h`, because `transaction.worktreeRoot`is shared with any simulation running concurrently;`--all`ignores age.`--worktree-root <path>` sweeps that directory instead and does not require a config. |
+| `audit`             | `audit --plan <path> [--skip-compile-proof]` — independently verify the tree produced by the plan. Run it immediately after apply.                                                                                                                                                                                                                                    |
+| `status`            | `status [--plan <path>] [--receipt <path>] [--reconciliation <path>]` — classify exact approval/application evidence, current audit state, and optional immutable evidence, then print one safe next command.                                                                                                                                                         |
+| `reconcile`         | `reconcile --plan <path> --reason <text> --approval-subject <subject> [--out <path>] [--write]` — compile a separate immutable record for declared byte/generated drift without changing the approved plan.                                                                                                                                                           |
+| `reconcile-approve` | `reconcile-approve --record <path> [--commit]` — inspect or create the exact record-only approval commit.                                                                                                                                                                                                                                                             |
+| `receipt`           | `receipt --plan <path> [--reconciliation <approved-record>] [--out <path>] [--write]` — compile an immutable passing-audit receipt linked to the exact application and, when supplied, approved reconciliation.                                                                                                                                                       |
 
 ### Reviewed boundary baseline
 
@@ -174,7 +174,7 @@ that already exist at its baseline commit:
   `file -> imported application file` pairs — into the immutable manifest;
 - `plan-review` prints the count, the digest prefix, and every edge, and raises
   the `boundary-baseline-recorded` warning: approving the plan approves them;
-- `audit` fails on every violation edge *outside* that list and reports the
+- `audit` fails on every violation edge _outside_ that list and reports the
   recorded ones under `boundaryBaseline` as `observed` (still present) or
   `cleared` (removed by this transaction). `boundaryRules` still fails on
   anything new.
@@ -216,12 +216,12 @@ failed attempt that later passes.
 
 ## Declaration preparation
 
-| command | usage and boundary |
-| --- | --- |
-| `prepare-plan` | `prepare-plan --file <path> --candidate <id> --target <path> --module-specifier <specifier> --group <id> [--group <id> ...] [--out <path>] [--write]` — compile only explicitly reviewed type-only groups. |
-| `prepare-multi-plan` | `prepare-multi-plan --spec <path> [--out <path>] [--write]` — compile exact reviewed per-donor members into one atomic multi-file preparation. |
-| `prepare-apply` | `prepare-apply --plan <path> [--commit]` — isolated replay by default; with `--commit`, require approved-manifest provenance and audit immediately. |
-| `prepare-audit` | `prepare-audit --plan <path>` — independently replay declaration, import, graph, mode, and public-surface evidence. |
+| command              | usage and boundary                                                                                                                                                                                         |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prepare-plan`       | `prepare-plan --file <path> --candidate <id> --target <path> --module-specifier <specifier> --group <id> [--group <id> ...] [--out <path>] [--write]` — compile only explicitly reviewed type-only groups. |
+| `prepare-multi-plan` | `prepare-multi-plan --spec <path> [--out <path>] [--write]` — compile exact reviewed per-donor members into one atomic multi-file preparation.                                                             |
+| `prepare-apply`      | `prepare-apply --plan <path> [--commit]` — isolated replay by default; with `--commit`, require approved-manifest provenance and audit immediately.                                                        |
+| `prepare-audit`      | `prepare-audit --plan <path>` — independently replay declaration, import, graph, mode, and public-surface evidence.                                                                                        |
 
 Preparation uses the workspace's configured `preparation.commit` and non-empty
 `preparation.gates`; CLI flags cannot invent or remove that policy.
@@ -265,13 +265,13 @@ result — matching `prepare-apply`'s exact simulate-then-commit shape.
 
 ## Configured preparers and ratchets
 
-| command | usage and boundary |
-| --- | --- |
-| `preparer-plan` | `preparer-plan [--extraction <path>] --preparer <id> --source <path> [--bootstrap-config <path>] [--out <path>] [--write]` — run one configured preparer in a disposable baseline worktree and compile its declared outputs into a reviewable manifest. Without an extraction, `source` is the standalone policy anchor. |
-| `preparer-bootstrap-commit` | `preparer-bootstrap-commit --plan <path> --subject <subject>` — for a plan compiled with `preparer-plan --bootstrap-config <path>`, temporarily materialize reviewed outputs so normal hooks can validate the introducing config, commit only the exact config and manifest, then roll the outputs back. |
-| `preparer-simulate` | `preparer-simulate --plan <path>` — replay captured outputs and their configured verification without changing the checkout. |
-| `preparer-apply` | `preparer-apply --plan <path>` — require the exact manifest as the sole commit directly above its extraction baseline, simulate first, then journal-apply reviewed outputs with rollback; never commits the outputs. |
-| `preparer-commit` | `preparer-commit --plan <path>` — verify exact applied bytes and modes, refuse guarded branches or any extra dirty path, and commit only declared outputs with configured metadata. |
+| command                     | usage and boundary                                                                                                                                                                                                                                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `preparer-plan`             | `preparer-plan [--extraction <path>] --preparer <id> --source <path> [--bootstrap-config <path>] [--out <path>] [--write]` — run one configured preparer in a disposable baseline worktree and compile its declared outputs into a reviewable manifest. Without an extraction, `source` is the standalone policy anchor. |
+| `preparer-bootstrap-commit` | `preparer-bootstrap-commit --plan <path> --subject <subject>` — for a plan compiled with `preparer-plan --bootstrap-config <path>`, temporarily materialize reviewed outputs so normal hooks can validate the introducing config, commit only the exact config and manifest, then roll the outputs back.                 |
+| `preparer-simulate`         | `preparer-simulate --plan <path>` — replay captured outputs and their configured verification without changing the checkout.                                                                                                                                                                                             |
+| `preparer-apply`            | `preparer-apply --plan <path>` — require the exact manifest as the sole commit directly above its extraction baseline, simulate first, then journal-apply reviewed outputs with rollback; never commits the outputs.                                                                                                     |
+| `preparer-commit`           | `preparer-commit --plan <path>` — verify exact applied bytes and modes, refuse guarded branches or any extra dirty path, and commit only declared outputs with configured metadata.                                                                                                                                      |
 
 Preparers are generic repository-owned pre-extraction policies. Each config
 entry declares an `id`, `phase: "pre-extraction"`, one or more of `replacements`,
@@ -282,33 +282,31 @@ the last two come from one exact byte-identical move in the extraction
 manifest. Planning refuses undeclared writes and non-UTF-8 output files.
 
 ```ts
-preparers: [{
-  id: "quality-ratchet",
-  phase: "pre-extraction",
-  command: "node tools/promote-ratchet.mjs {targetPath}",
-  outputs: ["quality/baselines/{targetPath}.json"],
-  verify: "node tools/check-ratchet.mjs {targetPath}",
-  commit: { subject: "chore: promote ratchet for {targetPath}" },
-}]
+preparers: [
+  {
+    id: "quality-ratchet",
+    phase: "pre-extraction",
+    command: "node tools/promote-ratchet.mjs {targetPath}",
+    outputs: ["quality/baselines/{targetPath}.json"],
+    verify: "node tools/check-ratchet.mjs {targetPath}",
+    commit: { subject: "chore: promote ratchet for {targetPath}" },
+  },
+];
 ```
 
 For a source edit that does not need a repository helper, declare ordered text
 replacements instead:
 
 ```ts
-preparers: [{
-  id: "tighten-widget-limit",
-  phase: "pre-extraction",
-  replacements: [{
-    path: "{sourcePath}",
-    prefix: "export const widget = { ",
-    before: "limit: 10",
-    after: "limit: 20",
-    suffix: " };",
-  }],
-  outputs: ["{sourcePath}"],
-  commit: { subject: "refactor: tighten widget limit" },
-}]
+preparers: [
+  {
+    id: "tighten-widget-limit",
+    phase: "pre-extraction",
+    replacements: [{ path: "{sourcePath}", prefix: "export const widget = { ", before: "limit: 10", after: "limit: 20", suffix: " };" }],
+    outputs: ["{sourcePath}"],
+    commit: { subject: "refactor: tighten widget limit" },
+  },
+];
 ```
 
 Replacement entries execute in array order and later entries read the bytes
@@ -330,15 +328,14 @@ uses the same binding templates as replacements. Mode defaults to `0o644` and
 may be `0o755`:
 
 ```ts
-preparers: [{
-  id: "add-widget-contract",
-  phase: "pre-extraction",
-  creates: [{
-    path: "{packageRoot}/src/widget-contract.ts",
-    contents: "export interface WidgetContract {}\n",
-  }],
-  commit: { subject: "refactor: add widget contract" },
-}]
+preparers: [
+  {
+    id: "add-widget-contract",
+    phase: "pre-extraction",
+    creates: [{ path: "{packageRoot}/src/widget-contract.ts", contents: "export interface WidgetContract {}\n" }],
+    commit: { subject: "refactor: add widget contract" },
+  },
+];
 ```
 
 Planning requires each create path to be absent, or already be a regular file
@@ -390,22 +387,26 @@ included in the wiring commit. Undeclared repository changes still fail the
 changed-scope audit.
 
 ```ts
-postJournalPreparers: [{
-  id: "module-registry",
-  phase: "after-journal-before-gates",
-  replacements: [{
-    path: "tools/module-registry.ts",
-    prefix: "export const modules = [",
-    before: '"apps/api/src/domain.ts"',
-    after: '"libs/domain/src/domain.ts"',
-    suffix: "] as const;\n",
-  }],
-  creates: [{ path: "tools/generated-input.ts", contents: "export {};\n", mode: 0o644 }],
-  command: "bun tools/generate.ts",
-  outputs: ["tools/module-registry.ts", "generated/baseline.ts"],
-  triggers: ["^apps/api/src/domain\\.ts$"],
-  verify: "bun tools/generate.ts --check",
-}]
+postJournalPreparers: [
+  {
+    id: "module-registry",
+    phase: "after-journal-before-gates",
+    replacements: [
+      {
+        path: "tools/module-registry.ts",
+        prefix: "export const modules = [",
+        before: '"apps/api/src/domain.ts"',
+        after: '"libs/domain/src/domain.ts"',
+        suffix: "] as const;\n",
+      },
+    ],
+    creates: [{ path: "tools/generated-input.ts", contents: "export {};\n", mode: 0o644 }],
+    command: "bun tools/generate.ts",
+    outputs: ["tools/module-registry.ts", "generated/baseline.ts"],
+    triggers: ["^apps/api/src/domain\\.ts$"],
+    verify: "bun tools/generate.ts --check",
+  },
+];
 ```
 
 Created paths are outputs automatically and must not also appear in `outputs`.
@@ -471,10 +472,10 @@ scan. `status` is read-only and reports stale HEAD as non-actionable.
 
 ## Exit codes
 
-| code | meaning |
-| --- | --- |
-| `0` | Command completed and its reported proof passed. |
-| `1` | Expected domain operation completed with a failed validation, simulation, check, or audit result. |
-| `3` | A selected adapter or integration is explicitly not yet ported. |
-| `64` | Invalid command usage or refused operator input. |
-| `70` | Unexpected internal defect; the CLI prints the full cause chain. |
+| code | meaning                                                                                           |
+| ---- | ------------------------------------------------------------------------------------------------- |
+| `0`  | Command completed and its reported proof passed.                                                  |
+| `1`  | Expected domain operation completed with a failed validation, simulation, check, or audit result. |
+| `3`  | A selected adapter or integration is explicitly not yet ported.                                   |
+| `64` | Invalid command usage or refused operator input.                                                  |
+| `70` | Unexpected internal defect; the CLI prints the full cause chain.                                  |

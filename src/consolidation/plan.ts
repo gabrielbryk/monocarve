@@ -9,9 +9,10 @@
 
 import type { MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
-import type { Sha256 } from "../util/hash.ts";
 import type { ExtractionManifest, PlanOperation } from "../plan/manifest.ts";
+import type { Sha256 } from "../util/hash.ts";
 import type { ConsolidationCandidate } from "./candidate.ts";
+import { buildConsolidationManifest } from "./plan-manifest.ts";
 import {
   applyConsolidationDonorRetirement,
   buildConsolidationWiringOperations,
@@ -20,7 +21,6 @@ import {
   reorderConsolidationOperations,
   resolveConsumers,
 } from "./plan-support.ts";
-import { buildConsolidationManifest } from "./plan-manifest.ts";
 
 export interface BuildConsolidationPlanOptions {
   readonly config: MonocarveConfig;
@@ -34,36 +34,16 @@ export interface BuildConsolidationPlanOptions {
 
 export function buildConsolidationPlan(options: BuildConsolidationPlanOptions): ExtractionManifest {
   const { config, graph, candidate, baselineCommit, rootDir } = options;
-  const { context, packageManager, taskRunner, packageName, packageRoot, application, projectId, baselineCommitHash, committedAt } = initializeConsolidationPlan({
-    config,
-    rootDir,
-    candidate,
-    packageRootOverride: options.packageRoot,
-    baselineCommit,
-  });
+  const { context, packageManager, taskRunner, packageName, packageRoot, application, projectId, baselineCommitHash, committedAt } =
+    initializeConsolidationPlan({ config, rootDir, candidate, packageRootOverride: options.packageRoot, baselineCommit });
 
   // Build move operations for each file.
   const operations: PlanOperation[] = [];
   const sourceBlobs: Record<string, Sha256> = {};
 
-  const { publicModules, publicSpecifierFor, tests } = prepareConsolidationSources({
-    context,
-    candidate,
-    packageRoot,
-    packageName,
-    operations,
-    sourceBlobs,
-  });
+  const { publicModules, publicSpecifierFor, tests } = prepareConsolidationSources({ context, candidate, packageRoot, packageName, operations, sourceBlobs });
 
-  const { dependencies, consumers, consumerSections } = resolveConsumers({
-    context,
-    graph,
-    candidate,
-    packageName,
-    publicSpecifierFor,
-    operations,
-    tests,
-  });
+  const { dependencies, consumers, consumerSections } = resolveConsumers({ context, graph, candidate, packageName, publicSpecifierFor, operations, tests });
 
   buildConsolidationWiringOperations({
     context,

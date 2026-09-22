@@ -67,11 +67,7 @@ export function git(options: GitOptions, ...args: string[]): string {
       encoding: "utf8",
       env: scrubbedGitEnv(),
       maxBuffer: 256 * 1024 * 1024,
-      ...(options.inherit
-        ? { stdio: "inherit" as const }
-        : options.quiet
-          ? { stdio: ["ignore", "pipe", "ignore"] as const }
-          : {}),
+      ...(options.inherit ? { stdio: "inherit" as const } : options.quiet ? { stdio: ["ignore", "pipe", "ignore"] as const } : {}),
     });
     return typeof output === "string" ? output.trim() : "";
   } catch (error) {
@@ -81,12 +77,7 @@ export function git(options: GitOptions, ...args: string[]): string {
 
 /** Run git and return raw stdout bytes — for blobs, which are not text. */
 export function gitBytes(options: GitOptions, ...args: string[]): Uint8Array {
-  return execFileSync("git", args, {
-    cwd: options.cwd,
-    env: scrubbedGitEnv(),
-    maxBuffer: 256 * 1024 * 1024,
-    stdio: ["ignore", "pipe", "ignore"],
-  });
+  return execFileSync("git", args, { cwd: options.cwd, env: scrubbedGitEnv(), maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
 }
 
 /** Run git, returning null instead of throwing. */
@@ -174,9 +165,7 @@ export interface GitStatusEntry {
  * renamed out from underneath a plan.
  */
 export function statusEntries(workspaceRoot: string): readonly GitStatusEntry[] {
-  const output = new TextDecoder().decode(
-    gitBytes({ cwd: workspaceRoot }, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", "."),
-  );
+  const output = new TextDecoder().decode(gitBytes({ cwd: workspaceRoot }, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", "."));
   const fields = output.split("\0");
   const prefix = repositoryPrefix(workspaceRoot);
   const entries: GitStatusEntry[] = [];
@@ -203,11 +192,7 @@ export function statusEntries(workspaceRoot: string): readonly GitStatusEntry[] 
       rawPaths.push(other);
       index += 1;
     }
-    entries.push({
-      index: indexStatus,
-      worktree: worktreeStatus,
-      paths: rawPaths.map((value) => workspaceRelativeStatusPath(value, prefix)),
-    });
+    entries.push({ index: indexStatus, worktree: worktreeStatus, paths: rawPaths.map((value) => workspaceRelativeStatusPath(value, prefix)) });
   }
   return entries;
 }

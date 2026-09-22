@@ -11,15 +11,15 @@ import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapter
 import { GENERATOR } from "../branding.ts";
 import type { ApplicationConfig, MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
-import type { Sha256 } from "../util/hash.ts";
-import { renderTemplate } from "../util/template.ts";
+import { boundaryBaselineOf } from "../plan/boundary-baseline.ts";
+import { graphDigest, renderGates } from "../plan/build-support.ts";
+import type { Consumer } from "../plan/consumers.ts";
 import type { WorkspaceContext } from "../plan/context.ts";
 import type { InferredDependencies } from "../plan/dependencies.ts";
-import type { Consumer } from "../plan/consumers.ts";
 import { PLAN_SCHEMA_VERSION, type ExtractionManifest, type PlanOperation, type PublicModule } from "../plan/manifest.ts";
-import { boundaryBaselineOf } from "../plan/boundary-baseline.ts";
 import { buildPlanProvenance } from "../plan/provenance.ts";
-import { graphDigest, renderGates } from "../plan/build-support.ts";
+import type { Sha256 } from "../util/hash.ts";
+import { renderTemplate } from "../util/template.ts";
 import type { ConsolidationCandidate } from "./candidate.ts";
 import { operationPathsOf } from "./plan-support.ts";
 
@@ -45,7 +45,28 @@ export function buildConsolidationManifest(input: {
   readonly consumers: readonly Consumer[];
   readonly consumerSections: ReadonlyMap<string, "runtime" | "dev">;
 }): ExtractionManifest {
-  const { config, rootDir, graph, candidate, context, packageManager, taskRunner, application, packageName, packageRoot, projectId, baselineCommitHash, committedAt, publicModules, tests, dependencies, sourceBlobs, operations, consumers, consumerSections } = input;
+  const {
+    config,
+    rootDir,
+    graph,
+    candidate,
+    context,
+    packageManager,
+    taskRunner,
+    application,
+    packageName,
+    packageRoot,
+    projectId,
+    baselineCommitHash,
+    committedAt,
+    publicModules,
+    tests,
+    dependencies,
+    sourceBlobs,
+    operations,
+    consumers,
+    consumerSections,
+  } = input;
 
   const consumerOwners = consumers.map((c) => c.package);
   const commitVars = {
@@ -76,27 +97,18 @@ export function buildConsolidationManifest(input: {
     graphDigest: graphDigest(graph),
     application: application.name,
     boundaryBaseline: boundaryBaselineOf({ config, rootDir, files: context.repositorySources(), referencesOf: (file) => context.moduleReferences(file) }),
-    target: {
-      packageName,
-      packageRoot,
-      entrypoint: config.scaffoldTemplates.entrypoint,
-      requiredExports: [],
-      publicModules,
-    },
+    target: { packageName, packageRoot, entrypoint: config.scaffoldTemplates.entrypoint, requiredExports: [], publicModules },
     source: {
       files: candidate.files,
       tests,
       ...(candidate.assets.length > 0 ? { assets: candidate.assets } : {}),
-    // `candidate.sccs` is an array; Object.keys would count its indices.
-    sccs: candidate.sccs.length > 0
-      ? Object.fromEntries(candidate.sccs.map((scc) => [scc.id, scc.members]))
-      : { "scc-consolidation": candidate.files },
+      // `candidate.sccs` is an array; Object.keys would count its indices.
+      sccs: candidate.sccs.length > 0 ? Object.fromEntries(candidate.sccs.map((scc) => [scc.id, scc.members])) : { "scc-consolidation": candidate.files },
     },
     dependencies,
     sourceBlobs,
     operations,
-    consumers: consumers
-      .map((consumer) => ({
+    consumers: consumers.map((consumer) => ({
       file: consumer.file,
       owner: consumer.package,
       expectedImporter: consumer.expectedImporter,

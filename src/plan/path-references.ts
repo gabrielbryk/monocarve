@@ -168,11 +168,7 @@ export class PathReferenceIndex {
       }
     }
     return found.sort(
-      (left, right) =>
-        byCodeUnit(left.file, right.file) ||
-        left.line - right.line ||
-        left.column - right.column ||
-        byCodeUnit(left.target, right.target),
+      (left, right) => byCodeUnit(left.file, right.file) || left.line - right.line || left.column - right.column || byCodeUnit(left.target, right.target),
     );
   }
 }
@@ -233,8 +229,10 @@ export function buildPathReferenceIndex(context: WorkspaceContext): PathReferenc
       scanned.add(file);
       const referenceBases = context.config.pathReferenceRewrites.enabled
         ? context.config.pathReferenceRewrites.roots
-          .filter((root) => root.referenceBase !== undefined && (file === root.root || file.startsWith(root.root + "/")) && root.extensions.includes(extname(file)))
-          .map((root) => root.referenceBase!)
+            .filter(
+              (root) => root.referenceBase !== undefined && (file === root.root || file.startsWith(root.root + "/")) && root.extensions.includes(extname(file)),
+            )
+            .map((root) => root.referenceBase!)
         : [];
       scanText(readFileSync(absolute, "utf8"), file, (raw, occurrence) => record(raw, occurrence, referenceBases));
     }

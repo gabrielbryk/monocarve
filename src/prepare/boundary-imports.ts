@@ -63,11 +63,7 @@ export function planExistingPackageBoundary(input: PlanExistingPackageBoundaryIn
   return boundary.retire ? { rewrites, deletion: planDeletion(input, rewrites) } : { rewrites };
 }
 
-function planImporterRewrite(
-  input: PlanExistingPackageBoundaryInput,
-  donorPath: string,
-  importer: RetainedImporterInput,
-): RewriteModuleSpecifierOperation {
+function planImporterRewrite(input: PlanExistingPackageBoundaryInput, donorPath: string, importer: RetainedImporterInput): RewriteModuleSpecifierOperation {
   const { boundary } = input;
   for (const symbol of importer.importedSymbols) {
     if (!boundary.replacementSymbols.includes(symbol)) {
@@ -99,12 +95,14 @@ function planImporterRewrite(
   return {
     kind: "rewrite-module-specifier",
     file,
-    rewrites: [{
-      from: importer.specifier,
-      to: boundary.replacementSpecifier,
-      symbols: [...importer.importedSymbols].sort(byCodeUnit),
-      ...(importer.moduleSpecifierCall === undefined ? {} : { moduleSpecifierCall: importer.moduleSpecifierCall }),
-    }],
+    rewrites: [
+      {
+        from: importer.specifier,
+        to: boundary.replacementSpecifier,
+        symbols: [...importer.importedSymbols].sort(byCodeUnit),
+        ...(importer.moduleSpecifierCall === undefined ? {} : { moduleSpecifierCall: importer.moduleSpecifierCall }),
+      },
+    ],
     contents,
   };
 }
@@ -119,9 +117,5 @@ function planDeletion(input: PlanExistingPackageBoundaryInput, rewrites: readonl
     resultHash: hashText(""),
     resultMode: 0,
   };
-  return {
-    kind: "delete-module",
-    file,
-    importerProof: rewrites.map((rewrite) => rewrite.file.path).sort(byCodeUnit),
-  };
+  return { kind: "delete-module", file, importerProof: rewrites.map((rewrite) => rewrite.file.path).sort(byCodeUnit) };
 }

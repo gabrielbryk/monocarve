@@ -5,9 +5,9 @@ import { pnpmAdapter } from "../../src/adapters/pnpm.ts";
 import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../../src/adapters/registry.ts";
 import { rewriteResolvedImportSpecifier } from "../../src/codemod/imports.ts";
 import { getApplication, parseConfig, resolveExtractionProfile } from "../../src/config.ts";
+import type { ExtractionManifest, PlanOperation } from "../../src/plan/manifest.ts";
 import { buildPlanProvenance } from "../../src/plan/provenance.ts";
 import { hashText } from "../../src/util/hash.ts";
-import type { ExtractionManifest, PlanOperation } from "../../src/plan/manifest.ts";
 import { fixtureGit, read, write } from "./fixture-repo.ts";
 
 export const DONOR = "apps/api/src/widget/widget.ts";
@@ -24,21 +24,9 @@ export const ZETA = "@acme/zeta";
  * is written inline, and a link-only workspace has no `packages:` key. The
  * splicer has to be exercised against the file it will actually meet.
  */
-export const LOCKFILE = [
-  "lockfileVersion: '9.0'",
-  "",
-  "importers:",
-  "",
-  "  .: {}",
-  "",
-  "  libs/zeta: {}",
-  "",
-].join("\n");
+export const LOCKFILE = ["lockfileVersion: '9.0'", "", "importers:", "", "  .: {}", "", "  libs/zeta: {}", ""].join("\n");
 
-export const IMPORTER_BLOCK = pnpmAdapter.importerBlock(
-  LOCKFILE.replace("  libs/zeta: {}", "  libs/analytics: {}\n\n  libs/zeta: {}"),
-  PACKAGE_ROOT,
-)!;
+export const IMPORTER_BLOCK = pnpmAdapter.importerBlock(LOCKFILE.replace("  libs/zeta: {}", "  libs/analytics: {}\n\n  libs/zeta: {}"), PACKAGE_ROOT)!;
 export const LOCKFILE_APPLIED = pnpmAdapter.insertImporter(LOCKFILE, PACKAGE_ROOT, IMPORTER_BLOCK);
 
 export function importerBlock(lines: readonly string[]): string {
@@ -89,14 +77,7 @@ export function baseManifest(root: string): ExtractionManifest {
       preconditionHash: hashText(consumerText),
       resultHash: hashText(rewritten),
     },
-    {
-      kind: "write-file",
-      path: ENTRYPOINT,
-      contents: barrel,
-      preconditionHash: "missing",
-      resultHash: hashText(barrel),
-      generator: "scaffold:entrypoint",
-    },
+    { kind: "write-file", path: ENTRYPOINT, contents: barrel, preconditionHash: "missing", resultHash: hashText(barrel), generator: "scaffold:entrypoint" },
     {
       kind: "lockfile-importer",
       lockfile: "pnpm-lock.yaml",
@@ -118,12 +99,7 @@ export function baseManifest(root: string): ExtractionManifest {
     baselineCommit: fixtureGit(root, "rev-parse", "HEAD"),
     graphDigest: hashText("fixture-graph"),
     application: "api",
-    target: {
-      packageName: PACKAGE,
-      packageRoot: PACKAGE_ROOT,
-      entrypoint: "src/index.ts",
-      requiredExports: [{ name: "widgetValue", typeOnly: false }],
-    },
+    target: { packageName: PACKAGE, packageRoot: PACKAGE_ROOT, entrypoint: "src/index.ts", requiredExports: [{ name: "widgetValue", typeOnly: false }] },
     source: { files: [DONOR], tests: [], sccs: { "scc-fixture": [DONOR] } },
     dependencies: { runtime: {}, dev: {}, packageReferences: [] },
     sourceBlobs: { [DONOR]: donorHash },
@@ -149,10 +125,7 @@ export function baseManifest(root: string): ExtractionManifest {
     metrics: { movedFiles: 1, movedLines: 1, applicationLinesBefore: 4, applicationLinesAfter: 3, consumers: 1 },
     commits: {
       plan: { subject: "chore(@acme/analytics): compile extraction plan fixture-extraction" },
-      move: {
-        subject: "refactor(@acme/analytics): move 1 files into libs/analytics",
-        body: "Extraction-Proof: simulated fixture-extraction",
-      },
+      move: { subject: "refactor(@acme/analytics): move 1 files into libs/analytics", body: "Extraction-Proof: simulated fixture-extraction" },
       wiring: { subject: "refactor(@acme/analytics): wire @acme/analytics into the workspace" },
     },
     gates: { package: [], project: [], workspace: ["true"] },
@@ -196,9 +169,7 @@ export function landOnDisk(root: string, manifest: ExtractionManifest): void {
       write(
         root,
         operation.target,
-        operation.kind === "move"
-          ? text
-          : text.replace(operation.rewrites[0]!.donorlessSpecifier, operation.rewrites[0]!.packageSpecifier),
+        operation.kind === "move" ? text : text.replace(operation.rewrites[0]!.donorlessSpecifier, operation.rewrites[0]!.packageSpecifier),
       );
       rmSync(join(root, operation.source));
     } else if (operation.kind === "rewrite-import") {
@@ -206,22 +177,12 @@ export function landOnDisk(root: string, manifest: ExtractionManifest): void {
       write(
         root,
         operation.file,
-        rewriteResolvedImportSpecifier(
-          current,
-          join(root, operation.file),
-          join(root, operation.donors[0]!),
-          operation.rewrites[0]!.to,
-          root,
-        ),
+        rewriteResolvedImportSpecifier(current, join(root, operation.file), join(root, operation.donors[0]!), operation.rewrites[0]!.to, root),
       );
     } else if (operation.kind === "write-file") {
       write(root, operation.path, operation.contents);
     } else if (operation.kind === "lockfile-importer") {
-      write(
-        root,
-        operation.lockfile,
-        pnpmAdapter.applyImporter(read(root, operation.lockfile), operation.packageRoot, operation.block, operation.mode),
-      );
+      write(root, operation.lockfile, pnpmAdapter.applyImporter(read(root, operation.lockfile), operation.packageRoot, operation.block, operation.mode));
     } else {
       throw new Error("fixture does not support path migrations");
     }

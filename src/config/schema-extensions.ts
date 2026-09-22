@@ -5,37 +5,50 @@ import { relativePath } from "./primitives.ts";
 const kebabId = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "must be a lowercase kebab-case identifier");
 
 /** Explicit adoption of orphaned generated output as durable source. */
-export const generatedSourceAdoptions = z.array(z.strictObject({
-  id: kebabId,
-  /** Application-owned path used to render repository policy for package-only adoptions. */
-  policyAnchor: relativePath.optional(),
-  artifacts: z.array(z.strictObject({
-    path: relativePath,
-    /** Must equal the missing source declared by the artifact header. */
-    missingSource: relativePath,
-    /** Exact leading line count removed from the artifact. */
-    removeHeaderLines: z.number().int().positive(),
-  })).min(1),
-  /** Optional generator retired only when no other provenance header names it. */
-  retireGenerator: relativePath.optional(),
-})).default([]).superRefine((items, ctx) => {
-  const seen = new Set<string>();
-  items.forEach((item, index) => {
-    if (seen.has(item.id)) ctx.addIssue({ code: "custom", path: [index, "id"], message: "generatedSourceAdoptions id must be unique" });
-    seen.add(item.id);
+export const generatedSourceAdoptions = z
+  .array(
+    z.strictObject({
+      id: kebabId,
+      /** Application-owned path used to render repository policy for package-only adoptions. */
+      policyAnchor: relativePath.optional(),
+      artifacts: z
+        .array(
+          z.strictObject({
+            path: relativePath,
+            /** Must equal the missing source declared by the artifact header. */
+            missingSource: relativePath,
+            /** Exact leading line count removed from the artifact. */
+            removeHeaderLines: z.number().int().positive(),
+          }),
+        )
+        .min(1),
+      /** Optional generator retired only when no other provenance header names it. */
+      retireGenerator: relativePath.optional(),
+    }),
+  )
+  .default([])
+  .superRefine((items, ctx) => {
+    const seen = new Set<string>();
+    items.forEach((item, index) => {
+      if (seen.has(item.id)) ctx.addIssue({ code: "custom", path: [index, "id"], message: "generatedSourceAdoptions id must be unique" });
+      seen.add(item.id);
+    });
   });
-});
 
 export type GeneratedSourceAdoptionsConfig = z.output<typeof generatedSourceAdoptions>;
 
 /** Exact JSON-pointer fields whose module paths resolve from a declared root. */
-export const runtimeModuleRegistries = z.array(z.strictObject({
-  file: relativePath,
-  pointer: z.string().regex(/^\/(?:[^/]+\/)*[^/]+$/, "must be an absolute JSON pointer pattern"),
-  resolveFrom: relativePath,
-  /** Exact prefix removed by the runtime consumer before resolving the value. */
-  stripPrefix: z.string().min(1).optional(),
-})).default([]);
+export const runtimeModuleRegistries = z
+  .array(
+    z.strictObject({
+      file: relativePath,
+      pointer: z.string().regex(/^\/(?:[^/]+\/)*[^/]+$/, "must be an absolute JSON pointer pattern"),
+      resolveFrom: relativePath,
+      /** Exact prefix removed by the runtime consumer before resolving the value. */
+      stripPrefix: z.string().min(1).optional(),
+    }),
+  )
+  .default([]);
 
 export type RuntimeModuleRegistriesConfig = z.output<typeof runtimeModuleRegistries>;
 

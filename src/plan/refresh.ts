@@ -53,7 +53,9 @@ export function refreshExtractionPlan(options: RefreshPlanOptions): RefreshPlanR
   const candidate = options.resolveCandidate(existing);
   if (candidate === undefined) throw new PlanningError(`cannot refresh plan ${existing.planId}: candidate no longer resolves; compile a new plan`);
   if (candidate.application !== existing.application) {
-    throw new PlanningError(`cannot refresh plan ${existing.planId}: application changed from ${existing.application} to ${candidate.application}; compile a new plan`);
+    throw new PlanningError(
+      `cannot refresh plan ${existing.planId}: application changed from ${existing.application} to ${candidate.application}; compile a new plan`,
+    );
   }
 
   const profile = existing.target.profile?.name;
@@ -64,9 +66,7 @@ export function refreshExtractionPlan(options: RefreshPlanOptions): RefreshPlanR
     candidate,
     baselineCommit: currentHead,
     ...(existing.target.targetSubpath === undefined ? {} : { targetSubpath: existing.target.targetSubpath }),
-    ...(profile === undefined
-      ? { packageName: existing.target.packageName, packageRoot: existing.target.packageRoot }
-      : { profile }),
+    ...(profile === undefined ? { packageName: existing.target.packageName, packageRoot: existing.target.packageRoot } : { profile }),
   });
 
   assertSame("candidate identity", existing.planId, refreshed.planId);

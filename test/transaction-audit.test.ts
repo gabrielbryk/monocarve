@@ -2,10 +2,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { auditPlanSync } from "../src/transaction/audit.ts";
-import { assertPlanValid } from "../src/plan/validate.ts";
-import { hashText } from "../src/util/hash.ts";
 import type { ExtractionManifest } from "../src/plan/manifest.ts";
+import { assertPlanValid } from "../src/plan/validate.ts";
+import { auditPlanSync } from "../src/transaction/audit.ts";
+import { hashText } from "../src/util/hash.ts";
 import { cleanupFixtures, fixtureConfig, fixtureRepo, read, write } from "./support/fixture-repo.ts";
 import { CONSUMER, DONOR, ENTRYPOINT, PACKAGE, PACKAGE_ROOT, TARGET, baseManifest, extractionFiles, landOnDisk } from "./support/transaction-fixture.ts";
 
@@ -48,11 +48,7 @@ describe("audit negative cases", () => {
     expect(tampered.operations).not.toEqual(manifest.operations);
     const report = auditPlanSync({ config, rootDir: root, manifest: tampered });
     expect(report.passed).toBe(false);
-    expect(
-      report.lockfileIntegrity.failures.some((failure) =>
-        failure.startsWith("lockfile importer block does not match the worktree"),
-      ),
-    ).toBe(true);
+    expect(report.lockfileIntegrity.failures.some((failure) => failure.startsWith("lockfile importer block does not match the worktree"))).toBe(true);
   }, 60_000);
 
   test("fails when the package entrypoint is missing", () => {
@@ -145,9 +141,7 @@ describe("audit negative cases", () => {
     const manifest: ExtractionManifest = {
       ...base,
       operations: base.operations.map((operation) =>
-        operation.kind === "write-file" && operation.path === ENTRYPOINT
-          ? { ...operation, contents: barrel, resultHash: hashText(barrel) }
-          : operation,
+        operation.kind === "write-file" && operation.path === ENTRYPOINT ? { ...operation, contents: barrel, resultHash: hashText(barrel) } : operation,
       ),
     };
     write(root, stowaway, "export const stowaway = Date.now();\n");
@@ -157,9 +151,7 @@ describe("audit negative cases", () => {
     const report = auditPlanSync({ config, rootDir: root, manifest });
     expect(report.byteFidelity.passed).toBe(true);
     expect(report.entrypointClosure.passed).toBe(false);
-    expect(report.entrypointClosure.failures).toEqual([
-      "package entrypoint evaluates a module the plan never declared: widget/stowaway",
-    ]);
+    expect(report.entrypointClosure.failures).toEqual(["package entrypoint evaluates a module the plan never declared: widget/stowaway"]);
     // Nothing else notices, which is why this proof is not documentation.
     expect(report.failures).toEqual(report.entrypointClosure.failures);
     expect(report.passed).toBe(false);
@@ -179,9 +171,7 @@ describe("audit negative cases", () => {
       evaluationEffects: [{ subject: "module", reach: "moved", path: DONOR, kinds: ["expression-statement"] }],
     };
     const report = auditPlanSync({ config, rootDir: root, manifest: sourcePaths });
-    expect(report.entrypointClosure.failures).toEqual([
-      `declared evaluation effects name a path this plan does not produce: ${DONOR}`,
-    ]);
+    expect(report.entrypointClosure.failures).toEqual([`declared evaluation effects name a path this plan does not produce: ${DONOR}`]);
     expect(report.passed).toBe(false);
 
     // The same inventory keyed to the target passes, so the failure above is

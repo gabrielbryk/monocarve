@@ -1,8 +1,8 @@
 import { z } from "zod";
 
+import { scratchPath } from "../util/scratch-root.ts";
 import { regexSource, relativePath } from "./primitives.ts";
 import type { MonocarveConfig } from "./schema.ts";
-import { scratchPath } from "../util/scratch-root.ts";
 
 export const generatedArtifacts = z.strictObject({
   provenance: z
@@ -26,7 +26,11 @@ export const generatedArtifacts = z.strictObject({
    * yet. They are different kinds of command with different normal durations,
    * and one number cannot be right for both.
    */
-  timeoutMs: z.number().int().positive().default(5 * 60 * 1000),
+  timeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .default(5 * 60 * 1000),
   artifacts: z
     .array(
       z.strictObject({
@@ -75,14 +79,9 @@ export type GeneratedArtifactConfig = GeneratedArtifactsConfig["artifacts"][numb
  * An artifact with no `triggers` is matched by every extraction; that is what
  * an empty list means, not "matched by nothing".
  */
-export function triggeredArtifacts(
-  config: MonocarveConfig,
-  movedPaths: readonly string[],
-): readonly GeneratedArtifactConfig[] {
+export function triggeredArtifacts(config: MonocarveConfig, movedPaths: readonly string[]): readonly GeneratedArtifactConfig[] {
   return config.generatedArtifacts.artifacts.filter((artifact) =>
-    artifact.triggers.length === 0
-      ? true
-      : movedPaths.some((path) => artifact.triggers.some((pattern) => new RegExp(pattern).test(path))),
+    artifact.triggers.length === 0 ? true : movedPaths.some((path) => artifact.triggers.some((pattern) => new RegExp(pattern).test(path))),
   );
 }
 
@@ -103,7 +102,11 @@ export function triggeredArtifacts(
  * self-contained and discoverable through `PATH`.
  */
 export const pathMigrations = z.strictObject({
-  timeoutMs: z.number().int().positive().default(5 * 60 * 1000),
+  timeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .default(5 * 60 * 1000),
   artifacts: z
     .array(
       z.strictObject({
@@ -128,99 +131,143 @@ export const pathMigrations = z.strictObject({
 export type PathMigrationsConfig = z.output<typeof pathMigrations>;
 
 /** Optional repository build proofs for emitted, tree-shaken assets. */
-export const assetEmissionProofs = z.array(z.strictObject({
-  id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
-  command: z.string().min(1),
-  roots: z.array(relativePath).min(1),
-  extensions: z.array(z.string().regex(/^\./, "extension must start with a dot")).min(1),
-  analyzer: z.literal("css-selectors"),
-})).default([]).superRefine((items, context) => {
-  const seen = new Set<string>();
-  items.forEach((item, index) => {
-    if (seen.has(item.id)) context.addIssue({ code: "custom", path: [index, "id"], message: "asset-emission proof id must be unique" });
-    seen.add(item.id);
+export const assetEmissionProofs = z
+  .array(
+    z.strictObject({
+      id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+      command: z.string().min(1),
+      roots: z.array(relativePath).min(1),
+      extensions: z.array(z.string().regex(/^\./, "extension must start with a dot")).min(1),
+      analyzer: z.literal("css-selectors"),
+    }),
+  )
+  .default([])
+  .superRefine((items, context) => {
+    const seen = new Set<string>();
+    items.forEach((item, index) => {
+      if (seen.has(item.id)) context.addIssue({ code: "custom", path: [index, "id"], message: "asset-emission proof id must be unique" });
+      seen.add(item.id);
+    });
   });
-});
 
 export type AssetEmissionProofConfig = z.output<typeof assetEmissionProofs>[number];
 
 /** Declared-output commands which require the journal's moved tree. */
-export const postJournalPreparers = z.array(z.strictObject({
-  id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
-  phase: z.literal("after-journal-before-gates"),
-  command: z.string().min(1).optional(),
-  replacements: z.array(z.strictObject({
-    path: relativePath,
-    before: z.string().min(1),
-    after: z.string(),
-    prefix: z.string().min(1).optional(),
-    suffix: z.string().min(1).optional(),
-  }).superRefine((replacement, ctx) => {
-    if (replacement.prefix === undefined && replacement.suffix === undefined) ctx.addIssue({ code: "custom", message: "text replacement must configure prefix or suffix context" });
-  })).min(1).optional(),
-  creates: z.array(z.strictObject({ path: relativePath, contents: z.string(), mode: z.union([z.literal(0o644), z.literal(0o755)]).optional() })).min(1).optional(),
-  outputs: z.array(relativePath).default([]),
-  triggers: z.array(regexSource).default([]),
-  verify: z.string().min(1).optional(),
-  emittedModuleSpecifiers: z.array(z.strictObject({
-    /** Generator/template source containing module specifiers emitted verbatim. */
-    source: relativePath,
-    /** Generated module whose directory is the emitted specifiers' resolution base. */
-    resolutionBase: relativePath,
-  })).default([]),
-}).superRefine((item, context) => {
-  if (item.command === undefined && item.replacements === undefined && item.creates === undefined) context.addIssue({ code: "custom", message: "post-journal preparer must configure command, replacements, or creates" });
-})).default([]).superRefine((items, context) => {
-  const ids = new Set<string>();
-  const outputs = new Set<string>();
-  items.forEach((item, index) => {
-    if (ids.has(item.id)) context.addIssue({ code: "custom", path: [index, "id"], message: "post-journal preparer id must be unique" });
-    ids.add(item.id);
-    const creates = new Set(item.creates?.map((create) => create.path) ?? []);
-    if (creates.size !== (item.creates?.length ?? 0)) context.addIssue({ code: "custom", path: [index, "creates"], message: "post-journal create path must be unique" });
-    for (const replacement of item.replacements ?? []) {
-      if (!item.outputs.includes(replacement.path)) context.addIssue({ code: "custom", path: [index, "replacements"], message: `post-journal replacement path is not a declared output: ${replacement.path}` });
-      if (creates.has(replacement.path)) context.addIssue({ code: "custom", path: [index], message: `post-journal path cannot be both replaced and created: ${replacement.path}` });
-    }
-    for (const path of creates) if (item.outputs.includes(path)) context.addIssue({ code: "custom", path: [index, "creates"], message: `created path is automatically an output and must not be declared twice: ${path}` });
-    for (const path of creates) {
-      if (outputs.has(path)) context.addIssue({ code: "custom", path: [index, "creates"], message: `post-journal preparer output is duplicated: ${path}` });
-      outputs.add(path);
-    }
-    item.outputs.forEach((output) => {
-      if (outputs.has(output)) context.addIssue({ code: "custom", path: [index, "outputs"], message: `post-journal preparer output is duplicated: ${output}` });
-      outputs.add(output);
-    });
-    const sources = new Set<string>();
-    item.emittedModuleSpecifiers.forEach((declaration, declarationIndex) => {
-      if (sources.has(declaration.source)) context.addIssue({ code: "custom", path: [index, "emittedModuleSpecifiers", declarationIndex, "source"], message: `emitted module specifier source is duplicated: ${declaration.source}` });
-      sources.add(declaration.source);
-      if (!item.outputs.includes(declaration.resolutionBase)) context.addIssue({ code: "custom", path: [index, "emittedModuleSpecifiers", declarationIndex, "resolutionBase"], message: "emitted module specifier resolutionBase must be one of the preparer's declared outputs" });
+export const postJournalPreparers = z
+  .array(
+    z
+      .strictObject({
+        id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+        phase: z.literal("after-journal-before-gates"),
+        command: z.string().min(1).optional(),
+        replacements: z
+          .array(
+            z
+              .strictObject({
+                path: relativePath,
+                before: z.string().min(1),
+                after: z.string(),
+                prefix: z.string().min(1).optional(),
+                suffix: z.string().min(1).optional(),
+              })
+              .superRefine((replacement, ctx) => {
+                if (replacement.prefix === undefined && replacement.suffix === undefined)
+                  ctx.addIssue({ code: "custom", message: "text replacement must configure prefix or suffix context" });
+              }),
+          )
+          .min(1)
+          .optional(),
+        creates: z
+          .array(z.strictObject({ path: relativePath, contents: z.string(), mode: z.union([z.literal(0o644), z.literal(0o755)]).optional() }))
+          .min(1)
+          .optional(),
+        outputs: z.array(relativePath).default([]),
+        triggers: z.array(regexSource).default([]),
+        verify: z.string().min(1).optional(),
+        emittedModuleSpecifiers: z
+          .array(
+            z.strictObject({
+              /** Generator/template source containing module specifiers emitted verbatim. */
+              source: relativePath,
+              /** Generated module whose directory is the emitted specifiers' resolution base. */
+              resolutionBase: relativePath,
+            }),
+          )
+          .default([]),
+      })
+      .superRefine((item, context) => {
+        if (item.command === undefined && item.replacements === undefined && item.creates === undefined)
+          context.addIssue({ code: "custom", message: "post-journal preparer must configure command, replacements, or creates" });
+      }),
+  )
+  .default([])
+  .superRefine((items, context) => {
+    const ids = new Set<string>();
+    const outputs = new Set<string>();
+    items.forEach((item, index) => {
+      if (ids.has(item.id)) context.addIssue({ code: "custom", path: [index, "id"], message: "post-journal preparer id must be unique" });
+      ids.add(item.id);
+      const creates = new Set(item.creates?.map((create) => create.path) ?? []);
+      if (creates.size !== (item.creates?.length ?? 0))
+        context.addIssue({ code: "custom", path: [index, "creates"], message: "post-journal create path must be unique" });
+      for (const replacement of item.replacements ?? []) {
+        if (!item.outputs.includes(replacement.path))
+          context.addIssue({
+            code: "custom",
+            path: [index, "replacements"],
+            message: `post-journal replacement path is not a declared output: ${replacement.path}`,
+          });
+        if (creates.has(replacement.path))
+          context.addIssue({ code: "custom", path: [index], message: `post-journal path cannot be both replaced and created: ${replacement.path}` });
+      }
+      for (const path of creates)
+        if (item.outputs.includes(path))
+          context.addIssue({
+            code: "custom",
+            path: [index, "creates"],
+            message: `created path is automatically an output and must not be declared twice: ${path}`,
+          });
+      for (const path of creates) {
+        if (outputs.has(path)) context.addIssue({ code: "custom", path: [index, "creates"], message: `post-journal preparer output is duplicated: ${path}` });
+        outputs.add(path);
+      }
+      item.outputs.forEach((output) => {
+        if (outputs.has(output))
+          context.addIssue({ code: "custom", path: [index, "outputs"], message: `post-journal preparer output is duplicated: ${output}` });
+        outputs.add(output);
+      });
+      const sources = new Set<string>();
+      item.emittedModuleSpecifiers.forEach((declaration, declarationIndex) => {
+        if (sources.has(declaration.source))
+          context.addIssue({
+            code: "custom",
+            path: [index, "emittedModuleSpecifiers", declarationIndex, "source"],
+            message: `emitted module specifier source is duplicated: ${declaration.source}`,
+          });
+        sources.add(declaration.source);
+        if (!item.outputs.includes(declaration.resolutionBase))
+          context.addIssue({
+            code: "custom",
+            path: [index, "emittedModuleSpecifiers", declarationIndex, "resolutionBase"],
+            message: "emitted module specifier resolutionBase must be one of the preparer's declared outputs",
+          });
+      });
     });
   });
-});
 
 export type PostJournalPreparerConfig = z.output<typeof postJournalPreparers>[number];
 
 /** Configured post-journal generators invalidated by moved or rewritten paths. */
-export function triggeredPostJournalPreparers(
-  config: MonocarveConfig,
-  changedPaths: readonly string[],
-): readonly PostJournalPreparerConfig[] {
-  return config.postJournalPreparers.filter((preparer) =>
-    preparer.triggers.length === 0 || changedPaths.some((path) => preparer.triggers.some((pattern) => new RegExp(pattern).test(path))),
+export function triggeredPostJournalPreparers(config: MonocarveConfig, changedPaths: readonly string[]): readonly PostJournalPreparerConfig[] {
+  return config.postJournalPreparers.filter(
+    (preparer) => preparer.triggers.length === 0 || changedPaths.some((path) => preparer.triggers.some((pattern) => new RegExp(pattern).test(path))),
   );
 }
 export type PathMigrationConfig = PathMigrationsConfig["artifacts"][number];
 
-export function triggeredPathMigrations(
-  config: MonocarveConfig,
-  movedPaths: readonly string[],
-): readonly PathMigrationConfig[] {
+export function triggeredPathMigrations(config: MonocarveConfig, movedPaths: readonly string[]): readonly PathMigrationConfig[] {
   return config.pathMigrations.artifacts.filter((artifact) =>
-    artifact.triggers.length === 0
-      ? true
-      : movedPaths.some((path) => artifact.triggers.some((pattern) => new RegExp(pattern).test(path))),
+    artifact.triggers.length === 0 ? true : movedPaths.some((path) => artifact.triggers.some((pattern) => new RegExp(pattern).test(path))),
   );
 }
 
@@ -242,7 +289,10 @@ export const transaction = z.strictObject({
    * or `~/.cache`. The default is resolved per parse, so the environment a run
    * actually has is the environment it honours.
    */
-  worktreeRoot: z.string().min(1).default(() => scratchPath("worktrees")),
+  worktreeRoot: z
+    .string()
+    .min(1)
+    .default(() => scratchPath("worktrees")),
   /**
    * How the simulation worktree gets `node_modules`. `symlink` is the default
    * because a full install per simulation is minutes of wall clock for no added

@@ -1,11 +1,20 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { applyPlan } from "../src/transaction/apply.ts";
 import type { ExtractionManifest } from "../src/plan/manifest.ts";
+import { applyPlan } from "../src/transaction/apply.ts";
 import {
-  BARREL, ENTRYPOINT, PACKAGE_ROOT, cleanupFixtures, expectApplyToFail, expectRestored, extractionFiles, fixture,
-  fixtureGit, repoState, write,
+  BARREL,
+  ENTRYPOINT,
+  PACKAGE_ROOT,
+  cleanupFixtures,
+  expectApplyToFail,
+  expectRestored,
+  extractionFiles,
+  fixture,
+  fixtureGit,
+  repoState,
+  write,
 } from "./support/rollback-fixture.ts";
 
 describe("rollback restores the checkout from every commit boundary", () => {
@@ -33,13 +42,7 @@ describe("rollback restores the checkout from every commit boundary", () => {
       (base) => ({
         ...base,
         generatedFiles: [
-          {
-            path: artifact,
-            source: PACKAGE_ROOT,
-            regenerate: "exit 7",
-            regenerateOnApply: true,
-            exemptReason: "the fixture's generator never produces bytes",
-          },
+          { path: artifact, source: PACKAGE_ROOT, regenerate: "exit 7", regenerateOnApply: true, exemptReason: "the fixture's generator never produces bytes" },
         ],
         changedFiles: [...base.changedFiles, artifact].sort(),
       }),
@@ -49,9 +52,7 @@ describe("rollback restores the checkout from every commit boundary", () => {
 
     // The simulation regenerates too, and would stop the apply before the
     // checkout was touched; this case is about the checkout's recovery.
-    const error = await expectApplyToFail(
-      applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, skipSimulation: true }),
-    );
+    const error = await expectApplyToFail(applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, skipSimulation: true }));
     expect(error.message).toContain(`regenerating ${artifact} failed (exit 7)`);
     expect(error.message).toContain(`[rollback complete: HEAD and index reset to ${before.head}`);
 
@@ -72,9 +73,7 @@ describe("rollback restores the checkout from every commit boundary", () => {
     const before = repoState(root);
     expect(before.staged).toContain("unrelated.ts");
 
-    const error = await expectApplyToFail(
-      applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, resume: true, skipSimulation: true }),
-    );
+    const error = await expectApplyToFail(applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, resume: true, skipSimulation: true }));
     expect(error.message).toContain("move commit");
     expect(error.message).toContain("rollback complete");
 
@@ -104,9 +103,7 @@ describe("rollback restores the checkout from every commit boundary", () => {
     const { root, config, manifest, manifestPath } = fixture({ ...extractionFiles(), [ENTRYPOINT]: BARREL });
     const before = repoState(root);
 
-    const error = await expectApplyToFail(
-      applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, skipSimulation: true }),
-    );
+    const error = await expectApplyToFail(applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, skipSimulation: true }));
     expect(error.message).toContain(`commit is missing declared operation paths: ${ENTRYPOINT}`);
     expect(error.message).toContain(`[rollback complete: HEAD and index reset to ${before.head}`);
 

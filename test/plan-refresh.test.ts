@@ -76,13 +76,9 @@ test("refuses an uncommitted workspace instead of claiming to compile HEAD", asy
   write(root, "docs/uncommitted.md", "not at HEAD\n");
   const graph = await scanDependencyGraph({ config, rootDir: root, noCache: true });
 
-  expect(() => refreshExtractionPlan({
-    manifest,
-    config,
-    rootDir: root,
-    graph,
-    resolveCandidate: () => candidateFor(config, graph),
-  })).toThrow("dirty workspace");
+  expect(() => refreshExtractionPlan({ manifest, config, rootDir: root, graph, resolveCandidate: () => candidateFor(config, graph) })).toThrow(
+    "dirty workspace",
+  );
 });
 
 test("refuses target identity drift from current configuration", async () => {

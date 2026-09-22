@@ -1,6 +1,6 @@
+import { testKindOf } from "../../config.ts";
 import { isSourceModulePath } from "../../util/files.ts";
 import { isSha256 } from "../../util/hash.ts";
-import { testKindOf } from "../../config.ts";
 import type { ExtractionManifest } from "../manifest.ts";
 import type { ValidatePlanOptions } from "./shared.ts";
 import { Issues } from "./shared.ts";
@@ -10,12 +10,18 @@ export function validateSource(
   options: ValidatePlanOptions,
   issues: Issues,
   containedPath: (path: string, rule: string) => boolean,
-): { readonly files: readonly string[]; readonly tests: readonly string[]; readonly assets: readonly string[]; readonly blobs: Readonly<Record<string, string>> } {
+): {
+  readonly files: readonly string[];
+  readonly tests: readonly string[];
+  readonly assets: readonly string[];
+  readonly blobs: Readonly<Record<string, string>>;
+} {
   const files = manifest.source?.files ?? [];
   const tests = manifest.source?.tests ?? [];
   const assets = manifest.source?.assets ?? [];
   const declared = [...files, ...tests, ...assets];
-  if (assets.some((asset) => isSourceModulePath(asset, options.config.sourceExtensions))) issues.add("asset-kind", "source.assets must not contain configured source modules");
+  if (assets.some((asset) => isSourceModulePath(asset, options.config.sourceExtensions)))
+    issues.add("asset-kind", "source.assets must not contain configured source modules");
   if (new Set(declared).size !== declared.length) issues.add("source-uniqueness", "source files, tests, and assets must be unique");
   for (const path of declared) containedPath(path, "source-path");
   if (!options.offline) {

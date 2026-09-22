@@ -37,26 +37,12 @@
 
 import { resolve } from "node:path";
 
-import {
-  triggeredArtifacts,
-  triggeredPostJournalPreparers,
-  type GeneratedArtifactConfig,
-  type MonocarveConfig,
-} from "../config.ts";
+import { triggeredArtifacts, triggeredPostJournalPreparers, type GeneratedArtifactConfig, type MonocarveConfig } from "../config.ts";
+import { regeneratedArtifacts, type ExtractionManifest, type GeneratedFileRecord } from "../plan/manifest.ts";
 import { fileState } from "../util/files.ts";
 import { MISSING, type FileState } from "../util/hash.ts";
-import {
-  regeneratedArtifacts,
-  type ExtractionManifest,
-  type GeneratedFileRecord,
-} from "../plan/manifest.ts";
 import { dirtyPaths, newlyDirtyPaths, run } from "./regenerate-command.ts";
-import {
-  preparerPolicyDrift,
-  replayRecordedPreparer,
-  runConfiguredPreparer,
-  type PreparerContext,
-} from "./regenerate-preparers.ts";
+import { preparerPolicyDrift, replayRecordedPreparer, runConfiguredPreparer, type PreparerContext } from "./regenerate-preparers.ts";
 
 export interface ArtifactRegeneration {
   /** Workspace-relative artifact path. */
@@ -93,11 +79,7 @@ export interface RegenerateOptions {
  * stale, and the plan's `changedFiles` would be wrong about it, so the plan has
  * to be recompiled rather than stretched.
  */
-function undeclaredArtifactFailure(
-  config: MonocarveConfig,
-  manifest: ExtractionManifest,
-  records: readonly GeneratedFileRecord[],
-): string | undefined {
+function undeclaredArtifactFailure(config: MonocarveConfig, manifest: ExtractionManifest, records: readonly GeneratedFileRecord[]): string | undefined {
   const declared = new Set(records.map((record) => record.path));
   const missing = triggeredArtifacts(config, manifest.source?.files ?? [])
     .map((artifact) => artifact.path)
@@ -110,15 +92,12 @@ function undeclaredArtifactFailure(
 }
 
 /** The same staleness check for preparers, which a path rewrite also triggers. */
-function undeclaredPreparerFailure(
-  config: MonocarveConfig,
-  manifest: ExtractionManifest,
-  records: readonly GeneratedFileRecord[],
-): string | undefined {
-  const declaredPreparerIds = new Set([...(manifest.postJournalPreparers ?? []).map((record) => record.id), ...records.flatMap((record) => record.preparerId === undefined ? [] : [record.preparerId])]);
-  const rewrittenDocuments = manifest.operations
-    .filter((operation) => operation.kind === "rewrite-path-reference")
-    .map((operation) => operation.file);
+function undeclaredPreparerFailure(config: MonocarveConfig, manifest: ExtractionManifest, records: readonly GeneratedFileRecord[]): string | undefined {
+  const declaredPreparerIds = new Set([
+    ...(manifest.postJournalPreparers ?? []).map((record) => record.id),
+    ...records.flatMap((record) => (record.preparerId === undefined ? [] : [record.preparerId])),
+  ]);
+  const rewrittenDocuments = manifest.operations.filter((operation) => operation.kind === "rewrite-path-reference").map((operation) => operation.file);
   const missingPreparers = triggeredPostJournalPreparers(config, [...(manifest.source?.files ?? []), ...rewrittenDocuments])
     .filter((preparer) => !declaredPreparerIds.has(preparer.id))
     .map((preparer) => preparer.id);
@@ -173,12 +152,10 @@ function regenerateConfiguredArtifact(
   };
   artifacts.push(entry);
 
-  if (undeclared.length > 0) return `generator for ${record.path} changed undeclared output(s): ${undeclared.join(", ")}; declare each output separately and recompile the plan`;
+  if (undeclared.length > 0)
+    return `generator for ${record.path} changed undeclared output(s): ${undeclared.join(", ")}; declare each output separately and recompile the plan`;
   if (result.exitCode !== 0) {
-    return (
-      `regenerating ${record.path} failed (exit ${result.exitCode}): ${artifact.regenerate}` +
-      `${result.output === "" ? "" : `\n${result.output}`}`
-    );
+    return `regenerating ${record.path} failed (exit ${result.exitCode}): ${artifact.regenerate}` + `${result.output === "" ? "" : `\n${result.output}`}`;
   }
   if (after === MISSING) return `regenerating ${record.path} succeeded but produced no file: ${artifact.regenerate}`;
   return undefined;

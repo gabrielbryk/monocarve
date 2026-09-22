@@ -30,11 +30,7 @@ export interface PreparerManifest {
       readonly prefix?: string;
       readonly suffix?: string;
     }[];
-    readonly creates?: readonly {
-      readonly path: string;
-      readonly contents: string;
-      readonly mode: 0o644 | 0o755;
-    }[];
+    readonly creates?: readonly { readonly path: string; readonly contents: string; readonly mode: 0o644 | 0o755 }[];
     readonly verify?: string;
     readonly commit: { readonly subject: string; readonly body?: string };
   };
@@ -59,7 +55,13 @@ export interface PreparerManifest {
     readonly id: string;
     readonly command?: string;
     readonly outputs: readonly string[];
-    readonly replacements?: readonly { readonly path: string; readonly before: string; readonly after: string; readonly prefix?: string; readonly suffix?: string }[];
+    readonly replacements?: readonly {
+      readonly path: string;
+      readonly before: string;
+      readonly after: string;
+      readonly prefix?: string;
+      readonly suffix?: string;
+    }[];
     readonly creates?: readonly { readonly path: string; readonly contents: string; readonly mode: number }[];
     readonly emittedModuleSpecifiers: readonly { readonly source: string; readonly resolutionBase: string }[];
     readonly verify?: string;

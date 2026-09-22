@@ -18,8 +18,8 @@
  * rather than deriving one from config).
  */
 
-import { MonocarveError } from "../errors.ts";
 import type { CompositionBoundariesConfig, PortPromotionsConfig } from "../config/schema-policy.ts";
+import { MonocarveError } from "../errors.ts";
 import { byCodeUnit } from "../util/hash.ts";
 
 export class BoundaryConfigError extends MonocarveError {
@@ -76,13 +76,13 @@ export interface ResolveBoundariesInput {
 
 /** Normalize both config surfaces into one deterministically ordered list. */
 export function resolveBoundaries(config: ResolveBoundariesInput): readonly ResolvedBoundary[] {
-  const resolved = [
-    ...config.compositionBoundaries.map(resolveCompositionBoundary),
-    ...config.portPromotions.map(resolvePortPromotion),
-  ].sort((left, right) => byCodeUnit(left.id, right.id));
+  const resolved = [...config.compositionBoundaries.map(resolveCompositionBoundary), ...config.portPromotions.map(resolvePortPromotion)].sort((left, right) =>
+    byCodeUnit(left.id, right.id),
+  );
   const seen = new Set<string>();
   for (const boundary of resolved) {
-    if (seen.has(boundary.id)) throw new BoundaryConfigError(`boundary id ${boundary.id} is declared more than once across compositionBoundaries and portPromotions`);
+    if (seen.has(boundary.id))
+      throw new BoundaryConfigError(`boundary id ${boundary.id} is declared more than once across compositionBoundaries and portPromotions`);
     seen.add(boundary.id);
   }
   return resolved;
@@ -103,7 +103,9 @@ function resolveCompositionBoundary(boundary: CompositionBoundariesConfig[number
     };
   }
   if (!boundary.contract || !boundary.contractModule || !boundary.appAdapter || !boundary.packageImport || boundary.symbols.length === 0) {
-    throw new BoundaryConfigError(`boundary ${boundary.id}: strategy "port" requires contract, contractModule, appAdapter, packageImport, and a non-empty symbols list`);
+    throw new BoundaryConfigError(
+      `boundary ${boundary.id}: strategy "port" requires contract, contractModule, appAdapter, packageImport, and a non-empty symbols list`,
+    );
   }
   if (!boundary.template) {
     throw new BoundaryConfigError(`boundary ${boundary.id}: strategy "port" requires a reviewed "template" id — the adapter is never synthesized`);

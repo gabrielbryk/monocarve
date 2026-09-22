@@ -1,16 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
-import {
-  baselinePath,
-  judge,
-  readBaseline,
-  report,
-  reportBaselineUpdate,
-  summarizeBaselineUpdate,
-  writeBaseline,
-  type BaselinedFinding,
-} from "./baseline.ts";
+import { baselinePath, judge, readBaseline, report, reportBaselineUpdate, summarizeBaselineUpdate, writeBaseline, type BaselinedFinding } from "./baseline.ts";
 
 export interface LineViolation {
   readonly path: string;
@@ -21,7 +12,8 @@ export interface LineViolation {
 const EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"];
 
 export function findLineViolations(rootDir: string, targets: readonly string[], limit: number): LineViolation[] {
-  return targets.flatMap((target) => files(resolve(rootDir, target)))
+  return targets
+    .flatMap((target) => files(resolve(rootDir, target)))
     .map((path) => ({ path, lines: lineCount(readFileSync(path, "utf8")), limit }))
     .filter((entry) => entry.lines > limit)
     .map((entry) => ({ ...entry, path: entry.path.slice(resolve(rootDir).length + 1).replaceAll("\\", "/") }))
@@ -48,8 +40,12 @@ if (import.meta.main) {
   const updating = argv.includes("--update-baseline");
   const targets = argv.filter((arg) => !arg.startsWith("--"));
   const limit = Number(process.env.MAX_FILE_LINES ?? "500");
-  const findings: BaselinedFinding[] = findLineViolations(rootDir, targets.length > 0 ? targets : ["src", "test", "scripts"], limit)
-    .map((entry) => ({ path: entry.path, metric: "lines", actual: entry.lines, detail: `${entry.lines} lines (limit ${entry.limit})` }));
+  const findings: BaselinedFinding[] = findLineViolations(rootDir, targets.length > 0 ? targets : ["src", "test", "scripts"], limit).map((entry) => ({
+    path: entry.path,
+    metric: "lines",
+    actual: entry.lines,
+    detail: `${entry.lines} lines (limit ${entry.limit})`,
+  }));
   const file = baselinePath(rootDir, "max-file-lines");
   if (updating) {
     const summary = summarizeBaselineUpdate(findings, readBaseline(file));

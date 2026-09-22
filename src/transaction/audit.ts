@@ -3,24 +3,16 @@
 import { createPackageManagerAdapter } from "../adapters/registry.ts";
 import type { PackageManagerAdapter } from "../adapters/types.ts";
 import { resetCodemodCaches } from "../codemod/imports.ts";
-import {
-  isAnyMove,
-  type MoveOperation,
-  type MoveWithRewriteOperation,
-} from "../plan/manifest.ts";
-import { entrypointSurfaceFailures, publicSubpathFailures } from "./audit-target-surface.ts";
-import { sourceConservation as proveSourceConservation } from "./audit-conservation.ts";
-import { unauditableManifest, unauditableReport } from "./audit-helpers.ts";
-import { replayFailure } from "./audit-graph.ts";
+import { isAnyMove, type MoveOperation, type MoveWithRewriteOperation } from "../plan/manifest.ts";
+import { generatedArtifactsProof, lockfileIntegrityProof, postJournalDeclarativeProof } from "./audit-artifacts.ts";
 import { byteFidelityProof } from "./audit-byte-fidelity.ts";
-import { consumerEvidence, type ConsumerEvidence } from "./audit-consumers.ts";
 import { entrypointClosureProof } from "./audit-closure.ts";
-import {
-  generatedArtifactsProof,
-  lockfileIntegrityProof,
-  postJournalDeclarativeProof,
-} from "./audit-artifacts.ts";
+import { sourceConservation as proveSourceConservation } from "./audit-conservation.ts";
+import { consumerEvidence, type ConsumerEvidence } from "./audit-consumers.ts";
+import { replayFailure } from "./audit-graph.ts";
+import { unauditableManifest, unauditableReport } from "./audit-helpers.ts";
 import { assembleReport, externalConsumerProof, type AuditProofs } from "./audit-report.ts";
+import { entrypointSurfaceFailures, publicSubpathFailures } from "./audit-target-surface.ts";
 import { proof, type AuditOptions, type AuditReport } from "./audit-types.ts";
 
 export type { AuditOptions, AuditReport, GraphEvidence, ProofResult } from "./audit-types.ts";
@@ -51,22 +43,12 @@ function proveAll(
 
   /* -- 2. consumer completeness ------------------------------------------ */
 
-  const consumerCompleteness = proof(
-    evidence.consumerFailures,
-    manifest.consumers.length + evidence.sourceCount,
-  );
+  const consumerCompleteness = proof(evidence.consumerFailures, manifest.consumers.length + evidence.sourceCount);
 
   /* -- 3. boundary rules ------------------------------------------------- */
 
-  const boundaryFailures = [
-    ...evidence.boundaryFailures,
-    ...entrypointSurfaceFailures(rootDir, manifest, moves),
-    ...publicSubpathFailures(rootDir, manifest),
-  ];
-  const boundaryRules = proof(
-    [...new Set(boundaryFailures)],
-    manifest.target.requiredExports.length + (manifest.target.publicModules?.length ?? 0),
-  );
+  const boundaryFailures = [...evidence.boundaryFailures, ...entrypointSurfaceFailures(rootDir, manifest, moves), ...publicSubpathFailures(rootDir, manifest)];
+  const boundaryRules = proof([...new Set(boundaryFailures)], manifest.target.requiredExports.length + (manifest.target.publicModules?.length ?? 0));
 
   /* -- 4. external-consumer compile proof -------------------------------- */
 
@@ -74,9 +56,7 @@ function proveAll(
 
   /* -- 5. codemod replay proof ------------------------------------------- */
 
-  const replays = manifest.operations.filter(
-    (operation): operation is MoveWithRewriteOperation => operation.kind === "move-with-rewrite",
-  );
+  const replays = manifest.operations.filter((operation): operation is MoveWithRewriteOperation => operation.kind === "move-with-rewrite");
   const replayFailures = replays.flatMap((operation) => replayFailure(config, manifest, operation, rootDir));
   const codemodReplay = proof(replayFailures, replays.length);
 

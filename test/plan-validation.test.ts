@@ -10,15 +10,15 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { assertPlanValid, validatePlan } from "../src/plan/validate.ts";
-import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../src/adapters/registry.ts";
 import { moonAdapter, noneTaskRunner } from "../src/adapters/moon.ts";
 import { pnpmAdapter } from "../src/adapters/pnpm.ts";
+import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../src/adapters/registry.ts";
 import { getApplication, resolveExtractionProfile } from "../src/config.ts";
-import { buildPlanProvenance } from "../src/plan/provenance.ts";
-import { hashText } from "../src/util/hash.ts";
 import { PLAN_SCHEMA_VERSION, type ExtractionManifest, type PlanOperation } from "../src/plan/manifest.ts";
 import { projectedArtifactEvidence } from "../src/plan/projected-workspace.ts";
+import { buildPlanProvenance } from "../src/plan/provenance.ts";
+import { assertPlanValid, validatePlan } from "../src/plan/validate.ts";
+import { hashText } from "../src/util/hash.ts";
 import { cleanupFixtures, fixtureConfig, fixtureRepo } from "./support/fixture-repo.ts";
 
 const DONOR = "apps/api/src/widget/widget.ts";
@@ -48,13 +48,7 @@ function manifest(): ExtractionManifest {
   const operations: PlanOperation[] = [
     { kind: "move", source: DONOR, target: TARGET, preconditionHash: donorHash, resultHash: donorHash },
     { kind: "move", source: ASSET, target: ASSET_TARGET, preconditionHash: assetHash, resultHash: assetHash },
-    {
-      kind: "write-file",
-      path: ENTRYPOINT,
-      contents: barrel,
-      preconditionHash: "missing",
-      resultHash: hashText(barrel),
-    },
+    { kind: "write-file", path: ENTRYPOINT, contents: barrel, preconditionHash: "missing", resultHash: hashText(barrel) },
   ];
   return {
     schemaVersion: 2,
@@ -95,7 +89,14 @@ describe("plan validation", () => {
   test("accepts legacy v2 plans and deterministic current provenance", () => {
     const { root, config } = repo();
     const profile = resolveExtractionProfile(config, getApplication(config, "api"), undefined);
-    const input = { config, profileGates: profile.gates, scaffoldTemplates: profile.scaffoldTemplates, packageManager: createPackageManagerAdapter(config), taskRunner: createTaskRunnerAdapter(config), rootPackageJson: '{ "name": "fixture-workspace", "private": true }\n' };
+    const input = {
+      config,
+      profileGates: profile.gates,
+      scaffoldTemplates: profile.scaffoldTemplates,
+      packageManager: createPackageManagerAdapter(config),
+      taskRunner: createTaskRunnerAdapter(config),
+      rootPackageJson: '{ "name": "fixture-workspace", "private": true }\n',
+    };
     expect(buildPlanProvenance(input)).toEqual(buildPlanProvenance(input));
     expect(input.packageManager.declaredVersion?.('{ "packageManager": "pnpm@9.15.0" }')).toBe("9.15.0");
     const current: ExtractionManifest = { ...manifest(), schemaVersion: 3, provenance: buildPlanProvenance(input) };
@@ -108,11 +109,21 @@ describe("plan validation", () => {
   test("rejects independently forged provenance claims", () => {
     const { root, config } = repo();
     const profile = resolveExtractionProfile(config, getApplication(config, "api"), undefined);
-    const provenance = buildPlanProvenance({ config, profileGates: profile.gates, scaffoldTemplates: profile.scaffoldTemplates, packageManager: createPackageManagerAdapter(config), taskRunner: createTaskRunnerAdapter(config), rootPackageJson: '{ "name": "fixture-workspace" }\n' });
+    const provenance = buildPlanProvenance({
+      config,
+      profileGates: profile.gates,
+      scaffoldTemplates: profile.scaffoldTemplates,
+      packageManager: createPackageManagerAdapter(config),
+      taskRunner: createTaskRunnerAdapter(config),
+      rootPackageJson: '{ "name": "fixture-workspace" }\n',
+    });
     const cases = [
       { value: { ...provenance, configDigest: hashText("forged-config") }, rule: "config-digest" },
       { value: { ...provenance, policyDigest: hashText("forged-policy") }, rule: "policy-digest" },
-      { value: { ...provenance, adapters: { ...provenance.adapters, packageManager: { ...provenance.adapters.packageManager, contractVersion: 99 } } }, rule: "adapter-provenance" },
+      {
+        value: { ...provenance, adapters: { ...provenance.adapters, packageManager: { ...provenance.adapters.packageManager, contractVersion: 99 } } },
+        rule: "adapter-provenance",
+      },
       { value: { ...provenance, compiler: { artifactIntegrity: hashText("forged-compiler") } }, rule: "compiler-integrity" },
     ];
     for (const entry of cases) {
@@ -124,13 +135,25 @@ describe("plan validation", () => {
   test("rejects architectural assessment evidence whose ordering can hide a changed claim", () => {
     const { root, config } = repo();
     const profile = resolveExtractionProfile(config, getApplication(config, "api"), undefined);
-    const provenance = buildPlanProvenance({ config, profileGates: profile.gates, scaffoldTemplates: profile.scaffoldTemplates, packageManager: createPackageManagerAdapter(config), taskRunner: createTaskRunnerAdapter(config), rootPackageJson: '{ "name": "fixture-workspace", "private": true }\n' });
+    const provenance = buildPlanProvenance({
+      config,
+      profileGates: profile.gates,
+      scaffoldTemplates: profile.scaffoldTemplates,
+      packageManager: createPackageManagerAdapter(config),
+      taskRunner: createTaskRunnerAdapter(config),
+      rootPackageJson: '{ "name": "fixture-workspace", "private": true }\n',
+    });
     const assessed: ExtractionManifest = {
-      ...manifest(), schemaVersion: PLAN_SCHEMA_VERSION, provenance,
+      ...manifest(),
+      schemaVersion: PLAN_SCHEMA_VERSION,
+      provenance,
       assessment: {
-        status: "review-required", cohesion: "medium",
+        status: "review-required",
+        cohesion: "medium",
         reasons: [{ code: "high-inbound", detail: "review hub ownership", paths: ["z.ts", "a.ts"] }],
-        compatibilityShims: [], targetOptions: [], selectedTarget: { packageName: PACKAGE, packageRoot: PACKAGE_ROOT, action: "extend" },
+        compatibilityShims: [],
+        targetOptions: [],
+        selectedTarget: { packageName: PACKAGE, packageRoot: PACKAGE_ROOT, action: "extend" },
       },
     };
     expect(validatePlan(assessed, { config, rootDir: root }).issues.map(({ rule }) => rule)).toContain("assessment");
@@ -154,10 +177,7 @@ describe("plan validation", () => {
       taskRunner: { id: "moon", contractVersion: 1, declaredVersion: "^1.31.0" },
     });
     const absent = buildPlanProvenance({ ...base, packageManager: pnpmAdapter, taskRunner: noneTaskRunner, rootPackageJson: "not-json" });
-    expect(absent.adapters).toEqual({
-      packageManager: { id: "pnpm", contractVersion: 1 },
-      taskRunner: { id: "none", contractVersion: 1 },
-    });
+    expect(absent.adapters).toEqual({ packageManager: { id: "pnpm", contractVersion: 1 }, taskRunner: { id: "none", contractVersion: 1 } });
   });
 
   test("rejects forged projected artifact and dependency-decision evidence", () => {
@@ -176,14 +196,10 @@ describe("plan validation", () => {
   test("rejects incomplete dependency-decision coverage", () => {
     const { root, config } = repo();
     const base = manifest();
-    const incomplete: ExtractionManifest = {
-      ...base,
-      dependencies: { runtime: { library: "1" }, dev: {}, packageReferences: [] },
-      dependencyDecisions: [],
-    };
-    expect(validatePlan(incomplete, { config, rootDir: root }).issues).toContainEqual(expect.objectContaining({
-      rule: "dependency-evidence", message: "missing dependency decision library:target-runtime",
-    }));
+    const incomplete: ExtractionManifest = { ...base, dependencies: { runtime: { library: "1" }, dev: {}, packageReferences: [] }, dependencyDecisions: [] };
+    expect(validatePlan(incomplete, { config, rootDir: root }).issues).toContainEqual(
+      expect.objectContaining({ rule: "dependency-evidence", message: "missing dependency decision library:target-runtime" }),
+    );
   });
 
   test("rejects an asset that is not moved, and a TypeScript file declared as an asset", () => {
@@ -195,23 +211,16 @@ describe("plan validation", () => {
       operations: base.operations.filter((operation) => operation.kind !== "move" || operation.source !== ASSET),
       changedFiles: base.changedFiles.filter((path) => path !== ASSET && path !== ASSET_TARGET),
     };
-    expect(() => assertPlanValid(missingAssetMove, { config, rootDir: root })).toThrow(
-      "operations must move every source, test, and asset exactly once",
-    );
+    expect(() => assertPlanValid(missingAssetMove, { config, rootDir: root })).toThrow("operations must move every source, test, and asset exactly once");
 
     const sourceAsAsset: ExtractionManifest = { ...base, source: { ...base.source, assets: [DONOR] } };
-    expect(() => assertPlanValid(sourceAsAsset, { config, rootDir: root })).toThrow(
-      "source.assets must not contain configured source modules",
-    );
+    expect(() => assertPlanValid(sourceAsAsset, { config, rootDir: root })).toThrow("source.assets must not contain configured source modules");
   });
 
   test("rejects a multi-line commit subject", () => {
     const { root, config } = repo();
     const base = manifest();
-    const broken: ExtractionManifest = {
-      ...base,
-      commits: { ...base.commits, move: { subject: "refactor(x): move\nrogue trailer" } },
-    };
+    const broken: ExtractionManifest = { ...base, commits: { ...base.commits, move: { subject: "refactor(x): move\nrogue trailer" } } };
     expect(() => assertPlanValid(broken, { config, rootDir: root })).toThrow("invalid Conventional Commit");
   });
 
@@ -225,13 +234,7 @@ describe("plan validation", () => {
       changedFiles: [DONOR, ENTRYPOINT].sort(),
       operations: [
         { kind: "move", source: DONOR, target: ENTRYPOINT, preconditionHash: donorHash, resultHash: donorHash },
-        {
-          kind: "write-file",
-          path: ENTRYPOINT,
-          contents: barrel,
-          preconditionHash: "missing",
-          resultHash: hashText(barrel),
-        },
+        { kind: "write-file", path: ENTRYPOINT, contents: barrel, preconditionHash: "missing", resultHash: hashText(barrel) },
       ],
     };
     expect(() => assertPlanValid(collision, { config, rootDir: root })).toThrow("barrel self-import");
@@ -242,20 +245,9 @@ describe("plan validation", () => {
     const base = manifest();
     const writeBeforeMove: ExtractionManifest = {
       ...base,
-      operations: [
-        {
-          kind: "write-file",
-          path: TARGET,
-          contents: barrel,
-          preconditionHash: "missing",
-          resultHash: hashText(barrel),
-        },
-        ...base.operations,
-      ],
+      operations: [{ kind: "write-file", path: TARGET, contents: barrel, preconditionHash: "missing", resultHash: hashText(barrel) }, ...base.operations],
     };
-    expect(() => assertPlanValid(writeBeforeMove, { config, rootDir: root })).toThrow(
-      `multiple operations mutate ${TARGET}`,
-    );
+    expect(() => assertPlanValid(writeBeforeMove, { config, rootDir: root })).toThrow(`multiple operations mutate ${TARGET}`);
   });
 
   test("rejects move-with-rewrite whose target is not an existing package, or which rewrites nothing", () => {
@@ -283,14 +275,7 @@ describe("plan validation", () => {
       ...base,
       operations: base.operations.map((operation) =>
         operation.kind === "move" && operation.source === DONOR
-          ? {
-              kind: "move-with-rewrite",
-              source: DONOR,
-              target: TARGET,
-              rewrites: [],
-              preconditionHash: donorHash,
-              resultHash: hashText("rewritten"),
-            }
+          ? { kind: "move-with-rewrite", source: DONOR, target: TARGET, rewrites: [], preconditionHash: donorHash, resultHash: hashText("rewritten") }
           : operation,
       ),
     };
@@ -318,9 +303,7 @@ describe("plan validation", () => {
         },
       ],
     };
-    expect(() => assertPlanValid(drifted, { config, rootDir: root })).toThrow(
-      "lockfileImporter.hash must be the SHA-256 of the declared importer block",
-    );
+    expect(() => assertPlanValid(drifted, { config, rootDir: root })).toThrow("lockfileImporter.hash must be the SHA-256 of the declared importer block");
   });
 
   test("rejects an importer insert aimed at an application, and a duplicate importer operation", () => {
@@ -343,14 +326,9 @@ describe("plan validation", () => {
         },
       ],
     };
-    expect(() => assertPlanValid(insertingAnApp, { config, rootDir: root })).toThrow(
-      "lockfile importer must target a workspace package",
-    );
+    expect(() => assertPlanValid(insertingAnApp, { config, rootDir: root })).toThrow("lockfile importer must target a workspace package");
 
-    const duplicated: ExtractionManifest = {
-      ...base,
-      operations: [...base.operations, base.operations[0]!],
-    };
+    const duplicated: ExtractionManifest = { ...base, operations: [...base.operations, base.operations[0]!] };
     expect(() => assertPlanValid(duplicated, { config, rootDir: root })).toThrow("duplicate operation");
   });
 
@@ -358,17 +336,10 @@ describe("plan validation", () => {
     const { root, config } = repo();
     const base = manifest();
 
-    expect(() => assertPlanValid({ ...base, changedFiles: [DONOR] }, { config, rootDir: root })).toThrow(
-      "changedFiles must exactly match operation paths",
-    );
+    expect(() => assertPlanValid({ ...base, changedFiles: [DONOR] }, { config, rootDir: root })).toThrow("changedFiles must exactly match operation paths");
 
-    const missingReference: ExtractionManifest = {
-      ...base,
-      dependencies: { runtime: {}, dev: {}, packageReferences: ["libs/does-not-exist"] },
-    };
-    expect(() => assertPlanValid(missingReference, { config, rootDir: root })).toThrow(
-      "package reference does not exist",
-    );
+    const missingReference: ExtractionManifest = { ...base, dependencies: { runtime: {}, dev: {}, packageReferences: ["libs/does-not-exist"] } };
+    expect(() => assertPlanValid(missingReference, { config, rootDir: root })).toThrow("package reference does not exist");
   });
 
   test("rejects an SCC map that does not partition the production files", () => {
@@ -383,11 +354,7 @@ describe("plan validation", () => {
   test("reports every error at once rather than only the first", () => {
     const { root, config } = repo();
     const base = manifest();
-    const broken: ExtractionManifest = {
-      ...base,
-      graphDigest: "not-a-hash",
-      target: { ...base.target, packageName: "not scoped" },
-    };
+    const broken: ExtractionManifest = { ...base, graphDigest: "not-a-hash", target: { ...base.target, packageName: "not scoped" } };
     const result = validatePlan(broken, { config, rootDir: root });
     expect(result.ok).toBe(false);
     expect(result.issues.filter((issue) => issue.severity === "error").length).toBeGreaterThanOrEqual(2);
@@ -406,10 +373,6 @@ describe("plan validation", () => {
     // A refactor may split rule families, but it must not reshuffle their
     // review output: callers use this deterministic order to diagnose a
     // forged manifest without diffing an incidental traversal order.
-    expect(validatePlan(broken, { config, rootDir: root }).issues.map((issue) => issue.rule)).toEqual([
-      "graph-digest",
-      "target-name",
-      "commit-subject",
-    ]);
+    expect(validatePlan(broken, { config, rootDir: root }).issues.map((issue) => issue.rule)).toEqual(["graph-digest", "target-name", "commit-subject"]);
   });
 });

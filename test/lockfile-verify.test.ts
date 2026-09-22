@@ -76,12 +76,8 @@ describe("lockfile verification plumbing", () => {
 
     // The operator ran the flag to find out. Returning `ok` here would report a
     // verification that never happened, which is worse than not offering one.
-    expect(() => verify(root, ["monocarve-no-such-package-manager", "install", "--lockfile-only"])).toThrow(
-      LockfileVerificationError,
-    );
-    expect(() => verify(root, ["monocarve-no-such-package-manager", "install"])).toThrow(
-      /needs monocarve-no-such-package-manager on PATH/,
-    );
+    expect(() => verify(root, ["monocarve-no-such-package-manager", "install", "--lockfile-only"])).toThrow(LockfileVerificationError);
+    expect(() => verify(root, ["monocarve-no-such-package-manager", "install"])).toThrow(/needs monocarve-no-such-package-manager on PATH/);
   });
 
   test("a package manager that fails is an error, and says which command and why", () => {
@@ -128,9 +124,7 @@ describe("lockfile verification plumbing", () => {
       completeness: () => ["apps/api declares left-pad@1.3.0, and the lockfile has no entry for it"],
     });
     expect(found.ok).toBe(false);
-    expect(found.differences).toEqual([
-      `${LOCKFILE}: apps/api declares left-pad@1.3.0, and the lockfile has no entry for it`,
-    ]);
+    expect(found.differences).toEqual([`${LOCKFILE}: apps/api declares left-pad@1.3.0, and the lockfile has no entry for it`]);
 
     // Which bytes it reads, asked where the two differ. The plan's, not the
     // regenerated ones: a check fed the regenerated file would pass a plan
@@ -190,9 +184,7 @@ describe("lockfile verification plumbing", () => {
     // no entry — measured on pnpm 11.17.0 as the same
     // `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY` a missing `packages:` entry gives,
     // which is why `packages:` alone is not attestation here or in the renderer.
-    expect(pnpmAdapter.missingResolutions(withSections("18.3.1"))).toEqual([
-      "libs/analytics declares react-dom@18.3.1, and the lockfile has no entry for it",
-    ]);
+    expect(pnpmAdapter.missingResolutions(withSections("18.3.1"))).toEqual(["libs/analytics declares react-dom@18.3.1, and the lockfile has no entry for it"]);
     expect(pnpmAdapter.missingResolutions(withSections("18.3.1(react@18.3.1)"))).toEqual([]);
 
     // A lockfile with resolutions and no `snapshots:` section predates the

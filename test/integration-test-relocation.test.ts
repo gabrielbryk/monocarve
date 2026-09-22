@@ -5,8 +5,8 @@ import { parseConfig } from "../src/config.ts";
 import { buildDependencyGraph } from "../src/graph/build.ts";
 import { buildIntegrationTestPlanSync } from "../src/plan/integration-tests.ts";
 import { validatePlan } from "../src/plan/validate.ts";
-import { executeJournal } from "../src/transaction/journal.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
+import { executeJournal } from "../src/transaction/journal.ts";
 import { hashText } from "../src/util/hash.ts";
 import { cleanupFixtures, fixtureGit, fixtureRepo, read } from "./support/fixture-repo.ts";
 
@@ -59,10 +59,14 @@ function workspace(testSource = 'import { helper } from "../../apps/api/src/test
     config: configured,
     rootDir: root,
     commit: fixtureGit(root, "rev-parse", "HEAD"),
-    reports: { api: { modules: [
-      { source: donorPath, dependencies: [] },
-      { source: testPath, dependencies: [{ module: "../../apps/api/src/testing.ts", resolved: donorPath }] },
-    ] } },
+    reports: {
+      api: {
+        modules: [
+          { source: donorPath, dependencies: [] },
+          { source: testPath, dependencies: [{ module: "../../apps/api/src/testing.ts", resolved: donorPath }] },
+        ],
+      },
+    },
   });
   return { root, configured, graph };
 }
@@ -77,7 +81,14 @@ describe("integration-test relocation", () => {
     expect(manifest.source).toEqual({ files: [], tests: [testPath], sccs: {} });
     expect(manifest.target).toMatchObject({ packageName: "@acme/it-api", packageRoot: "tests/api", requiredExports: [] });
     expect(manifest.dependencies).toMatchObject({ runtime: {}, dev: { "@acme/api": "workspace:*" } });
-    expect(manifest.operations).toContainEqual(expect.objectContaining({ kind: "move-with-rewrite", source: testPath, target: "tests/api/src/api.test.ts", rewrites: [{ donorlessSpecifier: "../../apps/api/src/testing.ts", packageSpecifier: "@acme/api/testing" }] }));
+    expect(manifest.operations).toContainEqual(
+      expect.objectContaining({
+        kind: "move-with-rewrite",
+        source: testPath,
+        target: "tests/api/src/api.test.ts",
+        rewrites: [{ donorlessSpecifier: "../../apps/api/src/testing.ts", packageSpecifier: "@acme/api/testing" }],
+      }),
+    );
     expect(validatePlan(manifest, { config: configured, rootDir: root })).toMatchObject({ ok: true });
 
     await executeJournal({ config: configured, treeRoot: root, manifest });
@@ -87,8 +98,10 @@ describe("integration-test relocation", () => {
   });
 
   test("moves local source helpers and declared assets with their integration root", () => {
-    const { root, configured, graph } = workspace('import { helper } from "./helper.ts"; import fixture from "./fixture.json"; void fixture; expect(helper).toBe(1);\n');
-    writeFileSync(`${root}/tests/integration/helper.ts`, 'export const helper = 1;\n');
+    const { root, configured, graph } = workspace(
+      'import { helper } from "./helper.ts"; import fixture from "./fixture.json"; void fixture; expect(helper).toBe(1);\n',
+    );
+    writeFileSync(`${root}/tests/integration/helper.ts`, "export const helper = 1;\n");
     writeFileSync(`${root}/tests/integration/fixture.json`, '{"ok":true}\n');
     const withAssets = parseConfig({ ...configured, assetExtensions: [".json"], testKinds: { unit: [], integration: ["tests/integration/"], e2e: [] } });
     const manifest = buildIntegrationTestPlanSync({ config: withAssets, rootDir: root, graph, suite: "api", baselineCommit: graph.commit! });
@@ -103,9 +116,7 @@ describe("integration-test relocation", () => {
   });
 
   test("keeps a packageReferences entry for an exact-root firstPartyPackages dependency", () => {
-    const { root, configured, graph } = workspace(
-      'import { helper } from "../../apps/api/src/testing.ts"; import "@acme/shared"; expect(helper).toBe(1);\n',
-    );
+    const { root, configured, graph } = workspace('import { helper } from "../../apps/api/src/testing.ts"; import "@acme/shared"; expect(helper).toBe(1);\n');
     const withSharedPackage = parseConfig({ ...configured, firstPartyPackages: [{ root: "shared", name: "@acme/shared" }] });
     mkdirSync(`${root}/shared`, { recursive: true });
     writeFileSync(`${root}/shared/package.json`, '{"name":"@acme/shared"}\n');
@@ -113,15 +124,28 @@ describe("integration-test relocation", () => {
       config: withSharedPackage,
       rootDir: root,
       commit: graph.commit!,
-      reports: { api: { modules: [
-        { source: donorPath, dependencies: [] },
-        { source: testPath, dependencies: [
-          { module: "../../apps/api/src/testing.ts", resolved: donorPath },
-          { module: "@acme/shared", couldNotResolve: true },
-        ] },
-      ] } },
+      reports: {
+        api: {
+          modules: [
+            { source: donorPath, dependencies: [] },
+            {
+              source: testPath,
+              dependencies: [
+                { module: "../../apps/api/src/testing.ts", resolved: donorPath },
+                { module: "@acme/shared", couldNotResolve: true },
+              ],
+            },
+          ],
+        },
+      },
     });
-    const manifest = buildIntegrationTestPlanSync({ config: withSharedPackage, rootDir: root, graph: rebuiltGraph, suite: "api", baselineCommit: rebuiltGraph.commit! });
+    const manifest = buildIntegrationTestPlanSync({
+      config: withSharedPackage,
+      rootDir: root,
+      graph: rebuiltGraph,
+      suite: "api",
+      baselineCommit: rebuiltGraph.commit!,
+    });
     expect(manifest.dependencies.dev["@acme/shared"]).toBe("workspace:*");
     expect(manifest.dependencies.packageReferences).toContain("shared");
   });
@@ -144,17 +168,29 @@ describe("integration-test relocation", () => {
 
   test("refuses dynamic or bare donor imports outside the configured surface", () => {
     const dynamic = workspace('void import("../../apps/api/src/testing.ts");\n');
-    expect(() => buildIntegrationTestPlanSync({ config: dynamic.configured, rootDir: dynamic.root, graph: dynamic.graph, suite: "api", baselineCommit: dynamic.graph.commit! })).toThrow(
-      "dynamic donor application import",
-    );
+    expect(() =>
+      buildIntegrationTestPlanSync({
+        config: dynamic.configured,
+        rootDir: dynamic.root,
+        graph: dynamic.graph,
+        suite: "api",
+        baselineCommit: dynamic.graph.commit!,
+      }),
+    ).toThrow("dynamic donor application import");
     const bare = workspace('import "@acme/api/private";\n');
-    expect(() => buildIntegrationTestPlanSync({ config: bare.configured, rootDir: bare.root, graph: bare.graph, suite: "api", baselineCommit: bare.graph.commit! })).toThrow(
-      "imports undeclared donor application surface @acme/api/private",
-    );
+    expect(() =>
+      buildIntegrationTestPlanSync({ config: bare.configured, rootDir: bare.root, graph: bare.graph, suite: "api", baselineCommit: bare.graph.commit! }),
+    ).toThrow("imports undeclared donor application surface @acme/api/private");
     const dynamicBare = workspace('void import("@acme/api/testing");\n');
-    expect(() => buildIntegrationTestPlanSync({ config: dynamicBare.configured, rootDir: dynamicBare.root, graph: dynamicBare.graph, suite: "api", baselineCommit: dynamicBare.graph.commit! })).toThrow(
-      "dynamic donor application import @acme/api/testing",
-    );
+    expect(() =>
+      buildIntegrationTestPlanSync({
+        config: dynamicBare.configured,
+        rootDir: dynamicBare.root,
+        graph: dynamicBare.graph,
+        suite: "api",
+        baselineCommit: dynamicBare.graph.commit!,
+      }),
+    ).toThrow("dynamic donor application import @acme/api/testing");
   });
 
   test("refuses a forged donor allowance during validation", () => {
@@ -174,7 +210,11 @@ describe("integration-test relocation", () => {
       ...manifest,
       operations: manifest.operations.map((operation) =>
         operation.kind === "move-with-rewrite"
-          ? { ...operation, rewrites: [{ donorlessSpecifier: "../../apps/api/src/private.ts", packageSpecifier: "@acme/api/testing" }], resultHash: hashText('import { helper } from "@acme/api/testing"; expect(helper).toBe(1);\n') }
+          ? {
+              ...operation,
+              rewrites: [{ donorlessSpecifier: "../../apps/api/src/private.ts", packageSpecifier: "@acme/api/testing" }],
+              resultHash: hashText('import { helper } from "@acme/api/testing"; expect(helper).toBe(1);\n'),
+            }
           : operation,
       ),
     };

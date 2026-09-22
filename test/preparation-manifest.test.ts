@@ -35,20 +35,22 @@ function manifest(): PreparationManifest {
     sourcePath: DONOR,
     name: "Contract",
     space: "type" as const,
-    declarations: [{
-      declarationId,
-      sourcePath: DONOR,
-      sourceHash,
-      name: "Contract",
-      kind: "interface" as const,
-      space: "type" as const,
-      originallyExported: true,
-      span: { start, end, hash: spanHash },
-      selectorId,
-      extractionStart,
-      extractionEnd,
-      extractionHash,
-    }],
+    declarations: [
+      {
+        declarationId,
+        sourcePath: DONOR,
+        sourceHash,
+        name: "Contract",
+        kind: "interface" as const,
+        space: "type" as const,
+        originallyExported: true,
+        span: { start, end, hash: spanHash },
+        selectorId,
+        extractionStart,
+        extractionEnd,
+        extractionHash,
+      },
+    ],
   };
   const targetStart = TARGET_AFTER.indexOf(DECLARATION);
   const targetEnd = targetStart + DECLARATION.length;
@@ -60,42 +62,30 @@ function manifest(): PreparationManifest {
     schemaVersion: 1,
     createdAt: BASELINE_DATE,
     generator: { name: "test-tool", version: "1.0.0" },
-    baseline: {
-      commit: "0123456789abcdef0123456789abcdef01234567",
-      committerDate: BASELINE_DATE,
-      configDigest: hashText("test-config"),
-    },
+    baseline: { commit: "0123456789abcdef0123456789abcdef01234567", committerDate: BASELINE_DATE, configDigest: hashText("test-config") },
     graphDigest: hashText("fresh-workspace-graph"),
     declarations: [group],
-    operations: [{
-      kind: "extract-type-declarations",
-      donor: { path: DONOR, preconditionHash: sourceHash, preconditionMode: 0o644, resultHash: hashText(DONOR_AFTER), resultMode: 0o644 },
-      target: { path: TARGET, preconditionHash: "missing", preconditionMode: "missing", resultHash: hashText(TARGET_AFTER), resultMode: 0o644 },
-      moduleSpecifier: "../../../libs/contracts/src/contract.js",
-      declarations: [group],
-      targetImportProofs: [],
-      targetImports: [],
-      donorImports: [],
-      reExportNames: ["Contract"],
-      targetDeclarationProofs: [{
-        selectorId,
-        targetStart,
-        targetEnd,
-        targetHash,
-        targetExtractionStart,
-        targetExtractionEnd,
-        targetExtractionHash,
-        synthesizedExport: false,
-      }],
-      donorContents: DONOR_AFTER,
-      targetContents: TARGET_AFTER,
-    }],
-    compatibilityReexports: [{
-      fromPath: DONOR,
-      toPath: TARGET,
-      moduleSpecifier: "../../../libs/contracts/src/contract.js",
-      exports: [{ name: "Contract", typeOnly: true }],
-    }],
+    operations: [
+      {
+        kind: "extract-type-declarations",
+        donor: { path: DONOR, preconditionHash: sourceHash, preconditionMode: 0o644, resultHash: hashText(DONOR_AFTER), resultMode: 0o644 },
+        target: { path: TARGET, preconditionHash: "missing", preconditionMode: "missing", resultHash: hashText(TARGET_AFTER), resultMode: 0o644 },
+        moduleSpecifier: "../../../libs/contracts/src/contract.js",
+        declarations: [group],
+        targetImportProofs: [],
+        targetImports: [],
+        donorImports: [],
+        reExportNames: ["Contract"],
+        targetDeclarationProofs: [
+          { selectorId, targetStart, targetEnd, targetHash, targetExtractionStart, targetExtractionEnd, targetExtractionHash, synthesizedExport: false },
+        ],
+        donorContents: DONOR_AFTER,
+        targetContents: TARGET_AFTER,
+      },
+    ],
+    compatibilityReexports: [
+      { fromPath: DONOR, toPath: TARGET, moduleSpecifier: "../../../libs/contracts/src/contract.js", exports: [{ name: "Contract", typeOnly: true }] },
+    ],
     changedFiles: [DONOR, TARGET].sort(),
     commits: { prepare: { subject: "refactor: prepare type contract seam" } },
     gates: { package: [], project: [], workspace: [] },
@@ -120,20 +110,22 @@ function privateGroup(sourceHash: string) {
     sourcePath: DONOR,
     name: "Local",
     space: "type" as const,
-    declarations: [{
-      declarationId,
-      selectorId,
-      sourcePath: DONOR,
-      sourceHash,
-      name: "Local",
-      kind: "type-alias" as const,
-      space: "type" as const,
-      originallyExported: false,
-      span: { start, end, hash: spanHash },
-      extractionStart: start,
-      extractionEnd: end,
-      extractionHash,
-    }],
+    declarations: [
+      {
+        declarationId,
+        selectorId,
+        sourcePath: DONOR,
+        sourceHash,
+        name: "Local",
+        kind: "type-alias" as const,
+        space: "type" as const,
+        originallyExported: false,
+        span: { start, end, hash: spanHash },
+        extractionStart: start,
+        extractionEnd: end,
+        extractionHash,
+      },
+    ],
   };
 }
 
@@ -189,9 +181,7 @@ describe("preparation manifest", () => {
 
     const extract = base.operations[0]!;
     if (extract.kind !== "extract-type-declarations") throw new Error("fixture operation must extract types");
-    const badHash = reidentify(base, {
-      operations: [{ ...extract, target: { ...extract.target, resultHash: hashText("wrong output") } }],
-    });
+    const badHash = reidentify(base, { operations: [{ ...extract, target: { ...extract.target, resultHash: hashText("wrong output") } }] });
     expect(() => assertPreparationManifestValid(badHash)).toThrow("resultHash does not match replay contents");
   });
 
@@ -199,19 +189,13 @@ describe("preparation manifest", () => {
     const base = manifest();
     const extract = base.operations[0]!;
     if (extract.kind !== "extract-type-declarations") throw new Error("fixture operation must extract types");
-    const drift = reidentify(base, {
-      operations: [{ ...extract, donor: { ...extract.donor, resultMode: 0o755 } }],
-    });
+    const drift = reidentify(base, { operations: [{ ...extract, donor: { ...extract.donor, resultMode: 0o755 } }] });
     expect(validatePreparationManifest(drift).issues.map((issue) => issue.rule)).toContain("extract-mode");
 
-    const inconsistent = reidentify(base, {
-      operations: [{ ...extract, target: { ...extract.target, preconditionMode: 0o644 } }],
-    });
+    const inconsistent = reidentify(base, { operations: [{ ...extract, target: { ...extract.target, preconditionMode: 0o644 } }] });
     expect(validatePreparationManifest(inconsistent).issues.map((issue) => issue.rule)).toContain("extract-target-mode");
 
-    const nonCanonical = reidentify(base, {
-      operations: [{ ...extract, donor: { ...extract.donor, preconditionMode: 0o664, resultMode: 0o664 } }],
-    });
+    const nonCanonical = reidentify(base, { operations: [{ ...extract, donor: { ...extract.donor, preconditionMode: 0o664, resultMode: 0o664 } }] });
     expect(validatePreparationManifest(nonCanonical).issues.map((issue) => issue.rule)).toContain("extract-donor-mode");
   });
 
@@ -220,9 +204,7 @@ describe("preparation manifest", () => {
     const extract = base.operations[0]!;
     if (extract.kind !== "extract-type-declarations") throw new Error("fixture operation must extract types");
 
-    const staleState = validatePreparationManifest(base, {
-      currentFiles: { [DONOR]: hashText("changed"), [TARGET]: "missing" },
-    });
+    const staleState = validatePreparationManifest(base, { currentFiles: { [DONOR]: hashText("changed"), [TARGET]: "missing" } });
     expect(staleState.issues.map((issue) => issue.rule)).toContain("stale-input");
 
     const staleSpan = validatePreparationManifest(base, { currentContents: { [DONOR]: DONOR_BEFORE.replace("Contract", "Changed") } });
@@ -261,10 +243,9 @@ describe("preparation manifest", () => {
     const proof = extract.targetDeclarationProofs[0]!;
     const targetEnd = proof.targetEnd + 1;
     const forged = reidentify(base, {
-      operations: [{
-        ...extract,
-        targetDeclarationProofs: [{ ...proof, targetEnd, targetHash: hashText(extract.targetContents.slice(proof.targetStart, targetEnd)) }],
-      }],
+      operations: [
+        { ...extract, targetDeclarationProofs: [{ ...proof, targetEnd, targetHash: hashText(extract.targetContents.slice(proof.targetStart, targetEnd)) }] },
+      ],
     });
     expect(validatePreparationManifest(forged).issues.map((issue) => issue.rule)).toContain("target-declaration-proof");
   });
@@ -286,14 +267,14 @@ describe("preparation manifest", () => {
     const proof = extract.targetDeclarationProofs[0]!;
     const targetExtractionEnd = proof.targetExtractionEnd + 1;
     const invalid = reidentify(base, {
-      operations: [{
-        ...extract,
-        targetDeclarationProofs: [{
-          ...proof,
-          targetExtractionEnd,
-          targetExtractionHash: hashText(extract.targetContents.slice(proof.targetExtractionStart, targetExtractionEnd)),
-        }],
-      }],
+      operations: [
+        {
+          ...extract,
+          targetDeclarationProofs: [
+            { ...proof, targetExtractionEnd, targetExtractionHash: hashText(extract.targetContents.slice(proof.targetExtractionStart, targetExtractionEnd)) },
+          ],
+        },
+      ],
     });
     expect(validatePreparationManifest(invalid).issues.map((issue) => issue.rule)).toContain("target-declaration-proof");
   });
@@ -303,18 +284,22 @@ describe("preparation manifest", () => {
     const extract = base.operations[0]!;
     if (extract.kind !== "extract-type-declarations") throw new Error("fixture operation must extract types");
     const invalid = reidentify(base, {
-      operations: [{
-        ...extract,
-        targetImports: [{
-          moduleSpecifier: "./remote.js",
-          importedName: "Remote",
-          localName: "Remote",
-          kind: "named",
-          originallyTypeOnly: true,
-          requiredAs: "type",
-          proofBaselineHash: hashText("stale donor"),
-        }],
-      }],
+      operations: [
+        {
+          ...extract,
+          targetImports: [
+            {
+              moduleSpecifier: "./remote.js",
+              importedName: "Remote",
+              localName: "Remote",
+              kind: "named",
+              originallyTypeOnly: true,
+              requiredAs: "type",
+              proofBaselineHash: hashText("stale donor"),
+            },
+          ],
+        },
+      ],
     });
     expect(validatePreparationManifest(invalid).issues.map((issue) => issue.rule)).toContain("replay-import");
   });
@@ -364,12 +349,14 @@ describe("preparation manifest", () => {
     const ambiguous = reidentify(base, {
       declarations: [extract.declarations[0]!, valueGroup],
       operations: [{ ...extract, declarations: [extract.declarations[0]!, valueGroup] }],
-      compatibilityReexports: [{
-        fromPath: DONOR,
-        toPath: "libs/other/src/contract.ts",
-        moduleSpecifier: "../../../libs/other/src/contract.js",
-        exports: [{ name: "Absent", typeOnly: true }],
-      }],
+      compatibilityReexports: [
+        {
+          fromPath: DONOR,
+          toPath: "libs/other/src/contract.ts",
+          moduleSpecifier: "../../../libs/other/src/contract.js",
+          exports: [{ name: "Absent", typeOnly: true }],
+        },
+      ],
     });
     const rules = validatePreparationManifest(ambiguous).issues.map((issue) => issue.rule);
     expect(rules).toContain("declaration-group");
@@ -388,11 +375,25 @@ describe("preparation manifest", () => {
     const extract = base.operations[0]!;
     if (extract.kind !== "extract-type-declarations") throw new Error("fixture operation must extract types");
     const privateSelector = { ...extract.declarations[0]!.declarations[0]!, name: "Local", originallyExported: false };
-    const privateId = hashJson({ sourcePath: DONOR, name: "Local", kind: privateSelector.kind, start: privateSelector.span.start, end: privateSelector.span.end, spanHash: privateSelector.span.hash });
+    const privateId = hashJson({
+      sourcePath: DONOR,
+      name: "Local",
+      kind: privateSelector.kind,
+      start: privateSelector.span.start,
+      end: privateSelector.span.end,
+      spanHash: privateSelector.span.hash,
+    });
     const privateWithId = {
       ...privateSelector,
       declarationId: privateId,
-      selectorId: hashJson({ declarationId: privateId, sourcePath: DONOR, sourceHash: privateSelector.sourceHash, extractionStart: privateSelector.extractionStart, extractionEnd: privateSelector.extractionEnd, extractionHash: privateSelector.extractionHash }),
+      selectorId: hashJson({
+        declarationId: privateId,
+        sourcePath: DONOR,
+        sourceHash: privateSelector.sourceHash,
+        extractionStart: privateSelector.extractionStart,
+        extractionEnd: privateSelector.extractionEnd,
+        extractionHash: privateSelector.extractionHash,
+      }),
     };
     const privateGroup = {
       ...extract.declarations[0]!,
@@ -427,13 +428,15 @@ describe("preparation manifest", () => {
     };
     const combined = reidentify(base, {
       declarations: [extract.declarations[0]!, privateClosure],
-      operations: [{
-        ...extract,
-        target: { ...extract.target, resultHash: hashText(targetContents) },
-        targetContents,
-        declarations: [extract.declarations[0]!, privateClosure],
-        targetDeclarationProofs: [...extract.targetDeclarationProofs, privateTargetProof],
-      }],
+      operations: [
+        {
+          ...extract,
+          target: { ...extract.target, resultHash: hashText(targetContents) },
+          targetContents,
+          declarations: [extract.declarations[0]!, privateClosure],
+          targetDeclarationProofs: [...extract.targetDeclarationProofs, privateTargetProof],
+        },
+      ],
     });
     expect(validatePreparationManifest(combined)).toEqual({ ok: true, issues: [] });
   });
@@ -471,9 +474,7 @@ describe("preparation manifest", () => {
   test("records an exact valid NodeNext specifier and refuses an ambiguous traversal", () => {
     const base = manifest();
     expect(base.compatibilityReexports[0]!.moduleSpecifier).toBe("../../../libs/contracts/src/contract.js");
-    const invalid = reidentify(base, {
-      compatibilityReexports: [{ ...base.compatibilityReexports[0]!, moduleSpecifier: "./target/../contract.js" }],
-    });
+    const invalid = reidentify(base, { compatibilityReexports: [{ ...base.compatibilityReexports[0]!, moduleSpecifier: "./target/../contract.js" }] });
     expect(validatePreparationManifest(invalid).issues.map((issue) => issue.rule)).toContain("compatibility-specifier");
   });
 });

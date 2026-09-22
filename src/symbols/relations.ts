@@ -2,13 +2,7 @@ import ts from "typescript";
 
 import { byCodeUnit, hashText, stableStringify, type Sha256 } from "../util/hash.ts";
 import { makeSpan, mergeSpaces, type PhysicalDeclaration } from "./declarations.ts";
-import type {
-  DeclarationComponent,
-  DeclarationGroup,
-  SymbolDeclaration,
-  SymbolEdge,
-  SymbolReference,
-} from "./types.ts";
+import type { DeclarationComponent, DeclarationGroup, SymbolDeclaration, SymbolEdge, SymbolReference } from "./types.ts";
 
 interface MutableReferenceEdge {
   readonly source: Sha256;
@@ -52,10 +46,7 @@ export function referenceSpace(identifier: ts.Identifier): "type" | "value" {
   return "value";
 }
 
-export function stronglyConnectedComponents(
-  groups: readonly DeclarationGroup[],
-  edges: readonly SymbolEdge[],
-): DeclarationComponent[] {
+export function stronglyConnectedComponents(groups: readonly DeclarationGroup[], edges: readonly SymbolEdge[]): DeclarationComponent[] {
   const adjacency = new Map(groups.map((group) => [group.id, [] as Sha256[]]));
   for (const edge of edges) adjacency.get(edge.source)?.push(edge.target);
   for (const targets of adjacency.values()) targets.sort(byCodeUnit);
@@ -64,11 +55,13 @@ export function stronglyConnectedComponents(
     if (!state.indices.has(group.id)) visitComponent(group.id, adjacency, state);
   }
   const selfEdges = new Set(edges.filter((edge) => edge.source === edge.target).map((edge) => edge.source));
-  return state.components.map((groupIds) => ({
-    id: hashText(stableStringify(groupIds)),
-    groupIds,
-    cyclic: groupIds.length > 1 || (groupIds[0] !== undefined && selfEdges.has(groupIds[0])),
-  })).sort((left, right) => byCodeUnit(left.groupIds[0] ?? "", right.groupIds[0] ?? ""));
+  return state.components
+    .map((groupIds) => ({
+      id: hashText(stableStringify(groupIds)),
+      groupIds,
+      cyclic: groupIds.length > 1 || (groupIds[0] !== undefined && selfEdges.has(groupIds[0])),
+    }))
+    .sort((left, right) => byCodeUnit(left.groupIds[0] ?? "", right.groupIds[0] ?? ""));
 }
 
 function collectDeclarationEdges(
@@ -95,9 +88,10 @@ function groupForIdentifier(
   node: ts.Identifier,
   groupBySymbol: ReadonlyMap<ts.Symbol, DeclarationGroup>,
 ): DeclarationGroup | undefined {
-  let symbol = ts.isShorthandPropertyAssignment(node.parent) && node.parent.name === node
-    ? checker.getShorthandAssignmentValueSymbol(node.parent)
-    : checker.getSymbolAtLocation(node);
+  let symbol =
+    ts.isShorthandPropertyAssignment(node.parent) && node.parent.name === node
+      ? checker.getShorthandAssignmentValueSymbol(node.parent)
+      : checker.getSymbolAtLocation(node);
   if (symbol && (symbol.flags & ts.SymbolFlags.Alias) !== 0) symbol = checker.getAliasedSymbol(symbol);
   return symbol ? groupBySymbol.get(symbol) : undefined;
 }
@@ -110,11 +104,7 @@ function addReference(
   node: ts.Identifier,
   mutable: Map<string, MutableReferenceEdge>,
 ): void {
-  const reference: SymbolReference = {
-    sourceDeclarationId: declarationId,
-    span: makeSpan(sourceText, node.getStart(), node.end),
-    space: referenceSpace(node),
-  };
+  const reference: SymbolReference = { sourceDeclarationId: declarationId, span: makeSpan(sourceText, node.getStart(), node.end), space: referenceSpace(node) };
   const key = `${sourceGroup.id}\0${targetGroup.id}`;
   const edge = mutable.get(key) ?? { source: sourceGroup.id, target: targetGroup.id, references: [] };
   edge.references.push(reference);
@@ -122,7 +112,10 @@ function addReference(
 }
 
 function finalizeEdge(edge: MutableReferenceEdge): SymbolEdge {
-  edge.references.sort((left, right) => left.span.start - right.span.start || byCodeUnit(left.sourceDeclarationId, right.sourceDeclarationId) || byCodeUnit(left.space, right.space));
+  edge.references.sort(
+    (left, right) =>
+      left.span.start - right.span.start || byCodeUnit(left.sourceDeclarationId, right.sourceDeclarationId) || byCodeUnit(left.space, right.space),
+  );
   return { source: edge.source, target: edge.target, space: mergeSpaces(edge.references.map((reference) => reference.space)), references: edge.references };
 }
 
@@ -141,9 +134,16 @@ function isDeclarationName(identifier: ts.Identifier): boolean {
 }
 
 function isNamedDeclaration(node: ts.Node): node is ts.NamedDeclaration {
-  return ts.isClassDeclaration(node) || ts.isFunctionDeclaration(node) || ts.isInterfaceDeclaration(node) ||
-    ts.isTypeAliasDeclaration(node) || ts.isEnumDeclaration(node) || ts.isModuleDeclaration(node) ||
-    ts.isVariableDeclaration(node) || ts.isTypeParameterDeclaration(node);
+  return (
+    ts.isClassDeclaration(node) ||
+    ts.isFunctionDeclaration(node) ||
+    ts.isInterfaceDeclaration(node) ||
+    ts.isTypeAliasDeclaration(node) ||
+    ts.isEnumDeclaration(node) ||
+    ts.isModuleDeclaration(node) ||
+    ts.isVariableDeclaration(node) ||
+    ts.isTypeParameterDeclaration(node)
+  );
 }
 
 interface TraversalState {
@@ -169,13 +169,7 @@ function visitComponent(id: Sha256, adjacency: ReadonlyMap<Sha256, readonly Sha2
   if (state.lowLinks.get(id) === state.indices.get(id)) state.components.push(popComponent(id, state));
 }
 
-function updateTraversalForTarget(
-  id: Sha256,
-  target: Sha256,
-  adjacency: ReadonlyMap<Sha256, readonly Sha256[]>,
-  state: TraversalState,
-  index: number,
-): void {
+function updateTraversalForTarget(id: Sha256, target: Sha256, adjacency: ReadonlyMap<Sha256, readonly Sha256[]>, state: TraversalState, index: number): void {
   if (!state.indices.has(target)) {
     visitComponent(target, adjacency, state);
     state.lowLinks.set(id, Math.min(state.lowLinks.get(id) ?? index, state.lowLinks.get(target) ?? index));

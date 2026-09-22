@@ -1,5 +1,5 @@
-import ts from "typescript";
 import { posix } from "node:path";
+import ts from "typescript";
 
 import { byCodeUnit, hashText, isSha256 } from "../util/hash.ts";
 import type {
@@ -34,9 +34,14 @@ export function validateRewriteRecipe(operation: RewriteModuleSpecifierOperation
 
 /** Bind each promoted contract write to the exact package subpath consumers use. */
 export function validatePortPackageExportRecipe(operations: readonly PreparationReplayOperation[], add: AddManifestIssue): void {
-  const packageWrites = operations.filter((operation): operation is PreparationWriteFileOperation => operation.kind === "write-file" && operation.purpose === "port-package-export");
-  const contracts = operations.filter((operation): operation is PreparationWriteFileOperation => operation.kind === "write-file" && operation.purpose === "port-contract");
-  const rewrites = operations.filter((operation): operation is RewriteModuleSpecifierOperation => operation.kind === "rewrite-module-specifier")
+  const packageWrites = operations.filter(
+    (operation): operation is PreparationWriteFileOperation => operation.kind === "write-file" && operation.purpose === "port-package-export",
+  );
+  const contracts = operations.filter(
+    (operation): operation is PreparationWriteFileOperation => operation.kind === "write-file" && operation.purpose === "port-contract",
+  );
+  const rewrites = operations
+    .filter((operation): operation is RewriteModuleSpecifierOperation => operation.kind === "rewrite-module-specifier")
     .flatMap((operation) => operation.rewrites);
   for (const operation of packageWrites) {
     let manifest: Record<string, unknown>;
@@ -47,12 +52,14 @@ export function validatePortPackageExportRecipe(operations: readonly Preparation
       continue;
     }
     const name = typeof manifest.name === "string" ? manifest.name : undefined;
-    const exports = manifest.exports && typeof manifest.exports === "object" && !Array.isArray(manifest.exports)
-      ? manifest.exports as Record<string, unknown> : {};
+    const exports =
+      manifest.exports && typeof manifest.exports === "object" && !Array.isArray(manifest.exports) ? (manifest.exports as Record<string, unknown>) : {};
     const packageRoot = posix.dirname(operation.file.path);
     const matches = contracts.flatMap((contract) => {
       const target = `./${posix.relative(packageRoot, contract.file.path)}`;
-      return Object.entries(exports).filter(([, value]) => exportLeavesMatch(value, target)).map(([key]) => ({ key, contract }));
+      return Object.entries(exports)
+        .filter(([, value]) => exportLeavesMatch(value, target))
+        .map(([key]) => ({ key, contract }));
     });
     if (!name || matches.length !== 1) {
       add("port-package-export", "port package export must bind exactly one promoted contract target", operation.file.path);
@@ -78,21 +85,19 @@ function exportLeavesMatch(value: unknown, target: string): boolean {
  * rewrite operations here — a later, graph-aware audit stage owns proving
  * that set is exhaustive against the live repository (see manifest-types.ts).
  */
-export function validateDeletionRecipe(
-  operation: DeleteModuleOperation,
-  operations: readonly PreparationReplayOperation[],
-  add: AddManifestIssue,
-): void {
+export function validateDeletionRecipe(operation: DeleteModuleOperation, operations: readonly PreparationReplayOperation[], add: AddManifestIssue): void {
   validateDeletionMutation(operation.file, add);
   validateImporterProof(operation.importerProof, operation.file.path, add);
   const rewritten = new Set(
-    operations
-      .filter((item): item is RewriteModuleSpecifierOperation => item.kind === "rewrite-module-specifier")
-      .map((item) => item.file.path),
+    operations.filter((item): item is RewriteModuleSpecifierOperation => item.kind === "rewrite-module-specifier").map((item) => item.file.path),
   );
   for (const importer of operation.importerProof) {
     if (!rewritten.has(importer)) {
-      add("delete-module-importers", `importerProof names ${importer}, but no rewrite-module-specifier operation in this manifest rewrote it`, operation.file.path);
+      add(
+        "delete-module-importers",
+        `importerProof names ${importer}, but no rewrite-module-specifier operation in this manifest rewrote it`,
+        operation.file.path,
+      );
     }
   }
 }
@@ -105,7 +110,8 @@ function validateDeletionMutation(file: PreparationFileMutation, add: AddManifes
   // A deletion has no post-state. These are the canonical empty-text sentinel
   // values `boundary-imports.ts`'s planDeletion writes — never a real hash of
   // rendered bytes, because there are none.
-  if (file.resultHash !== hashText("")) add("delete-module-result", "a deletion carries no post-state; resultHash must be the canonical empty-text sentinel", file.path);
+  if (file.resultHash !== hashText(""))
+    add("delete-module-result", "a deletion carries no post-state; resultHash must be the canonical empty-text sentinel", file.path);
   if (file.resultMode !== 0) add("delete-module-result", "a deletion carries no post-state; resultMode must be 0", file.path);
 }
 
@@ -134,8 +140,10 @@ function validateRewriteEntry(
     if (rewrite.symbols.length !== 0) add("rewrite-symbols", "a module-specifier call rewrite must not claim imported symbols", path);
     const calls = collectModuleSpecifierCalls(path, contents);
     const specifiers = calls.get(rewrite.moduleSpecifierCall);
-    if (!specifiers?.has(rewrite.to)) add("rewrite-specifier", `rewritten contents do not call ${rewrite.moduleSpecifierCall} with replacement specifier ${rewrite.to}`, path);
-    if (specifiers?.has(rewrite.from)) add("rewrite-specifier", `rewritten contents still call ${rewrite.moduleSpecifierCall} with retired specifier ${rewrite.from}`, path);
+    if (!specifiers?.has(rewrite.to))
+      add("rewrite-specifier", `rewritten contents do not call ${rewrite.moduleSpecifierCall} with replacement specifier ${rewrite.to}`, path);
+    if (specifiers?.has(rewrite.from))
+      add("rewrite-specifier", `rewritten contents still call ${rewrite.moduleSpecifierCall} with retired specifier ${rewrite.from}`, path);
     return;
   }
   if (rewrite.symbols.length === 0) add("rewrite-symbols", "each rewrite must name at least one moved symbol", path);
@@ -157,7 +165,8 @@ function validateRewriteEntry(
   const retained = bindings.get(rewrite.from);
   if (retainedSymbols.length === 0 && retained) add("rewrite-specifier", `rewritten contents still reference the retired specifier ${rewrite.from}`, path);
   if (retainedSymbols.length > 0 && !retained) add("rewrite-specifier", `rewritten contents do not retain the original specifier ${rewrite.from}`, path);
-  for (const symbol of retainedSymbols) if (!retained?.has(symbol)) add("rewrite-symbols", `rewritten contents do not retain ${symbol} from ${rewrite.from}`, path);
+  for (const symbol of retainedSymbols)
+    if (!retained?.has(symbol)) add("rewrite-symbols", `rewritten contents do not retain ${symbol} from ${rewrite.from}`, path);
   if (retained && [...retained].some((symbol) => !retainedSymbols.includes(symbol))) {
     add("rewrite-symbols", `rewritten contents retain undeclared symbols from ${rewrite.from}`, path);
   }
@@ -251,10 +260,17 @@ function validateInlineImportProofs(operation: ExtractTypeDeclarationsOperation,
   const proofs = operation.inlineImportTypeProofs ?? [];
   let previousEnd = -1;
   for (const proof of proofs) {
-    if (!isRelative(proof.originalSpecifier) || !isRelative(proof.targetSpecifier) ||
-      !isWorkspacePath(proof.resolvedSourcePath) || proof.proofBaselineHash !== operation.donor.preconditionHash ||
-      !Number.isInteger(proof.start) || !Number.isInteger(proof.end) || proof.start < previousEnd || proof.end <= proof.start ||
-      !/^[0-9a-f]{64}$/.test(proof.sourceHash)) {
+    if (
+      !isRelative(proof.originalSpecifier) ||
+      !isRelative(proof.targetSpecifier) ||
+      !isWorkspacePath(proof.resolvedSourcePath) ||
+      proof.proofBaselineHash !== operation.donor.preconditionHash ||
+      !Number.isInteger(proof.start) ||
+      !Number.isInteger(proof.end) ||
+      proof.start < previousEnd ||
+      proof.end <= proof.start ||
+      !/^[0-9a-f]{64}$/.test(proof.sourceHash)
+    ) {
       add("inline-import-type-proof", "inline import type rewrite proof is incomplete or not deterministically ordered", operation.donor.path);
     }
     previousEnd = proof.end;
@@ -271,7 +287,14 @@ function validateImports(
   validateSorted(imports, checkerImportKey, "replay-import-order", `${location} imports must be deterministically ordered and unique`, add);
   const bindings = new Map<string, PreparationCheckerProvenTypeImport>();
   for (const item of imports) {
-    if (!isModuleSpecifier(item.moduleSpecifier) || !isIdentifier(item.localName) || item.requiredAs !== "type" || typeof item.originallyTypeOnly !== "boolean" || item.proofBaselineHash !== baselineHash || !validImportShape(item)) {
+    if (
+      !isModuleSpecifier(item.moduleSpecifier) ||
+      !isIdentifier(item.localName) ||
+      item.requiredAs !== "type" ||
+      typeof item.originallyTypeOnly !== "boolean" ||
+      item.proofBaselineHash !== baselineHash ||
+      !validImportShape(item)
+    ) {
       add("replay-import", `${location} import is not a complete checker-proven type binding`, path);
     }
     const binding = `${item.moduleSpecifier}\u0000${item.localName}`;
@@ -293,7 +316,14 @@ function validateProvenance(
   const proofCounts = new Map<string, number>();
   for (const proof of proofs) {
     const imported = imports.get(`${proof.targetSpecifier}\u0000${proof.localName}`);
-    if (!isRelative(proof.originalSpecifier) || !isRelative(proof.targetSpecifier) || !isWorkspacePath(proof.resolvedSourcePath) || proof.proofBaselineHash !== baselineHash || !imported || !matchesTargetBinding(proof, imported)) {
+    if (
+      !isRelative(proof.originalSpecifier) ||
+      !isRelative(proof.targetSpecifier) ||
+      !isWorkspacePath(proof.resolvedSourcePath) ||
+      proof.proofBaselineHash !== baselineHash ||
+      !imported ||
+      !matchesTargetBinding(proof, imported)
+    ) {
       add("target-import-proof", "target import rewrite proof does not match a checker-proven rendered binding", path);
     }
     const binding = `${proof.targetSpecifier}\u0000${proof.localName}`;
@@ -304,24 +334,29 @@ function validateProvenance(
   for (const imported of imports.values()) {
     if (!isRelative(imported.moduleSpecifier)) continue;
     const binding = `${imported.moduleSpecifier}\u0000${imported.localName}`;
-    if (proofCounts.get(binding) !== 1) add("target-import-proof", `relative target import ${imported.localName} must have exactly one resolution provenance proof`, path);
+    if (proofCounts.get(binding) !== 1)
+      add("target-import-proof", `relative target import ${imported.localName} must have exactly one resolution provenance proof`, path);
   }
 }
 
 function matchesTargetBinding(proof: PreparationTargetImportProof, imported: PreparationCheckerProvenTypeImport): boolean {
-  return imported.moduleSpecifier === proof.targetSpecifier
-    && imported.localName === proof.localName
-    && imported.importedName === proof.importedName
-    && imported.kind === proof.kind
-    && imported.originallyTypeOnly === proof.originallyTypeOnly
-    && imported.requiredAs === proof.requiredAs
-    && imported.proofBaselineHash === proof.proofBaselineHash;
+  return (
+    imported.moduleSpecifier === proof.targetSpecifier &&
+    imported.localName === proof.localName &&
+    imported.importedName === proof.importedName &&
+    imported.kind === proof.kind &&
+    imported.originallyTypeOnly === proof.originallyTypeOnly &&
+    imported.requiredAs === proof.requiredAs &&
+    imported.proofBaselineHash === proof.proofBaselineHash
+  );
 }
 
 function validImportShape(item: PreparationCheckerProvenTypeImport): boolean {
-  return (item.kind === "named" && item.importedName !== "default" && isIdentifier(item.importedName))
-    || (item.kind === "default" && item.importedName === "default")
-    || (item.kind === "namespace" && item.importedName === "*");
+  return (
+    (item.kind === "named" && item.importedName !== "default" && isIdentifier(item.importedName)) ||
+    (item.kind === "default" && item.importedName === "default") ||
+    (item.kind === "namespace" && item.importedName === "*")
+  );
 }
 
 function checkerImportKey(item: PreparationCheckerProvenTypeImport): string {
@@ -341,13 +376,26 @@ function validateSortedStrings(items: readonly string[], rule: string, label: st
   for (let index = 1; index < items.length; index += 1) if (byCodeUnit(items[index - 1]!, items[index]!) >= 0) add(rule, `${label} must be sorted and unique`);
 }
 
-function isRelative(value: string): boolean { return isModuleSpecifier(value) && value.startsWith("."); }
-function isIdentifier(value: string): boolean { return typeof value === "string" && /^[$A-Z_a-z][$\w]*$/u.test(value); }
-function isWorkspacePath(path: string): boolean { return typeof path === "string" && path.length > 0 && !path.startsWith("/") && !path.startsWith("\\") && !path.split("/").some((part) => part === "" || part === "." || part === ".."); }
+function isRelative(value: string): boolean {
+  return isModuleSpecifier(value) && value.startsWith(".");
+}
+function isIdentifier(value: string): boolean {
+  return typeof value === "string" && /^[$A-Z_a-z][$\w]*$/u.test(value);
+}
+function isWorkspacePath(path: string): boolean {
+  return (
+    typeof path === "string" &&
+    path.length > 0 &&
+    !path.startsWith("/") &&
+    !path.startsWith("\\") &&
+    !path.split("/").some((part) => part === "" || part === "." || part === "..")
+  );
+}
 function isModuleSpecifier(specifier: string): boolean {
   if (typeof specifier !== "string" || specifier.length === 0 || /[\\\r\n\u0000]/.test(specifier) || specifier.startsWith("/")) return false;
   if (!specifier.startsWith(".")) return true;
-  const segments = specifier.split("/"); let index = segments[0] === "." ? 1 : 0;
+  const segments = specifier.split("/");
+  let index = segments[0] === "." ? 1 : 0;
   while (segments[index] === "..") index += 1;
   return index > 0 && index < segments.length && segments.slice(index).every((segment) => segment.length > 0 && segment !== "." && segment !== "..");
 }

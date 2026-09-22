@@ -32,8 +32,9 @@ describe("donor dependency pruning", () => {
   test("reports rather than disproving possible non-source consumers", () => {
     const root = fixtureRepo({ ...files("export const retained = true;\n"), "scripts/build.mjs": 'import "left-pad";\n' });
     const { context, dependencies } = evidence(root);
-    expect(donorDependencyPruningCandidates({ context, donorRoot: "apps/api", movedSources: [MOVED], dependencies }))
-      .toEqual([{ name: "left-pad", section: "runtime" }]);
+    expect(donorDependencyPruningCandidates({ context, donorRoot: "apps/api", movedSources: [MOVED], dependencies })).toEqual([
+      { name: "left-pad", section: "runtime" },
+    ]);
     expect(context.config.dependencyPruning.mode).toBe("report");
   });
 
@@ -48,7 +49,9 @@ describe("donor dependency pruning", () => {
     const config = fixtureConfig(root, { dependencyPruning: { mode: "apply", keep: ["build-tool"] } });
     const context = new WorkspaceContext(config, root);
     const candidates = donorDependencyPruningCandidates({
-      context, donorRoot: "apps/api", movedSources: [MOVED],
+      context,
+      donorRoot: "apps/api",
+      movedSources: [MOVED],
       dependencies: { runtime: {}, dev: { "build-tool": "1", "test-library": "1", vitest: "1" }, packageReferences: [] },
     });
     expect(candidates).toEqual([]);
@@ -68,10 +71,30 @@ function files(retained: string): Record<string, string> {
 function operations(root: string) {
   const { context, dependencies } = evidence(root);
   const manifestContents = '{"name":"@acme/api","dependencies":{"@acme/new-package":"workspace:*","left-pad":"1.3.0"}}\n';
-  const donorBlock = pnpmAdapter.addBlockDependency(pnpmAdapter.importerBlock(LOCK, "apps/api")!, "@acme/new-package", "workspace:*", "link:../../libs/new-package");
+  const donorBlock = pnpmAdapter.addBlockDependency(
+    pnpmAdapter.importerBlock(LOCK, "apps/api")!,
+    "@acme/new-package",
+    "workspace:*",
+    "link:../../libs/new-package",
+  );
   const operations = [
-    { kind: "write-file" as const, path: "apps/api/package.json", contents: manifestContents, generator: "wiring:consumer-dependency", preconditionHash: context.state("apps/api/package.json"), resultHash: hashText(manifestContents) },
-    { kind: "lockfile-importer" as const, lockfile: "pnpm-lock.yaml", packageRoot: "apps/api", block: donorBlock, mode: "replace" as const, preconditionHash: hashText(LOCK), resultHash: hashText(LOCK) },
+    {
+      kind: "write-file" as const,
+      path: "apps/api/package.json",
+      contents: manifestContents,
+      generator: "wiring:consumer-dependency",
+      preconditionHash: context.state("apps/api/package.json"),
+      resultHash: hashText(manifestContents),
+    },
+    {
+      kind: "lockfile-importer" as const,
+      lockfile: "pnpm-lock.yaml",
+      packageRoot: "apps/api",
+      block: donorBlock,
+      mode: "replace" as const,
+      preconditionHash: hashText(LOCK),
+      resultHash: hashText(LOCK),
+    },
   ];
   return composeDonorDependencyPruning({ context, donorRoot: "apps/api", movedSources: [MOVED], dependencies, packageManager: pnpmAdapter, operations });
 }

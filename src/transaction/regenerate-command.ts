@@ -26,13 +26,7 @@ export interface CommandResult {
  */
 export function run(command: string, cwd: string, timeoutMs: number): CommandResult {
   const started = Date.now();
-  const result = Bun.spawnSync(["sh", "-c", command], {
-    cwd,
-    env: scrubbedGitEnv(),
-    stdout: "pipe",
-    stderr: "pipe",
-    timeout: timeoutMs,
-  });
+  const result = Bun.spawnSync(["sh", "-c", command], { cwd, env: scrubbedGitEnv(), stdout: "pipe", stderr: "pipe", timeout: timeoutMs });
   // Truthiness, not `!== null`: a process that exited normally reports the
   // signal as `null` on some paths and `undefined` on others, and a note
   // reading "killed by undefined" is worse than no note at all.

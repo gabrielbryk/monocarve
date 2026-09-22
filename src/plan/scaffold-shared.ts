@@ -6,9 +6,9 @@ import { scaffoldFor, type ScaffoldTemplatesConfig, type TemplateSource } from "
 import { hashText } from "../util/hash.ts";
 import { relativePosix } from "../util/paths.ts";
 import { renderTemplate, type TemplateVars } from "../util/template.ts";
-import type { PlanOperation } from "./manifest.ts";
 import { PlanningError, type WorkspaceContext } from "./context.ts";
 import { formatGeneratedText } from "./format-generated.ts";
+import type { PlanOperation } from "./manifest.ts";
 import type { ScaffoldInput } from "./scaffold.ts";
 
 export function writeOperation(context: WorkspaceContext, path: string, contents: string, generator: string): PlanOperation {

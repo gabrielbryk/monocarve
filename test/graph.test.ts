@@ -11,10 +11,10 @@ import { describe, expect, test } from "bun:test";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { domainFor, ownerFor, parseConfig, type MonocarveConfig } from "../src/config.ts";
 import { buildDependencyGraph, type ScanReport } from "../src/graph/build.ts";
 import { buildApplicationGraph } from "../src/graph/components.ts";
 import { analyzeLayers } from "../src/graph/layers.ts";
-import { domainFor, ownerFor, parseConfig, type MonocarveConfig } from "../src/config.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = resolve(here, "../fixtures/basic-monorepo");
@@ -84,49 +84,47 @@ describe("dependency model", () => {
       api: {
         modules: [
           { source: "apps/api/src/orders/models.ts", dependencies: [] },
-          {
-            source: "apps/api/src/orders/models.test.ts",
-            dependencies: [{ module: "./models.ts", resolved: "apps/api/src/orders/models.ts" }],
-          },
+          { source: "apps/api/src/orders/models.test.ts", dependencies: [{ module: "./models.ts", resolved: "apps/api/src/orders/models.ts" }] },
         ],
       },
     });
 
     expect(buildApplicationGraph(graph).nodes).toEqual(["apps/api/src/orders/models.ts"]);
-    expect([...(graph.testImporters.get("apps/api/src/orders/models.ts") ?? [])]).toEqual([
-      "apps/api/src/orders/models.test.ts",
-    ]);
+    expect([...(graph.testImporters.get("apps/api/src/orders/models.ts") ?? [])]).toEqual(["apps/api/src/orders/models.test.ts"]);
     expect(graph.testKinds.get("apps/api/src/orders/models.test.ts")).toBe("unit");
   });
 
   test("records configured mock calls as test importers even when the scanner omits them", () => {
-    const graph = graphOf({
-      web: {
-        modules: [
-          { source: "apps/web/src/widgets/chart.ts", dependencies: [] },
-          {
-            source: "apps/web/src/widgets/mock-only.test.ts",
-            dependencies: [],
-          },
-        ],
+    const graph = graphOf(
+      {
+        web: {
+          modules: [
+            { source: "apps/web/src/widgets/chart.ts", dependencies: [] },
+            { source: "apps/web/src/widgets/mock-only.test.ts", dependencies: [] },
+          ],
+        },
       },
-    }, { moduleSpecifierCalls: ["vi.mock"] });
+      { moduleSpecifierCalls: ["vi.mock"] },
+    );
 
     // The empty synthetic cruiser dependency list proves the configured-call
     // AST inventory, rather than the scanner report, supplies the edge.
-    expect([...(graph.testImporters.get("apps/web/src/widgets/chart.ts") ?? [])]).toEqual([
-      "apps/web/src/widgets/mock-only.test.ts",
-    ]);
+    expect([...(graph.testImporters.get("apps/web/src/widgets/chart.ts") ?? [])]).toEqual(["apps/web/src/widgets/mock-only.test.ts"]);
   });
 
   test("records configured integration and e2e intent outside production nodes", () => {
-    const graph = graphOf({
-      api: { modules: [
-        { source: "apps/api/src/orders/models.ts", dependencies: [] },
-        { source: "apps/api/src/orders/models.integration.ts", dependencies: [{ module: "./models.ts", resolved: "apps/api/src/orders/models.ts" }] },
-        { source: "apps/api/src/orders/models.e2e.ts", dependencies: [{ module: "./models.ts", resolved: "apps/api/src/orders/models.ts" }] },
-      ] },
-    }, { testPathPatterns: [], testKinds: { unit: [], integration: ["\\.integration\\.ts$"], e2e: ["\\.e2e\\.ts$"] } });
+    const graph = graphOf(
+      {
+        api: {
+          modules: [
+            { source: "apps/api/src/orders/models.ts", dependencies: [] },
+            { source: "apps/api/src/orders/models.integration.ts", dependencies: [{ module: "./models.ts", resolved: "apps/api/src/orders/models.ts" }] },
+            { source: "apps/api/src/orders/models.e2e.ts", dependencies: [{ module: "./models.ts", resolved: "apps/api/src/orders/models.ts" }] },
+          ],
+        },
+      },
+      { testPathPatterns: [], testKinds: { unit: [], integration: ["\\.integration\\.ts$"], e2e: ["\\.e2e\\.ts$"] } },
+    );
     expect(buildApplicationGraph(graph).nodes).toEqual(["apps/api/src/orders/models.ts"]);
     expect([...graph.testKinds.entries()].sort()).toEqual([
       ["apps/api/src/orders/models.e2e.ts", "e2e"],
@@ -137,18 +135,11 @@ describe("dependency model", () => {
   test("maps a workspace package specifier the resolver could not follow", () => {
     const graph = graphOf({
       api: {
-        modules: [
-          {
-            source: "apps/api/src/orders/repository.ts",
-            dependencies: [{ module: "@acme/format", resolved: "@acme/format", couldNotResolve: true }],
-          },
-        ],
+        modules: [{ source: "apps/api/src/orders/repository.ts", dependencies: [{ module: "@acme/format", resolved: "@acme/format", couldNotResolve: true }] }],
       },
     });
 
-    expect([...(graph.workspaceDependenciesBySource.get("apps/api/src/orders/repository.ts") ?? [])]).toEqual([
-      "libs/format",
-    ]);
+    expect([...(graph.workspaceDependenciesBySource.get("apps/api/src/orders/repository.ts") ?? [])]).toEqual(["libs/format"]);
     expect(graph.unresolvedWorkspaceEdges.map((edge) => edge.toOwner)).toEqual(["libs/format"]);
     // The package really does export that entry, so it is not an unresolved import.
     expect(graph.unresolved).toEqual([]);
@@ -165,9 +156,7 @@ describe("dependency model", () => {
         ],
       },
     });
-    expect(graph.unresolved).toEqual([
-      { source: "apps/api/src/orders/repository.ts", specifier: "@acme/format/schema" },
-    ]);
+    expect(graph.unresolved).toEqual([{ source: "apps/api/src/orders/repository.ts", specifier: "@acme/format/schema" }]);
   });
 
   test("classifies type-only, dynamic, and asset edges from the AST", () => {
@@ -208,15 +197,11 @@ describe("path classification", () => {
     expect(domainFor(derived, "apps/web/src/widgets/chart.ts")).toBe("web:widgets");
     expect(domainFor(derived, "apps/web/src/types.ts")).toBe("web:__root__");
 
-    const nested = config({
-      portfolio: { nestedDomainRoots: ["components"] },
-    });
+    const nested = config({ portfolio: { nestedDomainRoots: ["components"] } });
     expect(domainFor(nested, "apps/web/src/components/card.tsx")).toBe("web:components");
     expect(domainFor(nested, "apps/web/src/components/governance/card.tsx")).toBe("web:components/governance");
 
-    const configured = config({
-      portfolio: { domains: [{ name: "browser", patterns: ["^apps/web/"] }] },
-    });
+    const configured = config({ portfolio: { domains: [{ name: "browser", patterns: ["^apps/web/"] }] } });
     expect(domainFor(configured, "apps/web/src/widgets/chart.ts")).toBe("browser");
   });
 });

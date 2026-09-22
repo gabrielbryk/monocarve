@@ -5,9 +5,9 @@ import { join } from "node:path";
 
 import { pnpmAdapter } from "../../src/adapters/pnpm.ts";
 import { rewriteResolvedImportSpecifier } from "../../src/codemod/imports.ts";
+import type { ExtractionManifest, PlanOperation } from "../../src/plan/manifest.ts";
 import { verifyLockfile } from "../../src/transaction/lockfile-verify.ts";
 import { hashText } from "../../src/util/hash.ts";
-import type { ExtractionManifest, PlanOperation } from "../../src/plan/manifest.ts";
 import { fixtureConfig, fixtureGit, fixtureRepo, read, scratchDirectory, write } from "./fixture-repo.ts";
 
 export const LOCKFILE = pnpmAdapter.lockfileName;
@@ -67,14 +67,8 @@ function workspaceFiles(shape: WorkspaceShape): Record<string, string> {
     "pnpm-workspace.yaml": "packages:\n  - apps/*\n  - libs/*\n",
     [`${APP}/package.json`]: packageManifest("@acme/api", ownDependencies(shape)),
     [`${APP}/tsconfig.json`]: `${JSON.stringify({ include: ["src"] }, null, 2)}\n`,
-    "libs/format/package.json": packageManifest(
-      "@acme/format",
-      shape.siblingDependencies ? { "@acme/logger": "workspace:*" } : {},
-    ),
-    "libs/logger/package.json": packageManifest(
-      "@acme/logger",
-      shape.siblingDependencies ? { "@acme/format": "workspace:*" } : {},
-    ),
+    "libs/format/package.json": packageManifest("@acme/format", shape.siblingDependencies ? { "@acme/logger": "workspace:*" } : {}),
+    "libs/logger/package.json": packageManifest("@acme/logger", shape.siblingDependencies ? { "@acme/format": "workspace:*" } : {}),
     [DONOR]: "export const widgetValue = 1;\n",
     [CONSUMER]: 'import { widgetValue } from "./widget/widget.ts";\n\nexport const used = widgetValue + 1;\n',
   };
@@ -134,18 +128,12 @@ export function verify(workspacePath: string, command: readonly string[]) {
 export function simulationFixture(
   shape: WorkspaceShape,
   options: SimulationOptions = {},
-): {
-  config: ReturnType<typeof fixtureConfig>;
-  manifest: ExtractionManifest;
-  root: string;
-} {
+): { config: ReturnType<typeof fixtureConfig>; manifest: ExtractionManifest; root: string } {
   const root = fixtureRepo(workspaceFiles(shape));
   runPnpm(root);
   fixtureGit(root, "add", "-A");
   fixtureGit(root, "commit", "-qm", "test: seed the lockfile with pnpm's own output");
-  const config = fixtureConfig(root, {
-    transaction: { worktreeRoot: scratchDirectory(), nodeModules: "none", cleanup: true, simulateGates: true },
-  });
+  const config = fixtureConfig(root, { transaction: { worktreeRoot: scratchDirectory(), nodeModules: "none", cleanup: true, simulateGates: true } });
   return { config, manifest: simulationManifest(root, shape, options), root };
 }
 
@@ -196,14 +184,7 @@ function simulationManifest(root: string, shape: WorkspaceShape, options: Simula
       resultHash: hashText(packageJson),
       generator: "scaffold:package-json",
     },
-    {
-      kind: "write-file",
-      path: ENTRYPOINT,
-      contents: barrel,
-      preconditionHash: "missing",
-      resultHash: hashText(barrel),
-      generator: "scaffold:entrypoint",
-    },
+    { kind: "write-file", path: ENTRYPOINT, contents: barrel, preconditionHash: "missing", resultHash: hashText(barrel), generator: "scaffold:entrypoint" },
     {
       kind: "write-file",
       path: `${APP}/package.json`,
@@ -240,18 +221,9 @@ function simulationManifest(root: string, shape: WorkspaceShape, options: Simula
     baselineCommit: fixtureGit(root, "rev-parse", "HEAD"),
     graphDigest: hashText("lockfile-verification-graph"),
     application: "api",
-    target: {
-      packageName: PACKAGE,
-      packageRoot: PACKAGE_ROOT,
-      entrypoint: "src/index.ts",
-      requiredExports: [{ name: "widgetValue", typeOnly: false }],
-    },
+    target: { packageName: PACKAGE, packageRoot: PACKAGE_ROOT, entrypoint: "src/index.ts", requiredExports: [{ name: "widgetValue", typeOnly: false }] },
     source: { files: [DONOR], tests: [], sccs: { "scc-fixture": [DONOR] } },
-    dependencies: {
-      runtime: ownDependencies(shape),
-      dev: {},
-      packageReferences: shape.consumerDependencies ? ["libs/format"] : [],
-    },
+    dependencies: { runtime: ownDependencies(shape), dev: {}, packageReferences: shape.consumerDependencies ? ["libs/format"] : [] },
     sourceBlobs: { [DONOR]: donorHash },
     operations,
     consumers: [
@@ -265,15 +237,7 @@ function simulationManifest(root: string, shape: WorkspaceShape, options: Simula
       },
     ],
     generatedFiles: [],
-    changedFiles: [
-      DONOR,
-      TARGET,
-      CONSUMER,
-      ENTRYPOINT,
-      LOCKFILE,
-      `${APP}/package.json`,
-      `${PACKAGE_ROOT}/package.json`,
-    ].sort(),
+    changedFiles: [DONOR, TARGET, CONSUMER, ENTRYPOINT, LOCKFILE, `${APP}/package.json`, `${PACKAGE_ROOT}/package.json`].sort(),
     lockfileImporter: { packageRoot: PACKAGE_ROOT, hash: hashText(block) },
     expectedDynamicImportDelta: { added: [], removed: [] },
     evaluationEffects: [],

@@ -3,15 +3,12 @@ import { scrubbedGitEnv } from "../util/git.ts";
 import { PreparerError } from "./error.ts";
 
 export async function runPreparerCommand(command: string, cwd: string, timeout: number, label: string): Promise<void> {
-  const child = Bun.spawn(["sh", "-c", command], {
-    cwd,
-    env: scrubbedGitEnv(),
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const child = Bun.spawn(["sh", "-c", command], { cwd, env: scrubbedGitEnv(), stdin: "ignore", stdout: "pipe", stderr: "pipe" });
   let timedOut = false;
-  const timeoutTimer = setTimeout(() => { timedOut = true; child.kill(); }, timeout);
+  const timeoutTimer = setTimeout(() => {
+    timedOut = true;
+    child.kill();
+  }, timeout);
   const stdoutCapture = captureProcessStream(child.stdout);
   const stderrCapture = captureProcessStream(child.stderr);
   const keepAlive = setInterval(() => undefined, 1_000);
@@ -57,14 +54,21 @@ function captureProcessStream(stream: ReadableStream<Uint8Array>): ProcessStream
     output += decoder.decode();
     return output.length <= limit ? output : `${output.slice(0, head)}${marker}${output.slice(-tail)}`;
   })();
-  return { result, cancel: async () => { await reader.cancel(); } };
+  return {
+    result,
+    cancel: async () => {
+      await reader.cancel();
+    },
+  };
 }
 
 async function drainAfterExit(captures: readonly ProcessStreamCapture[], graceMs: number): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   await Promise.race([
     Promise.all(captures.map((capture) => capture.result)).then(() => undefined),
-    new Promise<void>((resolve) => { timer = setTimeout(resolve, graceMs); }),
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, graceMs);
+    }),
   ]);
   if (timer !== undefined) clearTimeout(timer);
   await Promise.all(captures.map((capture) => capture.cancel()));

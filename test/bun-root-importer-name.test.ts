@@ -107,24 +107,21 @@ describe("the projection mirrors the lockfile's root entry", () => {
   // Shaped like the repository that exposed this: a root entry with dependency
   // sections and no name. Both variants are multi-line, because that is what
   // bun writes for a root that declares anything at all.
-  const lock = (rootLines: readonly string[]): string => [
-    "{",
-    '  "lockfileVersion": 1,',
-    '  "workspaces": {',
-    ...rootLines,
-    '    "libs/lib": {',
-    '      "name": "@acme/lib",',
-    '      "version": "0.0.0",',
-    "    },",
-    "  },",
-    "}",
-    "",
-  ].join("\n");
-  const ROOT_DEPENDENCIES = [
-    '      "dependencies": {',
-    '        "@acme/lib": "workspace:*",',
-    "      },",
-  ];
+  const lock = (rootLines: readonly string[]): string =>
+    [
+      "{",
+      '  "lockfileVersion": 1,',
+      '  "workspaces": {',
+      ...rootLines,
+      '    "libs/lib": {',
+      '      "name": "@acme/lib",',
+      '      "version": "0.0.0",',
+      "    },",
+      "  },",
+      "}",
+      "",
+    ].join("\n");
+  const ROOT_DEPENDENCIES = ['      "dependencies": {', '        "@acme/lib": "workspace:*",', "      },"];
   const named = lock(['    "": {', '      "name": "probe",', ...ROOT_DEPENDENCIES, "    },"]);
   const anonymous = lock(['    "": {', ...ROOT_DEPENDENCIES, "    },"]);
   const rootless = lock([]);

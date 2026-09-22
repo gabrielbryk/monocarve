@@ -30,9 +30,8 @@ function addPackagePaths(paths: Record<string, string[]>, packageRoot: string, r
   if (!packageName) return;
   const installedPackageRoot = resolve(installedRoot, relative(rootDir, packageRoot));
   const exportsField = manifest.exports;
-  const subpaths = exportsField && typeof exportsField === "object" && !Array.isArray(exportsField)
-    ? exportsField as Record<string, unknown>
-    : { ".": exportsField };
+  const subpaths =
+    exportsField && typeof exportsField === "object" && !Array.isArray(exportsField) ? (exportsField as Record<string, unknown>) : { ".": exportsField };
   const keys = Object.keys(subpaths).filter((key) => key.startsWith("."));
   for (const key of keys.length > 0 ? keys : ["."]) addPublicPath(paths, packageName, manifest, packageRoot, installedPackageRoot, rootDir, key, subpaths[key]);
   paths[packageName] ??= [relativePosix(rootDir, join(packageRoot, "src/index.ts"))];
@@ -53,10 +52,6 @@ function addPublicPath(
   const candidate = resolve(packageRoot, exportTarget(exported) ?? fallback ?? "./src/index.ts");
   const installedCandidate = resolve(installedPackageRoot, exportTarget(exported) ?? fallback ?? "./src/index.ts");
   if (key !== "." && !specifier.includes("*") && !existsSync(candidate) && !existsSync(installedCandidate)) return;
-  const target = existsSync(candidate)
-    ? candidate
-    : existsSync(installedCandidate)
-      ? installedCandidate
-      : join(packageRoot, "src/index.ts");
+  const target = existsSync(candidate) ? candidate : existsSync(installedCandidate) ? installedCandidate : join(packageRoot, "src/index.ts");
   paths[specifier] = [relativePosix(rootDir, target)];
 }

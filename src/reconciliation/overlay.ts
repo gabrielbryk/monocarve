@@ -1,6 +1,6 @@
 import { operationTargets, type ExtractionManifest, type PlanOperation } from "../plan/manifest.ts";
-import { ReconciliationValidationError } from "./validate.ts";
 import type { ReconciliationRecord } from "./types.ts";
+import { ReconciliationValidationError } from "./validate.ts";
 
 /** In-memory audit view only; this is never a replacement extraction manifest. */
 export function reconciliationAuditManifest(manifest: ExtractionManifest, record: ReconciliationRecord): ExtractionManifest {
@@ -16,8 +16,8 @@ export function reconciliationAuditManifest(manifest: ExtractionManifest, record
     const path = operationTargets(operation).find((candidate) => last.get(candidate) === index && accepted.has(candidate));
     return path === undefined ? operation : { ...operation, resultHash: accepted.get(path)! };
   });
-  const generatedFiles = manifest.generatedFiles.map((entry) => accepted.has(entry.path) && entry.regenerateOnApply
-    ? { ...entry, expectedHash: accepted.get(entry.path)! }
-    : entry);
+  const generatedFiles = manifest.generatedFiles.map((entry) =>
+    accepted.has(entry.path) && entry.regenerateOnApply ? { ...entry, expectedHash: accepted.get(entry.path)! } : entry,
+  );
   return { ...manifest, operations, generatedFiles };
 }

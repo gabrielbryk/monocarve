@@ -4,8 +4,8 @@ import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
 import type { PackageManagerAdapter } from "../adapters/types.ts";
-import { hashText, type FileState } from "../util/hash.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
+import { hashText, type FileState } from "../util/hash.ts";
 import { stateAt, textAt } from "./audit-helpers.ts";
 import { proof, type ProofResult } from "./audit-types.ts";
 
@@ -18,11 +18,7 @@ import { proof, type ProofResult } from "./audit-types.ts";
  * shape the package manager itself would never write. That question is the
  * opt-in `--verify-lockfile` run's, and nothing here answers it.
  */
-export function lockfileIntegrityProof(
-  adapter: PackageManagerAdapter,
-  manifest: ExtractionManifest,
-  rootDir: string,
-): ProofResult {
+export function lockfileIntegrityProof(adapter: PackageManagerAdapter, manifest: ExtractionManifest, rootDir: string): ProofResult {
   const lockfileFailures: string[] = [];
   let lockfileChecks = 0;
   for (const operation of manifest.operations) {
@@ -71,9 +67,7 @@ function generatedFileFailures(
   }
   if (generated.exemptReason) return [];
   if (generated.expectedHash) {
-    return stateAt(rootDir, generated.path) === generated.expectedHash
-      ? []
-      : [`generated file does not match its recorded hash: ${generated.path}`];
+    return stateAt(rootDir, generated.path) === generated.expectedHash ? [] : [`generated file does not match its recorded hash: ${generated.path}`];
   }
   return [`generated file ${generated.path} carries neither a hash nor an exemption`];
 }
@@ -83,21 +77,19 @@ export function generatedArtifactsProof(
   rootDir: string,
   regenerated: Readonly<Record<string, FileState>> | undefined,
 ): ProofResult {
-  const generatedFailures = manifest.generatedFiles.flatMap((generated) =>
-    generatedFileFailures(rootDir, generated, regenerated),
-  );
+  const generatedFailures = manifest.generatedFiles.flatMap((generated) => generatedFileFailures(rootDir, generated, regenerated));
   return proof(generatedFailures, manifest.generatedFiles.length);
 }
 
-export function postJournalDeclarativeProof(
-  manifest: ExtractionManifest,
-  rootDir: string,
-): ProofResult {
-  const postJournalFailures = (manifest.postJournalPreparers ?? []).flatMap((preparer) => preparer.mutations.flatMap((mutation) => {
-    const path = resolve(rootDir, mutation.path);
-    if (stateAt(rootDir, mutation.path) !== mutation.resultHash) return [`post-journal declarative result does not match its recorded hash: ${mutation.path}`];
-    const mode = existsSync(path) ? (statSync(path).mode & 0o111 ? 0o755 : 0o644) : "missing";
-    return mode === mutation.resultMode ? [] : [`post-journal declarative result does not match its recorded mode: ${mutation.path}`];
-  }));
+export function postJournalDeclarativeProof(manifest: ExtractionManifest, rootDir: string): ProofResult {
+  const postJournalFailures = (manifest.postJournalPreparers ?? []).flatMap((preparer) =>
+    preparer.mutations.flatMap((mutation) => {
+      const path = resolve(rootDir, mutation.path);
+      if (stateAt(rootDir, mutation.path) !== mutation.resultHash)
+        return [`post-journal declarative result does not match its recorded hash: ${mutation.path}`];
+      const mode = existsSync(path) ? (statSync(path).mode & 0o111 ? 0o755 : 0o644) : "missing";
+      return mode === mutation.resultMode ? [] : [`post-journal declarative result does not match its recorded mode: ${mutation.path}`];
+    }),
+  );
   return proof(postJournalFailures, (manifest.postJournalPreparers ?? []).flatMap((item) => item.mutations).length);
 }

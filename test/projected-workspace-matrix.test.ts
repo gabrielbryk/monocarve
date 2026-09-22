@@ -12,9 +12,13 @@ import { verifyProjectedImporters } from "../src/transaction/projected-importers
 import { cleanupFixtures, fixtureConfig, fixtureRepo, write } from "./support/fixture-repo.ts";
 
 const taskRunner: TaskRunnerAdapter = {
-  id: "fixture", projectFileName: null, projectRegistryFileName: null,
-  projectIdFor: (name) => name, projectIdOf: () => "",
-  registerProject: () => ({ kind: "already-satisfied" }), wrapGateCommand: (command) => ["sh", "-c", command],
+  id: "fixture",
+  projectFileName: null,
+  projectRegistryFileName: null,
+  projectIdFor: (name) => name,
+  projectIdOf: () => "",
+  registerProject: () => ({ kind: "already-satisfied" }),
+  wrapGateCommand: (command) => ["sh", "-c", command],
 };
 
 const cases = [
@@ -27,44 +31,63 @@ const cases = [
 describe("projected workspace interaction matrix", () => {
   afterEach(cleanupFixtures);
 
-  for (const scenario of cases) test(scenario.name, async () => {
-    const root = fixtureRepo(seed(scenario.existing, scenario.existingRuntime));
-    const config = fixtureConfig(root, { assetExtensions: [".css"], scaffoldTemplates: { packageJson: { contents: '{"name":"{package}","sideEffects":false}\n' } } });
-    const input = {
-      context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
-      packageManager: pnpmAdapter, taskRunner, packageName: "@acme/target", packageRoot: "libs/target", projectId: "target",
-      production: [] as string[], assets: scenario.assets,
-      dependencies: {
-        runtime: scenario.incoming === "runtime" ? { "@acme/contracts": "workspace:*" } : {},
-        dev: scenario.incoming === "dev" ? { "@acme/contracts": "workspace:*" } : {},
-        packageReferences: ["libs/contracts"],
-      },
-    };
-    const first = packageOperations(input);
-    expect(packageOperations(input)).toEqual(first);
-    expect(new Set(first.map(operationKey)).size).toBe(first.length);
-    assertCompiledOperationInvariants(input.context, pnpmAdapter, first);
-    applyStructured(root, first);
-    const manifest = { target: { packageRoot: "libs/target" }, operations: first } as unknown as Parameters<typeof verifyProjectedImporters>[0]["manifest"];
-    const verified = await verifyProjectedImporters({ workspacePath: root, manifest, adapter: pnpmAdapter });
-    expect(verified).toMatchObject({ ok: true, checked: ["libs/target"] });
-    const pkg = JSON.parse(await Bun.file(`${root}/libs/target/package.json`).text()) as Record<string, unknown>;
-    const section = scenario.existingRuntime || scenario.incoming === "runtime" ? "dependencies" : "devDependencies";
-    expect((pkg[section] as Record<string, string> | undefined)?.["@acme/contracts"]).toBe("workspace:*");
-    if (scenario.assets.length > 0) expect(pkg.sideEffects).toEqual(["**/*.css"]);
-  });
+  for (const scenario of cases)
+    test(scenario.name, async () => {
+      const root = fixtureRepo(seed(scenario.existing, scenario.existingRuntime));
+      const config = fixtureConfig(root, {
+        assetExtensions: [".css"],
+        scaffoldTemplates: { packageJson: { contents: '{"name":"{package}","sideEffects":false}\n' } },
+      });
+      const input = {
+        context: new WorkspaceContext(config, root),
+        config,
+        application: config.applications[0]!,
+        packageManager: pnpmAdapter,
+        taskRunner,
+        packageName: "@acme/target",
+        packageRoot: "libs/target",
+        projectId: "target",
+        production: [] as string[],
+        assets: scenario.assets,
+        dependencies: {
+          runtime: scenario.incoming === "runtime" ? { "@acme/contracts": "workspace:*" } : {},
+          dev: scenario.incoming === "dev" ? { "@acme/contracts": "workspace:*" } : {},
+          packageReferences: ["libs/contracts"],
+        },
+      };
+      const first = packageOperations(input);
+      expect(packageOperations(input)).toEqual(first);
+      expect(new Set(first.map(operationKey)).size).toBe(first.length);
+      assertCompiledOperationInvariants(input.context, pnpmAdapter, first);
+      applyStructured(root, first);
+      const manifest = { target: { packageRoot: "libs/target" }, operations: first } as unknown as Parameters<typeof verifyProjectedImporters>[0]["manifest"];
+      const verified = await verifyProjectedImporters({ workspacePath: root, manifest, adapter: pnpmAdapter });
+      expect(verified).toMatchObject({ ok: true, checked: ["libs/target"] });
+      const pkg = JSON.parse(await Bun.file(`${root}/libs/target/package.json`).text()) as Record<string, unknown>;
+      const section = scenario.existingRuntime || scenario.incoming === "runtime" ? "dependencies" : "devDependencies";
+      expect((pkg[section] as Record<string, string> | undefined)?.["@acme/contracts"]).toBe("workspace:*");
+      if (scenario.assets.length > 0) expect(pkg.sideEffects).toEqual(["**/*.css"]);
+    });
 });
 
 function seed(existing: boolean, runtime: boolean): Record<string, string> {
   const base = "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\n  libs/contracts: {}\n\n";
   const files: Record<string, string> = {
-    "pnpm-workspace.yaml": "packages:\n  - 'libs/*'\n", "pnpm-lock.yaml": base,
-    "libs/contracts/package.json": '{"name":"@acme/contracts"}\n', "apps/api/src/theme.css": ".x{}\n",
+    "pnpm-workspace.yaml": "packages:\n  - 'libs/*'\n",
+    "pnpm-lock.yaml": base,
+    "libs/contracts/package.json": '{"name":"@acme/contracts"}\n',
+    "apps/api/src/theme.css": ".x{}\n",
   };
   if (!existing) return files;
   const dependencies = runtime ? { "@acme/contracts": "workspace:*" } : {};
   files["libs/target/package.json"] = `${JSON.stringify({ name: "@acme/target", dependencies })}\n`;
-  const block = pnpmAdapter.renderImporterBlock({ packageRoot: "libs/target", dependencies, devDependencies: {}, lockfileText: base, workspaceRoots: { "@acme/contracts": "libs/contracts" } });
+  const block = pnpmAdapter.renderImporterBlock({
+    packageRoot: "libs/target",
+    dependencies,
+    devDependencies: {},
+    lockfileText: base,
+    workspaceRoots: { "@acme/contracts": "libs/contracts" },
+  });
   files["pnpm-lock.yaml"] = pnpmAdapter.insertImporter(base, "libs/target", `${block}\n\n`);
   return files;
 }
@@ -79,7 +102,11 @@ function applyStructured(root: string, operations: ReturnType<typeof packageOper
 }
 
 function operationKey(operation: ReturnType<typeof packageOperations>[number]): string {
-  return operation.kind === "lockfile-importer" ? `importer:${operation.packageRoot}`
-    : operation.kind === "write-file" || operation.kind === "migrate-path-keys" ? `path:${operation.path}`
-    : operation.kind === "rewrite-import" || operation.kind === "rewrite-fs-reference" || operation.kind === "rewrite-path-reference" ? `path:${operation.file}` : `move:${operation.source}`;
+  return operation.kind === "lockfile-importer"
+    ? `importer:${operation.packageRoot}`
+    : operation.kind === "write-file" || operation.kind === "migrate-path-keys"
+      ? `path:${operation.path}`
+      : operation.kind === "rewrite-import" || operation.kind === "rewrite-fs-reference" || operation.kind === "rewrite-path-reference"
+        ? `path:${operation.file}`
+        : `move:${operation.source}`;
 }

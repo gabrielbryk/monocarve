@@ -15,9 +15,9 @@ import { fileURLToPath } from "node:url";
 
 import { loadConfig } from "../src/config.ts";
 import { scanDependencyGraph } from "../src/graph/cruiser.ts";
-import { buildPortfolio } from "../src/portfolio/rank.ts";
 import { buildPlanSync, serializeManifest } from "../src/plan/build.ts";
 import { findStaticFsReferences } from "../src/plan/static-fs-references.ts";
+import { buildPortfolio } from "../src/portfolio/rank.ts";
 import { applyPlan } from "../src/transaction/apply.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
 import { cleanupFixtures, fixtureGit, scratchDirectory, write } from "./support/fixture-repo.ts";
@@ -47,11 +47,11 @@ function loopReaderSource(): string {
   return [
     'import { readFileSync } from "node:fs";',
     'import { resolve } from "node:path";',
-    '',
+    "",
     'const read = (path: string) => readFileSync(resolve(import.meta.dir, path), "utf8");',
-    '',
+    "",
     `for (const path of ["${DONOR_LITERAL}"]) read(path);`,
-    '',
+    "",
   ].join("\n");
 }
 
@@ -82,14 +82,7 @@ describe("static filesystem reference consumers", () => {
     const candidate = buildPortfolio({ config, graph }).candidates.find((entry) => entry.eligible && entry.files.includes(DONOR));
     expect(candidate).toBeDefined();
 
-    const manifest = buildPlanSync({
-      config,
-      rootDir: root,
-      graph,
-      candidate: candidate!,
-      baselineCommit: graph.commit!,
-      packageName: "@acme/chart-fsref",
-    });
+    const manifest = buildPlanSync({ config, rootDir: root, graph, candidate: candidate!, baselineCommit: graph.commit!, packageName: "@acme/chart-fsref" });
 
     const operation = manifest.operations.find(
       (candidateOperation) => candidateOperation.kind === "rewrite-fs-reference" && candidateOperation.file === READER,

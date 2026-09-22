@@ -24,10 +24,7 @@ export interface CondensedGraph {
  * Tarjan's algorithm, iterated over sorted nodes so the component order — and
  * therefore every id derived from it — is deterministic.
  */
-export function stronglyConnectedComponents(
-  nodes: readonly string[],
-  outgoing: ReadonlyMap<string, readonly string[]>,
-): string[][] {
+export function stronglyConnectedComponents(nodes: readonly string[], outgoing: ReadonlyMap<string, readonly string[]>): string[][] {
   let nextIndex = 0;
   const indices = new Map<string, number>();
   const lowLinks = new Map<string, number>();

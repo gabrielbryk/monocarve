@@ -3,7 +3,13 @@ import { existsSync, readFileSync } from "node:fs";
 
 import { parseConfig } from "../src/config.ts";
 import type { ExtractionManifest } from "../src/plan/manifest.ts";
-import { applyPreparerManifest, assertPreparerManifest, compilePreparerManifest, compileStandalonePreparerManifest, simulatePreparerManifest } from "../src/preparer/index.ts";
+import {
+  applyPreparerManifest,
+  assertPreparerManifest,
+  compilePreparerManifest,
+  compileStandalonePreparerManifest,
+  simulatePreparerManifest,
+} from "../src/preparer/index.ts";
 import { hashJson, hashText } from "../src/util/hash.ts";
 import { cleanupFixtures, fixtureGit, fixtureRepo, scratchDirectory } from "./support/fixture-repo.ts";
 
@@ -35,15 +41,19 @@ describe("configured pre-extraction preparers", () => {
   test("refuses undeclared writes and removes the disposable transaction worktree", async () => {
     const root = fixtureRepo({ "apps/consumer/src/tabs/leads/view.ts": "export const view = 1;\n" });
     const scratch = scratchDirectory();
-    const config = configuration(scratch, [policy("mkdir -p packages/leads/src/tabs/leads && printf ok > {targetPath}.baseline.json && printf rogue > rogue.txt")]);
+    const config = configuration(scratch, [
+      policy("mkdir -p packages/leads/src/tabs/leads && printf ok > {targetPath}.baseline.json && printf rogue > rogue.txt"),
+    ]);
 
-    await expect(compilePreparerManifest({
-      rootDir: root,
-      config,
-      extraction: extractionManifest(root),
-      preparerId: "quality-ratchet",
-      sourcePath: "apps/consumer/src/tabs/leads/view.ts",
-    })).rejects.toThrow("undeclared repository-visible path(s): rogue.txt");
+    await expect(
+      compilePreparerManifest({
+        rootDir: root,
+        config,
+        extraction: extractionManifest(root),
+        preparerId: "quality-ratchet",
+        sourcePath: "apps/consumer/src/tabs/leads/view.ts",
+      }),
+    ).rejects.toThrow("undeclared repository-visible path(s): rogue.txt");
 
     expect(existsSync(`${root}/rogue.txt`)).toBe(false);
     expect(existsSync(`${root}/packages/leads/src/tabs/leads/view.ts.baseline.json`)).toBe(false);
@@ -57,8 +67,15 @@ describe("configured pre-extraction preparers", () => {
     const root = fixtureRepo({ "apps/consumer/src/tabs/leads/view.ts": "export const view = 1;\n" });
     const configured = { ...policy("printf ok > {targetPath}.baseline.json"), verify: "printf mutation > verify-mutated.txt" };
     const config = configuration(scratchDirectory(), [configured]);
-    await expect(compilePreparerManifest({ rootDir: root, config, extraction: extractionManifest(root), preparerId: configured.id, sourcePath: "apps/consumer/src/tabs/leads/view.ts" }))
-      .rejects.toThrow("undeclared repository-visible path(s): verify-mutated.txt");
+    await expect(
+      compilePreparerManifest({
+        rootDir: root,
+        config,
+        extraction: extractionManifest(root),
+        preparerId: configured.id,
+        sourcePath: "apps/consumer/src/tabs/leads/view.ts",
+      }),
+    ).rejects.toThrow("undeclared repository-visible path(s): verify-mutated.txt");
     expect(existsSync(`${root}/verify-mutated.txt`)).toBe(false);
   });
 
@@ -88,7 +105,13 @@ describe("configured pre-extraction preparers", () => {
     const root = fixtureRepo({ ".gitignore": "*.scratch\n", "apps/consumer/src/tabs/leads/view.ts": "export const view = 1;\n" });
     const configured = policy("printf ok > {targetPath}.baseline.json && printf scratch > transient.scratch");
     const config = configuration(scratchDirectory(), [configured]);
-    const manifest = await compilePreparerManifest({ rootDir: root, config, extraction: extractionManifest(root), preparerId: configured.id, sourcePath: "apps/consumer/src/tabs/leads/view.ts" });
+    const manifest = await compilePreparerManifest({
+      rootDir: root,
+      config,
+      extraction: extractionManifest(root),
+      preparerId: configured.id,
+      sourcePath: "apps/consumer/src/tabs/leads/view.ts",
+    });
     expect(manifest.mutations.map((item) => item.path)).not.toContain("transient.scratch");
     expect(existsSync(`${root}/transient.scratch`)).toBe(false);
   });
@@ -137,17 +160,42 @@ describe("configured pre-extraction preparers", () => {
     const configured = createPolicy("{targetPath}.contract.ts", "export const contract = 1;\n", 0o755);
     const config = configuration(scratchDirectory(), [configured]);
 
-    const manifest = await compilePreparerManifest({ rootDir: root, config, extraction: extractionManifest(root), preparerId: configured.id, sourcePath: source });
+    const manifest = await compilePreparerManifest({
+      rootDir: root,
+      config,
+      extraction: extractionManifest(root),
+      preparerId: configured.id,
+      sourcePath: source,
+    });
 
-    expect(manifest.preparer.creates).toEqual([{ path: "packages/leads/src/tabs/leads/view.ts.contract.ts", contents: "export const contract = 1;\n", mode: 0o755 }]);
-    expect(manifest.mutations[0]).toMatchObject({ path: "packages/leads/src/tabs/leads/view.ts.contract.ts", preconditionHash: "missing", preconditionMode: "missing", resultMode: 0o755, contents: "export const contract = 1;\n" });
+    expect(manifest.preparer.creates).toEqual([
+      { path: "packages/leads/src/tabs/leads/view.ts.contract.ts", contents: "export const contract = 1;\n", mode: 0o755 },
+    ]);
+    expect(manifest.mutations[0]).toMatchObject({
+      path: "packages/leads/src/tabs/leads/view.ts.contract.ts",
+      preconditionHash: "missing",
+      preconditionMode: "missing",
+      resultMode: 0o755,
+      contents: "export const contract = 1;\n",
+    });
     await simulatePreparerManifest({ rootDir: root, config, manifest });
     await applyPreparerManifest({ rootDir: root, config, manifest });
     expect(readFileSync(`${root}/packages/leads/src/tabs/leads/view.ts.contract.ts`, "utf8")).toBe("export const contract = 1;\n");
     fixtureGit(root, "add", ".");
     fixtureGit(root, "commit", "-qm", "test: apply declarative create");
-    const idempotent = await compilePreparerManifest({ rootDir: root, config, extraction: extractionManifest(root), preparerId: configured.id, sourcePath: source });
-    expect(idempotent.mutations[0]).toMatchObject({ preconditionHash: manifest.mutations[0]!.resultHash, resultHash: manifest.mutations[0]!.resultHash, preconditionMode: 0o755, resultMode: 0o755 });
+    const idempotent = await compilePreparerManifest({
+      rootDir: root,
+      config,
+      extraction: extractionManifest(root),
+      preparerId: configured.id,
+      sourcePath: source,
+    });
+    expect(idempotent.mutations[0]).toMatchObject({
+      preconditionHash: manifest.mutations[0]!.resultHash,
+      resultHash: manifest.mutations[0]!.resultHash,
+      preconditionMode: 0o755,
+      resultMode: 0o755,
+    });
     await applyPreparerManifest({ rootDir: root, config, manifest: idempotent });
   });
 
@@ -158,28 +206,63 @@ describe("configured pre-extraction preparers", () => {
     const configured = createPolicy(created, "expected\n");
     const config = configuration(scratchDirectory(), [configured]);
 
-    await expect(compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source }))
-      .rejects.toThrow(`file create 1 found different existing content or mode: ${created}`);
+    await expect(
+      compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source }),
+    ).rejects.toThrow(`file create 1 found different existing content or mode: ${created}`);
   });
 
   test("refuses duplicate create paths, replacement overlap, and workspace escape", async () => {
     const source = "apps/consumer/src/tabs/leads/view.ts";
     const root = fixtureRepo({ [source]: "export const view = 1;\n" });
-    const duplicate = { ...createPolicy("contract.ts", "one\n"), creates: [{ path: "contract.ts", contents: "one\n" }, { path: "contract.ts", contents: "two\n" }] };
-    await expect(compileStandalonePreparerManifest({ rootDir: root, config: configuration(scratchDirectory(), [duplicate]), baselineCommit: "HEAD", preparerId: duplicate.id, sourcePath: source }))
-      .rejects.toThrow("duplicate preparer create path: contract.ts");
+    const duplicate = {
+      ...createPolicy("contract.ts", "one\n"),
+      creates: [
+        { path: "contract.ts", contents: "one\n" },
+        { path: "contract.ts", contents: "two\n" },
+      ],
+    };
+    await expect(
+      compileStandalonePreparerManifest({
+        rootDir: root,
+        config: configuration(scratchDirectory(), [duplicate]),
+        baselineCommit: "HEAD",
+        preparerId: duplicate.id,
+        sourcePath: source,
+      }),
+    ).rejects.toThrow("duplicate preparer create path: contract.ts");
 
     const overlap = { ...createPolicy(source, "created\n"), replacements: [{ path: source, prefix: "export const ", before: "view = 1", after: "view = 2" }] };
-    await expect(compileStandalonePreparerManifest({ rootDir: root, config: configuration(scratchDirectory(), [overlap]), baselineCommit: "HEAD", preparerId: overlap.id, sourcePath: source }))
-      .rejects.toThrow(`preparer path cannot be both replaced and created: ${source}`);
+    await expect(
+      compileStandalonePreparerManifest({
+        rootDir: root,
+        config: configuration(scratchDirectory(), [overlap]),
+        baselineCommit: "HEAD",
+        preparerId: overlap.id,
+        sourcePath: source,
+      }),
+    ).rejects.toThrow(`preparer path cannot be both replaced and created: ${source}`);
 
     const redundantOutput = { ...createPolicy("contract.ts", "created\n"), outputs: ["contract.ts"] };
-    await expect(compileStandalonePreparerManifest({ rootDir: root, config: configuration(scratchDirectory(), [redundantOutput]), baselineCommit: "HEAD", preparerId: redundantOutput.id, sourcePath: source }))
-      .rejects.toThrow("created path is automatically an output and must not be declared twice: contract.ts");
+    await expect(
+      compileStandalonePreparerManifest({
+        rootDir: root,
+        config: configuration(scratchDirectory(), [redundantOutput]),
+        baselineCommit: "HEAD",
+        preparerId: redundantOutput.id,
+        sourcePath: source,
+      }),
+    ).rejects.toThrow("created path is automatically an output and must not be declared twice: contract.ts");
 
     const escape = createPolicy("../contract.ts", "escaped\n");
-    await expect(compileStandalonePreparerManifest({ rootDir: root, config: configuration(scratchDirectory(), [escape]), baselineCommit: "HEAD", preparerId: escape.id, sourcePath: source }))
-      .rejects.toThrow("path is not workspace-relative");
+    await expect(
+      compileStandalonePreparerManifest({
+        rootDir: root,
+        config: configuration(scratchDirectory(), [escape]),
+        baselineCommit: "HEAD",
+        preparerId: escape.id,
+        sourcePath: source,
+      }),
+    ).rejects.toThrow("path is not workspace-relative");
   });
 
   test("manifest validation detects tampered declarative create policy", async () => {
@@ -206,11 +289,7 @@ describe("configured pre-extraction preparers", () => {
     const source = "apps/consumer/src/tabs/leads/view.ts";
     const before = "export const remove = 1;\nexport const keep = 2;\n";
     const after = "export const keep = 2;\n";
-    const configured = replacementPolicy(source, [{
-      before: "export const remove = 1;\n",
-      after: "",
-      suffix: "export const keep = 2;\n",
-    }]);
+    const configured = replacementPolicy(source, [{ before: "export const remove = 1;\n", after: "", suffix: "export const keep = 2;\n" }]);
     const root = fixtureRepo({ [source]: before });
     const config = configuration(scratchDirectory(), [configured]);
 
@@ -221,30 +300,29 @@ describe("configured pre-extraction preparers", () => {
 
     const appliedRoot = fixtureRepo({ [source]: after });
     const appliedConfig = configuration(scratchDirectory(), [configured]);
-    const idempotent = await compileStandalonePreparerManifest({ rootDir: appliedRoot, config: appliedConfig, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source });
+    const idempotent = await compileStandalonePreparerManifest({
+      rootDir: appliedRoot,
+      config: appliedConfig,
+      baselineCommit: "HEAD",
+      preparerId: configured.id,
+      sourcePath: source,
+    });
     expect(idempotent.mutations[0]?.contents).toBe(after);
   });
 
   test("keeps replacement source text literal while rendering its path", async () => {
     const source = "apps/consumer/src/tabs/leads/view.ts";
     const root = fixtureRepo({ [source]: "const card = <Widget description={description} />;\n" });
-    const configured = replacementPolicy("{sourcePath}", [{
-      prefix: "const card = <Widget ",
-      before: "description={description}",
-      after: "description={summary}",
-      suffix: " />;",
-    }]);
+    const configured = replacementPolicy("{sourcePath}", [
+      { prefix: "const card = <Widget ", before: "description={description}", after: "description={summary}", suffix: " />;" },
+    ]);
     const config = configuration(scratchDirectory(), [configured]);
 
     const manifest = await compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source });
 
-    expect(manifest.preparer.replacements).toEqual([{
-      path: source,
-      prefix: "const card = <Widget ",
-      before: "description={description}",
-      after: "description={summary}",
-      suffix: " />;",
-    }]);
+    expect(manifest.preparer.replacements).toEqual([
+      { path: source, prefix: "const card = <Widget ", before: "description={description}", after: "description={summary}", suffix: " />;" },
+    ]);
     expect(manifest.mutations[0]?.contents).toBe("const card = <Widget description={summary} />;\n");
     await simulatePreparerManifest({ rootDir: root, config, manifest });
   });
@@ -255,8 +333,9 @@ describe("configured pre-extraction preparers", () => {
     const configured = replacementPolicy("{unknownPath}", [{ before: "view = 1", after: "view = 2" }]);
     const config = configuration(scratchDirectory(), [configured]);
 
-    await expect(compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source }))
-      .rejects.toThrow("unknown placeholder {unknownPath}");
+    await expect(
+      compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source }),
+    ).rejects.toThrow("unknown placeholder {unknownPath}");
   });
 
   test("treats already-applied declarative replacements as idempotent", async () => {
@@ -282,8 +361,9 @@ describe("configured pre-extraction preparers", () => {
     const configured = replacementPolicy(source, [{ before: "view = 1", after: "view = 2" }]);
     const config = configuration(scratchDirectory(), [configured]);
 
-    await expect(compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source }))
-      .rejects.toThrow(`text replacement 1 matched neither before nor after text in ${source}`);
+    await expect(
+      compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source }),
+    ).rejects.toThrow(`text replacement 1 matched neither before nor after text in ${source}`);
   });
 
   test("refuses ambiguous before text instead of choosing an occurrence", async () => {
@@ -292,8 +372,9 @@ describe("configured pre-extraction preparers", () => {
     const configured = replacementPolicy(source, [{ before: "view = 1", after: "view = 2" }]);
     const config = configuration(scratchDirectory(), [configured]);
 
-    await expect(compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source }))
-      .rejects.toThrow(`text replacement 1 before text is ambiguous in ${source}`);
+    await expect(
+      compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source }),
+    ).rejects.toThrow(`text replacement 1 before text is ambiguous in ${source}`);
   });
 
   test("does not mistake an unrelated after value for the contextual target state", async () => {
@@ -302,8 +383,9 @@ describe("configured pre-extraction preparers", () => {
     const configured = replacementPolicy(source, [{ before: "view = 1", after: "view = 2" }]);
     const config = configuration(scratchDirectory(), [configured]);
 
-    await expect(compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source }))
-      .rejects.toThrow(`text replacement 1 matched neither before nor after text in ${source}`);
+    await expect(
+      compileStandalonePreparerManifest({ rootDir: root, config, baselineCommit: "HEAD", preparerId: configured.id, sourcePath: source }),
+    ).rejects.toThrow(`text replacement 1 matched neither before nor after text in ${source}`);
   });
 });
 
@@ -318,11 +400,18 @@ function policy(command: string) {
   };
 }
 
-function replacementPolicy(path: string, replacements: readonly { readonly before: string; readonly after: string; readonly prefix?: string; readonly suffix?: string }[]) {
+function replacementPolicy(
+  path: string,
+  replacements: readonly { readonly before: string; readonly after: string; readonly prefix?: string; readonly suffix?: string }[],
+) {
   return {
     id: "source-rewrite",
     phase: "pre-extraction" as const,
-    replacements: replacements.map((replacement) => ({ path, ...(replacement.prefix === undefined && replacement.suffix === undefined ? { prefix: "export const " } : {}), ...replacement })),
+    replacements: replacements.map((replacement) => ({
+      path,
+      ...(replacement.prefix === undefined && replacement.suffix === undefined ? { prefix: "export const " } : {}),
+      ...replacement,
+    })),
     outputs: [path],
     commit: { subject: "refactor: apply source rewrite" },
   };
@@ -366,8 +455,11 @@ function extractionManifest(root: string): ExtractionManifest {
     dependencies: { runtime: {}, dev: {}, packageReferences: [] },
     sourceBlobs: { [source]: hash },
     operations: [{ kind: "move", source, target, preconditionHash: hash, resultHash: hash }],
-    consumers: [], generatedFiles: [], changedFiles: [source, target],
-    expectedDynamicImportDelta: { added: [], removed: [] }, evaluationEffects: [],
+    consumers: [],
+    generatedFiles: [],
+    changedFiles: [source, target],
+    expectedDynamicImportDelta: { added: [], removed: [] },
+    evaluationEffects: [],
     metrics: { movedFiles: 1, movedLines: 1, applicationLinesBefore: 1, applicationLinesAfter: 0, consumers: 0 },
     commits: { move: { subject: "refactor: move" }, wiring: { subject: "refactor: wire" } },
     gates: { package: [], project: [], workspace: [] },

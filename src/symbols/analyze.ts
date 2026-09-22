@@ -3,12 +3,7 @@ import { basename, isAbsolute, posix } from "node:path";
 import ts from "typescript";
 
 import { byCodeUnit, hashText } from "../util/hash.ts";
-import {
-  buildGroups,
-  collectDeclarations,
-  collectExportedSymbols,
-  compareDeclarations,
-} from "./declarations.ts";
+import { buildGroups, collectDeclarations, collectExportedSymbols, compareDeclarations } from "./declarations.ts";
 import { SymbolAnalysisError } from "./error.ts";
 import { collectEdges, stronglyConnectedComponents } from "./relations.ts";
 import type { AnalyzeTypeScriptSourceInput, DeclarationGroup, SymbolAnalysisDiagnostic, SymbolGraph } from "./types.ts";
@@ -58,10 +53,9 @@ function buildSymbolGraph(
   }
   const physical = collectDeclarations(sourceFile, checker, sourcePath, sourceText);
   const exportedSymbols = collectExportedSymbols(sourceFile, checker);
-  const declarations = physical.map(({ record, symbol }) => ({
-    ...record,
-    exported: record.exported || (symbol !== undefined && exportedSymbols.has(symbol)),
-  })).sort(compareDeclarations);
+  const declarations = physical
+    .map(({ record, symbol }) => ({ ...record, exported: record.exported || (symbol !== undefined && exportedSymbols.has(symbol)) }))
+    .sort(compareDeclarations);
   const recordById = new Map(declarations.map((record) => [record.id, record]));
   const physicalById = new Map(physical.map((item) => [item.record.id, item]));
   const groups = buildGroups(sourcePath, declarations);
@@ -129,21 +123,15 @@ function groupsForSymbols(
   return result;
 }
 
-function isolatedHost(
-  compilerOptions: ts.CompilerOptions,
-  virtualPath: string,
-  sourceFile: ts.SourceFile,
-  sourceText: string,
-): ts.CompilerHost {
+function isolatedHost(compilerOptions: ts.CompilerOptions, virtualPath: string, sourceFile: ts.SourceFile, sourceText: string): ts.CompilerHost {
   const host = ts.createCompilerHost(compilerOptions, true);
   const getSourceFile = host.getSourceFile.bind(host);
   const fileExists = host.fileExists.bind(host);
   const readFile = host.readFile.bind(host);
-  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => fileName === virtualPath
-    ? sourceFile
-    : getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) =>
+    fileName === virtualPath ? sourceFile : getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
   host.fileExists = (fileName) => fileName === virtualPath || fileExists(fileName);
-  host.readFile = (fileName) => fileName === virtualPath ? sourceText : readFile(fileName);
+  host.readFile = (fileName) => (fileName === virtualPath ? sourceText : readFile(fileName));
   return host;
 }
 

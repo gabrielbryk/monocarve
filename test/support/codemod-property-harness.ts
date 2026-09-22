@@ -5,10 +5,7 @@ import { join } from "node:path";
 
 import ts from "typescript";
 
-import {
-  resetCodemodCaches,
-  rewriteResolvedImportSpecifier,
-} from "../../src/codemod/imports.ts";
+import { resetCodemodCaches, rewriteResolvedImportSpecifier } from "../../src/codemod/imports.ts";
 
 export const DONOR_SPECIFIERS = ["./helpers", "./helpers.js", "./helpers.ts"] as const;
 const OTHER_SPECIFIERS = ["./unrelated", "./unrelated.js", "node:path", "@acme/other"] as const;
@@ -44,19 +41,10 @@ const REFERENCES: readonly Fragment[] = [
   { id: "require-resolve", build: (q, s, i) => `const rr${i} = require.resolve(${q}${s}${q});` },
   { id: "import-equals", build: (q, s, i) => `import ie${i} = require(${q}${s}${q});` },
   { id: "import-type-node", build: (q, s, i) => `type IT${i} = import(${q}${s}${q}).B;` },
-  {
-    id: "import-type-in-signature",
-    build: (q, s, i) => `const fn${i} = (x: import(${q}${s}${q}).B): void => { void x; };`,
-  },
+  { id: "import-type-in-signature", build: (q, s, i) => `const fn${i} = (x: import(${q}${s}${q}).B): void => { void x; };` },
   { id: "multiline-import", build: (q, s, i) => `import {\n  a as ml${i},\n} from\n  ${q}${s}${q};` },
-  {
-    id: "block-comment-in-declaration",
-    build: (q, s, i) => `import /* an ordinary note */ { a as bc${i} } from ${q}${s}${q};`,
-  },
-  {
-    id: "line-comment-in-declaration",
-    build: (q, s, i) => `import {\n  // an ordinary note\n  a as lc${i},\n} from ${q}${s}${q};`,
-  },
+  { id: "block-comment-in-declaration", build: (q, s, i) => `import /* an ordinary note */ { a as bc${i} } from ${q}${s}${q};` },
+  { id: "line-comment-in-declaration", build: (q, s, i) => `import {\n  // an ordinary note\n  a as lc${i},\n} from ${q}${s}${q};` },
   { id: "import-attributes", build: (q, s, i) => `import at${i} from ${q}${s}${q} with { type: ${q}json${q} };` },
   { id: "deep-dynamic-import", build: (q, s, i) => `const dp${i} = { load: () => import(${q}${s}${q}) };` },
   { id: "template-dynamic-import", build: (_q, s, i) => `const tp${i} = import(\`${s}\`);` },
@@ -71,11 +59,7 @@ const DECOYS: readonly Fragment[] = [
   { id: "commented-out-import", build: (q, s, i) => `// import { a } from ${q}${s}${q}; // kept for k${i}` },
   { id: "call-argument", build: (q, s, i) => `const c${i} = String(${q}${s}${q});` },
   { id: "decorator-argument", build: (q, s, i) => `@Deco({ selector: ${q}${s}${q} })\nclass K${i} {}` },
-  {
-    id: "jsx-attribute",
-    tsx: true,
-    build: (q, s, i) => `export const V${i} = () => <div className=${q}${s}${q} data-x={1} />;`,
-  },
+  { id: "jsx-attribute", tsx: true, build: (q, s, i) => `export const V${i} = () => <div className=${q}${s}${q} data-x={1} />;` },
 ];
 
 export interface Shape {
@@ -126,13 +110,7 @@ function decoyFor(shape: Shape, index: number): Fragment {
   return pick(usable, index);
 }
 
-function buildCase(
-  id: string,
-  shape: Shape,
-  slots: readonly Slot[],
-  tsImporter: string,
-  tsxImporter: string,
-): GeneratedCase {
+function buildCase(id: string, shape: Shape, slots: readonly Slot[], tsImporter: string, tsxImporter: string): GeneratedCase {
   const lines: string[] = [];
   const donorSpecifiers = new Set<string>();
   let donorReferences = 0;
@@ -143,13 +121,7 @@ function buildCase(
     donorSpecifiers.add(slot.specifier);
     if (slot.reference) donorReferences += 1;
   });
-  return {
-    id: `${id}/shape:${shape.id}`,
-    path: shape.tsx ? tsxImporter : tsImporter,
-    source: render(lines, shape),
-    donorSpecifiers,
-    donorReferences,
-  };
+  return { id: `${id}/shape:${shape.id}`, path: shape.tsx ? tsxImporter : tsImporter, source: render(lines, shape), donorSpecifiers, donorReferences };
 }
 
 function generateCases(tsImporter: string, tsxImporter: string): GeneratedCase[] {
@@ -276,8 +248,7 @@ export function report(kase: Reportable, expected: string, actual: string): stri
 }
 
 export function assertNoFailures(failures: readonly string[]): void {
-  const summary =
-    failures.length === 0 ? "" : `${failures.length} failing case(s):\n${failures.slice(0, 3).join("\n\n")}`;
+  const summary = failures.length === 0 ? "" : `${failures.length} failing case(s):\n${failures.slice(0, 3).join("\n\n")}`;
   expect(summary).toBe("");
 }
 

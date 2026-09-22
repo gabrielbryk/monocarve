@@ -42,7 +42,14 @@ const ADAPTER_PATH = "apps/api/src/widget-adapter.ts";
 const ADAPTER_TEMPLATE_TEXT = "export class Widget {\n  amount = 0;\n}\n";
 
 const TSCONFIG = JSON.stringify({
-  compilerOptions: { strict: true, noEmit: true, module: "ESNext", moduleResolution: "Bundler", baseUrl: "../../..", paths: { "@acme/env": ["libs/env/src/index.ts"] } },
+  compilerOptions: {
+    strict: true,
+    noEmit: true,
+    module: "ESNext",
+    moduleResolution: "Bundler",
+    baseUrl: "../../..",
+    paths: { "@acme/env": ["libs/env/src/index.ts"] },
+  },
   include: ["src/**/*.ts"],
 });
 
@@ -58,7 +65,16 @@ interface ExistingPackageFixture {
  * single symbol is fully covered by the declared replacement — the ordinary,
  * fully-satisfiable case.
  */
-function existingPackageFixture(overrides: { readonly extraModules?: readonly ScanReport["modules"][number][]; readonly extraFiles?: Readonly<Record<string, string>>; readonly retire?: boolean; readonly selective?: boolean; readonly pathReferences?: boolean; readonly replacementSpecifier?: string } = {}): ExistingPackageFixture {
+function existingPackageFixture(
+  overrides: {
+    readonly extraModules?: readonly ScanReport["modules"][number][];
+    readonly extraFiles?: Readonly<Record<string, string>>;
+    readonly retire?: boolean;
+    readonly selective?: boolean;
+    readonly pathReferences?: boolean;
+    readonly replacementSpecifier?: string;
+  } = {},
+): ExistingPackageFixture {
   const root = fixtureRepo({
     "apps/api/tsconfig.json": TSCONFIG,
     [RETAINED]: RETAINED_SOURCE,
@@ -69,27 +85,28 @@ function existingPackageFixture(overrides: { readonly extraModules?: readonly Sc
   const config = fixtureConfig(root, {
     moduleSpecifierCalls: ["vi.mock"],
     testKinds: { unit: ["\\.test\\.ts$"], integration: [], e2e: [] },
-    compositionBoundaries: [{
-      id: "env-shim",
-      retained: RETAINED,
-      strategy: "existing-package",
-      replacement: { specifier: overrides.replacementSpecifier ?? "@acme/env", symbols: ["env"] },
-      retire: overrides.retire ?? true,
-      selective: overrides.selective ?? false,
-    }],
-    preparation: {
-      gates: { package: [], project: [], workspace: ["true"] },
-      commit: { subject: "refactor: prepare env boundary" },
-    },
-    ...(overrides.pathReferences ? {
-      pathReferenceRewrites: {
-        enabled: true,
-        roots: [{ root: ".agents", extensions: [".md"], mode: "exact-path-token" as const }],
-        onAmbiguousMatch: "refuse" as const,
-        matchExtensionless: false,
-        minSegments: 3,
+    compositionBoundaries: [
+      {
+        id: "env-shim",
+        retained: RETAINED,
+        strategy: "existing-package",
+        replacement: { specifier: overrides.replacementSpecifier ?? "@acme/env", symbols: ["env"] },
+        retire: overrides.retire ?? true,
+        selective: overrides.selective ?? false,
       },
-    } : {}),
+    ],
+    preparation: { gates: { package: [], project: [], workspace: ["true"] }, commit: { subject: "refactor: prepare env boundary" } },
+    ...(overrides.pathReferences
+      ? {
+          pathReferenceRewrites: {
+            enabled: true,
+            roots: [{ root: ".agents", extensions: [".md"], mode: "exact-path-token" as const }],
+            onAmbiguousMatch: "refuse" as const,
+            matchExtensionless: false,
+            minSegments: 3,
+          },
+        }
+      : {}),
   });
   const baseline = resolveCommit(root, "HEAD");
   const modules: ScanReport["modules"][number][] = [
@@ -105,10 +122,7 @@ function existingPackageFixture(overrides: { readonly extraModules?: readonly Sc
     graphDigest: hashText("fixture-workspace-graph"),
     boundaryId: "env-shim",
     graph,
-    rendering: {
-      gates: { package: [], project: [], workspace: ["true"] },
-      commit: { subject: "refactor: prepare env boundary" },
-    },
+    rendering: { gates: { package: [], project: [], workspace: ["true"] }, commit: { subject: "refactor: prepare env boundary" } },
   };
   return { root, config, graph, input };
 }
@@ -120,7 +134,9 @@ interface PortFixture {
   readonly input: CompileBoundaryPreparationManifestInput;
 }
 
-function portFixture(overrides: { readonly retainedSource?: string; readonly consumerSource?: string; readonly packageName?: string | null } = {}): PortFixture {
+function portFixture(
+  overrides: { readonly retainedSource?: string; readonly consumerSource?: string; readonly packageName?: string | null } = {},
+): PortFixture {
   const root = fixtureRepo({
     "apps/api/tsconfig.json": TSCONFIG,
     [PORT_RETAINED]: overrides.retainedSource ?? PORT_RETAINED_SOURCE,
@@ -128,21 +144,20 @@ function portFixture(overrides: { readonly retainedSource?: string; readonly con
     ...(overrides.packageName === null ? {} : { "libs/ports/package.json": JSON.stringify({ name: overrides.packageName ?? "@acme/ports/widget" }) }),
   });
   const config = fixtureConfig(root, {
-    compositionBoundaries: [{
-      id: "widget-port",
-      retained: PORT_RETAINED,
-      strategy: "port",
-      contract: "Widget",
-      contractModule: "widget",
-      appAdapter: ADAPTER_PATH,
-      packageImport: "@acme/ports/widget",
-      symbols: ["Widget"],
-      template: "widget-adapter",
-    }],
-    preparation: {
-      gates: { package: [], project: [], workspace: ["true"] },
-      commit: { subject: "refactor: prepare widget port boundary" },
-    },
+    compositionBoundaries: [
+      {
+        id: "widget-port",
+        retained: PORT_RETAINED,
+        strategy: "port",
+        contract: "Widget",
+        contractModule: "widget",
+        appAdapter: ADAPTER_PATH,
+        packageImport: "@acme/ports/widget",
+        symbols: ["Widget"],
+        template: "widget-adapter",
+      },
+    ],
+    preparation: { gates: { package: [], project: [], workspace: ["true"] }, commit: { subject: "refactor: prepare widget port boundary" } },
   });
   const baseline = resolveCommit(root, "HEAD");
   const modules: ScanReport["modules"][number][] = [
@@ -159,10 +174,7 @@ function portFixture(overrides: { readonly retainedSource?: string; readonly con
     graph,
     contractTargetPath: CONTRACT_TARGET,
     adapterTemplateText: ADAPTER_TEMPLATE_TEXT,
-    rendering: {
-      gates: { package: [], project: [], workspace: ["true"] },
-      commit: { subject: "refactor: prepare widget port boundary" },
-    },
+    rendering: { gates: { package: [], project: [], workspace: ["true"] }, commit: { subject: "refactor: prepare widget port boundary" } },
   };
   return { root, config, graph, input };
 }
@@ -227,14 +239,10 @@ describe("compileBoundaryPreparationManifest — existing-package strategy", () 
     });
 
     const manifest = compileBoundaryPreparationManifest(input);
-    const rewrite = manifest.operations.find(
-      (operation) => operation.kind === "rewrite-module-specifier" && operation.file.path === MOCK_IMPORTER,
-    );
+    const rewrite = manifest.operations.find((operation) => operation.kind === "rewrite-module-specifier" && operation.file.path === MOCK_IMPORTER);
     const deletion = manifest.operations.find((operation) => operation.kind === "delete-module");
     expect(graph.testImporters.get(RETAINED)).toContain(MOCK_IMPORTER);
-    expect(rewrite?.kind === "rewrite-module-specifier" ? rewrite.contents : "").toBe(
-      'vi.mock("@acme/env");\n',
-    );
+    expect(rewrite?.kind === "rewrite-module-specifier" ? rewrite.contents : "").toBe('vi.mock("@acme/env");\n');
     expect(deletion?.kind === "delete-module" ? deletion.importerProof : []).toContain(MOCK_IMPORTER);
   });
 
@@ -278,26 +286,23 @@ describe("compileBoundaryPreparationManifest — existing-package strategy", () 
       [earlyImporter]: 'import { env } from "../config/env.ts";\nexport const value = env;\n',
     });
     const config = fixtureConfig(root, {
-      compositionBoundaries: [{
-        id: "env-shim",
-        retained: RETAINED,
-        strategy: "existing-package",
-        replacement: { specifier: "@acme/env", symbols: ["env"] },
-        retire: true,
-      }],
-      preparation: {
-        gates: { package: [], project: [], workspace: ["true"] },
-        commit: { subject: "refactor: prepare env boundary" },
-      },
+      compositionBoundaries: [
+        { id: "env-shim", retained: RETAINED, strategy: "existing-package", replacement: { specifier: "@acme/env", symbols: ["env"] }, retire: true },
+      ],
+      preparation: { gates: { package: [], project: [], workspace: ["true"] }, commit: { subject: "refactor: prepare env boundary" } },
     });
     const baseline = resolveCommit(root, "HEAD");
     const graph = buildDependencyGraph({
       config,
       rootDir: root,
-      reports: { api: { modules: [
-        { source: RETAINED, dependencies: [] },
-        { source: earlyImporter, dependencies: [{ module: "../config/env.ts", resolved: RETAINED }] },
-      ] } },
+      reports: {
+        api: {
+          modules: [
+            { source: RETAINED, dependencies: [] },
+            { source: earlyImporter, dependencies: [{ module: "../config/env.ts", resolved: RETAINED }] },
+          ],
+        },
+      },
       commit: baseline.commit,
     });
     const manifest = compileBoundaryPreparationManifest({
@@ -307,10 +312,7 @@ describe("compileBoundaryPreparationManifest — existing-package strategy", () 
       graphDigest: hashText("fixture-workspace-graph"),
       boundaryId: "env-shim",
       graph,
-      rendering: {
-        gates: { package: [], project: [], workspace: ["true"] },
-        commit: { subject: "refactor: prepare env boundary" },
-      },
+      rendering: { gates: { package: [], project: [], workspace: ["true"] }, commit: { subject: "refactor: prepare env boundary" } },
     });
 
     expect(manifest.operations.map((operation) => operation.kind)).toEqual(["rewrite-module-specifier", "delete-module"]);
@@ -347,10 +349,7 @@ describe("compileBoundaryPreparationManifest — existing-package strategy", () 
       graphDigest: hashText("fixture-workspace-graph"),
       boundaryId: "env-shim",
       graph,
-      rendering: {
-        gates: { package: [], project: [], workspace: ["true"] },
-        commit: { subject: "refactor: prepare env boundary" },
-      },
+      rendering: { gates: { package: [], project: [], workspace: ["true"] }, commit: { subject: "refactor: prepare env boundary" } },
     };
 
     expect(() => compileBoundaryPreparationManifest(input)).toThrow(
@@ -402,14 +401,11 @@ describe("compileBoundaryPreparationManifest — port strategy", () => {
     expect(() => assertPreparationManifestValid(manifest)).not.toThrow();
     expect(rewrite?.kind).toBe("rewrite-module-specifier");
     if (rewrite?.kind !== "rewrite-module-specifier") throw new Error("expected mixed consumer rewrite");
-    expect(rewrite.rewrites).toEqual([{
-      from: "../widget.ts", to: "@acme/ports/widget", symbols: ["Widget"], retainedSymbols: ["makeWidget"],
-    }]);
+    expect(rewrite.rewrites).toEqual([{ from: "../widget.ts", to: "@acme/ports/widget", symbols: ["Widget"], retainedSymbols: ["makeWidget"] }]);
 
-    const operations = manifest.operations.map((operation) => operation === rewrite ? {
-      ...operation,
-      rewrites: operation.rewrites.map(({ retainedSymbols: _omitted, ...entry }) => entry),
-    } : operation);
+    const operations = manifest.operations.map((operation) =>
+      operation === rewrite ? { ...operation, rewrites: operation.rewrites.map(({ retainedSymbols: _omitted, ...entry }) => entry) } : operation,
+    );
     const { planId: _planId, ...draft } = manifest;
     const tampered = createPreparationManifest({ ...draft, operations });
     expect(() => assertPreparationManifestValid(tampered)).toThrow(/still reference the retired specifier|retain undeclared symbols/);
@@ -417,7 +413,8 @@ describe("compileBoundaryPreparationManifest — port strategy", () => {
 
   test("rewrites only the selected declaration when retained values use a separate donor import", () => {
     const retainedSource = "export interface Widget { amount: number }\nexport class WidgetError extends Error {}\n";
-    const consumerSource = 'import type { Widget as Input } from "../widget.ts";\nimport { WidgetError } from "../widget.ts";\nexport type Value = Input;\nexport const error = new WidgetError();\n';
+    const consumerSource =
+      'import type { Widget as Input } from "../widget.ts";\nimport { WidgetError } from "../widget.ts";\nexport type Value = Input;\nexport const error = new WidgetError();\n';
     const manifest = compileBoundaryPreparationManifest(portFixture({ retainedSource, consumerSource }).input);
     const rewrite = manifest.operations.find((operation) => operation.kind === "rewrite-module-specifier");
 
@@ -425,16 +422,14 @@ describe("compileBoundaryPreparationManifest — port strategy", () => {
     if (rewrite?.kind !== "rewrite-module-specifier") throw new Error("expected selective consumer rewrite");
     expect(rewrite.contents).toContain('import type { Widget as Input } from "@acme/ports/widget";');
     expect(rewrite.contents).toContain('import { WidgetError } from "../widget.ts";');
-    expect(rewrite.rewrites).toEqual([{
-      from: "../widget.ts", to: "@acme/ports/widget", symbols: ["Widget"], retainedSymbols: ["WidgetError"],
-    }]);
+    expect(rewrite.rewrites).toEqual([{ from: "../widget.ts", to: "@acme/ports/widget", symbols: ["Widget"], retainedSymbols: ["WidgetError"] }]);
 
     const forgedContents = rewrite.contents.replace("Widget as Input }", "Widget as Input, WidgetError }");
     const forgedRewrite = { ...rewrite, file: { ...rewrite.file, resultHash: hashText(forgedContents) }, contents: forgedContents };
     const { planId: _planId, ...draft } = manifest;
     const forged = createPreparationManifest({
       ...draft,
-      operations: manifest.operations.map((operation) => operation === rewrite ? forgedRewrite : operation),
+      operations: manifest.operations.map((operation) => (operation === rewrite ? forgedRewrite : operation)),
     });
     expect(() => assertPreparationManifestValid(forged)).toThrow(/bind undeclared symbols from @acme\/ports\/widget/);
   });

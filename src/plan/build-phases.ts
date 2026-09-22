@@ -58,7 +58,7 @@ export function selectExtractionSources(args: {
   const targetOf = (source: string): string => packageTargetPath(args.packageRoot, moduleOf(source));
   const entrypointPath = `${args.packageRoot}/${args.entrypoint}`;
   const directEntrypointPromotion = args.targetModule === "index" && production.length === 1;
-  const targets = sources.map((source, index) => directEntrypointPromotion && index === 0 ? entrypointPath : targetOf(source));
+  const targets = sources.map((source, index) => (directEntrypointPromotion && index === 0 ? entrypointPath : targetOf(source)));
   const assetTargets = assets.map(targetOf);
   const allTargets = [...targets, ...assetTargets];
   if (new Set(allTargets).size !== allTargets.length) {
@@ -101,7 +101,14 @@ export function selectExtractionSources(args: {
     else publicModules[promotedIndex] = promotedModule;
   }
   return {
-    production, assets, tests, sources, targets, assetTargets, entrypointPath, publicModules,
+    production,
+    assets,
+    tests,
+    sources,
+    targets,
+    assetTargets,
+    entrypointPath,
+    publicModules,
     publicSpecifierFor: new Map(publicModules.map((entry) => [entry.source, entry.specifier])),
   };
 }
@@ -111,10 +118,15 @@ export function selectExtractionSources(args: {
  * runtime/module edges, but an extracted source can depend on them for its
  * public typecheck contract. */
 function withAmbientAugmentations(context: WorkspaceContext, selected: readonly string[]): string[] {
-  const packages = new Set(selected.flatMap((source) => context.moduleReferences(source)
-    .map((reference) => reference.specifier)
-    .filter((specifier): specifier is string => specifier !== null && !specifier.startsWith("."))
-    .map((specifier) => context.packageNameOf(specifier))));
+  const packages = new Set(
+    selected.flatMap((source) =>
+      context
+        .moduleReferences(source)
+        .map((reference) => reference.specifier)
+        .filter((specifier): specifier is string => specifier !== null && !specifier.startsWith("."))
+        .map((specifier) => context.packageNameOf(specifier)),
+    ),
+  );
   if (packages.size === 0) return [...selected].sort();
   const augmentations = context.repositorySources().filter((path) => {
     if (selected.includes(path) || !context.isProductionSource(path)) return false;
@@ -145,19 +157,24 @@ export function appendConsumerOperations(args: {
 }): { readonly consumers: Consumer[]; readonly dynamicImportDelta: { readonly added: string[]; readonly removed: string[] } } {
   const consumers = findConsumers(args.context, args.sources, args.packageName, args.publicSpecifierFor, args.includeDonorFiles)
     .filter((consumer) => !args.excludedFiles?.has(consumer.file))
-    .map((consumer) => args.context.isTest(consumer.file) ? { ...consumer, dependencySection: "dev" as const } : consumer);
-  for (const consumer of consumers) for (const donor of consumer.donors) {
-    if (isAssetPath(args.context.config, donor) && !args.publicSpecifierFor.has(donor)) {
-      throw new PlanningError(`retained asset consumer ${consumer.file} requires a configured public subpath for ${donor}`);
+    .map((consumer) => (args.context.isTest(consumer.file) ? { ...consumer, dependencySection: "dev" as const } : consumer));
+  for (const consumer of consumers)
+    for (const donor of consumer.donors) {
+      if (isAssetPath(args.context.config, donor) && !args.publicSpecifierFor.has(donor)) {
+        throw new PlanningError(`retained asset consumer ${consumer.file} requires a configured public subpath for ${donor}`);
+      }
     }
-  }
   const dynamicImportDelta = { added: [] as string[], removed: [] as string[] };
   for (const consumer of consumers) {
     appendDynamicImportDelta(args.context, consumer, args.packageName, args.publicSpecifierFor, dynamicImportDelta);
     const next = rewriteConsumer(args.context, consumer, args.packageName, args.publicSpecifierFor);
     args.operations.push({
-      kind: "rewrite-import", file: consumer.file, donors: [...consumer.donors], rewrites: consumer.rewrites,
-      preconditionHash: args.context.state(consumer.file), resultHash: hashText(next),
+      kind: "rewrite-import",
+      file: consumer.file,
+      donors: [...consumer.donors],
+      rewrites: consumer.rewrites,
+      preconditionHash: args.context.state(consumer.file),
+      resultHash: hashText(next),
     });
   }
   return { consumers, dynamicImportDelta };
@@ -195,22 +212,12 @@ export function appendStaticFsReferenceOperations(args: {
       (text, rewrite) => rewriteStaticFsReference(text, args.context.absolute(file), args.context.absolute(rewrite.donor), rewrite.to),
       current,
     );
-    args.operations.push({
-      kind: "rewrite-fs-reference",
-      file,
-      rewrites,
-      preconditionHash: args.context.state(file),
-      resultHash: hashText(next),
-    });
+    args.operations.push({ kind: "rewrite-fs-reference", file, rewrites, preconditionHash: args.context.state(file), resultHash: hashText(next) });
   }
   return { consumers };
 }
 
-function staticFsRewritesFor(
-  context: WorkspaceContext,
-  file: string,
-  donorTargets: ReadonlyMap<string, string>,
-): FsReferenceRewrite[] {
+function staticFsRewritesFor(context: WorkspaceContext, file: string, donorTargets: ReadonlyMap<string, string>): FsReferenceRewrite[] {
   const rewrites = new Map<string, FsReferenceRewrite>();
   for (const match of findStaticFsReferences(context.text(file), context.absolute(file))) {
     let donor: string;
@@ -235,7 +242,8 @@ function appendDynamicImportDelta(
   publicSpecifierFor: ReadonlyMap<string, string>,
   delta: { added: string[]; removed: string[] },
 ): void {
-  const references = context.moduleReferences(consumer.file)
+  const references = context
+    .moduleReferences(consumer.file)
     .filter((reference) => reference.dynamic && reference.specifier !== null && reference.resolved !== null)
     .filter((reference) => consumer.donors.some((donor) => context.absolute(donor) === reference.resolved));
   for (const reference of references) {
@@ -245,18 +253,21 @@ function appendDynamicImportDelta(
   }
 }
 
-function rewriteConsumer(
-  context: WorkspaceContext,
-  consumer: Consumer,
-  packageName: string,
-  publicSpecifierFor: ReadonlyMap<string, string>,
-): string {
+function rewriteConsumer(context: WorkspaceContext, consumer: Consumer, packageName: string, publicSpecifierFor: ReadonlyMap<string, string>): string {
   const current = context.text(consumer.file);
   const next = consumer.donors.reduce(
-    (value, donor) => rewriteResolvedImportSpecifier(
-      value, context.absolute(consumer.file), context.absolute(donor), publicSpecifierFor.get(donor) ?? packageName, context.rootDir,
-      context.config.moduleSpecifierCalls, context.config.assetExtensions, context.config.cssImportExtensions,
-    ), current,
+    (value, donor) =>
+      rewriteResolvedImportSpecifier(
+        value,
+        context.absolute(consumer.file),
+        context.absolute(donor),
+        publicSpecifierFor.get(donor) ?? packageName,
+        context.rootDir,
+        context.config.moduleSpecifierCalls,
+        context.config.assetExtensions,
+        context.config.cssImportExtensions,
+      ),
+    current,
   );
   if (next === current) throw new PlanningError(`consumer ${consumer.file} would not change when repointed at ${packageName}`);
   return next;
@@ -277,22 +288,37 @@ export function evaluationEffectsFor(args: {
   );
   const closure = evaluationClosure({ config: args.config, context: args.context, graph: args.graph, seeds: args.production, rewrites: args.rewrites });
   return evaluationInventory([
-    ...args.production.map((source, index) => ({ subject: "module" as const, reach: "moved" as const, path: args.targets[index]!, kinds: args.context.evaluationEffectKinds(source) })),
-    ...(entrypoint ? [{ subject: "module" as const, reach: "generated" as const, path: entrypoint.path, kinds: evaluationEffectKinds(entrypoint.contents, entrypoint.path) }] : []),
+    ...args.production.map((source, index) => ({
+      subject: "module" as const,
+      reach: "moved" as const,
+      path: args.targets[index]!,
+      kinds: args.context.evaluationEffectKinds(source),
+    })),
+    ...(entrypoint
+      ? [{ subject: "module" as const, reach: "generated" as const, path: entrypoint.path, kinds: evaluationEffectKinds(entrypoint.contents, entrypoint.path) }]
+      : []),
     ...closure.reached.map((path) => ({ subject: "module" as const, reach: "reached" as const, path, kinds: args.context.evaluationEffectKinds(path) })),
     ...closure.packages.map((entry) => ({ subject: "package" as const, name: entry.name, sideEffects: entry.sideEffects })),
   ]);
 }
 
-function evaluationInventory(entries: readonly (
-  | { readonly subject: "module"; readonly reach: EvaluationReach; readonly path: string; readonly kinds: readonly EvaluationEffectKind[] }
-  | { readonly subject: "package"; readonly name: string; readonly sideEffects: SideEffectsDeclaration }
-)[]): EvaluationEffectRecord[] {
-  const modules = entries.flatMap((entry): EvaluationModuleRecord[] => entry.subject === "module" && entry.kinds.length > 0
-    ? [{ subject: "module", reach: entry.reach, path: entry.path, kinds: [...new Set(entry.kinds)].sort(byCodeUnit) }] : [])
+function evaluationInventory(
+  entries: readonly (
+    | { readonly subject: "module"; readonly reach: EvaluationReach; readonly path: string; readonly kinds: readonly EvaluationEffectKind[] }
+    | { readonly subject: "package"; readonly name: string; readonly sideEffects: SideEffectsDeclaration }
+  )[],
+): EvaluationEffectRecord[] {
+  const modules = entries
+    .flatMap((entry): EvaluationModuleRecord[] =>
+      entry.subject === "module" && entry.kinds.length > 0
+        ? [{ subject: "module", reach: entry.reach, path: entry.path, kinds: [...new Set(entry.kinds)].sort(byCodeUnit) }]
+        : [],
+    )
     .sort((left, right) => byCodeUnit(left.path, right.path));
-  const packages = entries.flatMap((entry): EvaluationPackageRecord[] => entry.subject === "package"
-    ? [{ subject: "package", name: entry.name, sideEffects: entry.sideEffects }] : [])
+  const packages = entries
+    .flatMap((entry): EvaluationPackageRecord[] =>
+      entry.subject === "package" ? [{ subject: "package", name: entry.name, sideEffects: entry.sideEffects }] : [],
+    )
     .sort((left, right) => byCodeUnit(left.name, right.name));
   return [...modules, ...packages];
 }

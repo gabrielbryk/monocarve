@@ -19,8 +19,23 @@ describe("compiler hardening regressions", () => {
     const initialManifest = '{"name":"@acme/web","dependencies":{"@acme/carved":"workspace:*","runtime-library":"1"}}\n';
     const block = pnpmAdapter.addBlockDependency(pnpmAdapter.importerBlock(LOCK, "apps/api")!, "@acme/carved", "workspace:*", "link:../../libs/carved");
     const projected = new ProjectedWorkspace(context, pnpmAdapter, [
-      { kind: "write-file", path: "apps/api/package.json", contents: initialManifest, generator: "consumer", preconditionHash: context.state("apps/api/package.json"), resultHash: hashText(initialManifest) },
-      { kind: "lockfile-importer", lockfile: "pnpm-lock.yaml", packageRoot: "apps/api", block, mode: "replace", preconditionHash: hashText(LOCK), resultHash: hashText(LOCK) },
+      {
+        kind: "write-file",
+        path: "apps/api/package.json",
+        contents: initialManifest,
+        generator: "consumer",
+        preconditionHash: context.state("apps/api/package.json"),
+        resultHash: hashText(initialManifest),
+      },
+      {
+        kind: "lockfile-importer",
+        lockfile: "pnpm-lock.yaml",
+        packageRoot: "apps/api",
+        block,
+        mode: "replace",
+        preconditionHash: hashText(LOCK),
+        resultHash: hashText(LOCK),
+      },
     ]);
     projected.transformJson("apps/api/package.json", "prune", (value) => ({ ...value, dependencies: { "@acme/carved": "workspace:*" } }));
     projected.transformImporter("apps/api", (current) => pnpmAdapter.removeBlockDependency(current, "runtime-library"));
@@ -31,13 +46,14 @@ describe("compiler hardening regressions", () => {
   });
 
   test("usage inventory sees retained tests, tsconfig types, and policy keeps", () => {
-    const root = fixtureRepo(files({
-      "apps/api/src/retained.test.ts": 'import "test-library";\n',
-      "apps/api/tsconfig.json": '{"compilerOptions":{"types":["vitest/globals"]}}\n',
-    }));
+    const root = fixtureRepo(
+      files({ "apps/api/src/retained.test.ts": 'import "test-library";\n', "apps/api/tsconfig.json": '{"compilerOptions":{"types":["vitest/globals"]}}\n' }),
+    );
     const config = fixtureConfig(root, { dependencyPruning: { mode: "apply", keep: ["build-tool"] } });
     const evidence = collectDependencyUsage({
-      context: new WorkspaceContext(config, root), donorRoot: "apps/api", movedSources: ["apps/api/src/moved.ts"],
+      context: new WorkspaceContext(config, root),
+      donorRoot: "apps/api",
+      movedSources: ["apps/api/src/moved.ts"],
       dependencyNames: ["test-library", "vitest", "build-tool", "runtime-library"],
     });
     expect(evidence.find(({ name }) => name === "test-library")?.retainedSources).toEqual(["apps/api/src/retained.test.ts"]);
@@ -50,7 +66,13 @@ describe("compiler hardening regressions", () => {
     const root = fixtureRepo(files());
     const context = new WorkspaceContext(fixtureConfig(root), root);
     const contents = '{"name":"@acme/web"}\n';
-    const operation = { kind: "write-file" as const, path: "apps/api/package.json", contents, preconditionHash: context.state("apps/api/package.json"), resultHash: hashText(contents) };
+    const operation = {
+      kind: "write-file" as const,
+      path: "apps/api/package.json",
+      contents,
+      preconditionHash: context.state("apps/api/package.json"),
+      resultHash: hashText(contents),
+    };
     expect(() => assertCompiledOperationInvariants(context, pnpmAdapter, [operation, operation])).toThrow("duplicate final mutation");
   });
 
@@ -58,10 +80,19 @@ describe("compiler hardening regressions", () => {
     const root = fixtureRepo(files());
     const context = new WorkspaceContext(fixtureConfig(root), root);
     const block = pnpmAdapter.importerBlock(LOCK, "apps/api")!;
-    expect(() => assertCompiledOperationInvariants(context, pnpmAdapter, [{
-      kind: "lockfile-importer", lockfile: "pnpm-lock.yaml", packageRoot: "apps/api", block, mode: "replace",
-      preconditionHash: "0".repeat(64), resultHash: hashText(LOCK),
-    }])).toThrow("stale lockfile precondition");
+    expect(() =>
+      assertCompiledOperationInvariants(context, pnpmAdapter, [
+        {
+          kind: "lockfile-importer",
+          lockfile: "pnpm-lock.yaml",
+          packageRoot: "apps/api",
+          block,
+          mode: "replace",
+          preconditionHash: "0".repeat(64),
+          resultHash: hashText(LOCK),
+        },
+      ]),
+    ).toThrow("stale lockfile precondition");
   });
 });
 

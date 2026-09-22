@@ -57,6 +57,8 @@
     "max-file-lines": "bun run scripts/quality/max-file-lines.ts",
     "complexity": "bun run scripts/quality/complexity-check.ts",
     "quality": "bun run max-file-lines && bun run complexity",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
     "check": "bun run typecheck && bun run test && bun run quality",
     "verify-package": "bun run ./scripts/verify-package.ts",
     "prepublishOnly": "bun run build:bundle && bun run verify-package"
@@ -71,6 +73,7 @@
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",
-    "oxc-parser": "^0.139.0"
+    "oxc-parser": "^0.139.0",
+    "oxfmt": "0.67.0"
   }
 }

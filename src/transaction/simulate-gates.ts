@@ -88,9 +88,7 @@ async function runGateTier(options: SingleTierOptions): Promise<readonly GateRes
         options.timeoutMs,
         options.retries,
         options.runner,
-        options.diagnosticsDirectory === undefined
-          ? undefined
-          : join(options.diagnosticsDirectory, `${options.tier}-${index + 1}.log`),
+        options.diagnosticsDirectory === undefined ? undefined : join(options.diagnosticsDirectory, `${options.tier}-${index + 1}.log`),
         options.writeDiagnostic,
       );
       results[index] = result;
@@ -121,7 +119,11 @@ async function runGate(
   for (let attempt = 0; ; attempt += 1) {
     const attemptStarted = Date.now();
     result = await runner(command, { cwd, timeoutMs });
-    attempts.push({ exitCode: result.exitCode, durationMs: Date.now() - attemptStarted, ...(result.exitCode === 0 ? {} : { output: failedGateOutput(result) }) });
+    attempts.push({
+      exitCode: result.exitCode,
+      durationMs: Date.now() - attemptStarted,
+      ...(result.exitCode === 0 ? {} : { output: failedGateOutput(result) }),
+    });
     if (result.exitCode === 0 || attempt >= retries) break;
   }
   const exitCode = result.exitCode;
@@ -153,10 +155,7 @@ async function runGate(
   };
 }
 
-async function runBunGateCommand(
-  command: readonly string[],
-  options: { readonly cwd: string; readonly timeoutMs: number },
-): Promise<GateCommandOutput> {
+async function runBunGateCommand(command: readonly string[], options: { readonly cwd: string; readonly timeoutMs: number }): Promise<GateCommandOutput> {
   // Keep compiler/test scratch off system /tmp: on long campaigns its tmpfs
   // can exhaust inodes while the disposable worktree's backing disk is fine.
   // A unique directory per command is concurrency-safe and is always removed.
@@ -172,11 +171,7 @@ async function runBunGateCommand(
       stderr: "pipe",
       timeout: options.timeoutMs,
     });
-    const [exitCode, stdout, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
+    const [exitCode, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
     return { exitCode, stdout, stderr };
   } finally {
     rmSync(gateTemp, { recursive: true, force: true });

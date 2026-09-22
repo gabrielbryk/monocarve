@@ -55,8 +55,15 @@ function declaredDependencyVersion(text: string, name: string): string | undefin
 function declaredMoonId(rootDir: string, packageRoot: string): string | undefined {
   const file = join(rootDir, packageRoot, "moon.yml");
   if (!existsSync(file)) return undefined;
-  const line = readFileSync(file, "utf8").split("\n").find((candidate) => candidate.startsWith("id:"));
-  return line ? line.slice("id:".length).trim().replace(/^['"]|['"]$/g, "") : undefined;
+  const line = readFileSync(file, "utf8")
+    .split("\n")
+    .find((candidate) => candidate.startsWith("id:"));
+  return line
+    ? line
+        .slice("id:".length)
+        .trim()
+        .replace(/^['"]|['"]$/g, "")
+    : undefined;
 }
 
 function moonProjectId(packageRoot: string): string {

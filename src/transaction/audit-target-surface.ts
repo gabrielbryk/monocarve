@@ -27,16 +27,12 @@ export function entrypointSurfaceFailures(
   if (!existsSync(entrypoint)) return [`target entrypoint does not exist: ${manifest.target.entrypoint}`];
   try {
     const entrypointDeclared = manifest.operations.some(
-      (operation) =>
-        operation.kind === "write-file" &&
-        operation.path === `${manifest.target.packageRoot}/${manifest.target.entrypoint}`,
+      (operation) => operation.kind === "write-file" && operation.path === `${manifest.target.packageRoot}/${manifest.target.entrypoint}`,
     );
     // When the plan wrote the barrel, it alone defines the surface. When it
     // did not — extraction into a package that already had one — the moved
     // modules are inspected too.
-    const moduleTargets = moves
-      .filter((move) => /\.[cm]?[jt]sx?$/.test(move.target))
-      .map((move) => resolve(rootDir, move.target));
+    const moduleTargets = moves.filter((move) => /\.[cm]?[jt]sx?$/.test(move.target)).map((move) => resolve(rootDir, move.target));
     const files = [entrypoint, ...(entrypointDeclared ? [] : moduleTargets)].filter(existsSync);
     const actual = files.flatMap((file) => sourceExportsFromFile(file));
     return manifest.target.requiredExports
@@ -53,9 +49,10 @@ export function publicSubpathFailures(rootDir: string, manifest: ExtractionManif
   if ((manifest.target.publicModules?.length ?? 0) === 0 || !existsSync(packageManifestPath)) return [];
   try {
     const packageManifest = JSON.parse(readFileSync(packageManifestPath, "utf8")) as { exports?: unknown };
-    const exportsMap = packageManifest.exports && typeof packageManifest.exports === "object" && !Array.isArray(packageManifest.exports)
-      ? packageManifest.exports as Record<string, unknown>
-      : {};
+    const exportsMap =
+      packageManifest.exports && typeof packageManifest.exports === "object" && !Array.isArray(packageManifest.exports)
+        ? (packageManifest.exports as Record<string, unknown>)
+        : {};
     return (manifest.target.publicModules ?? []).flatMap((module) => subpathFailures(rootDir, manifest.target.packageRoot, exportsMap, module));
   } catch (error) {
     return [`package subpaths could not be read: ${(error as Error).message}`];
@@ -64,12 +61,7 @@ export function publicSubpathFailures(rootDir: string, manifest: ExtractionManif
 
 type PublicModuleRecord = NonNullable<ExtractionManifest["target"]["publicModules"]>[number];
 
-function subpathFailures(
-  rootDir: string,
-  packageRoot: string,
-  exportsMap: Record<string, unknown>,
-  module: PublicModuleRecord,
-): string[] {
+function subpathFailures(rootDir: string, packageRoot: string, exportsMap: Record<string, unknown>, module: PublicModuleRecord): string[] {
   const declared = firstExportTarget(exportsMap[module.exportKey]);
   if (declared !== module.exportTarget) return [`package subpath ${module.exportKey} does not target ${module.exportTarget}`];
   const resolved = relativePosix(rootDir, resolve(rootDir, packageRoot, declared));

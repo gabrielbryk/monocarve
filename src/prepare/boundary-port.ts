@@ -75,8 +75,7 @@ export function planPortBoundary(input: PlanPortBoundaryInput): PlanPortBoundary
   });
   if (atomicGroup && selection.closureGroupIds.length !== selection.requestedGroupIds.length) {
     throw new BoundaryPortError(
-      `port boundary ${boundary.id} requires a closed type-only declaration group; ` +
-        "one or more omitted declarations are required by the selected group",
+      `port boundary ${boundary.id} requires a closed type-only declaration group; ` + "one or more omitted declarations are required by the selected group",
     );
   }
   if (!atomicGroup && (selection.declarations.length !== 1 || selection.closureGroupIds.length !== 1)) {
@@ -86,45 +85,56 @@ export function planPortBoundary(input: PlanPortBoundaryInput): PlanPortBoundary
     );
   }
   if (selection.imports.some((item) => item.moduleSpecifier.startsWith("."))) {
-    throw new BoundaryPortError(`port boundary ${boundary.id} cannot promote ${boundary.declarationName}: it has a relative type import, which this builder does not rewrite`);
+    throw new BoundaryPortError(
+      `port boundary ${boundary.id} cannot promote ${boundary.declarationName}: it has a relative type import, which this builder does not rewrite`,
+    );
   }
-  const contract = writeOperation(input.contractTargetPath, renderContractModule(selection.declarations, input.retainedSourceText, selection.imports), "port-contract");
+  const contract = writeOperation(
+    input.contractTargetPath,
+    renderContractModule(selection.declarations, input.retainedSourceText, selection.imports),
+    "port-contract",
+  );
 
-  const selectedConsumers = input.consumers.map((consumer) => ({ consumer, bindings: portImportBindings(consumer, boundary.symbols) }))
+  const selectedConsumers = input.consumers
+    .map((consumer) => ({ consumer, bindings: portImportBindings(consumer, boundary.symbols) }))
     .filter((item) => item.bindings.promoted.length > 0);
-  assertTypeOnlyPromotion(selectedConsumers.flatMap(({ consumer, bindings }) => bindings.promotedLocals
-    .map((localName) => ({ path: consumer.path, text: consumer.text, localName }))));
+  assertTypeOnlyPromotion(
+    selectedConsumers.flatMap(({ consumer, bindings }) =>
+      bindings.promotedLocals.map((localName) => ({ path: consumer.path, text: consumer.text, localName })),
+    ),
+  );
   const rewrites = selectedConsumers
     .sort((left, right) => byCodeUnit(left.consumer.path, right.consumer.path))
     .map(({ consumer, bindings }) => planConsumerRewrite(input, consumer, bindings));
   return boundary.appAdapter === undefined ? { contract, rewrites } : { contract, adapter: buildAdapter(input, boundary), rewrites };
 }
 
-function renderContractModule(
-  declarations: readonly SelectedTypeDeclaration[],
-  sourceText: string,
-  imports: readonly RequiredImportBinding[],
-): string {
-  const exported = declarations.map((declaration) => {
-    const body = sourceText.slice(declaration.declaration.start, declaration.declaration.end);
-    return declaration.originallyExported ? body : `export ${body}`;
-  }).join("\n\n");
+function renderContractModule(declarations: readonly SelectedTypeDeclaration[], sourceText: string, imports: readonly RequiredImportBinding[]): string {
+  const exported = declarations
+    .map((declaration) => {
+      const body = sourceText.slice(declaration.declaration.start, declaration.declaration.end);
+      return declaration.originallyExported ? body : `export ${body}`;
+    })
+    .join("\n\n");
   const importText = imports.map(renderImportLine).join("\n");
   return importText.length === 0 ? `${exported}\n` : `${importText}\n\n${exported}\n`;
 }
 
 function renderImportLine(item: RequiredImportBinding): string {
-  const binding = item.kind === "default"
-    ? item.localName
-    : item.kind === "namespace"
-      ? `* as ${item.localName}`
-      : `{ ${item.importedName === item.localName ? item.importedName : `${item.importedName} as ${item.localName}`} }`;
+  const binding =
+    item.kind === "default"
+      ? item.localName
+      : item.kind === "namespace"
+        ? `* as ${item.localName}`
+        : `{ ${item.importedName === item.localName ? item.importedName : `${item.importedName} as ${item.localName}`} }`;
   return `import type ${binding} from ${JSON.stringify(item.moduleSpecifier)};`;
 }
 
 function buildAdapter(input: PlanPortBoundaryInput, boundary: ResolvedPortBoundary): PreparationWriteFileOperation {
   if (boundary.template === undefined || input.adapterTemplateText === undefined) {
-    throw new BoundaryPortError(`port boundary ${boundary.id} declares an appAdapter but no reviewed template text was supplied; Monocarve never synthesizes adapter code`);
+    throw new BoundaryPortError(
+      `port boundary ${boundary.id} declares an appAdapter but no reviewed template text was supplied; Monocarve never synthesizes adapter code`,
+    );
   }
   const appAdapter = boundary.appAdapter;
   if (appAdapter === undefined) throw new BoundaryPortError(`port boundary ${boundary.id} has no configured appAdapter path`);
@@ -150,12 +160,14 @@ function planConsumerRewrite(input: PlanPortBoundaryInput, consumer: PortConsume
   return {
     kind: "rewrite-module-specifier",
     file,
-    rewrites: [{
-      from: consumer.specifier,
-      to: boundary.packageImport,
-      symbols: bindings.promoted,
-      ...(bindings.retained.length === 0 ? {} : { retainedSymbols: bindings.retained }),
-    }],
+    rewrites: [
+      {
+        from: consumer.specifier,
+        to: boundary.packageImport,
+        symbols: bindings.promoted,
+        ...(bindings.retained.length === 0 ? {} : { retainedSymbols: bindings.retained }),
+      },
+    ],
     contents,
   };
 }
@@ -175,7 +187,13 @@ interface PortImportSelection {
 }
 
 function portImportBindings(consumer: PortConsumerInput, promoted: readonly string[]): PortImportBindings {
-  const source = ts.createSourceFile(consumer.path, consumer.text, ts.ScriptTarget.Latest, true, consumer.path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const source = ts.createSourceFile(
+    consumer.path,
+    consumer.text,
+    ts.ScriptTarget.Latest,
+    true,
+    consumer.path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
   const allowed = new Set(promoted);
   const moved = new Set<string>();
   const movedLocals = new Set<string>();
@@ -222,17 +240,23 @@ function portImportBindings(consumer: PortConsumerInput, promoted: readonly stri
     if (promotedElements.length > 0) selections.push({ statement, promotedElements, retainedElements });
   }
   if (hasSideEffectImport && selections.length > 0) {
-    throw new BoundaryPortError(`${consumer.path} has a side-effect import from ${consumer.specifier}; a selective port rewrite cannot prove its retained binding identity`);
+    throw new BoundaryPortError(
+      `${consumer.path} has a side-effect import from ${consumer.specifier}; a selective port rewrite cannot prove its retained binding identity`,
+    );
   }
   return {
-    promoted: [...moved].sort(byCodeUnit), promotedLocals: [...movedLocals].sort(byCodeUnit),
-    retained: [...retained].sort(byCodeUnit), retainedLocals: [...retainedLocals].sort(byCodeUnit), selections,
+    promoted: [...moved].sort(byCodeUnit),
+    promotedLocals: [...movedLocals].sort(byCodeUnit),
+    retained: [...retained].sort(byCodeUnit),
+    retainedLocals: [...retainedLocals].sort(byCodeUnit),
+    selections,
   };
 }
 
 function rewriteSelectedPortImports(consumer: PortConsumerInput, packageImport: string, bindings: PortImportBindings): string {
   if (bindings.selections.length === 0) throw new BoundaryPortError(`${consumer.path} has no selected import declaration from ${consumer.specifier}`);
-  const edits = bindings.selections.map((selection) => selectedImportEdit(consumer, packageImport, selection))
+  const edits = bindings.selections
+    .map((selection) => selectedImportEdit(consumer, packageImport, selection))
     .sort((left, right) => right.start - left.start || right.end - left.end);
   let contents = consumer.text;
   for (const edit of edits) contents = `${contents.slice(0, edit.start)}${edit.text}${contents.slice(edit.end)}`;
@@ -257,7 +281,13 @@ function selectedImportEdit(
   const retainedClause = factory.updateImportClause(clause, clause.isTypeOnly, clause.name, retainedNamed);
   const promotedClause = factory.updateImportClause(clause, clause.isTypeOnly, undefined, factory.createNamedImports(promotedElements));
   const retainedImport = factory.updateImportDeclaration(statement, statement.modifiers, retainedClause, statement.moduleSpecifier, statement.attributes);
-  const promotedImport = factory.updateImportDeclaration(statement, statement.modifiers, promotedClause, factory.createStringLiteral(packageImport), statement.attributes);
+  const promotedImport = factory.updateImportDeclaration(
+    statement,
+    statement.modifiers,
+    promotedClause,
+    factory.createStringLiteral(packageImport),
+    statement.attributes,
+  );
   const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
   const source = statement.getSourceFile();
   const replacement = `${printer.printNode(ts.EmitHint.Unspecified, retainedImport, source)}\n${printer.printNode(ts.EmitHint.Unspecified, promotedImport, source)}`;

@@ -15,19 +15,12 @@ export interface RenderedPublicModulePath {
   readonly exportTarget: string;
 }
 
-export function renderPublicModulePaths(
-  surface: PublicSurfaceConfig,
-  paths: readonly string[],
-): RenderedPublicModulePath[] {
+export function renderPublicModulePaths(surface: PublicSurfaceConfig, paths: readonly string[]): RenderedPublicModulePath[] {
   if (surface.mode === "barrel") return [];
 
   const rendered = paths.map((rawPath) => {
     const path = rawPath.replaceAll("\\", "/");
-    const vars = {
-      path,
-      pathNoExtension: path.replace(/\.[cm]?[jt]sx?$/, ""),
-      pathJs: path.replace(/\.[cm]?tsx?$/, ".js"),
-    };
+    const vars = { path, pathNoExtension: path.replace(/\.[cm]?[jt]sx?$/, ""), pathJs: path.replace(/\.[cm]?tsx?$/, ".js") };
     const exportKey = renderTemplate(surface.keyTemplate, vars);
     const exportTarget = renderTemplate(surface.targetTemplate, vars);
     assertPackageRelative("key", exportKey);
@@ -46,12 +39,7 @@ export function renderPublicModulePaths(
 
 function assertPackageRelative(kind: "key" | "target", value: string): void {
   const segments = value.startsWith("./") ? value.slice(2).split("/") : [];
-  if (
-    !value.startsWith("./") ||
-    value === "./" ||
-    value.includes("\\") ||
-    segments.some((segment) => segment === "." || segment === "..")
-  ) {
+  if (!value.startsWith("./") || value === "./" || value.includes("\\") || segments.some((segment) => segment === "." || segment === "..")) {
     throw new PlanningError(`public subpath ${kind} must stay below the package root: ${value}`);
   }
 }

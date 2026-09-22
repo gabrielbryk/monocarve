@@ -19,29 +19,19 @@ import { statusEntries } from "./git.ts";
 export function pathOverlaps(left: string, right: string): boolean {
   const normalizedLeft = left.replace(/\/+$/, "");
   const normalizedRight = right.replace(/\/+$/, "");
-  return (
-    normalizedLeft === normalizedRight ||
-    normalizedLeft.startsWith(`${normalizedRight}/`) ||
-    normalizedRight.startsWith(`${normalizedLeft}/`)
-  );
+  return normalizedLeft === normalizedRight || normalizedLeft.startsWith(`${normalizedRight}/`) || normalizedRight.startsWith(`${normalizedLeft}/`);
 }
 
 /**
  * Dirty paths this transaction may not proceed over, sorted and deduplicated.
  * Empty means the tree is clean enough.
  */
-export function disallowedDirtyPaths(
-  rootDir: string,
-  allowDirtyPaths: readonly string[],
-  sensitivePaths: readonly string[],
-): readonly string[] {
+export function disallowedDirtyPaths(rootDir: string, allowDirtyPaths: readonly string[], sensitivePaths: readonly string[]): readonly string[] {
   const entries = statusEntries(rootDir);
   if (entries.length === 0) return [];
   const disallowed = entries.flatMap((entry) =>
     entry.paths.filter(
-      (path) =>
-        !allowDirtyPaths.some((allowed) => pathOverlaps(path, allowed)) ||
-        sensitivePaths.some((sensitive) => pathOverlaps(path, sensitive)),
+      (path) => !allowDirtyPaths.some((allowed) => pathOverlaps(path, allowed)) || sensitivePaths.some((sensitive) => pathOverlaps(path, sensitive)),
     ),
   );
   return [...new Set(disallowed)].sort();

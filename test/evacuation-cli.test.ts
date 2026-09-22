@@ -87,11 +87,9 @@ describe("evacuate CLI", () => {
     expect(analysis.stderr).toBe("");
     const blockedReport = JSON.parse(analysis.stdout) as EvacuationJson & { readonly manifest?: unknown };
     expect(blockedReport.candidate.eligible).toBe(false);
-    expect(blockedReport.boundaryCuts).toContainEqual(expect.objectContaining({
-      target: "apps/web/src/types.ts",
-      reason: "outside-evacuation",
-      remedy: { kind: "unconfigured" },
-    }));
+    expect(blockedReport.boundaryCuts).toContainEqual(
+      expect.objectContaining({ target: "apps/web/src/types.ts", reason: "outside-evacuation", remedy: { kind: "unconfigured" } }),
+    );
     expect(blockedReport.manifest).toBeUndefined();
     expect(existsSync(blockedPlan)).toBe(false);
 

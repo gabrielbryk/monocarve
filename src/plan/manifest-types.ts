@@ -1,8 +1,8 @@
 import type { EvaluationEffectKind } from "../codemod/side-effects.ts";
 import type { PublicSurfaceConfig } from "../config.ts";
 import type { FileState, Sha256 } from "../util/hash.ts";
-import type { ExportSurface } from "./public-surface.ts";
 import type { ImportRewrite, PlanOperation } from "./manifest-operations.ts";
+import type { ExportSurface } from "./public-surface.ts";
 
 /**
  * v2 requires dependency sections; v3 adds compiler provenance; v4 persists
@@ -19,7 +19,9 @@ export const LEGACY_PLAN_SCHEMA_VERSION = 2 as const;
 export const PREVIOUS_PLAN_SCHEMA_VERSION = 3 as const;
 export const PLAN_SCHEMA_VERSION = 4 as const;
 
-export function isSupportedExtractionManifestVersion(value: unknown): value is typeof LEGACY_PLAN_SCHEMA_VERSION | typeof PREVIOUS_PLAN_SCHEMA_VERSION | typeof PLAN_SCHEMA_VERSION {
+export function isSupportedExtractionManifestVersion(
+  value: unknown,
+): value is typeof LEGACY_PLAN_SCHEMA_VERSION | typeof PREVIOUS_PLAN_SCHEMA_VERSION | typeof PLAN_SCHEMA_VERSION {
   return value === LEGACY_PLAN_SCHEMA_VERSION || value === PREVIOUS_PLAN_SCHEMA_VERSION || value === PLAN_SCHEMA_VERSION;
 }
 
@@ -30,7 +32,10 @@ export function isExtractionManifestLike(value: unknown): value is ExtractionMan
   return isSupportedExtractionManifestVersion(candidate.schemaVersion) || "baselineCommit" in candidate;
 }
 
-export interface CommitSpec { readonly subject: string; readonly body?: string }
+export interface CommitSpec {
+  readonly subject: string;
+  readonly body?: string;
+}
 export interface ConsumerRewrite {
   readonly file: string;
   readonly owner: string;
@@ -121,13 +126,28 @@ export interface PostJournalPreparerRecord {
   readonly id: string;
   readonly command?: string;
   readonly outputs: readonly string[];
-  readonly replacements?: readonly { readonly path: string; readonly before: string; readonly after: string; readonly prefix?: string; readonly suffix?: string }[];
+  readonly replacements?: readonly {
+    readonly path: string;
+    readonly before: string;
+    readonly after: string;
+    readonly prefix?: string;
+    readonly suffix?: string;
+  }[];
   readonly creates?: readonly { readonly path: string; readonly contents: string; readonly mode: number }[];
-  readonly mutations: readonly { readonly path: string; readonly preconditionHash: FileState; readonly preconditionMode: number | "missing"; readonly resultHash: Sha256; readonly resultMode: number }[];
+  readonly mutations: readonly {
+    readonly path: string;
+    readonly preconditionHash: FileState;
+    readonly preconditionMode: number | "missing";
+    readonly resultHash: Sha256;
+    readonly resultMode: number;
+  }[];
   readonly emittedModuleSpecifiers: readonly { readonly source: string; readonly resolutionBase: string }[];
   readonly verify?: string;
 }
-export interface DynamicImportDelta { readonly added: readonly string[]; readonly removed: readonly string[] }
+export interface DynamicImportDelta {
+  readonly added: readonly string[];
+  readonly removed: readonly string[];
+}
 export interface PlanAdapterProvenance {
   readonly id: string;
   readonly contractVersion: number;
@@ -137,10 +157,7 @@ export interface PlanProvenance {
   readonly configDigest: Sha256;
   readonly policyDigest: Sha256;
   readonly compiler: { readonly artifactIntegrity: Sha256; readonly sourceRevision?: string };
-  readonly adapters: {
-    readonly packageManager: PlanAdapterProvenance;
-    readonly taskRunner: PlanAdapterProvenance;
-  };
+  readonly adapters: { readonly packageManager: PlanAdapterProvenance; readonly taskRunner: PlanAdapterProvenance };
   /** Present only for an explicit evacuation that authorizes configured protected roots. */
   readonly evacuation?: {
     readonly id: string;
@@ -194,11 +211,7 @@ export interface ExtractionManifest {
       readonly compatibility: "compatible" | "requires-review";
       readonly reasons: readonly string[];
     }[];
-    readonly selectedTarget: {
-      readonly packageName: string;
-      readonly packageRoot: string;
-      readonly action: "extend" | "create";
-    };
+    readonly selectedTarget: { readonly packageName: string; readonly packageRoot: string; readonly action: "extend" | "create" };
   };
   /** Present only for a reviewed complete-module architectural boundary cut. */
   readonly modulePromotion?: {

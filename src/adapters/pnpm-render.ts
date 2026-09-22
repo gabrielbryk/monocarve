@@ -28,9 +28,7 @@ function importerSections(input: RenderImporterInput, linkVersion: (from: string
     ["devDependencies", input.devDependencies],
     ["optionalDependencies", input.optionalDependencies ?? {}],
   ];
-  return sections
-    .map(([section, values]) => renderSection(section, values, input, linkVersion))
-    .filter((section): section is string => section !== undefined);
+  return sections.map(([section, values]) => renderSection(section, values, input, linkVersion)).filter((section): section is string => section !== undefined);
 }
 
 function renderSection(
@@ -46,12 +44,7 @@ function renderSection(
   return lines.join("\n");
 }
 
-function renderDependency(
-  name: string,
-  specifier: string,
-  input: RenderImporterInput,
-  linkVersion: (from: string, to: string) => string,
-): string[] {
+function renderDependency(name: string, specifier: string, input: RenderImporterInput, linkVersion: (from: string, to: string) => string): string[] {
   const version = specifier.startsWith("workspace:")
     ? workspaceVersion(name, input, linkVersion)
     : dependencyVersion(input.lockfileText, name, specifier, input.resolutionRoots?.[name] ?? input.packageRoot);
@@ -67,7 +60,7 @@ function renderDependency(
   // version and rejects a lockfile entry that still reads `catalog:` verbatim
   // as a mismatch, the moment any importer in the file changes.
   const persistedSpecifier =
-    specifier === "catalog:" ? existingSpecifier(input, name) ?? anyImporterSpecifier(input.lockfileText, name) ?? specifier : specifier;
+    specifier === "catalog:" ? (existingSpecifier(input, name) ?? anyImporterSpecifier(input.lockfileText, name) ?? specifier) : specifier;
   return [`      ${yamlKey(name)}:`, `        specifier: ${yamlValue(persistedSpecifier)}`, `        version: ${version}`];
 }
 
@@ -117,11 +110,7 @@ export function addBlockDependency(
   return `${lines.join("\n")}\n`;
 }
 
-export function addBlockDependencies(
-  block: string,
-  input: RenderImporterInput,
-  linkVersion: (from: string, to: string) => string,
-): string {
+export function addBlockDependencies(block: string, input: RenderImporterInput, linkVersion: (from: string, to: string) => string): string {
   let next = block;
   const sections: readonly [ConsumerDependencySection, Readonly<Record<string, string>>][] = [
     ["runtime", input.dependencies],
@@ -144,7 +133,8 @@ function blockHasSpecifier(block: string, name: string, specifier: string, secti
   const lines = expandableLines(block);
   const dependency = blockDependencies(lines).find((entry) => entry.name === name && entry.section === pnpmSection(section));
   if (!dependency) return false;
-  return lines.slice(dependency.start + 1, dependency.end)
+  return lines
+    .slice(dependency.start + 1, dependency.end)
     .some((line) => line.match(/^ {8}specifier:\s*(.+)$/)?.[1]?.replace(/^['"]|['"]$/g, "") === specifier);
 }
 

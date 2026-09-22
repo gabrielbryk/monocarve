@@ -43,21 +43,23 @@ export function projectVisualizationGraph(graph: DependencyGraph): Visualization
   const condensed = condense(paths, outgoing);
   const idByComponent = new Map(condensed.components.map((members, index) => [index, sccId(members)]));
 
-  const nodes = condensed.components.map((members, index) => {
-    const records = members.map((member) => graph.nodes.get(member)!);
-    return {
-      id: idByComponent.get(index)!,
-      label: labelFor(members),
-      members: [...members],
-      applications: unique(records.flatMap((node) => node.application === undefined ? [] : [node.application])),
-      domains: unique(records.map((node) => node.domain)),
-      owners: unique(records.map((node) => node.owner)),
-      zones: unique(records.map((node) => node.zone)),
-      lineCount: records.reduce((sum, node) => sum + node.lineCount, 0),
-      layer: condensed.layers.get(index) ?? 0,
-      cyclic: members.length > 1,
-    } satisfies VisualizationNode;
-  }).sort((left, right) => byCodeUnit(left.id, right.id));
+  const nodes = condensed.components
+    .map((members, index) => {
+      const records = members.map((member) => graph.nodes.get(member)!);
+      return {
+        id: idByComponent.get(index)!,
+        label: labelFor(members),
+        members: [...members],
+        applications: unique(records.flatMap((node) => (node.application === undefined ? [] : [node.application]))),
+        domains: unique(records.map((node) => node.domain)),
+        owners: unique(records.map((node) => node.owner)),
+        zones: unique(records.map((node) => node.zone)),
+        lineCount: records.reduce((sum, node) => sum + node.lineCount, 0),
+        layer: condensed.layers.get(index) ?? 0,
+        cyclic: members.length > 1,
+      } satisfies VisualizationNode;
+    })
+    .sort((left, right) => byCodeUnit(left.id, right.id));
 
   const aggregates = new Map<string, { from: string; to: string; kinds: Set<EdgeKind>; count: number }>();
   for (const edge of workspaceEdges) {
@@ -72,13 +74,9 @@ export function projectVisualizationGraph(graph: DependencyGraph): Visualization
     aggregate.count += 1;
     aggregates.set(key, aggregate);
   }
-  const edges = [...aggregates.values()].map((edge) => ({
-    id: `${edge.from}->${edge.to}`,
-    from: edge.from,
-    to: edge.to,
-    kinds: [...edge.kinds].sort(),
-    count: edge.count,
-  })).sort((left, right) => byCodeUnit(left.id, right.id));
+  const edges = [...aggregates.values()]
+    .map((edge) => ({ id: `${edge.from}->${edge.to}`, from: edge.from, to: edge.to, kinds: [...edge.kinds].sort(), count: edge.count }))
+    .sort((left, right) => byCodeUnit(left.id, right.id));
 
   const identity = { commit: graph.commit ?? null, nodes, edges };
   return {

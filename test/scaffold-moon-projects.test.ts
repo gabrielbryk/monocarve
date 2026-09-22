@@ -7,9 +7,7 @@ const workspace = (globs: readonly string[]) =>
 
 describe("moon project discovery coverage", () => {
   test("treats a project-file glob as covering its directory", () => {
-    expect(moonAdapter.registerProject(workspace(["libs/*/moon.yml"]), "libs/new-package", "new-package")).toEqual({
-      kind: "already-satisfied",
-    });
+    expect(moonAdapter.registerProject(workspace(["libs/*/moon.yml"]), "libs/new-package", "new-package")).toEqual({ kind: "already-satisfied" });
   });
 
   test("still rejects a package root outside every glob", () => {

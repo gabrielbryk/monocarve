@@ -1,26 +1,37 @@
 /** Command registry and executable help text. */
 
 import { TOOL_NAME, TOOL_VERSION } from "../branding.ts";
-import { discoveryCommands } from "./discovery.ts";
 import { configDoctorCommands } from "./config-doctor.ts";
+import { consolidationCommands } from "./consolidation.ts";
+import { discoveryCommands } from "./discovery.ts";
+import { evacuationCommands } from "./evacuation.ts";
+import { lifecycleCommands } from "./lifecycle.ts";
 import { planningCommands } from "./planning.ts";
 import { preparationCommands } from "./preparation.ts";
 import { preparerCommands } from "./preparers.ts";
-import { transactionCommands } from "./transactions.ts";
-import { lifecycleCommands } from "./lifecycle.ts";
 import { reconciliationCommands } from "./reconciliation.ts";
-import { visualizationCommands } from "./visualization.ts";
-import { evacuationCommands } from "./evacuation.ts";
-import { consolidationCommands } from "./consolidation.ts";
+import { transactionCommands } from "./transactions.ts";
 import type { CommandSpec } from "./types.ts";
+import { visualizationCommands } from "./visualization.ts";
 
 function qualify(spec: CommandSpec): CommandSpec {
   return { ...spec, usage: `${TOOL_NAME} ${spec.usage}` };
 }
 
 export const COMMANDS: Record<string, CommandSpec> = Object.fromEntries(
-  Object.entries({ ...discoveryCommands, ...evacuationCommands, ...consolidationCommands, ...configDoctorCommands, ...planningCommands, ...preparationCommands, ...preparerCommands, ...transactionCommands, ...lifecycleCommands, ...reconciliationCommands, ...visualizationCommands })
-    .map(([name, spec]) => [name, qualify(spec)]),
+  Object.entries({
+    ...discoveryCommands,
+    ...evacuationCommands,
+    ...consolidationCommands,
+    ...configDoctorCommands,
+    ...planningCommands,
+    ...preparationCommands,
+    ...preparerCommands,
+    ...transactionCommands,
+    ...lifecycleCommands,
+    ...reconciliationCommands,
+    ...visualizationCommands,
+  }).map(([name, spec]) => [name, qualify(spec)]),
 );
 
 export const GLOBAL_OPTIONS = `global options:

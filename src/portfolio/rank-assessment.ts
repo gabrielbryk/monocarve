@@ -1,15 +1,15 @@
 /** Eligibility checks and advisory warnings for portfolio candidates. */
 
+import { scopedPackageName, type MonocarveConfig } from "../config.ts";
 import { isCompositionRoot, type ComponentReport } from "../graph/layers.ts";
 import type { DependencyGraph } from "../graph/model.ts";
-import { byCodeUnit } from "../util/hash.ts";
-import { scopedPackageName, type MonocarveConfig } from "../config.ts";
 import { findConsumers } from "../plan/consumers.ts";
-import { inferDependencies } from "../plan/dependencies.ts";
 import { WorkspaceContext } from "../plan/context.ts";
+import { inferDependencies } from "../plan/dependencies.ts";
 import { evaluationClosure } from "../plan/evaluation-closure.ts";
 import type { SideEffectsDeclaration } from "../plan/manifest.ts";
 import type { PathReferenceIndex } from "../plan/path-references.ts";
+import { byCodeUnit } from "../util/hash.ts";
 import { analyzeContainment, classifyEscapes } from "./containment.ts";
 import { retainedBlockers } from "./retained.ts";
 import type { RejectionReason, RetainedBlocker, RewriteEscape } from "./types.ts";
@@ -47,11 +47,7 @@ export function assessCandidate(
   const closureSet = new Set(closure);
 
   if (owners.length !== 1) {
-    rejections.push({
-      code: "multiple-owners",
-      detail: `closure spans more than one owner: ${owners.join(", ")}`,
-      edges: [],
-    });
+    rejections.push({ code: "multiple-owners", detail: `closure spans more than one owner: ${owners.join(", ")}`, edges: [] });
   }
   if (domains.length !== 1) warnings.push(`closure crosses runtime domains: ${domains.join(", ")}`);
 
@@ -77,11 +73,7 @@ export function assessCandidate(
 
   const compositionRoots = closure.filter((path) => isCompositionRoot(config, path));
   if (compositionRoots.length > 0 || closureReports.some((item) => item.archetype === "composition")) {
-    rejections.push({
-      code: "composition-root",
-      detail: "the closure composes the application at runtime and cannot leave it",
-      edges: compositionRoots,
-    });
+    rejections.push({ code: "composition-root", detail: "the closure composes the application at runtime and cannot leave it", edges: compositionRoots });
   }
 
   // A computed reference blocks only production this candidate would move.
@@ -89,9 +81,7 @@ export function assessCandidate(
   // that cannot be resolved until runtime, so that test-only uncertainty is not
   // an extraction refusal. Production stays fail-closed, and resolved test
   // donor edges are still inventoried and rewritten by findConsumers.
-  const unsupported = [...closure, ...tests].filter(
-    (path) => !context.isTest(path) && context.hasUnsupportedReference(path),
-  );
+  const unsupported = [...closure, ...tests].filter((path) => !context.isTest(path) && context.hasUnsupportedReference(path));
   if (unsupported.length > 0) {
     rejections.push({
       code: "unsupported-module-reference",
@@ -106,11 +96,7 @@ export function assessCandidate(
 
   const hasSurface = closure.some((path) => graph.nodes.get(path)?.hasExports === true);
   if (report.inboundNodes.length === 0 && tests.length === 0 && report.testImporterFiles.length === 0 && !hasSurface) {
-    rejections.push({
-      code: "no-exports",
-      detail: "the closure has no exports, no consumers, and no tests",
-      edges: [],
-    });
+    rejections.push({ code: "no-exports", detail: "the closure has no exports, no consumers, and no tests", edges: [] });
   }
 
   const analysis = analyzeContainment(context, graph, [...closure, ...tests]);
@@ -138,9 +124,7 @@ export function assessCandidate(
     });
   }
   if (rewritable.length > 0) {
-    warnings.push(
-      `closure escapes rewritable to workspace packages: ${rewritable.length} (first: ${rewritable[0]!.file} -> ${rewritable[0]!.package})`,
-    );
+    warnings.push(`closure escapes rewritable to workspace packages: ${rewritable.length} (first: ${rewritable[0]!.file} -> ${rewritable[0]!.package})`);
   }
 
   warnings.push(...evaluationWarnings(config, context, graph, closure));
@@ -149,10 +133,7 @@ export function assessCandidate(
   const blockers = retainedBlockers(context, graph, closure, config.portfolio.retainedRoots);
   if (blockers.length > 0) {
     const first = blockers[0]!;
-    warnings.push(
-      `closure reaches ${blockers.length} portfolio.retainedRoots module(s) ` +
-        `(first: ${first.file} -> ${first.target}, a ${first.kind} edge)`,
-    );
+    warnings.push(`closure reaches ${blockers.length} portfolio.retainedRoots module(s) ` + `(first: ${first.file} -> ${first.target}, a ${first.kind} edge)`);
   }
   const classification = classifyCandidate(config, report, domains, blockers);
 
@@ -180,19 +161,9 @@ function classifyCandidate(
 }
 
 const WARNING_EXAMPLES = 3;
-const DECLARATION_RANK: Readonly<Record<SideEffectsDeclaration, number>> = {
-  some: 0,
-  undeclared: 1,
-  unresolved: 2,
-  none: 3,
-};
+const DECLARATION_RANK: Readonly<Record<SideEffectsDeclaration, number>> = { some: 0, undeclared: 1, unresolved: 2, none: 3 };
 
-function evaluationWarnings(
-  config: MonocarveConfig,
-  context: WorkspaceContext,
-  graph: DependencyGraph,
-  closure: readonly string[],
-): string[] {
+function evaluationWarnings(config: MonocarveConfig, context: WorkspaceContext, graph: DependencyGraph, closure: readonly string[]): string[] {
   const evaluation = evaluationClosure({ config, context, graph, seeds: closure });
   const warnings: string[] = [];
   const effectful = evaluation.modules.filter((path) => context.evaluationEffectKinds(path).length > 0);
@@ -262,11 +233,7 @@ export function protectedPathRejections(config: MonocarveConfig, movable: readon
     .filter((path) => config.portfolio.protectedPaths.some((protectedPath) => path === protectedPath || path.startsWith(`${protectedPath}/`)))
     .sort(byCodeUnit);
   if (protectedMovable.length === 0) return [];
-  return [{
-    code: "protected-path",
-    detail: `${protectedMovable.length} movable path(s) are protected by portfolio.protectedPaths`,
-    edges: protectedMovable,
-  }];
+  return [{ code: "protected-path", detail: `${protectedMovable.length} movable path(s) are protected by portfolio.protectedPaths`, edges: protectedMovable }];
 }
 
 export function planabilityRejections(

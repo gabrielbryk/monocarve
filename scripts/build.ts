@@ -47,10 +47,7 @@ chmodSync(resolve(root, "dist/monocarve.js"), 0o755);
 
 if (!bundleOnly) {
   mkdirSync(resolve(root, "artifacts"), { recursive: true });
-  await build({
-    entrypoints: ["src/monocarve.ts"],
-    compile: { outfile: resolve(root, "artifacts/monocarve"), autoloadDotenv: false, autoloadBunfig: false },
-  });
+  await build({ entrypoints: ["src/monocarve.ts"], compile: { outfile: resolve(root, "artifacts/monocarve"), autoloadDotenv: false, autoloadBunfig: false } });
 }
 
 async function build(overrides: Bun.BuildConfig): Promise<void> {

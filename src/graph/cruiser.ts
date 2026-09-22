@@ -56,9 +56,7 @@ const graphCache = new Map<string, DependencyGraph>();
 /** Build the dependency model for the configured applications. */
 export async function scanDependencyGraph(options: ScanOptions): Promise<DependencyGraph> {
   const { config, rootDir } = options;
-  const applications = options.application
-    ? [getApplication(config, options.application)]
-    : config.applications;
+  const applications = options.application ? [getApplication(config, options.application)] : config.applications;
 
   const commit = safeHead(rootDir);
   const key = `${rootDir}|${applications.map((app) => app.name).join(",")}|${commit ?? "none"}|${hashJson(config)}`;
@@ -69,12 +67,7 @@ export async function scanDependencyGraph(options: ScanOptions): Promise<Depende
 
   const reports = await scanDependencyReports(options, applications);
 
-  const graph = buildDependencyGraph({
-    config,
-    rootDir,
-    reports,
-    ...(commit === undefined ? {} : { commit }),
-  });
+  const graph = buildDependencyGraph({ config, rootDir, reports, ...(commit === undefined ? {} : { commit }) });
   if (config.graph.cache && options.reports === undefined) graphCache.set(key, graph);
   return graph;
 }
@@ -82,9 +75,7 @@ export async function scanDependencyGraph(options: ScanOptions): Promise<Depende
 /** Capture the raw scanner reports used to build a graph for operator replay. */
 export async function scanDependencyReports(
   options: ScanOptions,
-  applications = options.application
-    ? [getApplication(options.config, options.application)]
-    : options.config.applications,
+  applications = options.application ? [getApplication(options.config, options.application)] : options.config.applications,
 ): Promise<Record<string, ScanReport>> {
   const reports: Record<string, ScanReport> = {};
   for (const app of applications) {
@@ -143,12 +134,18 @@ let cwdScanTail: Promise<void> = Promise.resolve();
 async function withScannerCwd<T>(rootDir: string, action: () => Promise<T>): Promise<T> {
   const previous = cwdScanTail;
   let release!: () => void;
-  cwdScanTail = new Promise<void>((resolve) => { release = resolve; });
+  cwdScanTail = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   await previous;
   const cwd = process.cwd();
   process.chdir(rootDir);
-  try { return await action(); }
-  finally { process.chdir(cwd); release(); }
+  try {
+    return await action();
+  } finally {
+    process.chdir(cwd);
+    release();
+  }
 }
 
 function readRuleSet(rootDir: string, path: string): unknown {

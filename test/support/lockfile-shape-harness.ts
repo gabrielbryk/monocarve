@@ -145,12 +145,8 @@ function manifestJson(shape: PackageShape, extraDependencies: Readonly<Record<st
       main: "./src/index.ts",
       types: "./src/index.ts",
       ...(Object.keys(dependencies).length > 0 ? { dependencies } : {}),
-      ...(shape.devDependencies && Object.keys(shape.devDependencies).length > 0
-        ? { devDependencies: shape.devDependencies }
-        : {}),
-      ...(shape.optionalDependencies && Object.keys(shape.optionalDependencies).length > 0
-        ? { optionalDependencies: shape.optionalDependencies }
-        : {}),
+      ...(shape.devDependencies && Object.keys(shape.devDependencies).length > 0 ? { devDependencies: shape.devDependencies } : {}),
+      ...(shape.optionalDependencies && Object.keys(shape.optionalDependencies).length > 0 ? { optionalDependencies: shape.optionalDependencies } : {}),
     },
     null,
     2,
@@ -160,12 +156,7 @@ function manifestJson(shape: PackageShape, extraDependencies: Readonly<Record<st
 function rootManifest(shape: WorkspaceShape, extraDependencies: Readonly<Record<string, string>> = {}): string {
   const dependencies = { ...shape.rootDependencies, ...extraDependencies };
   return `${JSON.stringify(
-    {
-      name: "fixture-workspace",
-      private: true,
-      type: "module",
-      ...(Object.keys(dependencies).length > 0 ? { dependencies } : {}),
-    },
+    { name: "fixture-workspace", private: true, type: "module", ...(Object.keys(dependencies).length > 0 ? { dependencies } : {}) },
     null,
     2,
   )}\n`;
@@ -174,10 +165,7 @@ function rootManifest(shape: WorkspaceShape, extraDependencies: Readonly<Record<
 function workspaceManifest(shape: WorkspaceShape): string {
   const globs = shape.globs ?? shape.packages.map((pkg) => pkg.root);
   const catalog = shape.catalog ?? {};
-  const catalogLines =
-    Object.keys(catalog).length === 0
-      ? []
-      : ["catalog:", ...Object.entries(catalog).map(([name, range]) => `  ${name}: ${range}`)];
+  const catalogLines = Object.keys(catalog).length === 0 ? [] : ["catalog:", ...Object.entries(catalog).map(([name, range]) => `  ${name}: ${range}`)];
   return `${["packages:", ...globs.map((glob) => `  - ${glob}`), ...catalogLines].join("\n")}\n`;
 }
 
@@ -190,10 +178,7 @@ function workspaceRoots(shape: WorkspaceShape): Record<string, string> {
 
 /** The workspace as it stands before the plan — every package except the target. */
 function baselineFiles(shape: WorkspaceShape): Record<string, string> {
-  const files: Record<string, string> = {
-    "package.json": rootManifest(shape),
-    [WORKSPACE_MANIFEST]: workspaceManifest(shape),
-  };
+  const files: Record<string, string> = { "package.json": rootManifest(shape), [WORKSPACE_MANIFEST]: workspaceManifest(shape) };
   for (const pkg of shape.packages) files[`${pkg.root}/package.json`] = manifestJson(pkg);
   return files;
 }
@@ -222,12 +207,7 @@ export function spliceLockfile(baseline: string, shape: WorkspaceShape): string 
     text = pnpmAdapter.replaceImporter(
       text,
       consumer,
-      pnpmAdapter.addBlockDependency(
-        existing,
-        shape.target.name,
-        "workspace:*",
-        pnpmAdapter.linkVersion(consumer, shape.target.root),
-      ),
+      pnpmAdapter.addBlockDependency(existing, shape.target.name, "workspace:*", pnpmAdapter.linkVersion(consumer, shape.target.root)),
     );
   }
   return text;
@@ -297,15 +277,7 @@ export function checkShape(shape: WorkspaceShape): ShapeResult {
 
   return plannedHash === regeneratedHash
     ? { kind: "matched", root, baseline, planned: plannedBytes.toString(), hash: plannedHash }
-    : {
-        kind: "diverged",
-        root,
-        baseline,
-        planned: plannedBytes.toString(),
-        regenerated: regeneratedBytes.toString(),
-        plannedHash,
-        regeneratedHash,
-      };
+    : { kind: "diverged", root, baseline, planned: plannedBytes.toString(), regenerated: regeneratedBytes.toString(), plannedHash, regeneratedHash };
 }
 
 /**
@@ -324,11 +296,7 @@ export function describeResult(shape: WorkspaceShape, result: ShapeResult): stri
   let start = 0;
   while (start < left.length && start < right.length && left[start] === right[start]) start += 1;
   let tail = 0;
-  while (
-    tail < left.length - start &&
-    tail < right.length - start &&
-    left[left.length - 1 - tail] === right[right.length - 1 - tail]
-  ) {
+  while (tail < left.length - start && tail < right.length - start && left[left.length - 1 - tail] === right[right.length - 1 - tail]) {
     tail += 1;
   }
   const plannedMiddle = left.slice(start, left.length - tail);

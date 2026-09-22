@@ -74,49 +74,21 @@ describe("config profiles", () => {
   });
 
   test("applies public-surface precedence from root through profile to application", () => {
-    const rootSurface = {
-      mode: "subpaths" as const,
-      keyTemplate: "./root/{pathNoExtension}",
-      targetTemplate: "./src/{path}",
-    };
-    const profileSurface = {
-      mode: "subpaths" as const,
-      keyTemplate: "./profile/{pathNoExtension}",
-      targetTemplate: "./src/{path}",
-    };
-    const applicationSurface = {
-      mode: "subpaths" as const,
-      keyTemplate: "./application/{pathNoExtension}",
-      targetTemplate: "./src/{path}",
-    };
+    const rootSurface = { mode: "subpaths" as const, keyTemplate: "./root/{pathNoExtension}", targetTemplate: "./src/{path}" };
+    const profileSurface = { mode: "subpaths" as const, keyTemplate: "./profile/{pathNoExtension}", targetTemplate: "./src/{path}" };
+    const applicationSurface = { mode: "subpaths" as const, keyTemplate: "./application/{pathNoExtension}", targetTemplate: "./src/{path}" };
     const config = parseConfig({
       applications: [
-        {
-          name: "web",
-          sourceRoot: "apps/web/src",
-          tsconfig: "apps/web/tsconfig.json",
-          scaffoldTemplates: { publicSurface: applicationSurface },
-        },
+        { name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json", scaffoldTemplates: { publicSurface: applicationSurface } },
         { name: "api", sourceRoot: "apps/api/src", tsconfig: "apps/api/tsconfig.json" },
       ],
       packageRoots: ["libs"],
       scaffoldTemplates: { packageJson: { contents: "{}" }, publicSurface: rootSurface },
-      extractionProfiles: {
-        profiles: {
-          modular: {
-            destinationRoot: "libs",
-            scaffoldTemplates: { publicSurface: profileSurface },
-          },
-        },
-      },
+      extractionProfiles: { profiles: { modular: { destinationRoot: "libs", scaffoldTemplates: { publicSurface: profileSurface } } } },
     });
 
-    expect(resolveExtractionProfile(config, config.applications[0]!, "modular").scaffoldTemplates.publicSurface).toEqual(
-      applicationSurface,
-    );
-    expect(resolveExtractionProfile(config, config.applications[1]!, "modular").scaffoldTemplates.publicSurface).toEqual(
-      profileSurface,
-    );
+    expect(resolveExtractionProfile(config, config.applications[0]!, "modular").scaffoldTemplates.publicSurface).toEqual(applicationSurface);
+    expect(resolveExtractionProfile(config, config.applications[1]!, "modular").scaffoldTemplates.publicSurface).toEqual(profileSurface);
     expect(scaffoldFor(config, config.applications[1]!).publicSurface).toEqual(rootSurface);
   });
 
@@ -127,33 +99,17 @@ describe("config profiles", () => {
       packageScope: "@acme/",
       scaffoldTemplates: { packageJson: { contents: "{}" } },
     };
+    expect(() => parseConfig({ ...base, extractionProfiles: { default: "missing", profiles: {} } })).toThrow(/default/);
+    expect(() => parseConfig({ ...base, extractionProfiles: { profiles: { helper: { destinationRoot: "outside" } } } })).toThrow(/destinationRoot/);
     expect(() =>
-      parseConfig({ ...base, extractionProfiles: { default: "missing", profiles: {} } }),
-    ).toThrow(/default/);
-    expect(() =>
-      parseConfig({
-        ...base,
-        extractionProfiles: { profiles: { helper: { destinationRoot: "outside" } } },
-      }),
-    ).toThrow(/destinationRoot/);
-    expect(() =>
-      parseConfig({
-        ...base,
-        extractionProfiles: { profiles: { helper: { destinationRoot: "libs", directoryTemplate: "nested/{name}" } } },
-      }),
+      parseConfig({ ...base, extractionProfiles: { profiles: { helper: { destinationRoot: "libs", directoryTemplate: "nested/{name}" } } } }),
     ).toThrow(/direct-child directory/);
     expect(() =>
-      parseConfig({
-        ...base,
-        extractionProfiles: { profiles: { helper: { destinationRoot: "libs", packageNameTemplate: "not allowed" } } },
-      }),
+      parseConfig({ ...base, extractionProfiles: { profiles: { helper: { destinationRoot: "libs", packageNameTemplate: "not allowed" } } } }),
     ).toThrow(/packageNamePattern/);
-    expect(() =>
-      parseConfig({
-        ...base,
-        extractionProfiles: { profiles: { helper: { destinationRoot: "libs", packageNameTemplate: "{unknown}" } } },
-      }),
-    ).toThrow(/unknown profile template placeholder/);
+    expect(() => parseConfig({ ...base, extractionProfiles: { profiles: { helper: { destinationRoot: "libs", packageNameTemplate: "{unknown}" } } } })).toThrow(
+      /unknown profile template placeholder/,
+    );
   });
 
   test("validates profile templates for every application and validates a requested candidate name at render time", () => {
@@ -169,11 +125,7 @@ describe("config profiles", () => {
     };
     expect(() => parseConfig(base)).toThrow(/application "bad\/app"/);
 
-    const config = parseConfig({
-      ...base,
-      applications: [base.applications[0]!],
-      extractionProfiles: { profiles: { helper: { destinationRoot: "libs" } } },
-    });
+    const config = parseConfig({ ...base, applications: [base.applications[0]!], extractionProfiles: { profiles: { helper: { destinationRoot: "libs" } } } });
     const profile = resolveExtractionProfile(config, config.applications[0]!, "helper");
     expect(() => renderExtractionProfile(config, config.applications[0]!, profile, "bad/name")).toThrow(/direct-child directory/);
     expect(renderExtractionProfile(config, config.applications[0]!, profile, "useful-helper")).toEqual({

@@ -147,7 +147,12 @@ function louvainLocalMove(nodes: readonly string[], adjacency: ReadonlyMap<strin
   return membership;
 }
 
-function renderCommunities(nodes: readonly string[], edges: readonly (readonly [string, string])[], membership: ReadonlyMap<string, string>, graph: DependencyGraph): readonly Community[] {
+function renderCommunities(
+  nodes: readonly string[],
+  edges: readonly (readonly [string, string])[],
+  membership: ReadonlyMap<string, string>,
+  graph: DependencyGraph,
+): readonly Community[] {
   const groups = new Map<string, string[]>();
   for (const node of nodes) {
     const group = membership.get(node)!;
@@ -167,7 +172,13 @@ function renderCommunities(nodes: readonly string[], edges: readonly (readonly [
         if (leftInside && rightInside) internalEdges += 1;
         else if (leftInside || rightInside) externalEdges += 1;
       }
-      return { id: `community-${hashJson(members).slice(0, 10)}`, members, lineCount: members.reduce((sum, path) => sum + (graph.nodes.get(path)?.lineCount ?? 0), 0), internalEdges, externalEdges };
+      return {
+        id: `community-${hashJson(members).slice(0, 10)}`,
+        members,
+        lineCount: members.reduce((sum, path) => sum + (graph.nodes.get(path)?.lineCount ?? 0), 0),
+        internalEdges,
+        externalEdges,
+      };
     })
     .sort((left, right) => right.members.length - left.members.length || right.internalEdges - left.internalEdges || byCodeUnit(left.id, right.id));
 }

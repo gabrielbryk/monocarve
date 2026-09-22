@@ -7,18 +7,11 @@
  * raised it.
  */
 
-import type { ExtractionManifest } from "../plan/manifest.ts";
 import { boundaryEdgeKey, formatBoundaryEdge } from "../plan/boundary-baseline.ts";
-import { compileExternalConsumer } from "./external-consumer.ts";
+import type { ExtractionManifest } from "../plan/manifest.ts";
 import { dynamicImportDelta } from "./audit-graph.ts";
-import {
-  proof,
-  type AuditOptions,
-  type AuditReport,
-  type BoundaryBaselineEvidence,
-  type GraphEvidence,
-  type ProofResult,
-} from "./audit-types.ts";
+import { proof, type AuditOptions, type AuditReport, type BoundaryBaselineEvidence, type GraphEvidence, type ProofResult } from "./audit-types.ts";
+import { compileExternalConsumer } from "./external-consumer.ts";
 
 /** Proof 4: an external consumer can compile the declared surface. */
 export function externalConsumerProof(options: AuditOptions): ProofResult {
@@ -32,19 +25,21 @@ export function externalConsumerProof(options: AuditOptions): ProofResult {
   return proof(result.passed ? [] : result.diagnostics, 1);
 }
 
-export type AuditProofs = Required<Pick<
-  AuditReport,
-  | "byteFidelity"
-  | "consumerCompleteness"
-  | "boundaryRules"
-  | "externalConsumerCompile"
-  | "codemodReplay"
-  | "entrypointClosure"
-  | "lockfileIntegrity"
-  | "generatedArtifacts"
-  | "postJournalDeclarativeIntegrity"
-  | "sourceConservation"
->>;
+export type AuditProofs = Required<
+  Pick<
+    AuditReport,
+    | "byteFidelity"
+    | "consumerCompleteness"
+    | "boundaryRules"
+    | "externalConsumerCompile"
+    | "codemodReplay"
+    | "entrypointClosure"
+    | "lockfileIntegrity"
+    | "generatedArtifacts"
+    | "postJournalDeclarativeIntegrity"
+    | "sourceConservation"
+  >
+>;
 
 export interface ReportInputs {
   readonly manifest: ExtractionManifest;
@@ -54,10 +49,7 @@ export interface ReportInputs {
   readonly observedBaselineKeys: ReadonlySet<string>;
 }
 
-function boundaryBaselineEvidence(
-  manifest: ExtractionManifest,
-  observedBaselineKeys: ReadonlySet<string>,
-): BoundaryBaselineEvidence {
+function boundaryBaselineEvidence(manifest: ExtractionManifest, observedBaselineKeys: ReadonlySet<string>): BoundaryBaselineEvidence {
   const recordedEdges = manifest.boundaryBaseline?.edges ?? [];
   return {
     recorded: recordedEdges.length,
@@ -70,9 +62,7 @@ export function assembleReport(inputs: ReportInputs): AuditReport {
   const { manifest, rootDir, proofs, movedPathEdges, observedBaselineKeys } = inputs;
   const observed = dynamicImportDelta(manifest, rootDir);
   const expected = manifest.expectedDynamicImportDelta;
-  const deltaMatches =
-    observed.added.join("\n") === [...expected.added].join("\n") &&
-    observed.removed.join("\n") === [...expected.removed].join("\n");
+  const deltaMatches = observed.added.join("\n") === [...expected.added].join("\n") && observed.removed.join("\n") === [...expected.removed].join("\n");
   const graphEvidence: GraphEvidence = {
     dynamicImportDelta: observed,
     movedPathEdges: [...new Set(movedPathEdges)].sort(),

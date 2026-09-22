@@ -1,14 +1,21 @@
 import { afterAll, expect, test } from "bun:test";
 
+import { parseConfig } from "../src/config.ts";
 import { appendConsumerOperations } from "../src/plan/build-phases.ts";
 import { WorkspaceContext } from "../src/plan/context.ts";
-import { parseConfig } from "../src/config.ts";
 import { cleanupFixtures, fixtureConfig, fixtureRepo } from "./support/fixture-repo.ts";
 
 afterAll(cleanupFixtures);
 
 test("CSS import parsing is explicitly bound to configured asset extensions", () => {
-  expect(() => parseConfig({ applications: [{ name: "app", sourceRoot: "apps/app/src", tsconfig: "apps/app/tsconfig.json" }], packageRoots: ["libs"], cssImportExtensions: [".css"], scaffoldTemplates: { packageJson: { contents: "{}" } } })).toThrow("CSS import extension must also be an asset extension");
+  expect(() =>
+    parseConfig({
+      applications: [{ name: "app", sourceRoot: "apps/app/src", tsconfig: "apps/app/tsconfig.json" }],
+      packageRoots: ["libs"],
+      cssImportExtensions: [".css"],
+      scaffoldTemplates: { packageJson: { contents: "{}" } },
+    }),
+  ).toThrow("CSS import extension must also be an asset extension");
 });
 
 test("retained bare and query asset imports become exact package-subpath consumers", () => {
@@ -25,20 +32,30 @@ test("retained bare and query asset imports become exact package-subpath consume
   const context = new WorkspaceContext(config, root);
   const operations: Parameters<typeof appendConsumerOperations>[0]["operations"] = [];
   const result = appendConsumerOperations({
-    context, sources: ["apps/api/src/estimating/Panel.tsx", asset], packageName: "@acme/estimating",
-    publicSpecifierFor: new Map([[asset, "@acme/estimating/estimating/estimating.css"]]), operations,
+    context,
+    sources: ["apps/api/src/estimating/Panel.tsx", asset],
+    packageName: "@acme/estimating",
+    publicSpecifierFor: new Map([[asset, "@acme/estimating/estimating/estimating.css"]]),
+    operations,
   });
 
-  expect(result.consumers).toContainEqual(expect.objectContaining({
-    file: retained, donors: [asset], rewrites: [
-      { from: "./estimating/estimating.css", to: "@acme/estimating/estimating/estimating.css", donor: asset },
-      { from: "./estimating/estimating.css?url", to: "@acme/estimating/estimating/estimating.css?url", donor: asset },
-    ],
-  }));
+  expect(result.consumers).toContainEqual(
+    expect.objectContaining({
+      file: retained,
+      donors: [asset],
+      rewrites: [
+        { from: "./estimating/estimating.css", to: "@acme/estimating/estimating/estimating.css", donor: asset },
+        { from: "./estimating/estimating.css?url", to: "@acme/estimating/estimating/estimating.css?url", donor: asset },
+      ],
+    }),
+  );
   expect(operations).toContainEqual(expect.objectContaining({ kind: "rewrite-import", file: retained }));
-  expect(result.consumers).toContainEqual(expect.objectContaining({
-    file: retainedCss, rewrites: [{ from: "./estimating/estimating.css", to: "@acme/estimating/estimating/estimating.css", donor: asset }],
-  }));
+  expect(result.consumers).toContainEqual(
+    expect.objectContaining({
+      file: retainedCss,
+      rewrites: [{ from: "./estimating/estimating.css", to: "@acme/estimating/estimating/estimating.css", donor: asset }],
+    }),
+  );
   const cssOperation = operations.find((operation) => operation.kind === "rewrite-import" && operation.file === retainedCss);
   expect(cssOperation?.kind === "rewrite-import" && cssOperation.resultHash).toBeDefined();
 });

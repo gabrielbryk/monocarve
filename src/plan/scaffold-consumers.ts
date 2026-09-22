@@ -6,11 +6,11 @@ import type { ConsumerDependencySection, PackageManagerAdapter } from "../adapte
 import { applicationOwner } from "../config.ts";
 import { byCodeUnit, hashText } from "../util/hash.ts";
 import { relativePosix } from "../util/paths.ts";
+import type { ConsumerDependencyOwner } from "./consumers.ts";
 import { PlanningError, type WorkspaceContext } from "./context.ts";
 import type { PlanOperation } from "./manifest.ts";
-import type { ConsumerDependencyOwner } from "./consumers.ts";
-import type { ScaffoldInput } from "./scaffold.ts";
 import { insertSorted, parseJsonFile, stringifyJson, writeOperation } from "./scaffold-shared.ts";
+import type { ScaffoldInput } from "./scaffold.ts";
 
 export interface ConsumerWiringInput extends ScaffoldInput {
   readonly consumerOwners: readonly (string | ConsumerDependencyOwner)[];
@@ -55,11 +55,17 @@ function consumerManifestOperation(input: ConsumerWiringInput, owner: ConsumerDe
   return next ? writeOperation(input.context, path, stringifyJson(next), "wiring:consumer-dependency") : undefined;
 }
 
-type ManifestDependencies = Record<string, unknown> & { dependencies?: Record<string, string>; devDependencies?: Record<string, string>; optionalDependencies?: Record<string, string> };
+type ManifestDependencies = Record<string, unknown> & {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+};
 
 function assertDependencySections(manifest: ManifestDependencies, path: string, packageName: string): void {
-  if (manifest.optionalDependencies?.[packageName] !== undefined) throw new PlanningError(`${path} declares ${packageName} as optional; consumer dependency section is ambiguous`);
-  if (manifest.dependencies?.[packageName] !== undefined && manifest.devDependencies?.[packageName] !== undefined) throw new PlanningError(`${path} declares ${packageName} in both dependencies and devDependencies`);
+  if (manifest.optionalDependencies?.[packageName] !== undefined)
+    throw new PlanningError(`${path} declares ${packageName} as optional; consumer dependency section is ambiguous`);
+  if (manifest.dependencies?.[packageName] !== undefined && manifest.devDependencies?.[packageName] !== undefined)
+    throw new PlanningError(`${path} declares ${packageName} in both dependencies and devDependencies`);
 }
 
 function nextConsumerManifest(manifest: ManifestDependencies, packageName: string, section: ConsumerDependencySection): Record<string, unknown> | undefined {
@@ -70,7 +76,12 @@ function nextConsumerManifest(manifest: ManifestDependencies, packageName: strin
   return undefined;
 }
 
-function runtimeManifest(manifest: ManifestDependencies, runtime: Record<string, string>, dev: Record<string, string>, packageName: string): Record<string, unknown> {
+function runtimeManifest(
+  manifest: ManifestDependencies,
+  runtime: Record<string, string>,
+  dev: Record<string, string>,
+  packageName: string,
+): Record<string, unknown> {
   const next: Record<string, unknown> = { ...manifest, dependencies: Object.fromEntries(insertSorted(Object.entries(runtime), packageName, "workspace:*")) };
   const nextDev = Object.fromEntries(Object.entries(dev).filter(([name]) => name !== packageName));
   if (dev[packageName] !== undefined && Object.keys(nextDev).length === 0) delete next.devDependencies;
@@ -86,7 +97,10 @@ function consumerReferenceOperation(input: ConsumerWiringInput, owner: string): 
   const applicationConsumer = owner === applicationOwner(input.application);
   const path = applicationConsumer ? input.application.tsconfig : ownerPath(owner, "tsconfig.json");
   if (!input.context.exists(path)) return undefined;
-  const tsconfig = parseJsonFile(input.context.text(path), path) as Record<string, unknown> & { references?: { path?: string }[]; compilerOptions?: { composite?: unknown } };
+  const tsconfig = parseJsonFile(input.context.text(path), path) as Record<string, unknown> & {
+    references?: { path?: string }[];
+    compilerOptions?: { composite?: unknown };
+  };
   // A project reference is valid only for a composite build project (or an
   // existing solution config), except when the application explicitly names
   // its consumer tsconfig in configuration. Ordinary package configs commonly
@@ -111,17 +125,45 @@ function ownerPath(owner: string, file: string): string {
   return owner === "." || owner === "" ? file : `${owner}/${file}`;
 }
 
-function consumerImporterOperation(input: ConsumerWiringInput, owner: ConsumerDependencyOwner, lockfile: string): { operation: PlanOperation; lockfile: string } | undefined {
+function consumerImporterOperation(
+  input: ConsumerWiringInput,
+  owner: ConsumerDependencyOwner,
+  lockfile: string,
+): { operation: PlanOperation; lockfile: string } | undefined {
   if (!lockfile) return undefined;
   const block = input.packageManager.importerBlock(lockfile, owner.owner);
-  if (block === undefined) throw new PlanningError(`${input.packageManager.lockfileName} has no importer entry for ${owner.owner}, which this plan must add ${input.packageName} to; the lockfile is out of date with the workspace`);
-  const nextBlock = input.packageManager.addBlockDependency(block, input.packageName, "workspace:*", input.packageManager.linkVersion(owner.owner, input.packageRoot), owner.dependencySection);
+  if (block === undefined)
+    throw new PlanningError(
+      `${input.packageManager.lockfileName} has no importer entry for ${owner.owner}, which this plan must add ${input.packageName} to; the lockfile is out of date with the workspace`,
+    );
+  const nextBlock = input.packageManager.addBlockDependency(
+    block,
+    input.packageName,
+    "workspace:*",
+    input.packageManager.linkVersion(owner.owner, input.packageRoot),
+    owner.dependencySection,
+  );
   if (nextBlock === block) return undefined;
   const nextLockfile = input.packageManager.replaceImporter(lockfile, owner.owner, nextBlock);
-  return { operation: { kind: "lockfile-importer", lockfile: input.packageManager.lockfileName, packageRoot: owner.owner, block: nextBlock, mode: "replace", preconditionHash: hashText(lockfile), resultHash: hashText(nextLockfile) }, lockfile: nextLockfile };
+  return {
+    operation: {
+      kind: "lockfile-importer",
+      lockfile: input.packageManager.lockfileName,
+      packageRoot: owner.owner,
+      block: nextBlock,
+      mode: "replace",
+      preconditionHash: hashText(lockfile),
+      resultHash: hashText(nextLockfile),
+    },
+    lockfile: nextLockfile,
+  };
 }
 
 export function projectedLockfile(context: WorkspaceContext, packageManager: PackageManagerAdapter, operations: readonly PlanOperation[]): string {
   if (!context.exists(packageManager.lockfileName)) return "";
-  return operations.reduce((text, operation) => operation.kind === "lockfile-importer" ? packageManager.applyImporter(text, operation.packageRoot, operation.block, operation.mode) : text, context.text(packageManager.lockfileName));
+  return operations.reduce(
+    (text, operation) =>
+      operation.kind === "lockfile-importer" ? packageManager.applyImporter(text, operation.packageRoot, operation.block, operation.mode) : text,
+    context.text(packageManager.lockfileName),
+  );
 }

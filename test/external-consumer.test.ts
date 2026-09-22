@@ -11,8 +11,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 
 import { parseConfig, type MonocarveConfig } from "../src/config.ts";
-import { compileExternalConsumer } from "../src/transaction/external-consumer.ts";
 import type { ExtractionManifest } from "../src/plan/manifest.ts";
+import { compileExternalConsumer } from "../src/transaction/external-consumer.ts";
 import { cleanupFixtures, fixtureRepo, write } from "./support/fixture-repo.ts";
 
 const TARGET_NAME = "@acme/carved";
@@ -31,12 +31,7 @@ function manifest(requiredExports: ExtractionManifest["target"]["requiredExports
     baselineCommit: "fixture",
     graphDigest: "0".repeat(64),
     application: "donor",
-    target: {
-      packageName: TARGET_NAME,
-      packageRoot: TARGET_ROOT,
-      entrypoint: "src/index.ts",
-      requiredExports,
-    },
+    target: { packageName: TARGET_NAME, packageRoot: TARGET_ROOT, entrypoint: "src/index.ts", requiredExports },
     source: { files: [], tests: [], sccs: {} },
     dependencies: { runtime: {}, dev: {}, packageReferences: [] },
     sourceBlobs: {},
@@ -69,7 +64,14 @@ function config(
           tsconfig: "apps/donor/tsconfig.json",
           packageName: "@acme/donor",
           compositionRoots: [],
-          compilerProfile: { lib: ["lib.es2022.d.ts"], types: [...types], jsx: false, moduleResolution, esModuleInterop: interop, allowSyntheticDefaultImports: interop },
+          compilerProfile: {
+            lib: ["lib.es2022.d.ts"],
+            types: [...types],
+            jsx: false,
+            moduleResolution,
+            esModuleInterop: interop,
+            allowSyntheticDefaultImports: interop,
+          },
         },
       ],
       packageRoots: ["libs"],
@@ -92,19 +94,10 @@ function proofFixture(): { readonly root: string; readonly config: MonocarveConf
     "apps/donor/package.json": packageJson({
       name: "@acme/donor",
       private: true,
-      dependencies: {
-        "adjacent-declarations": "1.0.0",
-        "legacy-default": "1.0.0",
-        "legacy-typed": "1.0.0",
-        "plain-runtime": "1.0.0",
-      },
+      dependencies: { "adjacent-declarations": "1.0.0", "legacy-default": "1.0.0", "legacy-typed": "1.0.0", "plain-runtime": "1.0.0" },
     }),
     "apps/donor/tsconfig.json": packageJson({ compilerOptions: {}, include: ["src"] }),
-    "libs/carved/package.json": packageJson({
-      name: TARGET_NAME,
-      type: "module",
-      exports: { ".": { types: "./src/index.ts", import: "./src/index.ts" } },
-    }),
+    "libs/carved/package.json": packageJson({ name: TARGET_NAME, type: "module", exports: { ".": { types: "./src/index.ts", import: "./src/index.ts" } } }),
     // This import must use the workspace package's declared `./feature`
     // export. No node_modules copy exists, so missing the subpath mapping
     // genuinely makes the synthetic external consumer fail.
@@ -120,10 +113,7 @@ function proofFixture(): { readonly root: string; readonly config: MonocarveConf
     "libs/carved/src/bundled.ts": "export const bundled = true;\n",
     "libs/utility/package.json": packageJson({
       name: "@acme/utility",
-      exports: {
-        ".": { types: "./src/index.ts", import: "./src/index.ts" },
-        "./feature": { types: "./src/feature.ts", import: "./src/feature.ts" },
-      },
+      exports: { ".": { types: "./src/index.ts", import: "./src/index.ts" }, "./feature": { types: "./src/feature.ts", import: "./src/feature.ts" } },
     }),
     "libs/utility/src/index.ts": "export const root = true;\n",
     "libs/utility/src/feature.ts": 'export const feature = "feature";\n',
@@ -168,11 +158,7 @@ describe("external consumer compile proof", () => {
       "package.json": packageJson({ name: "fixture-root", private: true }),
       "apps/donor/package.json": packageJson({ name: "@acme/donor", private: true }),
       "apps/donor/tsconfig.json": packageJson({ compilerOptions: {}, include: ["src"] }),
-      "libs/carved/package.json": packageJson({
-        name: TARGET_NAME,
-        type: "module",
-        exports: { ".": { types: "./src/index.ts", import: "./src/index.ts" } },
-      }),
+      "libs/carved/package.json": packageJson({ name: TARGET_NAME, type: "module", exports: { ".": { types: "./src/index.ts", import: "./src/index.ts" } } }),
       "libs/carved/src/index.ts": 'import { feature } from "@acme/utility/feature";\nexport const combined = feature;\n',
       "libs/utility/package.json": packageJson({
         name: "@acme/utility",
@@ -201,11 +187,7 @@ describe("external consumer compile proof", () => {
     const fixture = proofFixture();
     write(fixture.root, "apps/donor/vite-env.d.ts", 'declare module "*?url" { const url: string; export default url; }\n');
     write(fixture.root, "apps/donor/tsconfig.json", packageJson({ compilerOptions: {}, include: ["src", "vite-env.d.ts"] }));
-    write(fixture.root, "libs/carved/src/index.ts", [
-      'import workerUrl from "./worker.js?url";',
-      'export const combined = workerUrl;',
-      "",
-    ].join("\n"));
+    write(fixture.root, "libs/carved/src/index.ts", ['import workerUrl from "./worker.js?url";', "export const combined = workerUrl;", ""].join("\n"));
     write(fixture.root, "libs/carved/src/worker.js", "export default true;\n");
 
     const result = run(fixture.root, fixture.config, fixture.manifest);
@@ -217,20 +199,23 @@ describe("external consumer compile proof", () => {
   test("resolves owner types in symlink-mode simulation from the application's direct devDependencies", () => {
     const fixture = proofFixture();
     const fixtureConfig = config("bundler", ["direct-types"], false, "apps/donor", "symlink");
-    write(fixture.root, "apps/donor/package.json", packageJson({
-      name: "@acme/donor",
-      devDependencies: { "direct-types": "1.0.0" },
-      dependencies: {
-        "adjacent-declarations": "1.0.0",
-        "legacy-default": "1.0.0",
-        "legacy-typed": "1.0.0",
-        "plain-runtime": "1.0.0",
-      },
-    }));
+    write(
+      fixture.root,
+      "apps/donor/package.json",
+      packageJson({
+        name: "@acme/donor",
+        devDependencies: { "direct-types": "1.0.0" },
+        dependencies: { "adjacent-declarations": "1.0.0", "legacy-default": "1.0.0", "legacy-typed": "1.0.0", "plain-runtime": "1.0.0" },
+      }),
+    );
     write(fixture.root, "apps/donor/tsconfig.json", packageJson({ compilerOptions: { types: ["direct-types"] }, include: ["src"] }));
     write(fixture.root, "apps/donor/node_modules/direct-types/package.json", packageJson({ name: "direct-types", types: "./index.d.ts" }));
     write(fixture.root, "apps/donor/node_modules/direct-types/index.d.ts", "declare const directTypeSignal: string;\n");
-    write(fixture.root, "libs/carved/src/index.ts", 'import { feature } from "@acme/utility/feature";\nexport const combined = `${feature}:${directTypeSignal}`;\n');
+    write(
+      fixture.root,
+      "libs/carved/src/index.ts",
+      'import { feature } from "@acme/utility/feature";\nexport const combined = `${feature}:${directTypeSignal}`;\n',
+    );
 
     const result = run(fixture.root, fixtureConfig, fixture.manifest);
 
@@ -271,11 +256,7 @@ describe("external consumer compile proof", () => {
   test("does not guess a mismatched declaration flavor beside an ESM entry", () => {
     const fixture = proofFixture();
     rmSync(`${fixture.root}/apps/donor/node_modules/adjacent-declarations/dist/index.d.mts`);
-    write(
-      fixture.root,
-      "apps/donor/node_modules/adjacent-declarations/dist/index.d.ts",
-      "export const adjacentValue: number;\n",
-    );
+    write(fixture.root, "apps/donor/node_modules/adjacent-declarations/dist/index.d.ts", "export const adjacentValue: number;\n");
 
     const result = run(fixture.root, fixture.config, fixture.manifest);
 
@@ -302,7 +283,11 @@ describe("external consumer compile proof", () => {
   test("reproduces the donor's configured CommonJS default-import interoperability", () => {
     const fixture = proofFixture();
     write(fixture.root, "libs/carved/src/index.ts", 'import legacyDefault from "legacy-default";\nexport const combined = legacyDefault.value;\n');
-    write(fixture.root, "apps/donor/node_modules/legacy-default/package.json", packageJson({ name: "legacy-default", main: "./index.js", types: "./index.d.ts" }));
+    write(
+      fixture.root,
+      "apps/donor/node_modules/legacy-default/package.json",
+      packageJson({ name: "legacy-default", main: "./index.js", types: "./index.d.ts" }),
+    );
     write(fixture.root, "apps/donor/node_modules/legacy-default/index.js", "module.exports = { value: 1 };\n");
     write(fixture.root, "apps/donor/node_modules/legacy-default/index.d.ts", "declare const legacyDefault: { value: number };\nexport = legacyDefault;\n");
 
@@ -317,7 +302,10 @@ describe("external consumer compile proof", () => {
 
   test("imports a required default export and rejects a surface that omits it", () => {
     const fixture = proofFixture();
-    const required = [{ name: "combined", typeOnly: false }, { name: "default", typeOnly: false }] as const;
+    const required = [
+      { name: "combined", typeOnly: false },
+      { name: "default", typeOnly: false },
+    ] as const;
 
     write(fixture.root, "libs/carved/src/index.ts", `${targetSource()}export default combined;\n`);
     expect(run(fixture.root, fixture.config, manifest(required)).passed).toBe(true);
@@ -357,7 +345,10 @@ describe("external consumer compile proof", () => {
 
   test("imports a required default type export and rejects a surface that omits it", () => {
     const fixture = proofFixture();
-    const required = [{ name: "combined", typeOnly: false }, { name: "default", typeOnly: true }] as const;
+    const required = [
+      { name: "combined", typeOnly: false },
+      { name: "default", typeOnly: true },
+    ] as const;
 
     write(fixture.root, "libs/carved/src/index.ts", `${targetSource()}export default interface DefaultShape { value: string }\n`);
     expect(run(fixture.root, fixture.config, manifest(required)).passed).toBe(true);
@@ -375,13 +366,12 @@ describe("external consumer compile proof", () => {
 
   test("proves generic type exports without guessing their type-parameter arity", () => {
     const fixture = proofFixture();
-    const required = [{ name: "combined", typeOnly: false }, { name: "GenericResult", typeOnly: true }] as const;
+    const required = [
+      { name: "combined", typeOnly: false },
+      { name: "GenericResult", typeOnly: true },
+    ] as const;
 
-    write(
-      fixture.root,
-      "libs/carved/src/index.ts",
-      `${targetSource()}export interface GenericResult<T, TError = Error> { value: T; error?: TError }\n`,
-    );
+    write(fixture.root, "libs/carved/src/index.ts", `${targetSource()}export interface GenericResult<T, TError = Error> { value: T; error?: TError }\n`);
 
     const result = run(fixture.root, fixture.config, manifest(required));
     expect(result.passed).toBe(true);
@@ -390,20 +380,15 @@ describe("external consumer compile proof", () => {
 
   test("rejects a value where a string-named type export is required", () => {
     const fixture = proofFixture();
-    const required = [{ name: "combined", typeOnly: false }, { name: "string-type", typeOnly: true }] as const;
+    const required = [
+      { name: "combined", typeOnly: false },
+      { name: "string-type", typeOnly: true },
+    ] as const;
 
-    write(
-      fixture.root,
-      "libs/carved/src/index.ts",
-      `${targetSource()}interface StringType { value: string }\nexport type { StringType as "string-type" };\n`,
-    );
+    write(fixture.root, "libs/carved/src/index.ts", `${targetSource()}interface StringType { value: string }\nexport type { StringType as "string-type" };\n`);
     expect(run(fixture.root, fixture.config, manifest(required)).passed).toBe(true);
 
-    write(
-      fixture.root,
-      "libs/carved/src/index.ts",
-      `${targetSource()}const stringType = true;\nexport { stringType as "string-type" };\n`,
-    );
+    write(fixture.root, "libs/carved/src/index.ts", `${targetSource()}const stringType = true;\nexport { stringType as "string-type" };\n`);
     const valueInstead = run(fixture.root, fixture.config, manifest(required));
     expect(valueInstead.passed).toBe(false);
     expect(valueInstead.diagnostics.join("\n")).toContain("refers to a value, but is being used as a type");

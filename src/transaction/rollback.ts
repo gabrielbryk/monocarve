@@ -112,17 +112,13 @@ export async function rollback(rootDir: string, point: RollbackPoint): Promise<R
 
   const restore = restoreSnapshot(rootDir, point.snapshots);
   if (restore.failures.length > 0) {
-    problems.push(
-      `${restore.failures.length} path(s) NOT restored: ` +
-        restore.failures.map((failure) => `${failure.path} (${failure.message})`).join("; "),
-    );
+    problems.push(`${restore.failures.length} path(s) NOT restored: ` + restore.failures.map((failure) => `${failure.path} (${failure.message})`).join("; "));
   }
 
   const mismatches = snapshotMismatches(rootDir, point.snapshots);
   if (mismatches.length > 0) {
     problems.push(
-      `${mismatches.length} path(s) still differ from their snapshot: ` +
-        mismatches.map((mismatch) => `${mismatch.path} (${mismatch.message})`).join("; "),
+      `${mismatches.length} path(s) still differ from their snapshot: ` + mismatches.map((mismatch) => `${mismatch.path} (${mismatch.message})`).join("; "),
     );
   }
 
@@ -141,10 +137,5 @@ export async function rollback(rootDir: string, point: RollbackPoint): Promise<R
         `${point.snapshots.size} operation path(s) on disk${notes.length === 0 ? "" : ` (${notes.join("; ")})`}`,
     };
   }
-  return {
-    ok: false,
-    residue,
-    restored: restore.restored,
-    message: `ROLLBACK INCOMPLETE - manual recovery required: ${[...problems, ...notes].join("; ")}`,
-  };
+  return { ok: false, residue, restored: restore.restored, message: `ROLLBACK INCOMPLETE - manual recovery required: ${[...problems, ...notes].join("; ")}` };
 }

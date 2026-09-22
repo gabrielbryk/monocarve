@@ -54,7 +54,9 @@ describe("scanPathReferenceRewrites / rewritePathReferenceText", () => {
       referenceBase: "app/cloudflare-stack",
     });
     expect(scanPathReferenceRewrites("../../../outside/routes.ts", FILE, [move("../outside/routes.ts", "libs/x/routes.ts")], based).rewrites).toEqual([]);
-    expect(scanPathReferenceRewrites("/repo/app/backend/src/ingest/routes.ts", FILE, [move("app/backend/src/ingest/routes.ts", "libs/x/routes.ts")], based).rewrites).toEqual([]);
+    expect(
+      scanPathReferenceRewrites("/repo/app/backend/src/ingest/routes.ts", FILE, [move("app/backend/src/ingest/routes.ts", "libs/x/routes.ts")], based).rewrites,
+    ).toEqual([]);
   });
   test("case 1: an exact token naming a moved source yields one correct rewrite whose span splices to the expected bytes", () => {
     const text = "See apps/api/src/alpha.ts for details.\n";
@@ -93,12 +95,8 @@ describe("scanPathReferenceRewrites / rewritePathReferenceText", () => {
     const text = "see /repo/apps/api/src/x.ts here\n";
     const moves = [move("apps/api/src/x.ts", "libs/values/src/x.ts"), move("api/src/x.ts", "libs/other/src/x.ts")];
 
-    expect(() => scanPathReferenceRewrites(text, FILE, moves, settings({ onAmbiguousMatch: "refuse" }))).toThrow(
-      PlanningError,
-    );
-    expect(() => scanPathReferenceRewrites(text, FILE, moves, settings({ onAmbiguousMatch: "refuse" }))).toThrow(
-      /ambiguous path reference/,
-    );
+    expect(() => scanPathReferenceRewrites(text, FILE, moves, settings({ onAmbiguousMatch: "refuse" }))).toThrow(PlanningError);
+    expect(() => scanPathReferenceRewrites(text, FILE, moves, settings({ onAmbiguousMatch: "refuse" }))).toThrow(/ambiguous path reference/);
 
     const scan = scanPathReferenceRewrites(text, FILE, moves, settings({ onAmbiguousMatch: "skip" }));
     expect(scan.rewrites).toEqual([]);
@@ -114,9 +112,7 @@ describe("scanPathReferenceRewrites / rewritePathReferenceText", () => {
     const text = "first apps/api/src/c.ts second apps/api/src/d.ts\n";
     const moves = [move("apps/api/src/c.ts", "libs/shared/dest.ts"), move("apps/api/src/d.ts", "libs/shared/dest.ts")];
 
-    expect(() => scanPathReferenceRewrites(text, FILE, moves, settings({ onAmbiguousMatch: "refuse" }))).toThrow(
-      PlanningError,
-    );
+    expect(() => scanPathReferenceRewrites(text, FILE, moves, settings({ onAmbiguousMatch: "refuse" }))).toThrow(PlanningError);
 
     const scan = scanPathReferenceRewrites(text, FILE, moves, settings({ onAmbiguousMatch: "skip" }));
     expect(scan.rewrites).toEqual([]);
@@ -129,23 +125,13 @@ describe("scanPathReferenceRewrites / rewritePathReferenceText", () => {
   });
 
   test("case 4b: repeated references to one moved source are all rewritten", () => {
-    const text = [
-      "- apps/api/src/c.ts",
-      "- apps/api/src/c.ts",
-      "- apps/api/src/c.ts",
-      "",
-    ].join("\n");
+    const text = ["- apps/api/src/c.ts", "- apps/api/src/c.ts", "- apps/api/src/c.ts", ""].join("\n");
     const moves = [move("apps/api/src/c.ts", "libs/shared/dest.ts")];
 
     const scan = scanPathReferenceRewrites(text, FILE, moves, settings());
     expect(scan.skipped).toEqual([]);
     expect(scan.rewrites).toHaveLength(3);
-    expect(rewritePathReferenceText(text, scan.rewrites)).toBe([
-      "- libs/shared/dest.ts",
-      "- libs/shared/dest.ts",
-      "- libs/shared/dest.ts",
-      "",
-    ].join("\n"));
+    expect(rewritePathReferenceText(text, scan.rewrites)).toBe(["- libs/shared/dest.ts", "- libs/shared/dest.ts", "- libs/shared/dest.ts", ""].join("\n"));
   });
 
   test("case 5: an absolute token matching a workspace-relative moved path keeps its absolute prefix untouched — the span is narrowed to the matched suffix, `to` holds only the suffix replacement", () => {
@@ -172,9 +158,7 @@ describe("scanPathReferenceRewrites / rewritePathReferenceText", () => {
 
     expect(scan.rewrites).toHaveLength(1);
     const output = rewritePathReferenceText(text, scan.rewrites);
-    expect(output).toBe(
-      "See [chart](https://github.com/org/repo/blob/main/libs/chart/src/chart.ts) for details.\n",
-    );
+    expect(output).toBe("See [chart](https://github.com/org/repo/blob/main/libs/chart/src/chart.ts) for details.\n");
   });
 
   test("case 5c (F-A): a leading './' token is preserved verbatim; only the matched suffix moves", () => {
@@ -263,10 +247,7 @@ describe("scanPathReferenceRewrites / rewritePathReferenceText", () => {
   });
 
   test("case 9: determinism — identical inputs produce identically-ordered rewrites and skipped entries across two calls", () => {
-    const text = [
-      "apps/api/src/alpha.ts and apps/api/src/beta.ts\n",
-      "collide: apps/api/src/c.ts vs apps/api/src/d.ts\n",
-    ].join("");
+    const text = ["apps/api/src/alpha.ts and apps/api/src/beta.ts\n", "collide: apps/api/src/c.ts vs apps/api/src/d.ts\n"].join("");
     const moves = [
       move("apps/api/src/beta.ts", "libs/values/src/beta.ts"),
       move("apps/api/src/alpha.ts", "libs/values/src/alpha.ts"),

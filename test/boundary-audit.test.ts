@@ -21,10 +21,7 @@ import { cleanupFixtures, fixtureConfig, fixtureRepo, write } from "./support/fi
 
 afterEach(cleanupFixtures);
 
-const TSCONFIG = JSON.stringify({
-  compilerOptions: { strict: true, noEmit: true, module: "ESNext", moduleResolution: "Bundler" },
-  include: ["src/**/*.ts"],
-});
+const TSCONFIG = JSON.stringify({ compilerOptions: { strict: true, noEmit: true, module: "ESNext", moduleResolution: "Bundler" }, include: ["src/**/*.ts"] });
 
 const RETAINED = "apps/api/src/config/env.ts";
 const RETAINED_SOURCE = 'export const env = "prod";\n';
@@ -32,23 +29,12 @@ const IMPORTER = "apps/api/src/orders/service.ts";
 const IMPORTER_SOURCE = 'import { env } from "../config/env.ts";\nexport const value = env;\n';
 
 function existingPackageBoundary(): { readonly root: string; readonly config: ReturnType<typeof fixtureConfig>; readonly manifest: PreparationManifest } {
-  const root = fixtureRepo({
-    "apps/api/tsconfig.json": TSCONFIG,
-    [RETAINED]: RETAINED_SOURCE,
-    [IMPORTER]: IMPORTER_SOURCE,
-  });
+  const root = fixtureRepo({ "apps/api/tsconfig.json": TSCONFIG, [RETAINED]: RETAINED_SOURCE, [IMPORTER]: IMPORTER_SOURCE });
   const config = fixtureConfig(root, {
-    compositionBoundaries: [{
-      id: "env-shim",
-      retained: RETAINED,
-      strategy: "existing-package",
-      replacement: { specifier: "@acme/env", symbols: ["env"] },
-      retire: true,
-    }],
-    preparation: {
-      gates: { package: [], project: [], workspace: ["true"] },
-      commit: { subject: "refactor: prepare env boundary" },
-    },
+    compositionBoundaries: [
+      { id: "env-shim", retained: RETAINED, strategy: "existing-package", replacement: { specifier: "@acme/env", symbols: ["env"] }, retire: true },
+    ],
+    preparation: { gates: { package: [], project: [], workspace: ["true"] }, commit: { subject: "refactor: prepare env boundary" } },
   });
   const baseline = resolveCommit(root, "HEAD");
   const modules: ScanReport["modules"][number][] = [
@@ -63,10 +49,7 @@ function existingPackageBoundary(): { readonly root: string; readonly config: Re
     graphDigest: hashText("fixture-workspace-graph"),
     boundaryId: "env-shim",
     graph,
-    rendering: {
-      gates: { package: [], project: [], workspace: ["true"] },
-      commit: { subject: "refactor: prepare env boundary" },
-    },
+    rendering: { gates: { package: [], project: [], workspace: ["true"] }, commit: { subject: "refactor: prepare env boundary" } },
   };
   return { root, config, manifest: compileBoundaryPreparationManifest(input) };
 }
@@ -87,21 +70,20 @@ function portBoundary(): { readonly root: string; readonly config: ReturnType<ty
     "libs/ports/package.json": JSON.stringify({ name: "@acme/ports/widget" }),
   });
   const config = fixtureConfig(root, {
-    compositionBoundaries: [{
-      id: "widget-port",
-      retained: PORT_RETAINED,
-      strategy: "port",
-      contract: "Widget",
-      contractModule: "widget",
-      appAdapter: ADAPTER_PATH,
-      packageImport: "@acme/ports/widget",
-      symbols: ["Widget"],
-      template: "widget-adapter",
-    }],
-    preparation: {
-      gates: { package: [], project: [], workspace: ["true"] },
-      commit: { subject: "refactor: prepare widget port boundary" },
-    },
+    compositionBoundaries: [
+      {
+        id: "widget-port",
+        retained: PORT_RETAINED,
+        strategy: "port",
+        contract: "Widget",
+        contractModule: "widget",
+        appAdapter: ADAPTER_PATH,
+        packageImport: "@acme/ports/widget",
+        symbols: ["Widget"],
+        template: "widget-adapter",
+      },
+    ],
+    preparation: { gates: { package: [], project: [], workspace: ["true"] }, commit: { subject: "refactor: prepare widget port boundary" } },
   });
   const baseline = resolveCommit(root, "HEAD");
   const modules: ScanReport["modules"][number][] = [
@@ -118,10 +100,7 @@ function portBoundary(): { readonly root: string; readonly config: ReturnType<ty
     graph,
     contractTargetPath: CONTRACT_TARGET,
     adapterTemplateText: ADAPTER_TEMPLATE_TEXT,
-    rendering: {
-      gates: { package: [], project: [], workspace: ["true"] },
-      commit: { subject: "refactor: prepare widget port boundary" },
-    },
+    rendering: { gates: { package: [], project: [], workspace: ["true"] }, commit: { subject: "refactor: prepare widget port boundary" } },
   };
   return { root, config, manifest: compileBoundaryPreparationManifest(input) };
 }
@@ -134,29 +113,17 @@ describe("auditPreparationSync — retainedRootClearance", () => {
     // even though the manifest's own deletion claims this importer was
     // already rewritten away from it.
 
-    const report = auditPreparationSync({
-      config,
-      rootDir: root,
-      manifest,
-      freshGraph: { commit: manifest.baseline.commit, digest: manifest.graphDigest },
-    });
+    const report = auditPreparationSync({ config, rootDir: root, manifest, freshGraph: { commit: manifest.baseline.commit, digest: manifest.graphDigest } });
 
     expect(report.retainedRootClearance.passed).toBe(false);
-    expect(report.retainedRootClearance.failures).toEqual([
-      `${IMPORTER} still imports a value binding from retained root ../config/env.ts after promotion`,
-    ]);
+    expect(report.retainedRootClearance.failures).toEqual([`${IMPORTER} still imports a value binding from retained root ../config/env.ts after promotion`]);
   });
 
   test("passes once the manifest's own rewrite has actually landed on disk", () => {
     const { root, config, manifest } = existingPackageBoundary();
     executePreparationJournal({ rootDir: root, operations: preparationFilesystemOperations(manifest) });
 
-    const report = auditPreparationSync({
-      config,
-      rootDir: root,
-      manifest,
-      freshGraph: { commit: manifest.baseline.commit, digest: manifest.graphDigest },
-    });
+    const report = auditPreparationSync({ config, rootDir: root, manifest, freshGraph: { commit: manifest.baseline.commit, digest: manifest.graphDigest } });
 
     expect(report.retainedRootClearance.passed).toBe(true);
     expect(report.retainedRootClearance.failures).toEqual([]);
@@ -173,12 +140,7 @@ describe("auditPreparationSync — adapterSurfaceParity", () => {
     // about its adapter is never enough, only the landed bytes are.
     write(root, ADAPTER_PATH, "export const NotWidget = 1;\n");
 
-    const report = auditPreparationSync({
-      config,
-      rootDir: root,
-      manifest,
-      freshGraph: { commit: manifest.baseline.commit, digest: manifest.graphDigest },
-    });
+    const report = auditPreparationSync({ config, rootDir: root, manifest, freshGraph: { commit: manifest.baseline.commit, digest: manifest.graphDigest } });
 
     expect(report.adapterSurfaceParity.passed).toBe(false);
     expect(report.adapterSurfaceParity.failures).toHaveLength(1);
@@ -191,12 +153,7 @@ describe("auditPreparationSync — adapterSurfaceParity", () => {
     const { root, config, manifest } = portBoundary();
     executePreparationJournal({ rootDir: root, operations: preparationFilesystemOperations(manifest) });
 
-    const report = auditPreparationSync({
-      config,
-      rootDir: root,
-      manifest,
-      freshGraph: { commit: manifest.baseline.commit, digest: manifest.graphDigest },
-    });
+    const report = auditPreparationSync({ config, rootDir: root, manifest, freshGraph: { commit: manifest.baseline.commit, digest: manifest.graphDigest } });
 
     expect(report.adapterSurfaceParity.passed).toBe(true);
     expect(report.adapterSurfaceParity.failures).toEqual([]);
@@ -209,12 +166,7 @@ describe("auditPreparationSync — adapterSurfaceParity", () => {
     expect(manifest.changedFiles).toContain(CONTRACT_TARGET);
     expect(manifest.changedFiles).toContain(ADAPTER_PATH);
 
-    const report = auditPreparationSync({
-      config,
-      rootDir: root,
-      manifest,
-      freshGraph: { commit: manifest.baseline.commit, digest: manifest.graphDigest },
-    });
+    const report = auditPreparationSync({ config, rootDir: root, manifest, freshGraph: { commit: manifest.baseline.commit, digest: manifest.graphDigest } });
 
     expect(report.changedPathScope.passed).toBe(true);
     expect(report.changedPathScope.failures).toEqual([]);

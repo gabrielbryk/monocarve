@@ -32,12 +32,7 @@ describe("type-only seam safety", () => {
     const shape = group(graph, "Shape");
     const result = classifyTypeOnlyExtraction({ sourceText, graph, groupId: shape.id });
 
-    expect(result).toEqual({
-      groupId: shape.id,
-      declarationIds: shape.declarationIds,
-      eligible: true,
-      evidence: [],
-    });
+    expect(result).toEqual({ groupId: shape.id, declarationIds: shape.declarationIds, eligible: true, evidence: [] });
     const alias = group(graph, "ShapeName");
     expect(classifyTypeOnlyExtraction({ sourceText, graph, groupId: alias.id }).eligible).toBe(true);
   });
@@ -59,10 +54,8 @@ describe("type-only seam safety", () => {
   });
 
   test("refuses a non-exported ambient type whose script-global visibility cannot be preserved", () => {
-    expect(refusalCodes("declare interface GlobalShape { width: number }\n", "GlobalShape"))
-      .toContain("ambient-declaration");
-    expect(refusalCodes("declare type GlobalName = string;\n", "GlobalName"))
-      .toContain("ambient-declaration");
+    expect(refusalCodes("declare interface GlobalShape { width: number }\n", "GlobalShape")).toContain("ambient-declaration");
+    expect(refusalCodes("declare type GlobalName = string;\n", "GlobalName")).toContain("ambient-declaration");
   });
 
   test("refuses runtime-emitting declarations", () => {
@@ -83,7 +76,7 @@ describe("type-only seam safety", () => {
   });
 
   test("refuses a type/value merge", () => {
-    const sourceText = "export interface Token { value: string }\nexport const Token = { value: \"token\" };\n";
+    const sourceText = 'export interface Token { value: string }\nexport const Token = { value: "token" };\n';
     const codes = refusalCodes(sourceText, "Token");
     expect(codes).toContain("type-value-mixed-group");
     expect(codes).toContain("non-type-declaration");
@@ -97,43 +90,29 @@ describe("type-only seam safety", () => {
     if (!onlyOne) throw new Error("expected an interface merge member");
     expect(refusalCodes(interfaceSource, "Merge", [onlyOne])).toContain("incomplete-declaration-group");
 
-    const overloadSource = "function parse(input: string): string;\nfunction parse(input: number): number;\nfunction parse(input: string | number) { return input }\n";
+    const overloadSource =
+      "function parse(input: string): string;\nfunction parse(input: number): number;\nfunction parse(input: string | number) { return input }\n";
     const overloadGraph = analyze(overloadSource);
     const overload = group(overloadGraph, "parse");
     const partial = overload.declarationIds.slice(0, 1);
-    const result = classifyTypeOnlyExtraction({
-      sourceText: overloadSource,
-      graph: overloadGraph,
-      groupId: overload.id,
-      selectedDeclarationIds: partial,
-    });
-    expect(result.evidence.map((evidence) => evidence.code)).toEqual(expect.arrayContaining([
-      "incomplete-declaration-group",
-      "function-overload-group",
-    ]));
+    const result = classifyTypeOnlyExtraction({ sourceText: overloadSource, graph: overloadGraph, groupId: overload.id, selectedDeclarationIds: partial });
+    expect(result.evidence.map((evidence) => evidence.code)).toEqual(expect.arrayContaining(["incomplete-declaration-group", "function-overload-group"]));
   });
 
   test("refuses stale graph source and stale declaration spans", () => {
     const sourceText = "interface Stable { value: string }\n";
     const graph = analyze(sourceText);
     const stable = group(graph, "Stable");
-    expect(classifyTypeOnlyExtraction({
-      sourceText: `// changed\n${sourceText}`,
-      graph,
-      groupId: stable.id,
-    }).evidence.map((evidence) => evidence.code)).toContain("graph-source-mismatch");
+    expect(
+      classifyTypeOnlyExtraction({ sourceText: `// changed\n${sourceText}`, graph, groupId: stable.id }).evidence.map((evidence) => evidence.code),
+    ).toContain("graph-source-mismatch");
 
     const declaration = graph.declarations[0];
     if (!declaration) throw new Error("expected stable declaration");
-    const staleGraph: SymbolGraph = {
-      ...graph,
-      declarations: [{ ...declaration, span: { ...declaration.span, end: declaration.span.end - 1 } }],
-    };
-    expect(classifyTypeOnlyExtraction({
-      sourceText,
-      graph: staleGraph,
-      groupId: stable.id,
-    }).evidence.map((evidence) => evidence.code)).toContain("declaration-span-mismatch");
+    const staleGraph: SymbolGraph = { ...graph, declarations: [{ ...declaration, span: { ...declaration.span, end: declaration.span.end - 1 } }] };
+    expect(classifyTypeOnlyExtraction({ sourceText, graph: staleGraph, groupId: stable.id }).evidence.map((evidence) => evidence.code)).toContain(
+      "declaration-span-mismatch",
+    );
   });
 });
 
@@ -142,7 +121,5 @@ function tsOutput(sourceText: string): string {
 }
 
 function analyzeTypeScriptOutput(sourceText: string): string {
-  return ts.transpileModule(sourceText, {
-    compilerOptions: { module: ts.ModuleKind.ESNext },
-  }).outputText;
+  return ts.transpileModule(sourceText, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
 }

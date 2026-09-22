@@ -91,8 +91,12 @@ try {
       fail(`tarball includes build-only metadata ${path}`);
     }
     if (
-      path !== "package.json" && path !== "LICENSE" && path !== "README.md" && path !== "CHANGELOG.md"
-      && !path.startsWith("dist/") && !path.startsWith("docs/")
+      path !== "package.json" &&
+      path !== "LICENSE" &&
+      path !== "README.md" &&
+      path !== "CHANGELOG.md" &&
+      !path.startsWith("dist/") &&
+      !path.startsWith("docs/")
     ) {
       fail(`tarball includes unpublished path ${path}`);
     }

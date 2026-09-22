@@ -3,9 +3,9 @@
 
 import { TOOL_NAME, TOOL_VERSION } from "./branding.ts";
 import { parseArgs } from "./cli/args.ts";
+import { resetCodemodCaches } from "./codemod/imports.ts";
 import { COMMANDS, USAGE, commandHelp } from "./commands/index.ts";
 import { IoError, NotYetPortedError, MonocarveError, UsageError } from "./errors.ts";
-import { resetCodemodCaches } from "./codemod/imports.ts";
 
 export { parseArgs, type ParsedArgs } from "./cli/args.ts";
 
@@ -43,7 +43,9 @@ export async function main(argv: readonly string[]): Promise<number> {
  */
 async function runWithCompleteStdout(run: () => Promise<void>): Promise<void> {
   let failure: Error | undefined;
-  const capture = (error: Error): void => { failure ??= error; };
+  const capture = (error: Error): void => {
+    failure ??= error;
+  };
   process.stdout.on("error", capture);
   try {
     await run();

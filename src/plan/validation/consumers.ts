@@ -22,7 +22,8 @@ export function validateConsumers(
     if (consumerFiles.has(consumer.file)) issues.add("consumer", `duplicate consumer ${consumer.file}`);
     consumerFiles.add(consumer.file);
     if (!consumer.expectedImporter) issues.add("consumer", `consumer ${consumer.file} declares no expected importer`);
-    if (consumer.dependencySection !== "runtime" && consumer.dependencySection !== "dev") issues.add("consumer", `consumer ${consumer.file} has an invalid dependency section`);
+    if (consumer.dependencySection !== "runtime" && consumer.dependencySection !== "dev")
+      issues.add("consumer", `consumer ${consumer.file} has an invalid dependency section`);
     if (consumer.specifiers.length === 0) issues.add("consumer", `consumer ${consumer.file} declares no rewrite`);
     for (const rewrite of consumer.specifiers) {
       if (!rewriteTargets.has(rewrite.to)) issues.add("consumer", `consumer rewrite must target a declared ${packageName} surface`);

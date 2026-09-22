@@ -65,12 +65,7 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 
-import {
-  applyEscapeRewrites,
-  inventoryModuleReferences,
-  rewriteResolvedImportSpecifier,
-  unsupportedModuleReferences,
-} from "../src/codemod/imports.ts";
+import { applyEscapeRewrites, inventoryModuleReferences, rewriteResolvedImportSpecifier, unsupportedModuleReferences } from "../src/codemod/imports.ts";
 import {
   assertNoFailures,
   createCodemodPropertyHarness,
@@ -86,16 +81,7 @@ import {
 } from "./support/codemod-property-harness.ts";
 
 const harness = createCodemodPropertyHarness();
-const {
-  workspace,
-  DONOR,
-  ABSENT_DONOR,
-  TS_IMPORTER,
-  CASES,
-  MATCHING_CASES,
-  NON_MATCHING_CASES,
-  rewrite,
-} = harness;
+const { workspace, DONOR, ABSENT_DONOR, TS_IMPORTER, CASES, MATCHING_CASES, NON_MATCHING_CASES, rewrite } = harness;
 
 afterAll(harness.cleanup);
 
@@ -213,11 +199,7 @@ describe("the recorded specifier span", () => {
 
 describe("computed specifiers", () => {
   const SUBSTITUTED = ["const c = import(`./${name}`);", "const d = require(`./helpers${suffix}`);"];
-  const STATIC = [
-    "const a = import(`./helpers`);",
-    "const b = require(`./helpers`);",
-    "type E = import(`./helpers`).B;",
-  ];
+  const STATIC = ["const a = import(`./helpers`);", "const b = require(`./helpers`);", "type E = import(`./helpers`).B;"];
 
   test("a specifier with a substitution is never mangled", () => {
     const failures: string[] = [];
@@ -238,9 +220,7 @@ describe("computed specifiers", () => {
 
   test("a specifier with a substitution is reported as unsupported", () => {
     expect(SUBSTITUTED.length).toBeGreaterThan(0);
-    const counts = SUBSTITUTED.map(
-      (template) => unsupportedModuleReferences(render([template], SHAPES[0]!), TS_IMPORTER, workspace).length,
-    );
+    const counts = SUBSTITUTED.map((template) => unsupportedModuleReferences(render([template], SHAPES[0]!), TS_IMPORTER, workspace).length);
     expect(counts.every((count) => count > 0)).toBe(true);
   });
 

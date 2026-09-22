@@ -52,18 +52,19 @@ async function render() {
   const scopedEdges = displayed.edges.filter((edge) => visibleIds.has(edge.from) && visibleIds.has(edge.to) && (!kind || edge.kinds.includes(kind)));
   const overview = viewElement.value === "domains";
   const hierarchyEdges = overview && densityElement.value === "hierarchy" ? connectivityBackbone(visibleNodes, scopedEdges) : undefined;
-  const visibleEdges = hierarchyEdges
-    ?? (overview && densityElement.value === "backbone" ? backboneEdges(visibleNodes, scopedEdges) : scopedEdges);
+  const visibleEdges = hierarchyEdges ?? (overview && densityElement.value === "backbone" ? backboneEdges(visibleNodes, scopedEdges) : scopedEdges);
   const compound = overview ? await globalThis.monocarveLayout.layoutCompound(visibleNodes, visibleEdges) : undefined;
   if (version !== renderVersion) return;
   const positions = compound?.positions ?? componentPositions(visibleNodes);
   renderedContainers = compound?.containers ?? [];
   const colorKeys = visibleNodes.map((node) => groupFor(node));
   const colors = colorsFor(colorKeys);
-  const nodes = new DataSet(visibleNodes.map((node) => {
-    const colorKey = groupFor(node);
-    return renderNode(node, positions.get(node.id), colors.get(colorKey), highContrast);
-  }));
+  const nodes = new DataSet(
+    visibleNodes.map((node) => {
+      const colorKey = groupFor(node);
+      return renderNode(node, positions.get(node.id), colors.get(colorKey), highContrast);
+    }),
+  );
   const edges = new DataSet(visibleEdges.map((edge) => renderEdge(edge, overview, highContrast)));
   if (network) network.destroy();
   network = new Network(networkElement, { nodes, edges }, options);
@@ -104,9 +105,16 @@ function drawContainers(context, containers, colors, highContrast) {
 
 function renderNode(node, position, color, highContrast) {
   return {
-    id: node.id, label: node.label, x: position.x, y: position.y, fixed: true,
-    shape: node.summary ? "box" : "dot", value: Math.max(8, Math.sqrt(node.lineCount)),
-    color: highContrast ? { background: "#ffffff", border: color, highlight: { background: "#fff7cc", border: "#000000" }, hover: { background: "#f3f4f6", border: color } } : color,
+    id: node.id,
+    label: node.label,
+    x: position.x,
+    y: position.y,
+    fixed: true,
+    shape: node.summary ? "box" : "dot",
+    value: Math.max(8, Math.sqrt(node.lineCount)),
+    color: highContrast
+      ? { background: "#ffffff", border: color, highlight: { background: "#fff7cc", border: "#000000" }, hover: { background: "#f3f4f6", border: color } }
+      : color,
     borderWidth: highContrast ? 4 : 1,
     font: { color: highContrast ? "#000000" : "#e7eaf0", face: "system-ui", size: node.summary ? 18 : 13, bold: node.summary ? "700" : "500" },
     title: `${node.members.length} file(s), ${node.lineCount} lines`,
@@ -114,7 +122,9 @@ function renderNode(node, position, color, highContrast) {
 }
 
 function renderEdge(edge, overview, highContrast) {
-  const width = overview ? Math.min(highContrast ? 5 : 2.5, (highContrast ? 2 : 0.4) + Math.log2(edge.count + 1) * 0.4) : Math.min(8, 1 + Math.log2(edge.count));
+  const width = overview
+    ? Math.min(highContrast ? 5 : 2.5, (highContrast ? 2 : 0.4) + Math.log2(edge.count + 1) * 0.4)
+    : Math.min(8, 1 + Math.log2(edge.count));
   const color = highContrast ? { color: "#111827", highlight: "#dc2626", hover: "#2563eb", opacity: 1 } : undefined;
   return { id: edge.id, from: edge.from, to: edge.to, width, ...(color ? { color } : {}), title: `${edge.count} ${edge.kinds.join(", ")}` };
 }
@@ -124,7 +134,13 @@ function showDetails(node) {
   detailsElement.replaceChildren();
   const title = document.createElement("h2");
   title.textContent = node.label;
-  detailsElement.append(title, metric("Files", node.members.length), metric("Lines", node.lineCount), metric("Layer", node.layer), metric("Cycle", node.cyclic ? "yes" : "no"));
+  detailsElement.append(
+    title,
+    metric("Files", node.members.length),
+    metric("Lines", node.lineCount),
+    metric("Layer", node.layer),
+    metric("Cycle", node.cyclic ? "yes" : "no"),
+  );
   if (node.summary) {
     const hint = document.createElement("p");
     hint.textContent = "Double-click this domain to inspect its SCCs.";
@@ -179,7 +195,19 @@ function domainGraph(source) {
   const groups = new Map();
   for (const node of source.nodes) {
     const domain = domainForId.get(node.id);
-    const group = groups.get(domain) ?? { id: `domain:${domain}`, label: domain, members: [], applications: new Set(), domains: [domain], owners: new Set(), zones: new Set(), lineCount: 0, layer: 0, cyclic: false, summary: true };
+    const group = groups.get(domain) ?? {
+      id: `domain:${domain}`,
+      label: domain,
+      members: [],
+      applications: new Set(),
+      domains: [domain],
+      owners: new Set(),
+      zones: new Set(),
+      lineCount: 0,
+      layer: 0,
+      cyclic: false,
+      summary: true,
+    };
     group.members.push(...node.members);
     node.applications.forEach((value) => group.applications.add(value));
     node.owners.forEach((value) => group.owners.add(value));
@@ -189,7 +217,15 @@ function domainGraph(source) {
     group.cyclic ||= node.cyclic;
     groups.set(domain, group);
   }
-  const nodes = [...groups.values()].map((group) => ({ ...group, members: group.members.sort(), applications: [...group.applications].sort(), owners: [...group.owners].sort(), zones: [...group.zones].sort() })).sort((left, right) => left.id.localeCompare(right.id));
+  const nodes = [...groups.values()]
+    .map((group) => ({
+      ...group,
+      members: group.members.sort(),
+      applications: [...group.applications].sort(),
+      owners: [...group.owners].sort(),
+      zones: [...group.zones].sort(),
+    }))
+    .sort((left, right) => left.id.localeCompare(right.id));
   const aggregates = new Map();
   for (const edge of source.edges) {
     if (!byId.has(edge.from) || !byId.has(edge.to)) continue;
@@ -246,9 +282,11 @@ function connectivityBackbone(nodes, edges) {
 }
 
 function edgePriority(left, right, layers) {
-  return right.count - left.count
-    || Math.abs((layers.get(left.from) ?? 0) - (layers.get(left.to) ?? 0)) - Math.abs((layers.get(right.from) ?? 0) - (layers.get(right.to) ?? 0))
-    || left.id.localeCompare(right.id);
+  return (
+    right.count - left.count ||
+    Math.abs((layers.get(left.from) ?? 0) - (layers.get(left.to) ?? 0)) - Math.abs((layers.get(right.from) ?? 0) - (layers.get(right.to) ?? 0)) ||
+    left.id.localeCompare(right.id)
+  );
 }
 
 function drillInto(node) {
@@ -354,7 +392,9 @@ function layoutTree(root, children, sizes) {
   return { positions, width: maxDepth * 340, height: Math.max(120, nextLeaf * 120) };
 }
 
-function groupFor(node) { return node.applications[0] ?? node.owners[0] ?? node.zones[0] ?? "unclassified"; }
+function groupFor(node) {
+  return node.applications[0] ?? node.owners[0] ?? node.zones[0] ?? "unclassified";
+}
 
 function inScope(node, scope) {
   if (!scope) return true;
@@ -364,20 +404,35 @@ function inScope(node, scope) {
   return kind === "application" ? node.applications.includes(value) : node.domains.includes(value);
 }
 
-function nodeSearchText(node) { return [...node.members, ...node.applications, ...node.domains, ...node.owners, ...node.zones].join(" ").toLowerCase(); }
+function nodeSearchText(node) {
+  return [...node.members, ...node.applications, ...node.domains, ...node.owners, ...node.zones].join(" ").toLowerCase();
+}
 function colorsFor(keys) {
   const palette = ["#4f8cff", "#ff8a4c", "#45c486", "#d755c7", "#e1bd31", "#8b75ef", "#e45f72", "#35b9c8"];
   return new Map([...new Set(keys)].sort().map((group, index) => [group, palette[index % palette.length]]));
 }
-function short(value) { return value?.slice(0, 10) ?? "working tree"; }
-function element(id) { const found = document.getElementById(id); if (!found) throw new Error(`missing #${id}`); return found; }
+function short(value) {
+  return value?.slice(0, 10) ?? "working tree";
+}
+function element(id) {
+  const found = document.getElementById(id);
+  if (!found) throw new Error(`missing #${id}`);
+  return found;
+}
 
 searchElement.addEventListener("input", () => void render().catch(showError));
-viewElement.addEventListener("change", () => { scopeInitialized = false; fillScopes(); void render().catch(showError); });
+viewElement.addEventListener("change", () => {
+  scopeInitialized = false;
+  fillScopes();
+  void render().catch(showError);
+});
 scopeElement.addEventListener("change", () => void render().catch(showError));
 densityElement.addEventListener("change", () => void render().catch(showError));
 contrastElement.addEventListener("change", () => void render().catch(showError));
 kindElement.addEventListener("change", () => void render().catch(showError));
 refreshElement.addEventListener("click", () => void loadGraph(true).catch(showError));
 void loadGraph().catch(showError);
-function showError(error) { statusElement.textContent = error instanceof Error ? error.message : String(error); refreshElement.disabled = false; }
+function showError(error) {
+  statusElement.textContent = error instanceof Error ? error.message : String(error);
+  refreshElement.disabled = false;
+}

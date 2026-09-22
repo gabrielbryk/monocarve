@@ -7,8 +7,8 @@ import { buildPlanSync, serializeManifest } from "../plan/build.ts";
 import { PlanningError } from "../plan/context.ts";
 import { formatPlanReview, summarizePlanReview } from "../plan/review.ts";
 import { simulatePlan } from "../transaction/simulate.ts";
-import type { CommandSpec } from "./types.ts";
 import { assertPlannableTree, loadGraph, outputPath, print, writeOutput } from "./shared.ts";
+import type { CommandSpec } from "./types.ts";
 
 const UNSUPPORTED_FLAGS = ["plan", "apply", "approve", "manifest", "commit-approval", "force"] as const;
 
@@ -43,7 +43,9 @@ async function evacuate(args: ParsedArgs): Promise<void> {
       return;
     }
     if (!assessed.candidate.eligible) {
-      throw new UsageError(`evacuation ${assessed.evacuation.id} is not eligible: ${assessed.candidate.rejectionReasons.map(({ detail }) => detail).join("; ")}; cuts: ${formatCuts(report)}`);
+      throw new UsageError(
+        `evacuation ${assessed.evacuation.id} is not eligible: ${assessed.candidate.rejectionReasons.map(({ detail }) => detail).join("; ")}; cuts: ${formatCuts(report)}`,
+      );
     }
     throw new UsageError(`evacuation ${assessed.evacuation.id} has unconfigured boundary cuts: ${formatCuts({ ...report, boundaryCuts: unresolved })}`);
   }
@@ -74,21 +76,39 @@ async function evacuate(args: ParsedArgs): Promise<void> {
   const written = flagBool(args, "write");
   if (written && existsSync(`${loaded.rootDir}/${out}`)) throw new UsageError(`refusing to overwrite existing plan ${out}; the existing file was not changed`);
   if (written) writeOutput(loaded.rootDir, out, serializeManifest(manifest), { exclusive: true });
-  const review = summarizePlanReview(manifest, { baselinePaths: loaded.graph.workspace.owners.includes(manifest.target.packageRoot) ? [`${manifest.target.packageRoot}/package.json`] : [], manifestPath: out });
-  print(flagBool(args, "json")
-    ? { ...report, manifest, output: out, written, ...(simulation ? { simulation } : {}) }
-    : `${formatEvacuationReport(report)}\n\n${formatPlanReview(review).trimEnd()}\n\nOutput: ${out} (${written ? "written" : "dry run"})`, args);
+  const review = summarizePlanReview(manifest, {
+    baselinePaths: loaded.graph.workspace.owners.includes(manifest.target.packageRoot) ? [`${manifest.target.packageRoot}/package.json`] : [],
+    manifestPath: out,
+  });
+  print(
+    flagBool(args, "json")
+      ? { ...report, manifest, output: out, written, ...(simulation ? { simulation } : {}) }
+      : `${formatEvacuationReport(report)}\n\n${formatPlanReview(review).trimEnd()}\n\nOutput: ${out} (${written ? "written" : "dry run"})`,
+    args,
+  );
 }
 
-function formatCuts(report: { readonly boundaryCuts: readonly { readonly from: string; readonly specifier: string; readonly target: string; readonly reason: string; readonly remedy: { readonly kind: string } }[] }): string {
-  return report.boundaryCuts.length === 0 ? "none" : report.boundaryCuts.map((cut) => `${cut.from} -> ${cut.specifier} -> ${cut.target} (${cut.reason}, ${cut.remedy.kind})`).join("; ");
+function formatCuts(report: {
+  readonly boundaryCuts: readonly {
+    readonly from: string;
+    readonly specifier: string;
+    readonly target: string;
+    readonly reason: string;
+    readonly remedy: { readonly kind: string };
+  }[];
+}): string {
+  return report.boundaryCuts.length === 0
+    ? "none"
+    : report.boundaryCuts.map((cut) => `${cut.from} -> ${cut.specifier} -> ${cut.target} (${cut.reason}, ${cut.remedy.kind})`).join("; ");
 }
 
 export const evacuationCommands: Record<string, CommandSpec> = {
   evacuate: {
     summary: "scope one bounded domain evacuation",
-    usage: "evacuate --app <name> --source <file|directory|glob> [--source <...>] --package-name <name> [--authorize-protected <configured-root>] [--include-composition <selected-root>] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]",
-    details: "Read-only by default. Selectors are workspace-relative and production-only. --authorize-protected is repeatable, evacuation-only, and must exactly name a configured protected root inside the selected evacuation. --include-composition is repeatable and may include only an exact composition root already selected in the same application; its whole SCC moves. Compiles the ordinary immutable plan only after eligibility passes and every boundary cut names a configured remedy; --write exclusively creates that one manifest and never edits source files.",
+    usage:
+      "evacuate --app <name> --source <file|directory|glob> [--source <...>] --package-name <name> [--authorize-protected <configured-root>] [--include-composition <selected-root>] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]",
+    details:
+      "Read-only by default. Selectors are workspace-relative and production-only. --authorize-protected is repeatable, evacuation-only, and must exactly name a configured protected root inside the selected evacuation. --include-composition is repeatable and may include only an exact composition root already selected in the same application; its whole SCC moves. Compiles the ordinary immutable plan only after eligibility passes and every boundary cut names a configured remedy; --write exclusively creates that one manifest and never edits source files.",
     run: evacuate,
   },
 };

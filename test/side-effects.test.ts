@@ -26,9 +26,7 @@ function kinds(source: string, path = MODULE): string[] {
 describe("constructs that run when the module is evaluated", () => {
   test("reports a bindingless import, and locates it by line", () => {
     const source = ['import { register } from "./registry.ts";', 'import "./polyfill.ts";', ""].join("\n");
-    expect(evaluationEffects(source, MODULE)).toEqual([
-      { kind: "side-effect-import", line: 2, text: 'import "./polyfill.ts";' },
-    ]);
+    expect(evaluationEffects(source, MODULE)).toEqual([{ kind: "side-effect-import", line: 2, text: 'import "./polyfill.ts";' }]);
   });
 
   test("reports an empty named import, which evaluates its target exactly like a bindingless one", () => {
@@ -36,13 +34,7 @@ describe("constructs that run when the module is evaluated", () => {
   });
 
   test("reports every expression statement, whatever the expression is", () => {
-    const source = [
-      "connect();",
-      "registry.count += 1;",
-      "delete registry.stale;",
-      "counter++;",
-      "",
-    ].join("\n");
+    const source = ["connect();", "registry.count += 1;", "delete registry.stale;", "counter++;", ""].join("\n");
     expect(evaluationEffects(source, MODULE)).toEqual([
       { kind: "expression-statement", line: 1, text: "connect();" },
       { kind: "expression-statement", line: 2, text: "registry.count += 1;" },
@@ -156,7 +148,7 @@ describe("constructs that run later, or not at all", () => {
       "export { register };",
       "export default function start() {}",
       "interface Options { retries: number }",
-      "type Mode = \"fast\" | \"slow\";",
+      'type Mode = "fast" | "slow";',
       "enum Level { Low, High }",
       "class Session {}",
       "function stop() {}",
@@ -169,10 +161,10 @@ describe("constructs that run later, or not at all", () => {
 
   test("literal initializers with no call are not effects", () => {
     const source = [
-      "const name = \"api\";",
+      'const name = "api";',
       "const retries = 3;",
-      "const options = { retries: 3, nested: { mode: \"fast\" } };",
-      "const modes = [\"fast\", \"slow\"];",
+      'const options = { retries: 3, nested: { mode: "fast" } };',
+      'const modes = ["fast", "slow"];',
       "const label = `mode: ${name}`;",
       "const chosen = retries > 2 ? modes[0] : modes[1];",
       "let mutable;",
@@ -234,7 +226,7 @@ describe("a module with nothing to report", () => {
       "",
       "export const DEFAULT_OPTIONS: Options = { retries: 3 };",
       "",
-      "const SEPARATOR = \", \";",
+      'const SEPARATOR = ", ";',
       "",
       "export class Formatter {",
       "  private readonly rows: Row[] = [];",
@@ -264,20 +256,13 @@ describe("a module with nothing to report", () => {
 
 describe("script kind", () => {
   test("parses .tsx as TSX, so JSX does not become a wall of syntax errors", () => {
-    const source = [
-      "export function Panel() {",
-      "  return <div className=\"panel\">{label()}</div>;",
-      "}",
-      "",
-    ].join("\n");
+    const source = ["export function Panel() {", '  return <div className="panel">{label()}</div>;', "}", ""].join("\n");
     // Parsed as TSX the JSX is a return expression inside a function body, so
     // there is nothing to report.
     expect(evaluationEffects(source, "/workspace/apps/web/src/panel.tsx")).toEqual([]);
     // And effects in a .tsx file are still found: the parse is not the reason
     // the case above is empty.
-    expect(kinds(`${source}register(Panel);\n`, "/workspace/apps/web/src/panel.tsx")).toEqual([
-      "expression-statement",
-    ]);
+    expect(kinds(`${source}register(Panel);\n`, "/workspace/apps/web/src/panel.tsx")).toEqual(["expression-statement"]);
   });
 });
 

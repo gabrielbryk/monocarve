@@ -6,8 +6,8 @@ import { parseArgs } from "../src/cli.ts";
 import { parseConfig } from "../src/config.ts";
 import { applicationOwner } from "../src/config/helpers.ts";
 import { hashText, isFileState, MISSING } from "../src/util/hash.ts";
-import { renderTemplate, templatePlaceholders } from "../src/util/template.ts";
 import { relativeWorkspacePath, workspacePath } from "../src/util/paths.ts";
+import { renderTemplate, templatePlaceholders } from "../src/util/template.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = resolve(here, "../fixtures/basic-monorepo");
@@ -23,12 +23,9 @@ describe("utilities", () => {
   });
 
   test("templates render known placeholders and refuse unknown ones", () => {
-    expect(
-      renderTemplate("refactor({package}): move into {packageRoot}", {
-        package: "@acme/chart",
-        packageRoot: "libs/chart",
-      }),
-    ).toBe("refactor(@acme/chart): move into libs/chart");
+    expect(renderTemplate("refactor({package}): move into {packageRoot}", { package: "@acme/chart", packageRoot: "libs/chart" })).toBe(
+      "refactor(@acme/chart): move into libs/chart",
+    );
     expect(templatePlaceholders("{a} {b} {a}")).toEqual(["a", "b"]);
     expect(() => renderTemplate("{missing}", {})).toThrow(/unknown placeholder/);
   });
@@ -47,18 +44,7 @@ describe("utilities", () => {
   });
 
   test("cli parses flags, values, repeats, and subcommands", () => {
-    const args = parseArgs([
-      "plan",
-      "--candidate",
-      "c-1",
-      "--out=plans/plan.json",
-      "--graph",
-      "web=a.json",
-      "--graph",
-      "api=b.json",
-      "-j",
-      "extra",
-    ]);
+    const args = parseArgs(["plan", "--candidate", "c-1", "--out=plans/plan.json", "--graph", "web=a.json", "--graph", "api=b.json", "-j", "extra"]);
     expect(args.command).toBe("plan");
     expect(args.flags.get("candidate")).toBe("c-1");
     expect(args.flags.get("out")).toBe("plans/plan.json");
@@ -69,12 +55,7 @@ describe("utilities", () => {
 
   test("uses an explicit exact-root application owner when configured", () => {
     const config = parseConfig({
-      applications: [{
-        name: "worker",
-        sourceRoot: "apps/worker",
-        ownerRoot: "apps/worker",
-        tsconfig: "apps/worker/tsconfig.json",
-      }],
+      applications: [{ name: "worker", sourceRoot: "apps/worker", ownerRoot: "apps/worker", tsconfig: "apps/worker/tsconfig.json" }],
       packageRoots: ["libs"],
       scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
     });

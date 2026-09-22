@@ -9,10 +9,7 @@ import type { CompatibilityShim } from "./types.ts";
  * workspace package surface. This is evidence for a compatibility migration,
  * never permission to rewrite or delete the module.
  */
-export function detectCompatibilityShims(
-  context: WorkspaceContext,
-  graph: DependencyGraph,
-): readonly CompatibilityShim[] {
+export function detectCompatibilityShims(context: WorkspaceContext, graph: DependencyGraph): readonly CompatibilityShim[] {
   const packageNames = [...graph.workspace.packageNames.keys()].sort();
   const result: CompatibilityShim[] = [];
   for (const path of graph.paths) {
@@ -54,7 +51,7 @@ export function describePureReexport(
     } else if (clause.namedBindings) return undefined;
   }
   const directSpecifiers = exports.flatMap((statement) =>
-    statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier) ? [statement.moduleSpecifier.text] : []
+    statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier) ? [statement.moduleSpecifier.text] : [],
   );
   const unique = [...new Set([...importSpecifiers, ...directSpecifiers])];
   if (unique.length !== 1) return undefined;

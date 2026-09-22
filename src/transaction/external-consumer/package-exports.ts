@@ -7,9 +7,7 @@ export function exportTarget(value: unknown): string | undefined {
   if (Array.isArray(value)) return value.map(exportTarget).find((target) => target !== undefined);
   if (!value || typeof value !== "object") return undefined;
   const conditions = value as Record<string, unknown>;
-  return ["types", "import", "default", "require"]
-    .map((key) => exportTarget(conditions[key]))
-    .find((target) => target !== undefined);
+  return ["types", "import", "default", "require"].map((key) => exportTarget(conditions[key])).find((target) => target !== undefined);
 }
 
 /** The `types` condition of an `exports` value, and only that. */
@@ -18,9 +16,7 @@ export function typesCondition(value: unknown): string | undefined {
   if (Array.isArray(value)) return value.map(typesCondition).find((target) => target !== undefined);
   const conditions = value as Record<string, unknown>;
   if (typeof conditions.types === "string") return conditions.types;
-  return ["import", "default", "require"]
-    .map((key) => typesCondition(conditions[key]))
-    .find((target) => target !== undefined);
+  return ["import", "default", "require"].map((key) => typesCondition(conditions[key])).find((target) => target !== undefined);
 }
 
 /** The `./sub` keys of an `exports` map; empty when the field is absent or bare. */

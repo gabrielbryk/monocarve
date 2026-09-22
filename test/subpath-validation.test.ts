@@ -25,7 +25,8 @@ const ENTRYPOINT = `${PACKAGE_ROOT}/src/index.ts`;
 const alphaSource = "export const alpha = 1;\n";
 const betaSource = "export type Beta = { value: number };\n";
 const consumerSource = 'import { alpha } from "./alpha.ts";\nimport type { Beta } from "./beta.ts";\nexport const value: Beta = { value: alpha };\n';
-const rewrittenConsumer = 'import { alpha } from "@acme/analytics/alpha";\nimport type { Beta } from "@acme/analytics/beta";\nexport const value: Beta = { value: alpha };\n';
+const rewrittenConsumer =
+  'import { alpha } from "@acme/analytics/alpha";\nimport type { Beta } from "@acme/analytics/beta";\nexport const value: Beta = { value: alpha };\n';
 const barrel = 'export * from "./alpha.ts";\nexport * from "./beta.ts";\n';
 
 function setup(): { root: string; config: MonocarveConfig; manifest: ExtractionManifest } {
@@ -40,11 +41,7 @@ function setup(): { root: string; config: MonocarveConfig; manifest: ExtractionM
   const config = fixtureConfig(root, {
     scaffoldTemplates: {
       packageJson: { contents: "{}" },
-      publicSurface: {
-        mode: "subpaths",
-        keyTemplate: "./{pathNoExtension}",
-        targetTemplate: "./src/{path}",
-      },
+      publicSurface: { mode: "subpaths", keyTemplate: "./{pathNoExtension}", targetTemplate: "./src/{path}" },
     },
   });
 
@@ -105,14 +102,7 @@ function setup(): { root: string; config: MonocarveConfig; manifest: ExtractionM
     dependencies: { runtime: {}, dev: {}, packageReferences: [] },
     sourceBlobs: { [ALPHA]: hashText(alphaSource), [BETA]: hashText(betaSource) },
     operations,
-    consumers: [{
-      file: CONSUMER,
-      owner: "apps/api",
-      expectedImporter: "./alpha.ts",
-      specifiers: rewrites,
-      external: false,
-      dependencySection: "runtime",
-    }],
+    consumers: [{ file: CONSUMER, owner: "apps/api", expectedImporter: "./alpha.ts", specifiers: rewrites, external: false, dependencySection: "runtime" }],
     generatedFiles: [],
     changedFiles: [ALPHA, ALPHA_TARGET, BETA, BETA_TARGET, CONSUMER, ENTRYPOINT].sort(),
     expectedDynamicImportDelta: { added: [], removed: [] },
@@ -152,24 +142,14 @@ describe("public subpath plan validation", () => {
       rmSync(`${root}/${module.source}`);
     }
     const [alpha, ...rest] = manifest.target.publicModules!;
-    const forged: ExtractionManifest = {
-      ...manifest,
-      target: { ...manifest.target, publicModules: [{ ...alpha!, requiredExports: [] }, ...rest] },
-    };
-    expect(() => assertPlanValid(forged, { config, rootDir: root })).toThrow(
-      "public module map does not match configured surface templates",
-    );
+    const forged: ExtractionManifest = { ...manifest, target: { ...manifest.target, publicModules: [{ ...alpha!, requiredExports: [] }, ...rest] } };
+    expect(() => assertPlanValid(forged, { config, rootDir: root })).toThrow("public module map does not match configured surface templates");
   });
 
   test("rejects baseline bytes that disagree with the recorded source blob", () => {
     const { root, config, manifest } = setup();
-    const forged: ExtractionManifest = {
-      ...manifest,
-      sourceBlobs: { ...manifest.sourceBlobs, [ALPHA]: hashText("different bytes\n") },
-    };
-    expect(() => assertPlanValid(forged, { config, rootDir: root })).toThrow(
-      `baseline source does not match recorded source blob: ${ALPHA}`,
-    );
+    const forged: ExtractionManifest = { ...manifest, sourceBlobs: { ...manifest.sourceBlobs, [ALPHA]: hashText("different bytes\n") } };
+    expect(() => assertPlanValid(forged, { config, rootDir: root })).toThrow(`baseline source does not match recorded source blob: ${ALPHA}`);
   });
 
   test.each([
@@ -179,31 +159,18 @@ describe("public subpath plan validation", () => {
   ] as const)("rejects %s public-module export evidence", (_label, requiredExports) => {
     const { root, config, manifest } = setup();
     const [alpha, ...rest] = manifest.target.publicModules!;
-    const forged: ExtractionManifest = {
-      ...manifest,
-      target: {
-        ...manifest.target,
-        publicModules: [{ ...alpha!, requiredExports }, ...rest],
-      },
-    };
+    const forged: ExtractionManifest = { ...manifest, target: { ...manifest.target, publicModules: [{ ...alpha!, requiredExports }, ...rest] } };
 
-    expect(() => assertPlanValid(forged, { config, rootDir: root })).toThrow(
-      "public module map does not match configured surface templates",
-    );
+    expect(() => assertPlanValid(forged, { config, rootDir: root })).toThrow("public module map does not match configured surface templates");
   });
 
   test("rejects two valid public subpaths swapped between their donors", () => {
     const { root, config, manifest } = setup();
-    const swapped = manifest.consumers[0]!.specifiers.map((rewrite) => ({
-      ...rewrite,
-      to: rewrite.donor === ALPHA ? `${PACKAGE}/beta` : `${PACKAGE}/alpha`,
-    }));
+    const swapped = manifest.consumers[0]!.specifiers.map((rewrite) => ({ ...rewrite, to: rewrite.donor === ALPHA ? `${PACKAGE}/beta` : `${PACKAGE}/alpha` }));
     const forged: ExtractionManifest = {
       ...manifest,
       consumers: [{ ...manifest.consumers[0]!, specifiers: swapped }],
-      operations: manifest.operations.map((operation) =>
-        operation.kind === "rewrite-import" ? { ...operation, rewrites: swapped } : operation,
-      ),
+      operations: manifest.operations.map((operation) => (operation.kind === "rewrite-import" ? { ...operation, rewrites: swapped } : operation)),
     };
 
     const result = validatePlan(forged, { config, rootDir: root });
@@ -222,13 +189,9 @@ describe("public subpath plan validation", () => {
     const forged: ExtractionManifest = {
       ...manifest,
       consumers: [{ ...manifest.consumers[0]!, specifiers: withoutDonor }],
-      operations: manifest.operations.map((operation) =>
-        operation.kind === "rewrite-import" ? { ...operation, rewrites: withoutDonor } : operation,
-      ),
+      operations: manifest.operations.map((operation) => (operation.kind === "rewrite-import" ? { ...operation, rewrites: withoutDonor } : operation)),
     };
 
-    expect(() => assertPlanValid(forged, { config, rootDir: root })).toThrow(
-      `rewrite targeting public subpath ${PACKAGE}/alpha must name its donor`,
-    );
+    expect(() => assertPlanValid(forged, { config, rootDir: root })).toThrow(`rewrite targeting public subpath ${PACKAGE}/alpha must name its donor`);
   });
 });

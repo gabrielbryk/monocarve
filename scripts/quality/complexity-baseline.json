@@ -9,21 +9,24 @@
   "src/commands/planning.ts": {
     "maxCognitive": 37,
     "maxCyclo": 37,
-    "structuralScore": 124.8
+    "maxMethodLoc": 81,
+    "structuralScore": 125.7
   },
   "src/commands/preparation-boundary.ts": {
-    "maxCyclo": 16
+    "maxCyclo": 16,
+    "maxMethodLoc": 94
   },
   "src/commands/preparation.ts": {
     "maxCognitive": 36,
     "maxCyclo": 28,
-    "structuralScore": 114.6
+    "maxMethodLoc": 114,
+    "structuralScore": 118.6
   },
   "src/commands/reconciliation.ts": {
     "maxCyclo": 22
   },
   "src/config/profiles.ts": {
-    "structuralScore": 106.2
+    "structuralScore": 107.2
   },
   "src/config/schema-artifacts.ts": {
     "maxCognitive": 31
@@ -31,47 +34,52 @@
   "src/consolidation/candidate.ts": {
     "maxCyclo": 16
   },
+  "src/consolidation/plan-manifest.ts": {
+    "maxMethodLoc": 91
+  },
   "src/doctor/config-doctor.ts": {
     "maxCognitive": 43,
     "maxCyclo": 26,
     "maxNest": 9,
-    "structuralScore": 142.7
+    "structuralScore": 143.6
   },
   "src/evacuation/assessment.ts": {
-    "maxMethodLoc": 81
+    "maxMethodLoc": 83
   },
   "src/graph/build.ts": {
     "maxCognitive": 38,
     "maxCyclo": 22,
-    "maxMethodLoc": 109,
-    "structuralScore": 135.5
+    "maxMethodLoc": 95,
+    "structuralScore": 134.1
   },
   "src/graph/syntax.ts": {
     "maxCognitive": 30,
     "maxCyclo": 24,
-    "structuralScore": 101.8
+    "structuralScore": 100.6
   },
   "src/plan/build-support.ts": {
     "maxCognitive": 41,
     "maxCyclo": 25,
-    "structuralScore": 120.9
+    "structuralScore": 122.8
   },
   "src/plan/build.ts": {
     "maxCognitive": 36,
     "maxCyclo": 20,
-    "structuralScore": 105.6
+    "maxMethodLoc": 183,
+    "structuralScore": 119.8
   },
   "src/plan/context.ts": {
     "maxCognitive": 43,
     "maxCyclo": 25,
-    "structuralScore": 162.4
+    "structuralScore": 161.5
   },
   "src/plan/integration-tests.ts": {
     "maxCyclo": 16,
-    "maxMethodLoc": 114
+    "maxMethodLoc": 141
   },
   "src/plan/module-promotion.ts": {
-    "maxCyclo": 27
+    "maxCyclo": 27,
+    "maxMethodLoc": 98
   },
   "src/plan/path-reference-rewrites.ts": {
     "maxCognitive": 28,
@@ -80,7 +88,7 @@
   "src/plan/path-references.ts": {
     "maxCognitive": 38,
     "maxCyclo": 21,
-    "structuralScore": 138
+    "structuralScore": 138.2
   },
   "src/plan/public-surface.ts": {
     "maxCognitive": 26,
@@ -93,38 +101,38 @@
     "maxCognitive": 54,
     "maxCyclo": 33,
     "maxNest": 13,
-    "structuralScore": 193.6
+    "structuralScore": 193.2
   },
   "src/plan/validation/integration.ts": {
     "maxCognitive": 43,
     "maxCyclo": 25,
-    "structuralScore": 148.7
+    "structuralScore": 150.9
   },
   "src/plan/validation/metadata.ts": {
-    "structuralScore": 101.5
+    "structuralScore": 101.8
   },
   "src/plan/validation/operations.ts": {
     "maxCognitive": 32,
     "maxCyclo": 24,
-    "structuralScore": 116.9
+    "structuralScore": 117.3
   },
   "src/plan/validation/path-reference.ts": {
     "maxCognitive": 44,
     "maxCyclo": 23,
-    "structuralScore": 174
+    "structuralScore": 174.2
   },
   "src/plan/validation/target.ts": {
     "maxCognitive": 32,
     "maxCyclo": 24,
-    "maxMethodLoc": 87,
-    "structuralScore": 122.3
+    "maxMethodLoc": 83,
+    "structuralScore": 121.9
   },
   "src/portfolio/communities.ts": {
     "maxNest": 9
   },
   "src/portfolio/rank-assessment.ts": {
     "maxCyclo": 20,
-    "maxMethodLoc": 117
+    "maxMethodLoc": 98
   },
   "src/portfolio/recommendation.ts": {
     "maxCyclo": 17
@@ -138,35 +146,40 @@
   "src/prepare/audit.ts": {
     "maxCognitive": 30,
     "maxCyclo": 23,
-    "maxMethodLoc": 99,
+    "maxMethodLoc": 102,
     "maxNest": 9,
-    "structuralScore": 119.2
+    "structuralScore": 119.5
   },
   "src/prepare/boundary-port.ts": {
     "maxCognitive": 29,
     "maxCyclo": 18,
-    "structuralScore": 104.3
+    "structuralScore": 105.4
+  },
+  "src/prepare/build-boundary.ts": {
+    "maxMethodLoc": 86
   },
   "src/prepare/build.ts": {
     "maxCognitive": 32,
     "maxCyclo": 34,
-    "maxMethodLoc": 193,
-    "structuralScore": 102.7
+    "maxMethodLoc": 259,
+    "structuralScore": 109.3
   },
   "src/prepare/generated-source-adoption.ts": {
     "maxCognitive": 30,
-    "maxCyclo": 21
+    "maxCyclo": 21,
+    "maxMethodLoc": 105
   },
   "src/prepare/manifest-recipe.ts": {
     "maxCognitive": 30,
     "maxCyclo": 25,
-    "structuralScore": 100.7
+    "structuralScore": 101
   },
   "src/prepare/manifest.ts": {
     "maxCognitive": 37,
     "maxCyclo": 37,
+    "maxMethodLoc": 85,
     "maxNest": 9,
-    "structuralScore": 133.7
+    "structuralScore": 136.5
   },
   "src/prepare/multi-build.ts": {
     "maxCyclo": 17
@@ -177,23 +190,24 @@
   "src/prepare/selectors.ts": {
     "maxCognitive": 28,
     "maxNest": 9,
-    "structuralScore": 108.4
+    "structuralScore": 109.7
   },
   "src/prepare/simulate.ts": {
-    "maxCyclo": 16
+    "maxCyclo": 16,
+    "maxMethodLoc": 108
   },
   "src/prepare/value-split.ts": {
     "maxCognitive": 45,
     "maxCyclo": 34,
-    "maxMethodLoc": 94,
-    "structuralScore": 133.8
+    "maxMethodLoc": 110,
+    "structuralScore": 135.4
   },
   "src/reconciliation/evidence.ts": {
     "maxCyclo": 23
   },
   "src/reconciliation/receipt.ts": {
     "maxCyclo": 16,
-    "structuralScore": 126.1
+    "structuralScore": 127.4
   },
   "src/reconciliation/validate.ts": {
     "maxCyclo": 18
@@ -202,7 +216,7 @@
     "maxCognitive": 45,
     "maxCyclo": 22,
     "maxNest": 11,
-    "structuralScore": 165.6
+    "structuralScore": 165.7
   },
   "src/symbols/declarations.ts": {
     "maxNest": 9
@@ -213,7 +227,8 @@
   "src/transaction/audit-helpers.ts": {
     "maxCognitive": 49,
     "maxCyclo": 38,
-    "structuralScore": 142.3
+    "maxMethodLoc": 90,
+    "structuralScore": 144.9
   },
   "src/transaction/commit-evidence.ts": {
     "maxCognitive": 28,
@@ -226,7 +241,7 @@
   "src/transaction/generator-evolution.ts": {
     "maxCognitive": 35,
     "maxCyclo": 21,
-    "structuralScore": 114.5
+    "structuralScore": 116.7
   },
   "src/transaction/journal-operation.ts": {
     "maxCyclo": 22
@@ -237,7 +252,7 @@
   "src/transaction/simulate.ts": {
     "maxCognitive": 50,
     "maxCyclo": 33,
-    "maxMethodLoc": 188,
-    "structuralScore": 168.4
+    "maxMethodLoc": 212,
+    "structuralScore": 170.8
   }
 }

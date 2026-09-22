@@ -22,10 +22,10 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { rewriteResolvedImportSpecifier } from "../src/codemod/imports.ts";
+import type { DynamicImportDelta, ExtractionManifest, PlanOperation } from "../src/plan/manifest.ts";
 import { assertPlanValid } from "../src/plan/validate.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
 import { hashText } from "../src/util/hash.ts";
-import type { DynamicImportDelta, ExtractionManifest, PlanOperation } from "../src/plan/manifest.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, read, write } from "./support/fixture-repo.ts";
 
 const DONOR = "apps/api/src/widget/widget.ts";
@@ -41,13 +41,7 @@ const DYNAMIC_FAILURE = "dynamic-import evidence does not match the declared pla
 
 /** Baseline consumer text, parameterised by the dynamic imports under test. */
 function consumerSource(...dynamicLines: readonly string[]): string {
-  return [
-    'import { widgetValue } from "./widget/widget.ts";',
-    "",
-    "export const used = widgetValue + 1;",
-    ...dynamicLines,
-    "",
-  ].join("\n");
+  return ['import { widgetValue } from "./widget/widget.ts";', "", "export const used = widgetValue + 1;", ...dynamicLines, ""].join("\n");
 }
 
 function fixtureFiles(consumer: string): Record<string, string> {
@@ -90,14 +84,7 @@ function manifestFor(root: string, landedConsumer: string, delta: DynamicImportD
       preconditionHash: hashText(read(root, CONSUMER)),
       resultHash: hashText(landedConsumer),
     },
-    {
-      kind: "write-file",
-      path: ENTRYPOINT,
-      contents: BARREL,
-      preconditionHash: "missing",
-      resultHash: hashText(BARREL),
-      generator: "scaffold:entrypoint",
-    },
+    { kind: "write-file", path: ENTRYPOINT, contents: BARREL, preconditionHash: "missing", resultHash: hashText(BARREL), generator: "scaffold:entrypoint" },
   ];
 
   return {
@@ -108,12 +95,7 @@ function manifestFor(root: string, landedConsumer: string, delta: DynamicImportD
     baselineCommit: fixtureGit(root, "rev-parse", "HEAD"),
     graphDigest: hashText("dynamic-evidence-graph"),
     application: "api",
-    target: {
-      packageName: PACKAGE,
-      packageRoot: PACKAGE_ROOT,
-      entrypoint: "src/index.ts",
-      requiredExports: [{ name: "widgetValue", typeOnly: false }],
-    },
+    target: { packageName: PACKAGE, packageRoot: PACKAGE_ROOT, entrypoint: "src/index.ts", requiredExports: [{ name: "widgetValue", typeOnly: false }] },
     source: { files: [DONOR], tests: [], sccs: { "scc-fixture": [DONOR] } },
     dependencies: { runtime: {}, dev: {}, packageReferences: [] },
     sourceBlobs: { [DONOR]: donorHash },
@@ -216,10 +198,7 @@ describe("dynamic-import evidence", () => {
     // Two identical dynamic imports before, one after: a set diff sees nothing
     // removed, because the specifier is still there.
     const { root, config, manifest } = landed({
-      consumer: consumerSource(
-        'export const first = () => import("./alpha.ts");',
-        'export const second = () => import("./alpha.ts");',
-      ),
+      consumer: consumerSource('export const first = () => import("./alpha.ts");', 'export const second = () => import("./alpha.ts");'),
       delta: { added: [], removed: [] },
       land: (baseline, root) => repointed(baseline, root).replace('export const second = () => import("./alpha.ts");\n', ""),
     });

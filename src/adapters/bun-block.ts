@@ -8,8 +8,8 @@
  * entry drift with the audit still green.
  */
 
-import { LockfileError } from "./lockfile-error.ts";
 import { jsonString, parseJsonString } from "./bun-lock.ts";
+import { LockfileError } from "./lockfile-error.ts";
 
 /** The dependency maps bun writes inside a `workspaces` entry, in its order. */
 export const BUN_SECTIONS = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"] as const;

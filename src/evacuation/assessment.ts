@@ -6,10 +6,10 @@ import { partitionTests } from "../plan/consumers.ts";
 import { WorkspaceContext } from "../plan/context.ts";
 import { buildPathReferenceIndex, type PathReferenceIndex } from "../plan/path-references.ts";
 import { estimateCandidateEffort } from "../portfolio/effort.ts";
-import { recommendCandidate } from "../portfolio/recommendation.ts";
-import { preparationRecipe } from "../portfolio/recipe.ts";
 import { assessCandidate, dedupeReasons, planabilityRejections, protectedPathRejections } from "../portfolio/rank-assessment.ts";
 import { scoreCandidate, suggestedPackageName } from "../portfolio/rank.ts";
+import { preparationRecipe } from "../portfolio/recipe.ts";
+import { recommendCandidate } from "../portfolio/recommendation.ts";
 import { detectCompatibilityShims } from "../portfolio/shims.ts";
 import type { PortfolioCandidate } from "../portfolio/types.ts";
 import { byCodeUnit } from "../util/hash.ts";
@@ -58,23 +58,25 @@ export function assessEvacuationCandidate(options: AssessEvacuationOptions): Ass
   } catch (error) {
     partitionFailure = error;
   }
-  const assessment = partitionFailure === undefined
-    ? assessCandidate(config, context, pathReferences, graph, aggregate, evacuation.files, closureReports, owners, domains, tests)
-    : firstAssessment;
+  const assessment =
+    partitionFailure === undefined
+      ? assessCandidate(config, context, pathReferences, graph, aggregate, evacuation.files, closureReports, owners, domains, tests)
+      : firstAssessment;
   const includedComposition = new Set(options.includedCompositionRoots ?? []);
-  const allCompositionRootsIncluded = includedComposition.size > 0 && evacuation.files
-    .filter((path) => isCompositionRoot(config, path))
-    .every((path) => includedComposition.has(path));
-  const rejections = assessment.rejections.filter((reason) =>
-    reason.code !== "composition-root" || !allCompositionRootsIncluded,
-  );
+  const allCompositionRootsIncluded =
+    includedComposition.size > 0 && evacuation.files.filter((path) => isCompositionRoot(config, path)).every((path) => includedComposition.has(path));
+  const rejections = assessment.rejections.filter((reason) => reason.code !== "composition-root" || !allCompositionRootsIncluded);
   if (partitionFailure !== undefined) {
-    rejections.push({ code: "unplannable", detail: `test relocation: ${partitionFailure instanceof Error ? partitionFailure.message : String(partitionFailure)}`, edges: [] });
+    rejections.push({
+      code: "unplannable",
+      detail: `test relocation: ${partitionFailure instanceof Error ? partitionFailure.message : String(partitionFailure)}`,
+      edges: [],
+    });
     tests = directTests;
   }
   const authorized = new Set(options.authorizedProtectedRoots ?? []);
-  const protectedMovable = [...evacuation.files, ...tests, ...assessment.assets].filter((path) =>
-    ![...authorized].some((root) => path === root || path.startsWith(`${root}/`)),
+  const protectedMovable = [...evacuation.files, ...tests, ...assessment.assets].filter(
+    (path) => ![...authorized].some((root) => path === root || path.startsWith(`${root}/`)),
   );
   rejections.push(...protectedPathRejections(config, protectedMovable));
   rejections.push(...planabilityRejections(config, context, graph, evacuation.files, tests, evacuation.id));
@@ -149,8 +151,13 @@ function aggregateReport(
     frameworkDependencies: [...new Set(reports.flatMap((report) => report.frameworkDependencies))].sort(byCodeUnit),
     archetype: "module-candidate",
     generated: reports.flatMap((report) => report.generated).sort((left, right) => byCodeUnit(left.node, right.node)),
-    dynamicImports: directEdges.filter((edge) => edge.dynamic).map((edge) => edge.specifier).sort(byCodeUnit),
+    dynamicImports: directEdges
+      .filter((edge) => edge.dynamic)
+      .map((edge) => edge.specifier)
+      .sort(byCodeUnit),
     typeOnlyEdges: directEdges.filter((edge) => edge.typeOnly).length,
-    flags: [...new Set(reports.flatMap((report) => report.flags).filter((flag) => flag !== "composition-root" && flag !== "composition-or-route"))].sort(byCodeUnit),
+    flags: [...new Set(reports.flatMap((report) => report.flags).filter((flag) => flag !== "composition-root" && flag !== "composition-or-route"))].sort(
+      byCodeUnit,
+    ),
   };
 }

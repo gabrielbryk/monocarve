@@ -18,12 +18,7 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 
-import {
-  boundaryBaselineDefects,
-  boundaryBaselineDigest,
-  boundaryBaselineOf,
-  collectBoundaryEdges,
-} from "../src/plan/boundary-baseline.ts";
+import { boundaryBaselineDefects, boundaryBaselineDigest, boundaryBaselineOf, collectBoundaryEdges } from "../src/plan/boundary-baseline.ts";
 import { WorkspaceContext } from "../src/plan/context.ts";
 import type { BoundaryBaselineRecord, ExtractionManifest } from "../src/plan/manifest.ts";
 import { formatPlanReview, summarizePlanReview } from "../src/plan/review.ts";
@@ -51,12 +46,7 @@ function filesWithPreExistingViolation(): Record<string, string> {
 
 function baselineFor(root: string, config: ReturnType<typeof fixtureConfig>): BoundaryBaselineRecord {
   const context = new WorkspaceContext(config, root);
-  return boundaryBaselineOf({
-    config,
-    rootDir: root,
-    files: context.repositorySources(),
-    referencesOf: (file) => context.moduleReferences(file),
-  });
+  return boundaryBaselineOf({ config, rootDir: root, files: context.repositorySources(), referencesOf: (file) => context.moduleReferences(file) });
 }
 
 describe("boundary baseline — what the compiler records", () => {
@@ -85,23 +75,24 @@ describe("boundary baseline — what the compiler records", () => {
   test("edges are deduplicated and canonically ordered regardless of discovery order", () => {
     const config = fixtureConfig(fixtureRepo(extractionFiles()));
     const references = new Map<string, { specifier: string; resolved: string }[]>([
-      ["libs/b/src/index.ts", [
-        { specifier: "./z.ts", resolved: "/repo/apps/api/src/z.ts" },
-        { specifier: "../../../apps/api/src/a.ts", resolved: "/repo/apps/api/src/a.ts" },
-      ]],
-      ["libs/a/src/index.ts", [
-        { specifier: "./a", resolved: "/repo/apps/api/src/a.ts" },
-        // The same edge reached through a second spelling of the same module.
-        { specifier: "./a.ts", resolved: "/repo/apps/api/src/a.ts" },
-      ]],
+      [
+        "libs/b/src/index.ts",
+        [
+          { specifier: "./z.ts", resolved: "/repo/apps/api/src/z.ts" },
+          { specifier: "../../../apps/api/src/a.ts", resolved: "/repo/apps/api/src/a.ts" },
+        ],
+      ],
+      [
+        "libs/a/src/index.ts",
+        [
+          { specifier: "./a", resolved: "/repo/apps/api/src/a.ts" },
+          // The same edge reached through a second spelling of the same module.
+          { specifier: "./a.ts", resolved: "/repo/apps/api/src/a.ts" },
+        ],
+      ],
     ]);
 
-    const edges = collectBoundaryEdges({
-      config,
-      rootDir: "/repo",
-      files: [...references.keys()],
-      referencesOf: (file) => references.get(file) ?? [],
-    });
+    const edges = collectBoundaryEdges({ config, rootDir: "/repo", files: [...references.keys()], referencesOf: (file) => references.get(file) ?? [] });
 
     expect(edges).toEqual([
       { file: "libs/a/src/index.ts", target: "apps/api/src/a.ts" },
@@ -125,11 +116,7 @@ describe("boundary baseline — what the audit does with it", () => {
 
     expect(report.boundaryRules.failures).toEqual([]);
     expect(report.failures).not.toContain(LEGACY_FAILURE);
-    expect(report.boundaryBaseline).toEqual({
-      recorded: 1,
-      observed: [`${LEGACY_IMPORTER} -> ${LEGACY_TARGET}`],
-      cleared: [],
-    });
+    expect(report.boundaryBaseline).toEqual({ recorded: 1, observed: [`${LEGACY_IMPORTER} -> ${LEGACY_TARGET}`], cleared: [] });
   }, 60_000);
 
   test("the same edge fails when the reviewed plan did not record it", () => {
@@ -150,10 +137,7 @@ describe("boundary baseline — what the audit does with it", () => {
   test("an empty recorded baseline is not a waiver either", () => {
     const root = fixtureRepo(filesWithPreExistingViolation());
     const config = fixtureConfig(root);
-    const manifest: ExtractionManifest = {
-      ...baseManifest(root),
-      boundaryBaseline: { digest: boundaryBaselineDigest([]), edges: [] },
-    };
+    const manifest: ExtractionManifest = { ...baseManifest(root), boundaryBaseline: { digest: boundaryBaselineDigest([]), edges: [] } };
     landOnDisk(root, manifest);
 
     expect(auditPlanSync({ config, rootDir: root, manifest }).boundaryRules.failures).toContain(LEGACY_FAILURE);
@@ -171,9 +155,7 @@ describe("boundary baseline — what the audit does with it", () => {
       ...base,
       boundaryBaseline: baselineFor(root, config),
       operations: base.operations.map((operation) =>
-        operation.kind === "write-file" && operation.path === ENTRYPOINT
-          ? { ...operation, contents: barrel, resultHash: hashText(barrel) }
-          : operation,
+        operation.kind === "write-file" && operation.path === ENTRYPOINT ? { ...operation, contents: barrel, resultHash: hashText(barrel) } : operation,
       ),
     };
     expect(manifest.operations).not.toEqual(base.operations);
@@ -191,10 +173,7 @@ describe("boundary baseline — what the audit does with it", () => {
   test("a recorded edge the transaction removed is reported as cleared, not as evidence of one", () => {
     const root = fixtureRepo(extractionFiles());
     const config = fixtureConfig(root);
-    const manifest: ExtractionManifest = {
-      ...baseManifest(root),
-      boundaryBaseline: { digest: boundaryBaselineDigest([LEGACY_EDGE]), edges: [LEGACY_EDGE] },
-    };
+    const manifest: ExtractionManifest = { ...baseManifest(root), boundaryBaseline: { digest: boundaryBaselineDigest([LEGACY_EDGE]), edges: [LEGACY_EDGE] } };
     landOnDisk(root, manifest);
 
     const report = auditPlanSync({ config, rootDir: root, manifest });
@@ -219,8 +198,9 @@ describe("boundary baseline — canonical form", () => {
 
   test("a digest that does not describe its edges is a defect", () => {
     const widened = [LEGACY_EDGE, { file: "libs/legacy/src/other.ts", target: LEGACY_TARGET }];
-    expect(boundaryBaselineDefects({ digest: boundaryBaselineDigest([LEGACY_EDGE]), edges: widened }))
-      .toContain("recorded boundary baseline digest does not match its edges");
+    expect(boundaryBaselineDefects({ digest: boundaryBaselineDigest([LEGACY_EDGE]), edges: widened })).toContain(
+      "recorded boundary baseline digest does not match its edges",
+    );
   });
 
   test("unsorted and duplicated edges are defects", () => {

@@ -13,22 +13,22 @@ import { flagBool, flagString, flagStrings, type ParsedArgs } from "../cli/args.
 import { renderPreparationPolicy } from "../config.ts";
 import { UsageError } from "../errors.ts";
 import { buildApplicationGraph } from "../graph/components.ts";
-import { applyPreparation } from "../prepare/apply.ts";
-import { compileModulePromotion, modulePromotionImporterEvidence } from "../plan/module-promotion.ts";
 import { parseManifest, serializeManifest } from "../plan/build.ts";
 import { isExtractionManifestLike } from "../plan/manifest.ts";
-import { applyPlan } from "../transaction/apply.ts";
-import { simulatePlan } from "../transaction/simulate.ts";
+import { compileModulePromotion, modulePromotionImporterEvidence } from "../plan/module-promotion.ts";
+import { applyPreparation } from "../prepare/apply.ts";
+import { resolveBoundaries } from "../prepare/boundary-resolve.ts";
 import { compileBoundaryPreparationManifest } from "../prepare/build.ts";
 import { compileGeneratedSourceAdoption, generatedSourceAdoptionPolicyAnchor } from "../prepare/generated-source-adoption.ts";
-import { compileValueSplit } from "../prepare/value-split.ts";
-import { resolveBoundaries } from "../prepare/boundary-resolve.ts";
-import { simulatePreparation } from "../prepare/simulate.ts";
 import { serializePreparationManifest } from "../prepare/index.ts";
+import { simulatePreparation } from "../prepare/simulate.ts";
+import { compileValueSplit } from "../prepare/value-split.ts";
+import { applyPlan } from "../transaction/apply.ts";
+import { simulatePlan } from "../transaction/simulate.ts";
 import { relativeWorkspacePath } from "../util/paths.ts";
-import type { CommandSpec } from "./types.ts";
-import { graphDigest, load, loadGraph, loadManifest, outputPath, print, writeOutput, type LoadedGraph } from "./shared.ts";
 import { loadPreparationManifest, readWorkspaceText, requiredFlag } from "./preparation.ts";
+import { graphDigest, load, loadGraph, loadManifest, outputPath, print, writeOutput, type LoadedGraph } from "./shared.ts";
+import type { CommandSpec } from "./types.ts";
 
 /** Read-only: resolve one declared boundary and its baseline importer candidates. */
 async function boundaryReview(args: ParsedArgs): Promise<void> {
@@ -40,7 +40,7 @@ async function boundaryReview(args: ParsedArgs): Promise<void> {
     const application = loaded.graph.nodes.get(promotion.source)?.application;
     const appGraph = buildApplicationGraph(loaded.graph, application);
     const componentId = appGraph.condensed.componentByNode.get(promotion.source);
-    const candidateScc = componentId === undefined ? [] : appGraph.condensed.components[componentId] ?? [];
+    const candidateScc = componentId === undefined ? [] : (appGraph.condensed.components[componentId] ?? []);
     print({ schema: "boundary-review", kind: "module-promotion", promotion, candidateImporters, candidateScc }, args);
     return;
   }
@@ -65,7 +65,14 @@ async function boundaryCompile(args: ParsedArgs): Promise<void> {
   const id = requiredFlag(args, "id");
   const promotion = loaded.config.modulePromotions.find((item) => item.id === id);
   if (promotion) {
-    const manifest = compileModulePromotion({ rootDir: loaded.rootDir, config: loaded.config, graph: loaded.graph, context: loaded.context, baselineCommit: loaded.graph.commit ?? "HEAD", promotionId: id });
+    const manifest = compileModulePromotion({
+      rootDir: loaded.rootDir,
+      config: loaded.config,
+      graph: loaded.graph,
+      context: loaded.context,
+      baselineCommit: loaded.graph.commit ?? "HEAD",
+      promotionId: id,
+    });
     const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
     const written = flagBool(args, "write");
     if (written) writeOutput(loaded.rootDir, out, serializeManifest(manifest), { exclusive: true });
@@ -77,7 +84,16 @@ async function boundaryCompile(args: ParsedArgs): Promise<void> {
     const policyAnchor = generatedSourceAdoptionPolicyAnchor(adoption);
     const policySpecifier = policyAnchor.targetModuleSpecifier;
     const rendering = renderPreparationPolicy(loaded.config, policyAnchor);
-    const manifest = compileGeneratedSourceAdoption({ rootDir: loaded.rootDir, config: loaded.config, graph: loaded.graph, baselineCommit: loaded.graph.commit ?? "HEAD", graphDigest: graphDigest(loaded.graph), adoptionId: id, rendering, policySpecifier });
+    const manifest = compileGeneratedSourceAdoption({
+      rootDir: loaded.rootDir,
+      config: loaded.config,
+      graph: loaded.graph,
+      baselineCommit: loaded.graph.commit ?? "HEAD",
+      graphDigest: graphDigest(loaded.graph),
+      adoptionId: id,
+      rendering,
+      policySpecifier,
+    });
     const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
     const written = flagBool(args, "write");
     if (written) writeOutput(loaded.rootDir, out, serializePreparationManifest(manifest), { exclusive: true });
@@ -86,8 +102,20 @@ async function boundaryCompile(args: ParsedArgs): Promise<void> {
   }
   const valueSplit = loaded.config.valueSplits.find((item) => item.id === id);
   if (valueSplit) {
-    const rendering = renderPreparationPolicy(loaded.config, { sourcePath: valueSplit.source, targetPath: valueSplit.target, targetModuleSpecifier: valueSplit.targetModuleSpecifier });
-    const manifest = compileValueSplit({ rootDir: loaded.rootDir, config: loaded.config, graph: loaded.graph, baselineCommit: loaded.graph.commit ?? "HEAD", graphDigest: graphDigest(loaded.graph), splitId: id, rendering });
+    const rendering = renderPreparationPolicy(loaded.config, {
+      sourcePath: valueSplit.source,
+      targetPath: valueSplit.target,
+      targetModuleSpecifier: valueSplit.targetModuleSpecifier,
+    });
+    const manifest = compileValueSplit({
+      rootDir: loaded.rootDir,
+      config: loaded.config,
+      graph: loaded.graph,
+      baselineCommit: loaded.graph.commit ?? "HEAD",
+      graphDigest: graphDigest(loaded.graph),
+      splitId: id,
+      rendering,
+    });
     const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
     const written = flagBool(args, "write");
     if (written) writeOutput(loaded.rootDir, out, serializePreparationManifest(manifest), { exclusive: true });
@@ -154,13 +182,7 @@ async function boundaryApply(args: ParsedArgs): Promise<void> {
     return;
   }
   const { path, manifest } = loadPreparationManifest(args, rootDir);
-  const result = await applyPreparation({
-    config,
-    rootDir,
-    manifest,
-    manifestPath: path,
-    ...(flagBool(args, "commit") ? { commit: true } : {}),
-  });
+  const result = await applyPreparation({ config, rootDir, manifest, manifestPath: path, ...(flagBool(args, "commit") ? { commit: true } : {}) });
   print(result, args);
   if (!result.ok) process.exitCode = 1;
 }
@@ -173,10 +195,9 @@ function isExtractionPlan(args: ParsedArgs, rootDir: string): boolean {
 }
 
 function findBoundary(loaded: LoadedGraph, boundaryId: string) {
-  const boundary = resolveBoundaries({
-    compositionBoundaries: loaded.config.compositionBoundaries,
-    portPromotions: loaded.config.portPromotions,
-  }).find((item) => item.id === boundaryId);
+  const boundary = resolveBoundaries({ compositionBoundaries: loaded.config.compositionBoundaries, portPromotions: loaded.config.portPromotions }).find(
+    (item) => item.id === boundaryId,
+  );
   if (!boundary) throw new UsageError(`unknown boundary id ${JSON.stringify(boundaryId)}`);
   return boundary;
 }
@@ -184,7 +205,8 @@ function findBoundary(loaded: LoadedGraph, boundaryId: string) {
 /** Resolve a reviewed adapter-template id (see `scaffoldTemplates.extraFiles`) to its literal body. */
 function resolveAdapterTemplateText(loaded: LoadedGraph, templateId: string): string {
   const source = loaded.config.scaffoldTemplates.extraFiles[templateId];
-  if (!source) throw new UsageError(`no scaffoldTemplates.extraFiles entry named ${JSON.stringify(templateId)}; a boundary's reviewed template must be declared there`);
+  if (!source)
+    throw new UsageError(`no scaffoldTemplates.extraFiles entry named ${JSON.stringify(templateId)}; a boundary's reviewed template must be declared there`);
   if ("contents" in source) return source.contents;
   return readWorkspaceText(loaded.rootDir, relativeWorkspacePath(loaded.rootDir, source.file), "boundary adapter template");
 }
@@ -201,8 +223,10 @@ function parseTemplateVars(args: ParsedArgs): Record<string, string> {
 
 export const boundaryCommandSpec: CommandSpec = {
   summary: "compile, review, simulate, or apply a declared architectural boundary",
-  usage: "boundary review --id <boundaryId>\n       boundary compile --id <boundaryId> [--target <path>] [--template <id>] [--var key=value ...] [--out <path>] [--write]\n       boundary simulate --plan <manifest>\n       boundary apply --plan <manifest> [--commit]",
-  details: "review reports a declared composition boundary, port promotion, module promotion, value split, or generated-source adoption and its graph-derived evidence. compile derives importer sets and declaration SCCs itself, records SCC-cut or provenance proofs where applicable, and never accepts a hand-typed importer list. simulate replays the compiled manifest in a disposable worktree; apply simulates and, with --commit, lands it.",
+  usage:
+    "boundary review --id <boundaryId>\n       boundary compile --id <boundaryId> [--target <path>] [--template <id>] [--var key=value ...] [--out <path>] [--write]\n       boundary simulate --plan <manifest>\n       boundary apply --plan <manifest> [--commit]",
+  details:
+    "review reports a declared composition boundary, port promotion, module promotion, value split, or generated-source adoption and its graph-derived evidence. compile derives importer sets and declaration SCCs itself, records SCC-cut or provenance proofs where applicable, and never accepts a hand-typed importer list. simulate replays the compiled manifest in a disposable worktree; apply simulates and, with --commit, lands it.",
   run: async (args) => {
     const action = args.positionals[0];
     const nested = { ...args, positionals: args.positionals.slice(1) };

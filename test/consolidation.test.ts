@@ -26,12 +26,7 @@ afterEach(() => {
 });
 
 const config = parseConfig({
-  applications: [{
-    name: "api",
-    sourceRoot: "apps/api/src",
-    tsconfig: "apps/api/tsconfig.json",
-    compositionRoots: [],
-  }],
+  applications: [{ name: "api", sourceRoot: "apps/api/src", tsconfig: "apps/api/tsconfig.json", compositionRoots: [] }],
   packageRoots: ["libs"],
   packageScope: "@acme/",
   portfolio: { minFiles: 1 },
@@ -90,11 +85,7 @@ function graph(
     unresolvedWorkspaceEdges: [],
     testImporters: new Map(),
     testKinds: new Map(),
-    workspace: {
-      files: [...workspaceOwners],
-      owners: workspaceOwners,
-      packageNames,
-    },
+    workspace: { files: [...workspaceOwners], owners: workspaceOwners, packageNames },
   };
 }
 
@@ -153,12 +144,7 @@ describe("consolidation candidate", () => {
     const g = graph(allFiles, edges, ["libs/target", "libs/donor1", "libs/donor2"], pkgMap);
 
     const packages = resolveConsolidationPackages(g, "@acme/target", ["@acme/donor1", "@acme/donor2"]);
-    const candidate = buildConsolidationCandidate({
-      config,
-      graph: g,
-      target: packages.target,
-      donors: packages.donors,
-    });
+    const candidate = buildConsolidationCandidate({ config, graph: g, target: packages.target, donors: packages.donors });
 
     expect(candidate.files).toHaveLength(3);
     expect(candidate.files).toContain("libs/donor1/src/handler.ts");
@@ -179,12 +165,7 @@ describe("consolidation candidate", () => {
     const g = graph(allFiles, edges, ["libs/target", "libs/donor1"], pkgMap);
 
     const packages = resolveConsolidationPackages(g, "@acme/target", ["@acme/donor1"]);
-    const candidate = buildConsolidationCandidate({
-      config,
-      graph: g,
-      target: packages.target,
-      donors: packages.donors,
-    });
+    const candidate = buildConsolidationCandidate({ config, graph: g, target: packages.target, donors: packages.donors });
 
     expect(candidate.tests).toHaveLength(1);
     expect(candidate.tests).toContain("libs/donor1/src/service.test.ts");
@@ -230,13 +211,7 @@ describe("consolidation plan", () => {
     const packages = resolveConsolidationPackages(g, "@acme/target", ["@acme/donor1"]);
     const candidate = buildConsolidationCandidate({ config, graph: g, target: packages.target, donors: packages.donors });
 
-    const manifest = buildConsolidationPlan({
-      config,
-      rootDir: root,
-      graph: g,
-      candidate,
-      baselineCommit: "HEAD",
-    });
+    const manifest = buildConsolidationPlan({ config, rootDir: root, graph: g, candidate, baselineCommit: "HEAD" });
 
     const moveOps = manifest.operations.filter((op) => op.kind === "move");
     expect(moveOps).toHaveLength(2);
@@ -266,13 +241,7 @@ describe("consolidation plan", () => {
     const packages = resolveConsolidationPackages(g, "@acme/target", ["@acme/donor1"]);
     const candidate = buildConsolidationCandidate({ config, graph: g, target: packages.target, donors: packages.donors });
 
-    const manifest = buildConsolidationPlan({
-      config,
-      rootDir: root,
-      graph: g,
-      candidate,
-      baselineCommit: "HEAD",
-    });
+    const manifest = buildConsolidationPlan({ config, rootDir: root, graph: g, candidate, baselineCommit: "HEAD" });
 
     expect(Object.keys(manifest.sourceBlobs)).toContain("libs/donor1/src/service.ts");
   });
@@ -299,13 +268,7 @@ describe("consolidation plan", () => {
     const packages = resolveConsolidationPackages(g, "@acme/target", ["@acme/donor1"]);
     const candidate = buildConsolidationCandidate({ config, graph: g, target: packages.target, donors: packages.donors });
 
-    const manifest = buildConsolidationPlan({
-      config,
-      rootDir: root,
-      graph: g,
-      candidate,
-      baselineCommit: "HEAD",
-    });
+    const manifest = buildConsolidationPlan({ config, rootDir: root, graph: g, candidate, baselineCommit: "HEAD" });
 
     expect(manifest.consumers).toHaveLength(1);
     expect(manifest.consumers[0]!.file).toBe("apps/api/src/user.ts");

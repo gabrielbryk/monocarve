@@ -2,8 +2,8 @@ import { afterAll, expect, test } from "bun:test";
 import { join } from "node:path";
 
 import { hashText } from "../src/util/hash.ts";
-import { cleanupFixtures, fixtureGit } from "./support/fixture-repo.ts";
 import { committedWorkspace, existsSync, readFileSync, runIn, runJsonIn, writeFileSync } from "./support/cli.ts";
+import { cleanupFixtures, fixtureGit } from "./support/fixture-repo.ts";
 
 afterAll(cleanupFixtures);
 
@@ -13,39 +13,44 @@ test("preparer lifecycle regenerates an RM-shaped source ledger exactly once and
   const ledger = "generated/workers-port-ledger.json";
   writeFileSync(join(root, source), "export const routeOptions = 'old';\n");
   writeFileSync(join(root, ledger), '{"routeOptions":"old","runs":0}\n');
-  writeFileSync(join(root, "scripts/generate-ledger.sh"), [
-    "#!/bin/sh",
-    "set -eu",
-    "value=$(sed -n \"s/.*'\\([^']*\\)'.*/\\1/p\" apps/web/src/route-options.ts)",
-    "runs=$(sed -n 's/.*\"runs\":\\([0-9]*\\).*/\\1/p' generated/workers-port-ledger.json)",
-    "runs=$((runs + 1))",
-    "printf '{\"routeOptions\":\"%s\",\"runs\":%s}\\n' \"$value\" \"$runs\" > generated/workers-port-ledger.json",
-    "",
-  ].join("\n"));
+  writeFileSync(
+    join(root, "scripts/generate-ledger.sh"),
+    [
+      "#!/bin/sh",
+      "set -eu",
+      "value=$(sed -n \"s/.*'\\([^']*\\)'.*/\\1/p\" apps/web/src/route-options.ts)",
+      "runs=$(sed -n 's/.*\"runs\":\\([0-9]*\\).*/\\1/p' generated/workers-port-ledger.json)",
+      "runs=$((runs + 1))",
+      'printf \'{"routeOptions":"%s","runs":%s}\\n\' "$value" "$runs" > generated/workers-port-ledger.json',
+      "",
+    ].join("\n"),
+  );
   fixtureGit(root, "add", "apps/web/src/route-options.ts", ledger, "scripts/generate-ledger.sh");
   fixtureGit(root, "commit", "-qm", "test: seed generated ledger");
 
   const configPath = join(root, "monocarve.config.json");
   const config = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
-  config.preparers = [{
-    id: "prepare-route-options",
-    phase: "pre-extraction",
-    outputs: [source],
-    replacements: [{ path: source, prefix: "export const routeOptions = ", before: "'old'", after: "'new'", suffix: ";\n" }],
-    commit: { subject: "refactor: prepare route options" },
-  }];
-  config.generatedArtifacts = {
-    artifacts: [{ path: ledger, source, regenerate: "sh scripts/generate-ledger.sh", triggers: ["^apps/web/src/"] }],
-  };
-  config.postJournalPreparers = [{
-    id: "workers-port-ledger",
-    phase: "after-journal-before-gates",
-    command: "sh scripts/generate-ledger.sh",
-    outputs: [ledger],
-    triggers: ["^apps/web/src/"],
-    verify: `grep -q '\"routeOptions\":\"new\"' ${ledger}`,
-    emittedModuleSpecifiers: [],
-  }];
+  config.preparers = [
+    {
+      id: "prepare-route-options",
+      phase: "pre-extraction",
+      outputs: [source],
+      replacements: [{ path: source, prefix: "export const routeOptions = ", before: "'old'", after: "'new'", suffix: ";\n" }],
+      commit: { subject: "refactor: prepare route options" },
+    },
+  ];
+  config.generatedArtifacts = { artifacts: [{ path: ledger, source, regenerate: "sh scripts/generate-ledger.sh", triggers: ["^apps/web/src/"] }] };
+  config.postJournalPreparers = [
+    {
+      id: "workers-port-ledger",
+      phase: "after-journal-before-gates",
+      command: "sh scripts/generate-ledger.sh",
+      outputs: [ledger],
+      triggers: ["^apps/web/src/"],
+      verify: `grep -q '\"routeOptions\":\"new\"' ${ledger}`,
+      emittedModuleSpecifiers: [],
+    },
+  ];
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
   fixtureGit(root, "add", "monocarve.config.json");
   fixtureGit(root, "commit", "-qm", "test: configure RM-shaped preparer generation");
@@ -78,8 +83,18 @@ test("preparer planning and apply fail closed for missing and stale generated ou
   const configure = (root: string, command: string) => {
     const configPath = join(root, "monocarve.config.json");
     const config = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
-    config.preparers = [{ id: "rewrite", phase: "pre-extraction", outputs: ["apps/web/src/types.ts"], replacements: [{ path: "apps/web/src/types.ts", before: "export interface Point {", after: "export interface Coordinate {", suffix: "\n  x: number;" }], commit: { subject: "refactor: rewrite types" } }];
-    config.generatedArtifacts = { artifacts: [{ path: "generated/ledger.txt", source: "apps/web/src/types.ts", regenerate: command, triggers: ["^apps/web/src/"] }] };
+    config.preparers = [
+      {
+        id: "rewrite",
+        phase: "pre-extraction",
+        outputs: ["apps/web/src/types.ts"],
+        replacements: [{ path: "apps/web/src/types.ts", before: "export interface Point {", after: "export interface Coordinate {", suffix: "\n  x: number;" }],
+        commit: { subject: "refactor: rewrite types" },
+      },
+    ];
+    config.generatedArtifacts = {
+      artifacts: [{ path: "generated/ledger.txt", source: "apps/web/src/types.ts", regenerate: command, triggers: ["^apps/web/src/"] }],
+    };
     writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
     fixtureGit(root, "add", "monocarve.config.json");
     fixtureGit(root, "commit", "-qm", "test: configure generator");
@@ -90,7 +105,10 @@ test("preparer planning and apply fail closed for missing and stale generated ou
   expect(missing.stderr).toContain("produced no declared output");
 
   const staleRoot = committedWorkspace();
-  configure(staleRoot, "mkdir -p generated; test ! -f stale-generator || printf stale > generated/ledger.txt; test -f stale-generator || printf current > generated/ledger.txt");
+  configure(
+    staleRoot,
+    "mkdir -p generated; test ! -f stale-generator || printf stale > generated/ledger.txt; test -f stale-generator || printf current > generated/ledger.txt",
+  );
   const plan = await runJsonIn<{ output: string }>(staleRoot, "preparer-plan", "--preparer", "rewrite", "--source", "apps/web/src/types.ts", "--write");
   fixtureGit(staleRoot, "add", "-f", plan.output);
   fixtureGit(staleRoot, "commit", "-qm", "chore: approve generated preparer");
@@ -109,13 +127,15 @@ test("terminal preparer reconciliation still triggers and commits only a stale g
   writeFileSync(join(root, source), "export const routeOptions = 'old';\n");
   writeFileSync(join(root, ledger), "old ledger\n");
   const baseConfig = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
-  baseConfig.preparers = [{
-    id: "prepare-route-options",
-    phase: "pre-extraction",
-    outputs: [source],
-    replacements: [{ path: source, prefix: "export const routeOptions = ", before: "'old'", after: "'new'", suffix: ";\n" }],
-    commit: { subject: "refactor: prepare route options" },
-  }];
+  baseConfig.preparers = [
+    {
+      id: "prepare-route-options",
+      phase: "pre-extraction",
+      outputs: [source],
+      replacements: [{ path: source, prefix: "export const routeOptions = ", before: "'old'", after: "'new'", suffix: ";\n" }],
+      commit: { subject: "refactor: prepare route options" },
+    },
+  ];
   writeFileSync(configPath, `${JSON.stringify(baseConfig, null, 2)}\n`);
   fixtureGit(root, "add", configPath, source, ledger);
   fixtureGit(root, "commit", "-qm", "test: seed terminal reconciliation");
@@ -130,13 +150,15 @@ test("terminal preparer reconciliation still triggers and commits only a stale g
 
   const reconciledConfig = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
   reconciledConfig.generatedArtifacts = {
-    artifacts: [{
-      path: ledger,
-      source,
-      regenerate: `printf 'current ledger\\n' > ${ledger}`,
-      triggers: ["^apps/web/src/"],
-      exemptReason: "terminal reconciliation fixture",
-    }],
+    artifacts: [
+      {
+        path: ledger,
+        source,
+        regenerate: `printf 'current ledger\\n' > ${ledger}`,
+        triggers: ["^apps/web/src/"],
+        exemptReason: "terminal reconciliation fixture",
+      },
+    ],
   };
   writeFileSync(configPath, `${JSON.stringify(reconciledConfig, null, 2)}\n`);
   fixtureGit(root, "add", configPath);
@@ -153,8 +175,7 @@ test("terminal preparer reconciliation still triggers and commits only a stale g
   expect(second.mutations.find((item) => item.path === source)).toMatchObject({
     preconditionHash: second.mutations.find((item) => item.path === source)?.resultHash,
   });
-  expect(second.mutations.find((item) => item.path === ledger)?.preconditionHash)
-    .not.toBe(second.mutations.find((item) => item.path === ledger)?.resultHash);
+  expect(second.mutations.find((item) => item.path === ledger)?.preconditionHash).not.toBe(second.mutations.find((item) => item.path === ledger)?.resultHash);
   expect(await runJsonIn(root, "preparer-simulate", "--plan", second.output)).toMatchObject({ ok: true });
   fixtureGit(root, "add", "-f", second.output);
   fixtureGit(root, "commit", "-qm", "chore: approve ledger reconciliation");

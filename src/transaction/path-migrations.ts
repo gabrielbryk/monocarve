@@ -50,10 +50,7 @@ export function runPathMigrationCommand(
   if (exitCode !== 0) {
     const signal = result.signalCode ? `killed by ${result.signalCode} after ${timeoutMs}ms\n` : "";
     const output = `${signal}${result.stderr?.toString() ?? ""}`.trimEnd().slice(-OUTPUT_TAIL);
-    throw new Error(
-      `path migration ${operation.path} failed (exit ${exitCode}): ${operation.command}` +
-        (output === "" ? "" : `\n${output}`),
-    );
+    throw new Error(`path migration ${operation.path} failed (exit ${exitCode}): ${operation.command}` + (output === "" ? "" : `\n${output}`));
   }
   if (result.stdout === undefined) throw new Error(`path migration ${operation.path} produced no captured stdout`);
   return decodeUtf8(result.stdout, `path migration output for ${operation.path}`);

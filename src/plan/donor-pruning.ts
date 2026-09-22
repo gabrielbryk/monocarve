@@ -1,8 +1,8 @@
 /** Exact, opt-in pruning of dependencies no retained donor source references. */
 
 import type { PackageManagerAdapter } from "../adapters/types.ts";
-import type { InferredDependencies } from "./dependencies.ts";
 import type { WorkspaceContext } from "./context.ts";
+import type { InferredDependencies } from "./dependencies.ts";
 import { collectDependencyUsage } from "./dependency-usage.ts";
 import type { PlanOperation } from "./manifest.ts";
 import { ProjectedWorkspace } from "./projected-workspace.ts";
@@ -31,10 +31,9 @@ export function donorDependencyPruningCandidates(input: {
   const names = [...new Set([...Object.keys(input.dependencies.runtime), ...Object.keys(input.dependencies.dev)])].sort();
   const usage = collectDependencyUsage({ context: input.context, donorRoot: input.donorRoot, movedSources: input.movedSources, dependencyNames: names });
   return usage.flatMap(({ name, retainedSources, tsconfigTypes, explicitlyKept }): DonorDependencyPruningCandidate[] => {
-      const section = dependencySection(manifest, name);
-      return section === undefined || explicitlyKept || tsconfigTypes.length > 0 || retainedSources.length > 0
-        ? [] : [{ name, section }];
-    });
+    const section = dependencySection(manifest, name);
+    return section === undefined || explicitlyKept || tsconfigTypes.length > 0 || retainedSources.length > 0 ? [] : [{ name, section }];
+  });
 }
 
 export function composeDonorDependencyPruning(input: {

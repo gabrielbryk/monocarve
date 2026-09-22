@@ -2,13 +2,7 @@ import ts from "typescript";
 
 import { byCodeUnit, hashJson, hashText, type Sha256 } from "../util/hash.ts";
 import { SymbolAnalysisError } from "./error.ts";
-import type {
-  DeclarationGroup,
-  DeclarationKind,
-  SourceSpan,
-  SymbolDeclaration,
-  SymbolSpace,
-} from "./types.ts";
+import type { DeclarationGroup, DeclarationKind, SourceSpan, SymbolDeclaration, SymbolSpace } from "./types.ts";
 
 export interface PhysicalDeclaration {
   readonly record: SymbolDeclaration;
@@ -16,12 +10,7 @@ export interface PhysicalDeclaration {
   readonly symbol: ts.Symbol | undefined;
 }
 
-export function collectDeclarations(
-  sourceFile: ts.SourceFile,
-  checker: ts.TypeChecker,
-  sourcePath: string,
-  sourceText: string,
-): PhysicalDeclaration[] {
+export function collectDeclarations(sourceFile: ts.SourceFile, checker: ts.TypeChecker, sourcePath: string, sourceText: string): PhysicalDeclaration[] {
   const result: PhysicalDeclaration[] = [];
   for (const statement of sourceFile.statements) {
     if (ts.isVariableStatement(statement)) {
@@ -118,7 +107,7 @@ function declarationKind(node: ts.Statement): DeclarationKind | undefined {
 }
 
 function defaultDeclarationName(node: ts.Declaration): string {
-  const modifiers = ts.canHaveModifiers(node) ? ts.getModifiers(node) ?? [] : [];
+  const modifiers = ts.canHaveModifiers(node) ? (ts.getModifiers(node) ?? []) : [];
   if (modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)) return "default";
   throw new SymbolAnalysisError(`anonymous ${ts.SyntaxKind[node.kind] ?? "declaration"} has no stable symbol name`, []);
 }
@@ -145,8 +134,9 @@ function makeDeclaration(
 }
 
 function hasExportModifier(node: ts.Node): boolean {
-  return ts.canHaveModifiers(node) && (ts.getModifiers(node) ?? []).some(
-    (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword || modifier.kind === ts.SyntaxKind.DefaultKeyword,
+  return (
+    ts.canHaveModifiers(node) &&
+    (ts.getModifiers(node) ?? []).some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword || modifier.kind === ts.SyntaxKind.DefaultKeyword)
   );
 }
 

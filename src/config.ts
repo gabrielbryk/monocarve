@@ -29,14 +29,8 @@ export type {
   ResolvedExtractionProfile,
   ScaffoldTemplatesConfig,
 } from "./config/schema-core.ts";
-export {
-  assertPreparationPolicyMatches,
-  renderPreparationPolicy,
-} from "./config/preparation.ts";
-export type {
-  PreparationPolicyRenderInput,
-  RenderedPreparationPolicy,
-} from "./config/preparation.ts";
+export { assertPreparationPolicyMatches, renderPreparationPolicy } from "./config/preparation.ts";
+export type { PreparationPolicyRenderInput, RenderedPreparationPolicy } from "./config/preparation.ts";
 export {
   applicationFor,
   applicationOwner,

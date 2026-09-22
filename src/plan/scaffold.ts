@@ -2,11 +2,11 @@
 
 import { relative, resolve } from "node:path";
 
-import type { ApplicationConfig, MonocarveConfig, ScaffoldTemplatesConfig } from "../config.ts";
 import type { PackageManagerAdapter, TaskRunnerAdapter } from "../adapters/types.ts";
-import type { PublicModule } from "./manifest.ts";
+import type { ApplicationConfig, MonocarveConfig, ScaffoldTemplatesConfig } from "../config.ts";
 import type { WorkspaceContext } from "./context.ts";
 import type { InferredDependencies } from "./dependencies.ts";
+import type { PublicModule } from "./manifest.ts";
 
 export interface ScaffoldInput {
   readonly context: WorkspaceContext;
@@ -34,9 +34,12 @@ export interface ScaffoldInput {
 export function barrelSpecifier(templates: ScaffoldTemplatesConfig, targetRelative: string): string {
   const posix = targetRelative.replaceAll("\\", "/");
   switch (templates.barrelSpecifier) {
-    case "extensionless": return posix.replace(/\.[cm]?[jt]sx?$/, "");
-    case "js": return posix.replace(/\.[cm]?tsx?$/, ".js");
-    case "extension": return posix;
+    case "extensionless":
+      return posix.replace(/\.[cm]?[jt]sx?$/, "");
+    case "js":
+      return posix.replace(/\.[cm]?tsx?$/, ".js");
+    case "extension":
+      return posix;
   }
 }
 

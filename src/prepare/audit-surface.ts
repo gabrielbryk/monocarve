@@ -7,7 +7,12 @@ import { preparationCompilerOptions } from "./compiler-policy.ts";
 
 import { workspacePath } from "../util/paths.ts";
 import { assertAdapterSurfaceMatchesContract } from "./boundary-proofs.ts";
-import type { CompatibilityReexportIntent, ExtractTypeDeclarationsOperation, PreparationReplayOperation, PreparationWriteFileOperation } from "./manifest-types.ts";
+import type {
+  CompatibilityReexportIntent,
+  ExtractTypeDeclarationsOperation,
+  PreparationReplayOperation,
+  PreparationWriteFileOperation,
+} from "./manifest-types.ts";
 
 /**
  * Independent, post-replay re-proof that a boundary's app-owned adapter
@@ -21,11 +26,7 @@ import type { CompatibilityReexportIntent, ExtractTypeDeclarationsOperation, Pre
  * alone; Monocarve never guesses a pairing it was not told, so this proof
  * only runs for the unambiguous single-boundary case.
  */
-export function verifyAdapterSurfaceAgainstContract(
-  rootDir: string,
-  operations: readonly PreparationReplayOperation[],
-  failures: string[],
-): void {
+export function verifyAdapterSurfaceAgainstContract(rootDir: string, operations: readonly PreparationReplayOperation[], failures: string[]): void {
   const writes = operations.filter((operation): operation is PreparationWriteFileOperation => operation.kind === "write-file");
   const contracts = writes.filter((operation) => operation.purpose === "port-contract");
   const adapters = writes.filter((operation) => operation.purpose === "app-adapter");
@@ -53,12 +54,16 @@ function exportedTopLevelNames(path: string, text: string): string[] {
 }
 
 function exportedDeclarationName(statement: ts.Statement): string | undefined {
-  if (!ts.canHaveModifiers(statement) || !(ts.getModifiers(statement) ?? []).some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) return undefined;
+  if (!ts.canHaveModifiers(statement) || !(ts.getModifiers(statement) ?? []).some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword))
+    return undefined;
   if (ts.isVariableStatement(statement)) {
     const declaration = statement.declarationList.declarations[0];
     return declaration && ts.isIdentifier(declaration.name) ? declaration.name.text : undefined;
   }
-  if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) && statement.name) {
+  if (
+    (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) &&
+    statement.name
+  ) {
     return statement.name.text;
   }
   return undefined;
@@ -118,12 +123,7 @@ export function verifyRenderedCompatibilitySurface(
   for (const name of expected) if (!actual.has(name)) failures.push(`compatibility surface omits a declared name: ${intent.fromPath}:${name}`);
 }
 
-export function verifyCompatibilityResolution(
-  rootDir: string,
-  config: MonocarveConfig,
-  intent: CompatibilityReexportIntent,
-  failures: string[],
-): void {
+export function verifyCompatibilityResolution(rootDir: string, config: MonocarveConfig, intent: CompatibilityReexportIntent, failures: string[]): void {
   const donorPath = workspacePath(rootDir, intent.fromPath);
   const targetPath = workspacePath(rootDir, intent.toPath);
   const donorText = readFileSync(donorPath, "utf8");
@@ -184,7 +184,10 @@ function compatibilityProgram(
   targetPath: string,
   targetText: string,
 ): ts.Program {
-  const texts = new Map([[donorPath, donorText], [targetPath, targetText]]);
+  const texts = new Map([
+    [donorPath, donorText],
+    [targetPath, targetText],
+  ]);
   const options: ts.CompilerOptions = { ...preparationCompilerOptions(rootDir, config, sourcePath), noEmit: true };
   const host = ts.createCompilerHost(options, true);
   const originalSource = host.getSourceFile.bind(host);

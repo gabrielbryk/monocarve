@@ -6,8 +6,8 @@
 
 import { packageNameOf, type IntegrationTestSuiteConfig, type MonocarveConfig } from "../config.ts";
 import { sourceFiles } from "../util/files.ts";
-import type { EscapeRewrite } from "./manifest.ts";
 import { PlanningError, type WorkspaceContext } from "./context.ts";
+import type { EscapeRewrite } from "./manifest.ts";
 
 export interface IntegrationTestClosure {
   readonly tests: readonly string[];
@@ -15,11 +15,7 @@ export interface IntegrationTestClosure {
   readonly rewrites: ReadonlyMap<string, readonly EscapeRewrite[]>;
 }
 
-export function selectIntegrationTestRoots(
-  context: WorkspaceContext,
-  suiteName: string,
-  suite: IntegrationTestSuiteConfig,
-): string[] {
+export function selectIntegrationTestRoots(context: WorkspaceContext, suiteName: string, suite: IntegrationTestSuiteConfig): string[] {
   const roots = sourcePathsWithinSuite(context, suite)
     .filter((path) => suite.patterns.some((pattern) => new RegExp(pattern).test(path)))
     .sort();
@@ -41,16 +37,7 @@ export function collectIntegrationTestClosure(
   const donors = new Map(suite.donorImports.map((entry) => [entry.source, entry.specifier]));
 
   for (const test of selected) {
-    const fileRewrites = referencesForTest({
-      context,
-      config,
-      suite,
-      applicationPackageName,
-      selected,
-      assets,
-      donors,
-      test,
-    });
+    const fileRewrites = referencesForTest({ context, config, suite, applicationPackageName, selected, assets, donors, test });
     if (fileRewrites.length > 0) rewrites.set(test, fileRewrites);
   }
 
@@ -103,12 +90,7 @@ function validateBareReference(input: ReferenceCollectionInput, specifier: strin
   }
 }
 
-function collectRelativeReference(
-  input: ReferenceCollectionInput,
-  specifier: string,
-  dynamic: boolean,
-  rewrites: EscapeRewrite[],
-): void {
+function collectRelativeReference(input: ReferenceCollectionInput, specifier: string, dynamic: boolean, rewrites: EscapeRewrite[]): void {
   const resolved = input.context.resolveRelative(input.test, specifier);
   if (!resolved) throw new PlanningError(`integration test ${input.test} has an unresolved relative import ${specifier}`);
   if (isSuiteSource(input.suite, resolved)) {

@@ -129,7 +129,10 @@ function exportedName(statement: ts.Statement): string | undefined {
     const declaration = statement.declarationList.declarations[0];
     return declaration && ts.isIdentifier(declaration.name) ? declaration.name.text : undefined;
   }
-  if ((ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) && statement.name) {
+  if (
+    (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement)) &&
+    statement.name
+  ) {
     return statement.name.text;
   }
   return undefined;

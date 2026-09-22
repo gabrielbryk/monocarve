@@ -16,26 +16,14 @@
  * simulation covering for a plan that is actually incomplete.
  */
 
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  realpathSync,
-  rmSync,
-  statSync,
-  symlinkSync,
-  unlinkSync,
-} from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, unlinkSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { MonocarveError } from "../errors.ts";
-import { failedGateOutput } from "./gate-diagnostics.ts";
+import type { ExtractionManifest } from "../plan/manifest.ts";
 import { isDirectory } from "../util/files.ts";
 import { git, tryGit } from "../util/git.ts";
-import type { ExtractionManifest } from "../plan/manifest.ts";
+import { failedGateOutput } from "./gate-diagnostics.ts";
 
 export class WorktreeError extends MonocarveError {
   override readonly name = "WorktreeError";
@@ -94,9 +82,7 @@ export interface CreateWorktreeOptions {
 }
 
 export async function createWorktree(options: CreateWorktreeOptions): Promise<Worktree> {
-  const parent = isAbsolute(options.worktreeRoot)
-    ? options.worktreeRoot
-    : resolve(options.rootDir, options.worktreeRoot);
+  const parent = isAbsolute(options.worktreeRoot) ? options.worktreeRoot : resolve(options.rootDir, options.worktreeRoot);
   assertWorktreeRootIsNotNested(options.rootDir, parent);
   mkdirSync(parent, { recursive: true });
 
@@ -355,15 +341,10 @@ export function linkPlannedPackage(workspacePath: string, manifest: ExtractionMa
     linkPackage(workspacePath, owner, manifest.target.packageName, resolve(workspacePath, manifest.target.packageRoot));
   }
 
-  const declared = JSON.parse(readFileSync(manifestPath, "utf8")) as {
-    dependencies?: Record<string, string>;
-    devDependencies?: Record<string, string>;
-  };
+  const declared = JSON.parse(readFileSync(manifestPath, "utf8")) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
   const unlinked: string[] = [];
   for (const name of Object.keys({ ...declared.dependencies, ...declared.devDependencies })) {
-    const installed = [...owners, ""]
-      .map((owner) => resolve(workspacePath, owner, "node_modules", name))
-      .find(existsSync);
+    const installed = [...owners, ""].map((owner) => resolve(workspacePath, owner, "node_modules", name)).find(existsSync);
     if (installed) linkPackage(workspacePath, manifest.target.packageRoot, name, realpathSync(installed));
     else unlinked.push(name);
   }
@@ -394,11 +375,7 @@ export interface PrunedWorktrees {
   readonly skipped: string[];
 }
 
-export async function pruneWorktrees(
-  rootDir: string,
-  worktreeRoot: string,
-  options: PruneWorktreesOptions = {},
-): Promise<PrunedWorktrees> {
+export async function pruneWorktrees(rootDir: string, worktreeRoot: string, options: PruneWorktreesOptions = {}): Promise<PrunedWorktrees> {
   const parent = isAbsolute(worktreeRoot) ? worktreeRoot : resolve(rootDir, worktreeRoot);
   if (!existsSync(parent)) return { removed: [], skipped: [] };
   const minimumAgeMs = options.minimumAgeMs ?? 0;

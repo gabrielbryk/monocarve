@@ -42,9 +42,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Loade
   const configPath = options.configPath ? resolve(cwd, options.configPath) : findConfigFile(cwd);
 
   if (!configPath) {
-    throw new ConfigError(
-      `no config found in ${cwd} or any parent directory (looked for ${CONFIG_FILENAMES.join(", ")})`,
-    );
+    throw new ConfigError(`no config found in ${cwd} or any parent directory (looked for ${CONFIG_FILENAMES.join(", ")})`);
   }
   if (!existsSync(configPath)) {
     throw new ConfigError(`config not found: ${configPath}`);
@@ -59,9 +57,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Loade
 export function parseConfig(raw: unknown, source = "<inline>"): MonocarveConfig {
   const result = monocarveConfigSchema.safeParse(raw);
   if (!result.success) {
-    const issues = result.error.issues.map(
-      (issue) => `  ${issue.path.length ? issue.path.join(".") : "(root)"}: ${issue.message}`,
-    );
+    const issues = result.error.issues.map((issue) => `  ${issue.path.length ? issue.path.join(".") : "(root)"}: ${issue.message}`);
     throw new ConfigError(`invalid config at ${source}:\n${issues.join("\n")}`);
   }
   return result.data;

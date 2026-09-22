@@ -24,32 +24,37 @@ function workspace(): string {
 
 async function run(root: string, ...args: string[]) {
   const child = Bun.spawn(["bun", CLI, "--cwd", root, ...args], { cwd: ROOT, stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
+  const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
   return { code, stdout, stderr };
 }
 
 function plan(root: string, id: string, donor: string): string {
   const path = join(root, "plans", `${id}.json`);
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify({
-    planId: `plan-${id}`,
-    baselineCommit: "same-baseline",
-    graphDigest: HASH,
-    target: { packageName: `@acme/${id}`, packageRoot: `libs/${id}` },
-    operations: [{
-      kind: "rewrite-import",
-      file: "apps/web/src/main.ts",
-      donors: [donor],
-      rewrites: [{ from: `./${id}.ts`, to: `@acme/${id}` }],
-      preconditionHash: HASH,
-      resultHash: "b".repeat(64),
-    }],
-    generatedFiles: [],
-  }, null, 2)}\n`);
+  writeFileSync(
+    path,
+    `${JSON.stringify(
+      {
+        planId: `plan-${id}`,
+        baselineCommit: "same-baseline",
+        graphDigest: HASH,
+        target: { packageName: `@acme/${id}`, packageRoot: `libs/${id}` },
+        operations: [
+          {
+            kind: "rewrite-import",
+            file: "apps/web/src/main.ts",
+            donors: [donor],
+            rewrites: [{ from: `./${id}.ts`, to: `@acme/${id}` }],
+            preconditionHash: HASH,
+            resultHash: "b".repeat(64),
+          },
+        ],
+        generatedFiles: [],
+      },
+      null,
+      2,
+    )}\n`,
+  );
   return path;
 }
 
@@ -92,11 +97,7 @@ test("conflicts exposes exact shared-consumer evidence and replan-safe waves thr
     waves: { execution: string }[];
   };
   expect(report.schema).toBe("campaign-conflicts");
-  expect(report.conflicts).toContainEqual(expect.objectContaining({
-    category: "consumer-source",
-    path: "apps/web/src/main.ts",
-    disposition: "mergeable",
-  }));
+  expect(report.conflicts).toContainEqual(expect.objectContaining({ category: "consumer-source", path: "apps/web/src/main.ts", disposition: "mergeable" }));
   expect(report.waves.every((wave) => wave.execution === "replan-between-every-child")).toBe(true);
 });
 

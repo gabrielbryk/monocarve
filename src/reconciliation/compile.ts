@@ -2,8 +2,8 @@ import type { ExtractionManifest } from "../plan/manifest.ts";
 import { operationTargets } from "../plan/manifest.ts";
 import type { AuditReport } from "../transaction/audit.ts";
 import { byCodeUnit, hashJson, hashText, stableStringify, type FileState } from "../util/hash.ts";
-import { assertReconcilableAudit, assertReconciliationRecordValid, ReconciliationValidationError, reconciliationRecordId } from "./validate.ts";
 import type { ReconciliationRecord, ReconciliationRecordPayload, ReconciledDiscrepancy } from "./types.ts";
+import { assertReconcilableAudit, assertReconciliationRecordValid, ReconciliationValidationError, reconciliationRecordId } from "./validate.ts";
 
 export interface CompileReconciliationInput {
   readonly manifest: ExtractionManifest;
@@ -28,22 +28,27 @@ export function compileReconciliationRecord(input: CompileReconciliationInput): 
   const audit = normalizedAudit(input.audit);
   const expected = expectedStates(input.manifest);
   const seen = new Set<string>();
-  const discrepancies: ReconciledDiscrepancy[] = input.discrepancies.map(({ path, actual }) => {
-    if (seen.has(path)) throw new ReconciliationValidationError(`duplicate observed discrepancy: ${path}`);
-    seen.add(path);
-    const ownership = expected.get(path);
-    if (ownership === undefined) throw new ReconciliationValidationError(`undeclared discrepancy cannot be reconciled: ${path}`);
-    if (ownership.expected === actual) throw new ReconciliationValidationError(`observed discrepancy ${path} matches its declared state`);
-    return { path, actual, ...ownership };
-  }).sort((left, right) => byCodeUnit(left.path, right.path));
+  const discrepancies: ReconciledDiscrepancy[] = input.discrepancies
+    .map(({ path, actual }) => {
+      if (seen.has(path)) throw new ReconciliationValidationError(`duplicate observed discrepancy: ${path}`);
+      seen.add(path);
+      const ownership = expected.get(path);
+      if (ownership === undefined) throw new ReconciliationValidationError(`undeclared discrepancy cannot be reconciled: ${path}`);
+      if (ownership.expected === actual) throw new ReconciliationValidationError(`observed discrepancy ${path} matches its declared state`);
+      return { path, actual, ...ownership };
+    })
+    .sort((left, right) => byCodeUnit(left.path, right.path));
   const payload: ReconciliationRecordPayload = {
     schemaVersion: 1,
     createdAt: new Date(input.observedCommitDate).toISOString(),
     generator: input.manifest.generator,
     ...(input.manifest.provenance === undefined ? {} : { provenance: input.manifest.provenance }),
     plan: {
-      planId: input.manifest.planId, path: input.manifestPath, digest: hashText(input.manifestBytes),
-      baselineCommit: input.manifest.baselineCommit, approvalCommit: input.approvalCommit,
+      planId: input.manifest.planId,
+      path: input.manifestPath,
+      digest: hashText(input.manifestBytes),
+      baselineCommit: input.manifest.baselineCommit,
+      approvalCommit: input.approvalCommit,
     },
     application: {
       ...(input.moveCommit === undefined ? {} : { moveCommit: input.moveCommit }),
@@ -66,7 +71,11 @@ export function normalizedAudit(report: AuditReport): AuditReport {
 
 function assertManifestBytes(bytes: string, manifest: ExtractionManifest): void {
   let parsed: unknown;
-  try { parsed = JSON.parse(bytes); } catch { throw new ReconciliationValidationError("approved manifest bytes are not JSON"); }
+  try {
+    parsed = JSON.parse(bytes);
+  } catch {
+    throw new ReconciliationValidationError("approved manifest bytes are not JSON");
+  }
   if (stableStringify(parsed) !== stableStringify(manifest)) {
     throw new ReconciliationValidationError("approved manifest bytes do not encode the supplied plan");
   }

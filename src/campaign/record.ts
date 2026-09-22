@@ -68,7 +68,13 @@ export function recordCampaignApplication(input: RecordCampaignApplicationInput)
 }
 
 function assertPlanIdentity(tail: CampaignChildPlan, plan: CampaignChildPlan): void {
-  if (tail.id !== plan.id || tail.pairId !== plan.pairId || tail.kind !== plan.kind || tail.planId !== plan.planId || tail.baselineCommit !== plan.baselineCommit) {
+  if (
+    tail.id !== plan.id ||
+    tail.pairId !== plan.pairId ||
+    tail.kind !== plan.kind ||
+    tail.planId !== plan.planId ||
+    tail.baselineCommit !== plan.baselineCommit
+  ) {
     throw new CampaignRecordError(`reviewed plan ${plan.planId} does not match planned campaign child ${tail.planId}`);
   }
 }

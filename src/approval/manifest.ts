@@ -51,13 +51,7 @@ export function manifestApprovalEvidence(options: ManifestApprovalOptions): Mani
     throw new PreflightError(`HEAD ${current} does not match manifest baseline ${baselineCommit}`);
   }
   const branch = currentBranch(options.rootDir);
-  return {
-    manifestPath,
-    baselineCommit: current,
-    branch,
-    subject,
-    gitAdd: ["git", "add", "--", manifestPath],
-  };
+  return { manifestPath, baselineCommit: current, branch, subject, gitAdd: ["git", "add", "--", manifestPath] };
 }
 
 /**
@@ -147,7 +141,10 @@ function rollbackApprovalCommit(rootDir: string, evidence: ManifestApprovalEvide
 function assertOnlyManifestDirty(rootDir: string, manifestPath: string, staged: boolean): void {
   const expected = `${repositoryPrefix(rootDir)}${manifestPath}`;
   const entries = repositoryStatus(rootDir);
-  const valid = entries.length === 1 && entries[0]?.paths.length === 1 && entries[0].paths[0] === expected &&
+  const valid =
+    entries.length === 1 &&
+    entries[0]?.paths.length === 1 &&
+    entries[0].paths[0] === expected &&
     (staged ? entries[0].index !== " " && entries[0].index !== "?" && entries[0].worktree === " " : entries[0].index === " " || entries[0].index === "?");
   if (!valid) {
     const paths = [...new Set(entries.flatMap((entry) => entry.paths))];
@@ -155,7 +152,11 @@ function assertOnlyManifestDirty(rootDir: string, manifestPath: string, staged: 
   }
 }
 
-interface StatusRecord { readonly index: string; readonly worktree: string; readonly paths: readonly string[] }
+interface StatusRecord {
+  readonly index: string;
+  readonly worktree: string;
+  readonly paths: readonly string[];
+}
 
 function repositoryStatus(rootDir: string): StatusRecord[] {
   const fields = nulFields(gitBytes({ cwd: rootDir }, "status", "--porcelain=v1", "-z", "--untracked-files=all"));
@@ -171,5 +172,8 @@ function repositoryStatus(rootDir: string): StatusRecord[] {
 }
 
 function nulFields(bytes: Uint8Array): string[] {
-  return new TextDecoder().decode(bytes).split("\0").filter((value) => value.length > 0);
+  return new TextDecoder()
+    .decode(bytes)
+    .split("\0")
+    .filter((value) => value.length > 0);
 }

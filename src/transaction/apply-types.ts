@@ -1,12 +1,15 @@
 import type { MonocarveConfig } from "../config.ts";
 import { MonocarveError } from "../errors.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
-import type { GateResult } from "./simulate.ts";
 import type { RepositoryPostconditionReport } from "./postconditions.ts";
+import type { GateResult } from "./simulate.ts";
 
 export class ApplyError extends MonocarveError {
   override readonly name = "ApplyError";
-  constructor(message: string, readonly residue: readonly string[] = []) {
+  constructor(
+    message: string,
+    readonly residue: readonly string[] = [],
+  ) {
     super(message);
   }
 }
@@ -18,11 +21,7 @@ export interface ApplyResult {
   readonly wiringCommit?: string;
   readonly rolledBack: boolean;
   readonly failure?: string;
-  readonly dependencyRefresh?: {
-    readonly mode: "install";
-    readonly command: readonly string[];
-    readonly completed: true;
-  };
+  readonly dependencyRefresh?: { readonly mode: "install"; readonly command: readonly string[]; readonly completed: true };
   readonly failedGate?: GateResult;
   readonly worktreePath?: string;
   readonly gateRetry?: { readonly cwd: string; readonly command: string };

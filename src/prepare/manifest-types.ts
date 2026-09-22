@@ -250,11 +250,7 @@ export interface PreparationManifest {
   /** Digest of the fresh workspace graph used to select this preparation. */
   readonly graphDigest: Sha256;
   /** Exact compiler-selected input used to render repository preparation policy. */
-  readonly policyAnchor?: {
-    readonly sourcePath: string;
-    readonly targetPath: string;
-    readonly targetModuleSpecifier: string;
-  };
+  readonly policyAnchor?: { readonly sourcePath: string; readonly targetPath: string; readonly targetModuleSpecifier: string };
   readonly declarations: readonly PreparationDeclarationGroupSelector[];
   readonly operations: readonly PreparationReplayOperation[];
   /** Config-bound generated artifacts invalidated by this preparation. */
@@ -270,7 +266,13 @@ export interface PreparationManifest {
     readonly id: string;
     readonly command?: string;
     readonly outputs: readonly string[];
-    readonly replacements?: readonly { readonly path: string; readonly before: string; readonly after: string; readonly prefix?: string; readonly suffix?: string }[];
+    readonly replacements?: readonly {
+      readonly path: string;
+      readonly before: string;
+      readonly after: string;
+      readonly prefix?: string;
+      readonly suffix?: string;
+    }[];
     readonly creates?: readonly { readonly path: string; readonly contents: string; readonly mode: number }[];
     readonly emittedModuleSpecifiers: readonly { readonly source: string; readonly resolutionBase: string }[];
     readonly verify?: string;
