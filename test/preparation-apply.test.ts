@@ -9,6 +9,7 @@ import type { PreparationManifest } from "../src/prepare/manifest-types.ts";
 import { resolveCommit } from "../src/util/git.ts";
 import { hashJson, hashText, MISSING } from "../src/util/hash.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, read, write } from "./support/fixture-repo.ts";
+import { configDigest } from "../src/config/digest.ts";
 
 const DONOR = "apps/api/src/types.ts";
 const TARGET = "shared/types.ts";
@@ -286,7 +287,7 @@ function manifestFor(root: string, config: ReturnType<typeof fixtureConfig>, wor
     schemaVersion: 1,
     createdAt: baseline.committedAt,
     generator: { name: "test", version: "1" },
-    baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: hashJson(config) },
+    baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: configDigest(config) },
     graphDigest: hashText("test graph"),
     declarations: [group],
     operations: [{
