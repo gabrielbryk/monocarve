@@ -1,15 +1,32 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, lstatSync, readlinkSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
+import type { ExtractionManifest } from "../src/plan/manifest.ts";
 import { ApplyError, applyPlan } from "../src/transaction/apply.ts";
 import { executeJournal, snapshotPaths, type Snapshot } from "../src/transaction/journal.ts";
-import type { ExtractionManifest } from "../src/plan/manifest.ts";
 import { rollback } from "../src/transaction/rollback.ts";
 import { hashText } from "../src/util/hash.ts";
 import {
-  DONOR, LOCKFILE_APPLIED, PACKAGE_ROOT, TARGET, TOKENS, TOKENS_DIR, baseManifest, cleanupFixtures,
-  expectApplyToFail, expectRestored, extractionFiles, fixture, fixtureConfig, fixtureGit, fixtureRepo, read,
-  repoState, restoreNote, withReadOnlyDirectory, write,
+  DONOR,
+  LOCKFILE_APPLIED,
+  PACKAGE_ROOT,
+  TARGET,
+  TOKENS,
+  TOKENS_DIR,
+  baseManifest,
+  cleanupFixtures,
+  expectApplyToFail,
+  expectRestored,
+  extractionFiles,
+  fixture,
+  fixtureConfig,
+  fixtureGit,
+  fixtureRepo,
+  read,
+  repoState,
+  restoreNote,
+  withReadOnlyDirectory,
+  write,
 } from "./support/rollback-fixture.ts";
 
 describe("rollback reports residue loudly when it cannot restore", () => {
@@ -42,12 +59,7 @@ describe("rollback reports residue loudly when it cannot restore", () => {
       ],
     ]);
 
-    const result = await rollback(root, {
-      headCommit: fixtureGit(root, "rev-parse", "HEAD"),
-      branch: null,
-      snapshots,
-      staged: false,
-    });
+    const result = await rollback(root, { headCommit: fixtureGit(root, "rev-parse", "HEAD"), branch: null, snapshots, staged: false });
 
     expect(result.ok).toBe(false);
     expect(result.residue).toEqual([path]);
@@ -67,12 +79,7 @@ describe("rollback reports residue loudly when it cannot restore", () => {
     rmSync(join(root, path));
     symlinkSync("target.ts", join(root, path));
 
-    const result = await rollback(root, {
-      headCommit: fixtureGit(root, "rev-parse", "HEAD"),
-      branch: null,
-      snapshots,
-      staged: false,
-    });
+    const result = await rollback(root, { headCommit: fixtureGit(root, "rev-parse", "HEAD"), branch: null, snapshots, staged: false });
 
     expect(result.ok).toBe(true);
     expect(result.restored).toEqual([path]);
@@ -91,12 +98,7 @@ describe("rollback reports residue loudly when it cannot restore", () => {
     rmSync(join(root, path));
     symlinkSync(danglingTarget, join(root, path));
 
-    const result = await rollback(root, {
-      headCommit: fixtureGit(root, "rev-parse", "HEAD"),
-      branch: null,
-      snapshots,
-      staged: false,
-    });
+    const result = await rollback(root, { headCommit: fixtureGit(root, "rev-parse", "HEAD"), branch: null, snapshots, staged: false });
 
     expect(result.ok).toBe(true);
     expect(result.restored).toEqual([path]);
@@ -116,12 +118,7 @@ describe("rollback reports residue loudly when it cannot restore", () => {
     rmSync(join(root, path));
     write(root, path, "export const value = 1;\n");
 
-    const result = await rollback(root, {
-      headCommit: fixtureGit(root, "rev-parse", "HEAD"),
-      branch: null,
-      snapshots,
-      staged: false,
-    });
+    const result = await rollback(root, { headCommit: fixtureGit(root, "rev-parse", "HEAD"), branch: null, snapshots, staged: false });
 
     expect(result.ok).toBe(true);
     expect(result.restored).toEqual([path]);
@@ -140,12 +137,7 @@ describe("rollback reports residue loudly when it cannot restore", () => {
     const snapshots = snapshotPaths(root, [path]);
     chmodSync(absolute, 0o644);
 
-    const result = await rollback(root, {
-      headCommit: fixtureGit(root, "rev-parse", "HEAD"),
-      branch: null,
-      snapshots,
-      staged: false,
-    });
+    const result = await rollback(root, { headCommit: fixtureGit(root, "rev-parse", "HEAD"), branch: null, snapshots, staged: false });
 
     expect(result.ok).toBe(true);
     expect(result.restored).toEqual([path]);
@@ -184,9 +176,7 @@ describe("rollback reports residue loudly when it cannot restore", () => {
 
     let error: Error;
     try {
-      error = await expectApplyToFail(
-        applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, skipSimulation: true }),
-      );
+      error = await expectApplyToFail(applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, skipSimulation: true }));
     } finally {
       // Let the assertion inspect the true recovery result, then make fixture
       // cleanup possible. The rollback has already happened before this runs.
@@ -239,9 +229,7 @@ describe("rollback reports residue loudly when it cannot restore", () => {
     // succeeds. The case below must be indistinguishable from it.
     const control = fixture(files);
     await withReadOnlyDirectory(join(control.root, TOKENS_DIR), async () => {
-      const reported = await expectApplyToFail(
-        applyPlan({ ...control, rootDir: control.root, commit: true, skipSimulation: true }),
-      );
+      const reported = await expectApplyToFail(applyPlan({ ...control, rootDir: control.root, commit: true, skipSimulation: true }));
       expect(reported.message).toContain(TOKENS_DIR);
       expect(reported.message).toContain("rollback complete");
       // Four of six: the skipped lockfile operation changed nothing.
@@ -256,9 +244,7 @@ describe("rollback reports residue loudly when it cannot restore", () => {
     await withReadOnlyDirectory(join(root, TOKENS_DIR), async () => {
       chmodSync(lockfile, 0o444);
       try {
-        error = await expectApplyToFail(
-          applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, skipSimulation: true }),
-        );
+        error = await expectApplyToFail(applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, skipSimulation: true }));
       } finally {
         chmodSync(lockfile, 0o644);
       }
@@ -298,14 +284,7 @@ describe("rollback reports residue loudly when it cannot restore", () => {
       ...base,
       operations: [
         base.operations[0]!,
-        {
-          kind: "write-file",
-          path: inside,
-          contents: note,
-          preconditionHash: "missing",
-          resultHash: hashText(note),
-          generator: "scaffold:note",
-        },
+        { kind: "write-file", path: inside, contents: note, preconditionHash: "missing", resultHash: hashText(note), generator: "scaffold:note" },
         base.operations[4]!,
       ],
     };

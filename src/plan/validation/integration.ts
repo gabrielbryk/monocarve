@@ -1,5 +1,5 @@
-import { applicationOwner, getApplication, packageNameOf, renderExtractionProfile, resolveExtractionProfile, testKindOf } from "../../config.ts";
 import { applyEscapeRewrites } from "../../codemod/imports.ts";
+import { applicationOwner, getApplication, packageNameOf, renderExtractionProfile, resolveExtractionProfile, testKindOf } from "../../config.ts";
 import { isSourceModulePath, sourceFiles } from "../../util/files.ts";
 import { hashText } from "../../util/hash.ts";
 import { WorkspaceContext } from "../context.ts";
@@ -8,11 +8,7 @@ import type { ValidatePlanOptions } from "./shared.ts";
 import { Issues } from "./shared.ts";
 
 /** Validate the config authority unique to a leaf integration-test plan. */
-export function validateIntegrationTestSuite(
-  manifest: ExtractionManifest,
-  options: ValidatePlanOptions,
-  issues: Issues,
-): void {
+export function validateIntegrationTestSuite(manifest: ExtractionManifest, options: ValidatePlanOptions, issues: Issues): void {
   const record = manifest.integrationTestSuite;
   if (!record) return;
   const configured = options.config.integrationTestSuites[record.name];
@@ -51,7 +47,7 @@ export function validateIntegrationTestSuite(
   if (manifest.target.requiredExports.length !== 0) {
     issues.add("integration-test-suite", "integration test package must not declare a public export surface");
   }
-  if (app.packageName && manifest.dependencies.dev[app.packageName] !== "workspace:*" || Object.keys(manifest.dependencies.runtime).length !== 0) {
+  if ((app.packageName && manifest.dependencies.dev[app.packageName] !== "workspace:*") || Object.keys(manifest.dependencies.runtime).length !== 0) {
     issues.add("integration-test-suite", "integration test package must declare the donor application as a dev workspace dependency only");
   }
   if (options.offline) return;
@@ -73,7 +69,12 @@ function validatePublishedDonorSurfaces(
   if (!app.packageName) return;
   const exports = context.manifest(applicationOwner(app)).exports;
   for (const donor of donors) {
-    const key = donor.specifier === app.packageName ? "." : donor.specifier.startsWith(`${app.packageName}/`) ? `.${donor.specifier.slice(app.packageName.length)}` : undefined;
+    const key =
+      donor.specifier === app.packageName
+        ? "."
+        : donor.specifier.startsWith(`${app.packageName}/`)
+          ? `.${donor.specifier.slice(app.packageName.length)}`
+          : undefined;
     const target = typeof exports === "string" ? (key === "." ? exports : undefined) : exports && !Array.isArray(exports) && key ? exports[key] : undefined;
     if (typeof target !== "string" || target !== `./${donor.source.slice(`${applicationOwner(app)}/`.length)}`) {
       issues.add("integration-test-suite", `integration donor surface is not published by its application: ${donor.specifier}`);
@@ -119,7 +120,14 @@ function validateIntegrationMoves(
   configured: NonNullable<ValidatePlanOptions["config"]["integrationTestSuites"][string]>,
   donorPackageName: string | undefined,
 ): void {
-  const moves = new Map(manifest.operations.filter((operation): operation is Extract<PlanOperation, { kind: "move" | "move-with-rewrite" }> => operation.kind === "move" || operation.kind === "move-with-rewrite").map((operation) => [operation.source, operation]));
+  const moves = new Map(
+    manifest.operations
+      .filter(
+        (operation): operation is Extract<PlanOperation, { kind: "move" | "move-with-rewrite" }> =>
+          operation.kind === "move" || operation.kind === "move-with-rewrite",
+      )
+      .map((operation) => [operation.source, operation]),
+  );
   const donors = new Map(configured.donorImports.map((entry) => [entry.source, entry.specifier]));
   const selected = new Set(manifest.source.tests);
   const selectedAssets = new Set(manifest.source.assets ?? []);
@@ -139,7 +147,11 @@ function validateIntegrationMoves(
         if (reference.dynamic && donorPackageName && packageNameOf(reference.specifier) === donorPackageName) {
           issues.add("integration-test-suite", `integration test has a dynamic donor import: ${test}`);
         }
-        if (donorPackageName && packageNameOf(reference.specifier) === donorPackageName && !configured.donorImports.some((entry) => entry.specifier === reference.specifier)) {
+        if (
+          donorPackageName &&
+          packageNameOf(reference.specifier) === donorPackageName &&
+          !configured.donorImports.some((entry) => entry.specifier === reference.specifier)
+        ) {
           issues.add("integration-test-suite", `integration test imports an undeclared donor surface: ${test}`);
         }
         return [];
@@ -161,9 +173,21 @@ function validateIntegrationMoves(
       issues.add("integration-test-suite", `integration test donor rewrites do not match configured surfaces: ${test}`);
       continue;
     }
-    if (actual.length > 0 && operation.resultHash !== hashText(applyEscapeRewrites(
-      context.text(test), context.absolute(test), actual, options.rootDir, options.config.moduleSpecifierCalls, options.config.assetExtensions, options.config.cssImportExtensions,
-    ))) {
+    if (
+      actual.length > 0 &&
+      operation.resultHash !==
+        hashText(
+          applyEscapeRewrites(
+            context.text(test),
+            context.absolute(test),
+            actual,
+            options.rootDir,
+            options.config.moduleSpecifierCalls,
+            options.config.assetExtensions,
+            options.config.cssImportExtensions,
+          ),
+        )
+    ) {
       issues.add("integration-test-suite", `integration test rewrite result hash does not replay: ${test}`);
     }
   }

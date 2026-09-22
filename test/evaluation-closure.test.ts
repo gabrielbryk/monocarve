@@ -23,24 +23,20 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 
+import { resetCodemodCaches } from "../src/codemod/imports.ts";
+import type { MonocarveConfig } from "../src/config.ts";
 import { buildDependencyGraph, type ScanReport } from "../src/graph/build.ts";
 import { resetGraphCaches } from "../src/graph/cruiser.ts";
-import { resetCodemodCaches } from "../src/codemod/imports.ts";
 import { WorkspaceContext } from "../src/plan/context.ts";
 import { evaluationClosure, type EvaluationClosure } from "../src/plan/evaluation-closure.ts";
 import { buildPortfolio } from "../src/portfolio/rank.ts";
-import type { MonocarveConfig } from "../src/config.ts";
 import { cleanupFixtures, fixtureConfig, fixtureRepo } from "./support/fixture-repo.ts";
 
 const APP = "apps/api/src";
 
 /** A package manifest whose entry file is its own `src/index.ts`. */
 function libManifest(name: string, extra: Record<string, unknown> = {}): string {
-  return `${JSON.stringify(
-    { name, version: "0.0.0", private: true, type: "module", main: "./src/index.ts", types: "./src/index.ts", ...extra },
-    null,
-    2,
-  )}\n`;
+  return `${JSON.stringify({ name, version: "0.0.0", private: true, type: "module", main: "./src/index.ts", types: "./src/index.ts", ...extra }, null, 2)}\n`;
 }
 
 const TSCONFIG = `${JSON.stringify({ compilerOptions: { moduleResolution: "Bundler", strict: true, noEmit: true } }, null, 2)}\n`;
@@ -71,12 +67,9 @@ function workspaceFiles(): Record<string, string> {
 
     // Reaches the same package as `widget.ts`, so the shared modules must be
     // recorded once and not twice.
-    [`${APP}/widget/sibling.ts`]: [
-      'import { format } from "@acme/effects";',
-      "",
-      "export const sibling = (value: number): string => format(value);",
-      "",
-    ].join("\n"),
+    [`${APP}/widget/sibling.ts`]: ['import { format } from "@acme/effects";', "", "export const sibling = (value: number): string => format(value);", ""].join(
+      "\n",
+    ),
 
     // Type-only: erased before anything runs.
     [`${APP}/typed/typed.ts`]: [
@@ -108,7 +101,7 @@ function workspaceFiles(): Record<string, string> {
     [`${APP}/cycle/two.ts`]: [
       'import { one } from "./one.ts";',
       "",
-      "export const two = (value: number): string => (value > 0 ? one(value - 1) : \"\");",
+      'export const two = (value: number): string => (value > 0 ? one(value - 1) : "");',
       "",
     ].join("\n"),
 
@@ -175,12 +168,7 @@ function workspaceFiles(): Record<string, string> {
     ].join("\n"),
 
     "libs/lazy/package.json": libManifest("@acme/lazy"),
-    "libs/lazy/src/index.ts": [
-      "export const lazyValue = 1;",
-      "",
-      "globalThis.console.log('lazy package evaluated');",
-      "",
-    ].join("\n"),
+    "libs/lazy/src/index.ts": ["export const lazyValue = 1;", "", "globalThis.console.log('lazy package evaluated');", ""].join("\n"),
 
     // Declares an entry file that is not on disk, so the traversal can name the
     // boundary it failed to cross instead of silently reporting a clean closure.
@@ -225,10 +213,7 @@ function applicationReport(): ScanReport {
       },
       { source: `${APP}/cycle/two.ts`, dependencies: [{ module: "./one.ts", resolved: `${APP}/cycle/one.ts` }] },
       { source: `${APP}/vendor/vendor.ts`, dependencies: [] },
-      {
-        source: `${APP}/escape/escape.ts`,
-        dependencies: [{ module: "../shared/logger.ts", resolved: `${APP}/shared/logger.ts` }],
-      },
+      { source: `${APP}/escape/escape.ts`, dependencies: [{ module: "../shared/logger.ts", resolved: `${APP}/shared/logger.ts` }] },
       { source: `${APP}/shared/logger.ts`, dependencies: [] },
       { source: `${APP}/inert/inert.ts`, dependencies: [] },
     ],
@@ -249,8 +234,7 @@ function fixture(files: Record<string, string> = workspaceFiles()): Fixture {
     config,
     context,
     graph,
-    closureOf: (seeds, rewrites) =>
-      evaluationClosure({ config, context, graph, seeds, ...(rewrites ? { rewrites } : {}) }),
+    closureOf: (seeds, rewrites) => evaluationClosure({ config, context, graph, seeds, ...(rewrites ? { rewrites } : {}) }),
   };
 }
 
@@ -274,10 +258,7 @@ describe("evaluation closure", () => {
     // And the seed's own top level really is clean, so the moved-set-only
     // inventory this replaces would have reported nothing whatsoever.
     expect(context.evaluationEffectKinds(`${APP}/widget/widget.ts`)).toEqual([]);
-    expect(context.evaluationEffectKinds("libs/effects/src/register.ts")).toEqual([
-      "expression-statement",
-      "initializer-call",
-    ]);
+    expect(context.evaluationEffectKinds("libs/effects/src/register.ts")).toEqual(["expression-statement", "initializer-call"]);
   });
 
   test("does not follow a type-only edge", () => {

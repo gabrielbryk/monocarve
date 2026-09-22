@@ -17,11 +17,7 @@ export class EvacuationSelectorError extends MonocarveError {
  * `*` stays within one path segment; `**` may cross directory boundaries.
  * Tests and other files omitted from the production graph cannot be selected.
  */
-export function resolveEvacuationSelectors(
-  graph: DependencyGraph,
-  application: string,
-  selectors: readonly string[],
-): string[] {
+export function resolveEvacuationSelectors(graph: DependencyGraph, application: string, selectors: readonly string[]): string[] {
   if (selectors.length === 0) {
     throw new EvacuationSelectorError("evacuation requires at least one selector");
   }
@@ -32,9 +28,7 @@ export function resolveEvacuationSelectors(
   for (const selector of normalized) {
     const matches = graph.paths.filter((path) => matchesSelector(path, selector));
     if (matches.length === 0) {
-      throw new EvacuationSelectorError(
-        `evacuation selector ${JSON.stringify(selector)} matches no production graph nodes`,
-      );
+      throw new EvacuationSelectorError(`evacuation selector ${JSON.stringify(selector)} matches no production graph nodes`);
     }
 
     const outside = matches.filter((path) => {

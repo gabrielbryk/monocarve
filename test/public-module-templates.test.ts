@@ -4,21 +4,11 @@ import type { PublicSurfaceConfig } from "../src/config.ts";
 import { PlanningError } from "../src/plan/context.ts";
 import { renderPublicModulePaths } from "../src/plan/public-modules.ts";
 
-const extensions = [
-  "modules/plain.ts",
-  "modules/component.tsx",
-  "modules/module.mts",
-  "modules/common.cts",
-  "modules/javascript.js",
-  "modules/view.jsx",
-];
+const extensions = ["modules/plain.ts", "modules/component.tsx", "modules/module.mts", "modules/common.cts", "modules/javascript.js", "modules/view.jsx"];
 
 describe("public module templates", () => {
   test("renders path, extensionless, and JavaScript placeholders across supported module extensions", () => {
-    const raw = renderPublicModulePaths(
-      subpaths("./raw/{path}", "./src/{path}"),
-      extensions,
-    );
+    const raw = renderPublicModulePaths(subpaths("./raw/{path}", "./src/{path}"), extensions);
     expect(raw.map(({ exportKey, exportTarget }) => [exportKey, exportTarget])).toEqual([
       ["./raw/modules/plain.ts", "./src/modules/plain.ts"],
       ["./raw/modules/component.tsx", "./src/modules/component.tsx"],
@@ -28,10 +18,7 @@ describe("public module templates", () => {
       ["./raw/modules/view.jsx", "./src/modules/view.jsx"],
     ]);
 
-    const transformed = renderPublicModulePaths(
-      subpaths("./{pathNoExtension}", "./dist/{pathJs}"),
-      extensions,
-    );
+    const transformed = renderPublicModulePaths(subpaths("./{pathNoExtension}", "./dist/{pathJs}"), extensions);
     expect(transformed.map(({ exportKey, exportTarget }) => [exportKey, exportTarget])).toEqual([
       ["./modules/plain", "./dist/modules/plain.js"],
       ["./modules/component", "./dist/modules/component.js"],
@@ -44,11 +31,7 @@ describe("public module templates", () => {
 
   test("normalizes source separators before rendering", () => {
     expect(renderPublicModulePaths(subpaths("./{pathNoExtension}", "./src/{path}"), ["widgets\\chart.ts"])).toEqual([
-      {
-        path: "widgets/chart.ts",
-        exportKey: "./widgets/chart",
-        exportTarget: "./src/widgets/chart.ts",
-      },
+      { path: "widgets/chart.ts", exportKey: "./widgets/chart", exportTarget: "./src/widgets/chart.ts" },
     ]);
   });
 

@@ -8,7 +8,23 @@ import { basename, extname, isAbsolute, relative, resolve, sep } from "node:path
 import { PlanningError } from "./context.ts";
 
 const PRETTIER_EXTENSIONS = new Set([
-  ".cjs", ".cts", ".css", ".html", ".js", ".json", ".json5", ".jsonc", ".jsx", ".md", ".mjs", ".mts", ".scss", ".ts", ".tsx", ".yaml", ".yml",
+  ".cjs",
+  ".cts",
+  ".css",
+  ".html",
+  ".js",
+  ".json",
+  ".json5",
+  ".jsonc",
+  ".jsx",
+  ".md",
+  ".mjs",
+  ".mts",
+  ".scss",
+  ".ts",
+  ".tsx",
+  ".yaml",
+  ".yml",
 ]);
 
 /**
@@ -20,11 +36,7 @@ export function formatGeneratedText(rootDir: string, path: string, contents: str
   if (!PRETTIER_EXTENSIONS.has(extname(path).toLowerCase())) return contents;
   const executable = prettierExecutable(rootDir);
   if (executable === undefined) return contents;
-  const result = spawnSync(javascriptRuntime(), [executable, "--stdin-filepath", path], {
-    cwd: rootDir,
-    input: contents,
-    encoding: "utf8",
-  });
+  const result = spawnSync(javascriptRuntime(), [executable, "--stdin-filepath", path], { cwd: rootDir, input: contents, encoding: "utf8" });
   if (result.error !== undefined) throw new PlanningError(`Prettier could not format ${path}: ${result.error.message}`);
   if (result.status !== 0) {
     const detail = `${result.stderr ?? ""}`.trim();

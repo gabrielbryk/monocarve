@@ -26,8 +26,8 @@ import { statSync } from "node:fs";
 import { resolve } from "node:path";
 
 import type { MonocarveConfig, PostJournalPreparerConfig } from "../config.ts";
-import { applyFileCreates, applyTextReplacements } from "../preparer/declarative.ts";
 import type { GeneratedFileRecord, PostJournalPreparerRecord } from "../plan/manifest.ts";
+import { applyFileCreates, applyTextReplacements } from "../preparer/declarative.ts";
 import { fileState } from "../util/files.ts";
 import { hashJson, MISSING } from "../util/hash.ts";
 import { dirtyPaths, newlyDirtyPaths, run } from "./regenerate-command.ts";
@@ -49,7 +49,8 @@ export interface PreparerContext {
  */
 function normalizedPreparerPolicy(preparer: PostJournalPreparerConfig) {
   return {
-    id: preparer.id, ...(preparer.command === undefined ? {} : { command: preparer.command }),
+    id: preparer.id,
+    ...(preparer.command === undefined ? {} : { command: preparer.command }),
     outputs: [...new Set([...preparer.outputs, ...(preparer.creates?.map((item) => item.path) ?? [])])].sort(),
     ...(preparer.replacements === undefined ? {} : { replacements: preparer.replacements.map((item) => ({ ...item })) }),
     ...(preparer.creates === undefined ? {} : { creates: preparer.creates.map((item) => ({ ...item, mode: item.mode ?? 0o644 })) }),
@@ -70,7 +71,8 @@ export function preparerPolicyDrift(
     const preparer = configuredPreparers.get(record.id);
     const configuredPolicy = preparer === undefined ? undefined : normalizedPreparerPolicy(preparer);
     const { mutations: _mutations, ...recordPolicy } = record;
-    if (configuredPolicy === undefined || hashJson(configuredPolicy) !== hashJson(recordPolicy)) return `post-journal preparer ${record.id} differs from current configuration`;
+    if (configuredPolicy === undefined || hashJson(configuredPolicy) !== hashJson(recordPolicy))
+      return `post-journal preparer ${record.id} differs from current configuration`;
   }
   return undefined;
 }
@@ -84,9 +86,10 @@ export function preparerPolicyDrift(
 function mutationPreconditionDrift(record: PostJournalPreparerRecord, treeRoot: string): string | undefined {
   for (const mutation of record.mutations) {
     const current = fileState(resolve(treeRoot, mutation.path));
-    if (current !== mutation.preconditionHash && current !== mutation.resultHash) return `post-journal preparer ${record.id} precondition differs from manifest: ${mutation.path}`;
+    if (current !== mutation.preconditionHash && current !== mutation.resultHash)
+      return `post-journal preparer ${record.id} precondition differs from manifest: ${mutation.path}`;
     const rawMode = current === MISSING ? "missing" : statSync(resolve(treeRoot, mutation.path)).mode;
-    const mode = rawMode === "missing" ? "missing" : (rawMode & 0o111 ? 0o755 : 0o644);
+    const mode = rawMode === "missing" ? "missing" : rawMode & 0o111 ? 0o755 : 0o644;
     const expectedMode = current === mutation.resultHash ? mutation.resultMode : mutation.preconditionMode;
     if (mode !== expectedMode) return `post-journal preparer ${record.id} precondition mode differs from manifest: ${mutation.path}`;
   }
@@ -97,8 +100,14 @@ function mutationPreconditionDrift(record: PostJournalPreparerRecord, treeRoot: 
 function declarativeEditDrift(record: PostJournalPreparerRecord, treeRoot: string): string | undefined {
   try {
     if (record.replacements !== undefined) applyTextReplacements(treeRoot, record.replacements);
-    if (record.creates !== undefined) applyFileCreates(treeRoot, record.creates.map((item) => ({ ...item, mode: item.mode as 0o644 | 0o755 })));
-  } catch (error) { return `post-journal preparer ${record.id} declarative edit failed: ${(error as Error).message}`; }
+    if (record.creates !== undefined)
+      applyFileCreates(
+        treeRoot,
+        record.creates.map((item) => ({ ...item, mode: item.mode as 0o644 | 0o755 })),
+      );
+  } catch (error) {
+    return `post-journal preparer ${record.id} declarative edit failed: ${(error as Error).message}`;
+  }
   for (const mutation of record.mutations) {
     const current = fileState(resolve(treeRoot, mutation.path));
     if (current !== mutation.resultHash) return `post-journal preparer ${record.id} declarative result differs from manifest: ${mutation.path}`;
@@ -115,7 +124,8 @@ function recordedCommandFailure(record: PostJournalPreparerRecord, context: Prep
   }
   if (record.verify !== undefined) {
     const verification = run(record.verify, treeRoot, config.generatedArtifacts.timeoutMs);
-    if (verification.exitCode !== 0) return `post-journal preparer ${record.id} verification failed (exit ${verification.exitCode})${verification.output ? `\n${verification.output}` : ""}`;
+    if (verification.exitCode !== 0)
+      return `post-journal preparer ${record.id} verification failed (exit ${verification.exitCode})${verification.output ? `\n${verification.output}` : ""}`;
   }
   return undefined;
 }
@@ -143,7 +153,14 @@ export function replayRecordedPreparer(
   if (undeclared.length > 0) return `post-journal preparer ${record.id} changed undeclared output(s): ${undeclared.join(", ")}`;
   for (const generated of records.filter((item) => item.preparerId === record.id)) {
     const after = fileState(resolve(treeRoot, generated.path));
-    artifacts.push({ path: generated.path, command: record.command ?? "declarative edits", exitCode: 0, durationMs: Date.now() - started, changed: before.get(generated.path) !== after, hash: after });
+    artifacts.push({
+      path: generated.path,
+      command: record.command ?? "declarative edits",
+      exitCode: 0,
+      durationMs: Date.now() - started,
+      changed: before.get(generated.path) !== after,
+      hash: after,
+    });
     if (after === MISSING) return `post-journal preparer ${record.id} produced no declared output: ${generated.path}`;
   }
   return undefined;
@@ -167,7 +184,10 @@ export function runConfiguredPreparer(
   if (!preparer || preparer.command !== record.regenerate || preparer.verify !== record.verify) {
     return `post-journal preparer ${preparerId} differs from current configuration`;
   }
-  const declared = records.filter((item) => item.preparerId === preparerId).map((item) => item.path).sort();
+  const declared = records
+    .filter((item) => item.preparerId === preparerId)
+    .map((item) => item.path)
+    .sort();
   if (declared.join("\n") !== [...preparer.outputs].sort().join("\n")) {
     return `post-journal preparer ${preparerId} output set differs from current configuration`;
   }
@@ -176,10 +196,12 @@ export function runConfiguredPreparer(
   const result = run(preparer.command, treeRoot, config.generatedArtifacts.timeoutMs);
   if (result.exitCode !== 0) return `post-journal preparer ${preparer.id} failed (exit ${result.exitCode})${result.output ? `\n${result.output}` : ""}`;
   const undeclared = newlyDirtyPaths(treeRoot, repositoryBefore).filter((path) => !declared.includes(path));
-  if (undeclared.length > 0) return `post-journal preparer ${preparer.id} changed undeclared output(s): ${undeclared.join(", ")}; add every generated output to the preparer configuration and recompile the plan`;
+  if (undeclared.length > 0)
+    return `post-journal preparer ${preparer.id} changed undeclared output(s): ${undeclared.join(", ")}; add every generated output to the preparer configuration and recompile the plan`;
   if (preparer.verify !== undefined) {
     const verification = run(preparer.verify, treeRoot, config.generatedArtifacts.timeoutMs);
-    if (verification.exitCode !== 0) return `post-journal preparer ${preparer.id} verification failed (exit ${verification.exitCode})${verification.output ? `\n${verification.output}` : ""}`;
+    if (verification.exitCode !== 0)
+      return `post-journal preparer ${preparer.id} verification failed (exit ${verification.exitCode})${verification.output ? `\n${verification.output}` : ""}`;
   }
   for (const path of declared) {
     const after = fileState(resolve(treeRoot, path));

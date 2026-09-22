@@ -36,17 +36,10 @@ export function evacuationBoundaryCuts(
       const blocker: RetainedBlocker = { file: edge.from, specifier: edge.specifier, target: edge.to, kind };
       return [{ from: edge.from, specifier: edge.specifier, target: edge.to, kind, reason, remedy: preparationRecipe(config, [blocker])[0]!.remedy }];
     })
-    .sort((left, right) =>
-      byCodeUnit(left.from, right.from) || byCodeUnit(left.target, right.target) || byCodeUnit(left.specifier, right.specifier)
-    );
+    .sort((left, right) => byCodeUnit(left.from, right.from) || byCodeUnit(left.target, right.target) || byCodeUnit(left.specifier, right.specifier));
 }
 
-function cutReason(
-  target: string,
-  moved: ReadonlySet<string>,
-  composition: ReadonlySet<string>,
-  retainedRoots: readonly string[],
-): BoundaryCutReason | null {
+function cutReason(target: string, moved: ReadonlySet<string>, composition: ReadonlySet<string>, retainedRoots: readonly string[]): BoundaryCutReason | null {
   if (composition.has(target)) return "composition-root";
   if (retainedRoots.some((root) => target === root || target.startsWith(`${root}/`))) return "retained-root";
   return moved.has(target) ? null : "outside-evacuation";

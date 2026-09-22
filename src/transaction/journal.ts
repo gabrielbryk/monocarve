@@ -8,11 +8,11 @@
 import { rmSync } from "node:fs";
 
 import { createPackageManagerAdapter } from "../adapters/registry.ts";
-import type { MonocarveConfig } from "../config.ts";
 import { FAIL_OPERATION_ENV } from "../branding.ts";
+import type { MonocarveConfig } from "../config.ts";
+import { isAnyMove, manifestPaths, operationPaths, type ExtractionManifest, type PathMove, type PlanOperation } from "../plan/manifest.ts";
 import { git } from "../util/git.ts";
 import { MISSING, type FileState } from "../util/hash.ts";
-import { isAnyMove, manifestPaths, operationPaths, type ExtractionManifest, type PathMove, type PlanOperation } from "../plan/manifest.ts";
 import { JournalError } from "./journal-error.ts";
 import { applyOperation } from "./journal-operation.ts";
 import { restoreSnapshot, snapshotPaths, type RestoreReport } from "./journal-snapshot.ts";

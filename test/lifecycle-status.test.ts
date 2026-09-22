@@ -2,10 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { serializeManifest } from "../src/plan/build.ts";
-import { hashText } from "../src/util/hash.ts";
 import { inspectCommitChain } from "../src/transaction/commit-evidence.ts";
-import { classifyLifecycle } from "../src/transaction/lifecycle-status.ts";
 import { executeJournal } from "../src/transaction/journal.ts";
+import { classifyLifecycle } from "../src/transaction/lifecycle-status.ts";
+import { hashText } from "../src/util/hash.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, write } from "./support/fixture-repo.ts";
 import { baseManifest, CONSUMER, DONOR, ENTRYPOINT, extractionFiles, TARGET } from "./support/transaction-fixture.ts";
 
@@ -26,10 +26,16 @@ describe("transaction lifecycle evidence", () => {
     const base = baseManifest(root);
     const manifest = {
       ...base,
-      generatedFiles: [{
-        path: "quality-baseline.txt", source: TARGET, regenerate: "true", regenerateOnApply: true as const,
-        expectedHash: hashText("stable\n"), exemptReason: "unchanged post-journal fixture",
-      }],
+      generatedFiles: [
+        {
+          path: "quality-baseline.txt",
+          source: TARGET,
+          regenerate: "true",
+          regenerateOnApply: true as const,
+          expectedHash: hashText("stable\n"),
+          exemptReason: "unchanged post-journal fixture",
+        },
+      ],
       changedFiles: [...base.changedFiles, "quality-baseline.txt"].sort(),
     };
     const manifestPath = approve(root, manifest);
@@ -41,7 +47,11 @@ describe("transaction lifecycle evidence", () => {
     fixtureGit(root, "rm", "-q", "--", DONOR);
     fixtureGit(root, "add", "--", TARGET);
     fixtureGit(root, "commit", "-qm", manifest.commits.move.subject);
-    await executeJournal({ config, treeRoot: root, manifest: { ...manifest, operations: manifest.operations.filter((operation) => operation.kind !== "move") } });
+    await executeJournal({
+      config,
+      treeRoot: root,
+      manifest: { ...manifest, operations: manifest.operations.filter((operation) => operation.kind !== "move") },
+    });
     fixtureGit(root, "add", "--", CONSUMER, ENTRYPOINT, "pnpm-lock.yaml");
     fixtureGit(root, "commit", "-qm", manifest.commits.wiring.subject);
     const applied = inspectCommitChain({ rootDir: root, manifest, manifestPath });
@@ -51,7 +61,9 @@ describe("transaction lifecycle evidence", () => {
     fixtureGit(root, "commit", "--allow-empty", "-qm", "docs: later history");
     const descendant = inspectCommitChain({ rootDir: root, manifest, manifestPath });
     expect(descendant.laterCommitCount).toBe(1);
-    expect(classifyLifecycle({ manifestPath, atBaseline: false, planWritten: true, chain: descendant, currentTreeValid: true }).state).toBe("applied-with-later-commits");
+    expect(classifyLifecycle({ manifestPath, atBaseline: false, planWritten: true, chain: descendant, currentTreeValid: true }).state).toBe(
+      "applied-with-later-commits",
+    );
   }, 120_000);
 
   test("a forged move subject and path cannot establish an applied boundary", () => {
@@ -71,22 +83,39 @@ describe("transaction lifecycle evidence", () => {
 
   test("receipt evidence is required for audited state and current-tree drift wins", () => {
     const chain = { valid: true, failures: [], laterCommitCount: 0, phase: "applied" as const, appliedCommit: "a" };
-    expect(classifyLifecycle({ manifestPath: "plans/x.json", atBaseline: false, planWritten: true, chain, currentTreeValid: true, receipt: { valid: true } }).state).toBe("applied-and-audited");
-    const drift = classifyLifecycle({ manifestPath: "plans/x.json", atBaseline: false, planWritten: true, chain, currentTreeValid: false, receipt: { valid: true } });
+    expect(
+      classifyLifecycle({ manifestPath: "plans/x.json", atBaseline: false, planWritten: true, chain, currentTreeValid: true, receipt: { valid: true } }).state,
+    ).toBe("applied-and-audited");
+    const drift = classifyLifecycle({
+      manifestPath: "plans/x.json",
+      atBaseline: false,
+      planWritten: true,
+      chain,
+      currentTreeValid: false,
+      receipt: { valid: true },
+    });
     expect(drift.state).toBe("drifted");
     expect(drift.next).toEqual(["monocarve", "audit", "--plan", "plans/x.json"]);
   });
 
   test("bare and structural failures choose conservative next commands", () => {
-    expect(classifyLifecycle({ atBaseline: false, planWritten: false })).toMatchObject({
-      state: "unknown", next: ["monocarve", "portfolio"],
-    });
+    expect(classifyLifecycle({ atBaseline: false, planWritten: false })).toMatchObject({ state: "unknown", next: ["monocarve", "portfolio"] });
     const chain = { valid: true, failures: [], laterCommitCount: 0, phase: "applied" as const, appliedCommit: "a" };
-    const structural = classifyLifecycle({ manifestPath: "plans/x.json", atBaseline: false, planWritten: true, chain,
-      audit: { passed: false, reconcilable: false, failures: ["consumer boundary failed"] } });
+    const structural = classifyLifecycle({
+      manifestPath: "plans/x.json",
+      atBaseline: false,
+      planWritten: true,
+      chain,
+      audit: { passed: false, reconcilable: false, failures: ["consumer boundary failed"] },
+    });
     expect(structural).toMatchObject({ state: "drifted", failures: ["consumer boundary failed"], next: ["monocarve", "audit", "--plan", "plans/x.json"] });
-    const bytes = classifyLifecycle({ manifestPath: "plans/x.json", atBaseline: false, planWritten: true, chain,
-      audit: { passed: false, reconcilable: true, failures: ["byte mismatch"] } });
+    const bytes = classifyLifecycle({
+      manifestPath: "plans/x.json",
+      atBaseline: false,
+      planWritten: true,
+      chain,
+      audit: { passed: false, reconcilable: true, failures: ["byte mismatch"] },
+    });
     expect(bytes).toMatchObject({ state: "drifted", failures: ["byte mismatch"], next: ["monocarve", "reconcile", "--plan", "plans/x.json"] });
   });
 
@@ -96,19 +125,25 @@ describe("transaction lifecycle evidence", () => {
     const base = baseManifest(root);
     const first = 'export * from "./widget/widget.ts";\n';
     const final = `${first}// final journal state\n`;
-    const operations = base.operations.flatMap((operation) => operation.kind === "write-file" && operation.path.endsWith("/src/index.ts")
-      ? [
-          { ...operation, contents: first, resultHash: hashText(first) },
-          { ...operation, contents: final, preconditionHash: hashText(first), resultHash: hashText(final) },
-        ]
-      : [operation]);
+    const operations = base.operations.flatMap((operation) =>
+      operation.kind === "write-file" && operation.path.endsWith("/src/index.ts")
+        ? [
+            { ...operation, contents: first, resultHash: hashText(first) },
+            { ...operation, contents: final, preconditionHash: hashText(first), resultHash: hashText(final) },
+          ]
+        : [operation],
+    );
     const manifest = { ...base, operations };
     const manifestPath = approve(root, manifest);
     write(root, TARGET, "export const widgetValue = 1;\n");
     fixtureGit(root, "rm", "-q", "--", DONOR);
     fixtureGit(root, "add", "--", TARGET);
     fixtureGit(root, "commit", "-qm", manifest.commits.move.subject);
-    await executeJournal({ config, treeRoot: root, manifest: { ...manifest, operations: manifest.operations.filter((operation) => operation.kind !== "move") } });
+    await executeJournal({
+      config,
+      treeRoot: root,
+      manifest: { ...manifest, operations: manifest.operations.filter((operation) => operation.kind !== "move") },
+    });
     fixtureGit(root, "add", "--", CONSUMER, ENTRYPOINT, "pnpm-lock.yaml");
     fixtureGit(root, "commit", "-qm", manifest.commits.wiring.subject);
 
@@ -144,7 +179,11 @@ describe("transaction lifecycle evidence", () => {
     fixtureGit(repository, "rm", "-q", "--", `workspace/${DONOR}`);
     fixtureGit(repository, "add", "--", `workspace/${TARGET}`);
     fixtureGit(repository, "commit", "-qm", manifest.commits.move.subject);
-    await executeJournal({ config, treeRoot: root, manifest: { ...manifest, operations: manifest.operations.filter((operation) => operation.kind !== "move") } });
+    await executeJournal({
+      config,
+      treeRoot: root,
+      manifest: { ...manifest, operations: manifest.operations.filter((operation) => operation.kind !== "move") },
+    });
     fixtureGit(repository, "add", "--", `workspace/${CONSUMER}`, `workspace/${ENTRYPOINT}`, "workspace/pnpm-lock.yaml");
     fixtureGit(repository, "commit", "-qm", manifest.commits.wiring.subject);
 

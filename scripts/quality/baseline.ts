@@ -148,10 +148,7 @@ export interface BaselineUpdateSummary {
   readonly staleCount: number;
 }
 
-export function summarizeBaselineUpdate(
-  findings: readonly BaselinedFinding[],
-  baseline: QualityBaseline,
-): BaselineUpdateSummary {
+export function summarizeBaselineUpdate(findings: readonly BaselinedFinding[], baseline: QualityBaseline): BaselineUpdateSummary {
   const verdict = judge(findings, baseline);
   const newEntries: BaselinedFinding[] = [];
   const worsened: { finding: BaselinedFinding; recorded: number }[] = [];

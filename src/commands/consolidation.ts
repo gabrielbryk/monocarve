@@ -7,15 +7,15 @@
  */
 
 import { flagBool, flagString, flagStrings, type ParsedArgs } from "../cli/args.ts";
-import { UsageError } from "../errors.ts";
 import { buildConsolidationCandidate, resolveConsolidationPackages, assertNoTargetDonorCollision } from "../consolidation/index.ts";
 import { buildConsolidationPlan } from "../consolidation/plan.ts";
+import { UsageError } from "../errors.ts";
 import { serializeManifest } from "../plan/build.ts";
 import { PlanningError } from "../plan/context.ts";
 import { formatPlanReview, summarizePlanReview } from "../plan/review.ts";
 import { simulatePlan } from "../transaction/simulate.ts";
-import type { CommandSpec } from "./types.ts";
 import { assertPlannableTree, loadGraph, outputPath, print, writeOutput } from "./shared.ts";
+import type { CommandSpec } from "./types.ts";
 
 async function consolidate(args: ParsedArgs): Promise<void> {
   const targetName = flagString(args, "target");
@@ -34,15 +34,14 @@ async function consolidate(args: ParsedArgs): Promise<void> {
   const packages = resolveConsolidationPackages(loaded.graph, targetName, donorNames);
 
   // Check for collisions.
-  assertNoTargetDonorCollision(loaded.graph, packages.target.root, packages.donors.map((d) => d.root));
+  assertNoTargetDonorCollision(
+    loaded.graph,
+    packages.target.root,
+    packages.donors.map((d) => d.root),
+  );
 
   // Build consolidation candidate.
-  const candidate = buildConsolidationCandidate({
-    config: loaded.config,
-    graph: loaded.graph,
-    target: packages.target,
-    donors: packages.donors,
-  });
+  const candidate = buildConsolidationCandidate({ config: loaded.config, graph: loaded.graph, target: packages.target, donors: packages.donors });
 
   const retireDonors = flagBool(args, "retire-donors");
   if (candidate.files.length === 0 && !retireDonors) {
@@ -77,16 +76,21 @@ async function consolidate(args: ParsedArgs): Promise<void> {
     manifestPath: out,
   });
 
-  print(flagBool(args, "json")
-    ? { schema: "consolidate", candidate, manifest, output: out, written, ...(simulation ? { simulation } : {}) }
-    : `${formatPlanReview(review).trimEnd()}\n\nOutput: ${out} (${written ? "written" : "dry run"})`, args);
+  print(
+    flagBool(args, "json")
+      ? { schema: "consolidate", candidate, manifest, output: out, written, ...(simulation ? { simulation } : {}) }
+      : `${formatPlanReview(review).trimEnd()}\n\nOutput: ${out} (${written ? "written" : "dry run"})`,
+    args,
+  );
 }
 
 export const consolidationCommands: Record<string, CommandSpec> = {
   consolidate: {
     summary: "merge multiple packages into a target domain package",
-    usage: "consolidate --target <package-name> --donor <package-name> [--donor <...>] [--retire-donors] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]",
-    details: "Read-only by default. Moves files FROM multiple existing packages INTO one target package. --retire-donors additionally removes verified donor package scaffolds and lockfile importer blocks after the move, or can retire already-empty donors. --target is the destination domain package. --donor is repeatable and names each source package.",
+    usage:
+      "consolidate --target <package-name> --donor <package-name> [--donor <...>] [--retire-donors] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]",
+    details:
+      "Read-only by default. Moves files FROM multiple existing packages INTO one target package. --retire-donors additionally removes verified donor package scaffolds and lockfile importer blocks after the move, or can retire already-empty donors. --target is the destination domain package. --donor is repeatable and names each source package.",
     run: consolidate,
   },
 };

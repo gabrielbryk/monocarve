@@ -34,10 +34,7 @@ function boundary(overrides: Partial<ResolvedExistingPackageBoundary> = {}): Res
 }
 
 function repo(): string {
-  return fixtureRepo({
-    [RETAINED]: RETAINED_SOURCE,
-    [CONSUMER_PATH]: CONSUMER_SOURCE,
-  });
+  return fixtureRepo({ [RETAINED]: RETAINED_SOURCE, [CONSUMER_PATH]: CONSUMER_SOURCE });
 }
 
 function importer(overrides: Partial<RetainedImporterInput> = {}): RetainedImporterInput {

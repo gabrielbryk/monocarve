@@ -12,16 +12,16 @@
 import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapters/registry.ts";
 import { getApplication, packageNameMatcher, type ApplicationConfig, type MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
-import { hashText, type Sha256 } from "../util/hash.ts";
+import { appendConsumerOperations } from "../plan/build-phases.ts";
+import type { Consumer } from "../plan/consumers.ts";
 import { PlanningError, WorkspaceContext } from "../plan/context.ts";
 import { inferDependencies, type InferredDependencies } from "../plan/dependencies.ts";
-import type { Consumer } from "../plan/consumers.ts";
 import type { PlanOperation, PublicModule } from "../plan/manifest.ts";
 import { sourceExportsFromFile } from "../plan/public-surface.ts";
-import { consumerWiringOperations, packageOperations } from "../plan/scaffold.ts";
-import { appendConsumerOperations } from "../plan/build-phases.ts";
 import { parseJsonFile, stringifyJson, writeOperation } from "../plan/scaffold-shared.ts";
+import { consumerWiringOperations, packageOperations } from "../plan/scaffold.ts";
 import { resolveCommit } from "../util/git.ts";
+import { hashText, type Sha256 } from "../util/hash.ts";
 import type { ConsolidationCandidate } from "./candidate.ts";
 
 type PackageManagerAdapter = ReturnType<typeof createPackageManagerAdapter>;
@@ -50,7 +50,9 @@ export function resolveConsolidationTarget(input: {
   const packageRoot = input.packageRootOverride ?? candidate.target.root;
   // Use the application that owns the first donor's files.
   const firstDonorFile = candidate.files[0];
-  const applicationName = firstDonorFile ? config.applications.find((app) => app.sourceRoot && firstDonorFile.startsWith(app.sourceRoot))?.name ?? config.applications[0]!.name : config.applications[0]!.name;
+  const applicationName = firstDonorFile
+    ? (config.applications.find((app) => app.sourceRoot && firstDonorFile.startsWith(app.sourceRoot))?.name ?? config.applications[0]!.name)
+    : config.applications[0]!.name;
   const application = getApplication(config, applicationName);
   const projectId = taskRunner.projectIdFor(packageName, packageRoot);
   return { packageName, packageRoot, application, projectId };
@@ -124,9 +126,10 @@ export function buildConsolidationPublicModules(input: {
 }
 
 export function selectConsolidationTests(context: WorkspaceContext, candidate: ConsolidationCandidate): string[] {
-  return context.repositorySources().filter((path) =>
-    candidate.donors.some((donor) => path.startsWith(`${donor.root}/`)) && context.isTest(path),
-  ).sort();
+  return context
+    .repositorySources()
+    .filter((path) => candidate.donors.some((donor) => path.startsWith(`${donor.root}/`)) && context.isTest(path))
+    .sort();
 }
 
 /** Push move operations for every donor file, test, and asset onto `operations`/`sourceBlobs`. */
@@ -199,12 +202,7 @@ export function initializeConsolidationPlan(input: {
   const packageManager = createPackageManagerAdapter(config);
   const taskRunner = createTaskRunnerAdapter(config);
 
-  const { packageName, packageRoot, application, projectId } = resolveConsolidationTarget({
-    config,
-    candidate,
-    packageRootOverride,
-    taskRunner,
-  });
+  const { packageName, packageRoot, application, projectId } = resolveConsolidationTarget({ config, candidate, packageRootOverride, taskRunner });
 
   // Resolve baseline.
   const { commit: baselineCommitHash, committedAt } = resolveCommit(rootDir, baselineCommit);
@@ -268,14 +266,17 @@ export function resolveConsumers(input: {
     operations,
     includeDonorFiles: true,
   });
-  const consumers: Consumer[] = consumerAnalysis.consumers.length > 0 ? consumerAnalysis.consumers : candidate.consumers.map((consumer) => ({
-    package: consumer.owner,
-    file: consumer.file,
-    expectedImporter: consumer.specifiers[0] ?? "",
-    rewrites: consumer.specifiers.map((specifier) => ({ from: specifier, to: packageName, donor: candidate.files[0] ?? "" })),
-    donors: [...candidate.files],
-    dependencySection: "runtime" as const,
-  }));
+  const consumers: Consumer[] =
+    consumerAnalysis.consumers.length > 0
+      ? consumerAnalysis.consumers
+      : candidate.consumers.map((consumer) => ({
+          package: consumer.owner,
+          file: consumer.file,
+          expectedImporter: consumer.specifiers[0] ?? "",
+          rewrites: consumer.specifiers.map((specifier) => ({ from: specifier, to: packageName, donor: candidate.files[0] ?? "" })),
+          donors: [...candidate.files],
+          dependencySection: "runtime" as const,
+        }));
   const consumerSections = new Map<string, "runtime" | "dev">();
   for (const consumer of consumers) {
     const current = consumerSections.get(consumer.package);
@@ -302,7 +303,22 @@ export function buildConsolidationWiringOperations(input: {
   readonly consumers: readonly Consumer[];
   readonly operations: PlanOperation[];
 }): void {
-  const { context, config, application, packageManager, taskRunner, packageName, packageRoot, projectId, candidate, tests, dependencies, publicModules, consumers, operations } = input;
+  const {
+    context,
+    config,
+    application,
+    packageManager,
+    taskRunner,
+    packageName,
+    packageRoot,
+    projectId,
+    candidate,
+    tests,
+    dependencies,
+    publicModules,
+    consumers,
+    operations,
+  } = input;
 
   // Build consumer rewrites.
   const consumerOps = consumerWiringOperations({
@@ -366,10 +382,20 @@ export function applyConsolidationDonorRetirement(input: {
     const lockfile = packageManager.lockfileName;
     const block = context.exists(lockfile) ? packageManager.importerBlock(context.text(lockfile), donor.root) : undefined;
     if (block !== undefined) {
-      operations.push({ kind: "lockfile-importer", lockfile, packageRoot: donor.root, block, mode: "delete", preconditionHash: context.state(lockfile), resultHash: hashText("") });
+      operations.push({
+        kind: "lockfile-importer",
+        lockfile,
+        packageRoot: donor.root,
+        block,
+        mode: "delete",
+        preconditionHash: context.state(lockfile),
+        resultHash: hashText(""),
+      });
     }
   }
-  operations.push(...retirementDependencyOperations({ context, packageManager, donorNames: candidate.donors.map((donor) => donor.name), owners: [".", packageRoot] }));
+  operations.push(
+    ...retirementDependencyOperations({ context, packageManager, donorNames: candidate.donors.map((donor) => donor.name), owners: [".", packageRoot] }),
+  );
 }
 
 /**
@@ -381,15 +407,14 @@ export function applyConsolidationDonorRetirement(input: {
 export function reorderConsolidationOperations(operations: PlanOperation[]): void {
   const rewrites = operations.filter((operation) => operation.kind === "rewrite-import");
   const moves = operations.filter((operation) => operation.kind === "move" || operation.kind === "move-with-rewrite");
-  const remainder = operations.filter((operation) => operation.kind !== "rewrite-import" && operation.kind !== "move" && operation.kind !== "move-with-rewrite");
+  const remainder = operations.filter(
+    (operation) => operation.kind !== "rewrite-import" && operation.kind !== "move" && operation.kind !== "move-with-rewrite",
+  );
   operations.splice(0, operations.length, ...rewrites, ...moves, ...remainder);
 }
 
 /** Remove donor-package entries from one manifest's dependency sections. */
-function pruneManifestDependencies(
-  manifest: Record<string, unknown>,
-  donorNames: readonly string[],
-): { next: Record<string, unknown>; changed: boolean } {
+function pruneManifestDependencies(manifest: Record<string, unknown>, donorNames: readonly string[]): { next: Record<string, unknown>; changed: boolean } {
   let changed = false;
   const next = { ...manifest };
   for (const section of ["dependencies", "devDependencies", "optionalDependencies"] as const) {
@@ -397,7 +422,8 @@ function pruneManifestDependencies(
     if (!values) continue;
     const retained = Object.fromEntries(Object.entries(values).filter(([name]) => !donorNames.includes(name)));
     if (Object.keys(retained).length !== Object.keys(values).length) changed = true;
-    if (Object.keys(retained).length === 0) delete next[section]; else next[section] = retained;
+    if (Object.keys(retained).length === 0) delete next[section];
+    else next[section] = retained;
   }
   return { next, changed };
 }
@@ -417,7 +443,15 @@ function retireLockfileImporterBlock(input: {
   let nextBlock = block;
   for (const name of donorNames) nextBlock = packageManager.removeBlockDependency(nextBlock, name);
   if (nextBlock === block) return { lockfileText };
-  const operation: PlanOperation = { kind: "lockfile-importer", lockfile, packageRoot: owner, block: nextBlock, mode: "replace", preconditionHash: context.state(lockfile), resultHash: hashText(nextBlock) };
+  const operation: PlanOperation = {
+    kind: "lockfile-importer",
+    lockfile,
+    packageRoot: owner,
+    block: nextBlock,
+    mode: "replace",
+    preconditionHash: context.state(lockfile),
+    resultHash: hashText(nextBlock),
+  };
   return { operation, lockfileText: packageManager.applyImporter(lockfileText, owner, nextBlock, "replace") };
 }
 
@@ -438,7 +472,14 @@ function retirementDependencyOperations(input: {
     if (!changed) continue;
     const contents = stringifyJson(next);
     operations.push(writeOperation(input.context, manifestPath, contents, "consolidation:retire-donor-dependency"));
-    const retired = retireLockfileImporterBlock({ packageManager: input.packageManager, context: input.context, lockfile, lockfileText, owner, donorNames: input.donorNames });
+    const retired = retireLockfileImporterBlock({
+      packageManager: input.packageManager,
+      context: input.context,
+      lockfile,
+      lockfileText,
+      owner,
+      donorNames: input.donorNames,
+    });
     lockfileText = retired.lockfileText;
     if (retired.operation) operations.push(retired.operation);
   }

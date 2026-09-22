@@ -18,7 +18,10 @@ function candidate(): PortfolioCandidate {
     files: [A, B],
     tests: [A_TEST],
     assets: [A_ASSET, B_ASSET],
-    sccs: [{ id: "scc-a", members: [A] }, { id: "scc-b", members: [B] }],
+    sccs: [
+      { id: "scc-a", members: [A] },
+      { id: "scc-b", members: [B] },
+    ],
     seed: { id: "scc-a", members: [A] },
     lineCount: 2,
     owners: ["apps/api"],

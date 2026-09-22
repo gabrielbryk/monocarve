@@ -3,7 +3,11 @@ import { MonocarveError } from "../errors.ts";
 
 export class PreparationJournalError extends MonocarveError {
   override readonly name = "PreparationJournalError";
-  constructor(message: string, readonly residue: readonly string[] = [], cause?: unknown) {
+  constructor(
+    message: string,
+    readonly residue: readonly string[] = [],
+    cause?: unknown,
+  ) {
     super(message, cause === undefined ? undefined : { cause });
   }
 }

@@ -1,8 +1,8 @@
 /** Policy for deciding which first-party tests travel with a production closure. */
 
 import { byCodeUnit } from "../util/hash.ts";
-import { PlanningError, type WorkspaceContext } from "./context.ts";
 import type { TestRelocationPartition } from "./consumers.ts";
+import { PlanningError, type WorkspaceContext } from "./context.ts";
 
 /** Partition direct test importers without moving app-local test support. */
 export function partitionTests(
@@ -15,14 +15,7 @@ export function partitionTests(
   const fixedRetained = classified.filter((test) => context.testKind(test) !== "unit");
   const unitTests = classified.filter((test) => context.testKind(test) === "unit");
   fixedRetained.forEach((test) => validateFixedRetainedTest(context, test, assets));
-  const partition = partitionUnitTests(
-    context,
-    production,
-    unitTests,
-    assets,
-    fixedRetained,
-    context.config.testRelocation.strategy === "all-importers",
-  );
+  const partition = partitionUnitTests(context, production, unitTests, assets, fixedRetained, context.config.testRelocation.strategy === "all-importers");
   return retainTestsWithRetainedImporters(context, production, assets, partition);
 }
 
@@ -101,9 +94,9 @@ function classifyUnitTest(
     throw new PlanningError(`unsupported module reference in test importer ${test}`);
   }
   const movedAssets = new Set<string>();
-  const selfContained = context.moduleReferences(test).every((reference) =>
-    testReferenceTravels(context, test, reference.specifier, reference.resolved, moved, assets, movedAssets),
-  );
+  const selfContained = context
+    .moduleReferences(test)
+    .every((reference) => testReferenceTravels(context, test, reference.specifier, reference.resolved, moved, assets, movedAssets));
   if (!selfContained && movedAssets.size > 0) {
     throw new PlanningError(`retained test ${test} imports moved asset ${[...movedAssets].sort(byCodeUnit).join(", ")}`);
   }

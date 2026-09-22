@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 
-import { formatPlanReview, planReviewJson, summarizePlanReview } from "../src/plan/review.ts";
 import type { ExtractionManifest } from "../src/plan/manifest.ts";
-import { baseManifest, extractionFiles, PACKAGE_ROOT } from "./support/transaction-fixture.ts";
+import { formatPlanReview, planReviewJson, summarizePlanReview } from "../src/plan/review.ts";
 import { fixtureRepo } from "./support/fixture-repo.ts";
+import { baseManifest, extractionFiles, PACKAGE_ROOT } from "./support/transaction-fixture.ts";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -81,10 +81,7 @@ describe("plan review summary", () => {
 
   test("recognizes an existing target with no package or registration scaffold", () => {
     const base = manifest();
-    const withoutScaffold: ExtractionManifest = {
-      ...base,
-      operations: base.operations.filter((operation) => operation.kind !== "write-file"),
-    };
+    const withoutScaffold: ExtractionManifest = { ...base, operations: base.operations.filter((operation) => operation.kind !== "write-file") };
     const summary = summarizePlanReview(withoutScaffold, {
       baselinePaths: [`${PACKAGE_ROOT}/package.json`, `${PACKAGE_ROOT}/src/existing.ts`],
       manifestPath: "plans/existing.json",
@@ -105,20 +102,15 @@ describe("plan review summary", () => {
       gates: { package: [], project: [], workspace: [] },
     });
     expect(summary.target.mode).toBe("unknown");
-    expect(summary.warnings.map(({ code }) => code)).toEqual([
-      "target-mode-unknown",
-      "approval-path-missing",
-      "approval-subject-missing",
-      "no-gates",
-    ]);
+    expect(summary.warnings.map(({ code }) => code)).toEqual(["target-mode-unknown", "approval-path-missing", "approval-subject-missing", "no-gates"]);
   });
 
   test("makes possible donor orphans an explicit review decision", () => {
     const base = manifest();
-    const summary = summarizePlanReview({
-      ...base,
-      donorDependencyPruning: { mode: "report", candidates: [{ name: "runtime-library", section: "runtime" }] },
-    }, { baselinePaths: [], manifestPath: "plans/review.json" });
+    const summary = summarizePlanReview(
+      { ...base, donorDependencyPruning: { mode: "report", candidates: [{ name: "runtime-library", section: "runtime" }] } },
+      { baselinePaths: [], manifestPath: "plans/review.json" },
+    );
     expect(summary.warnings).toContainEqual(expect.objectContaining({ code: "donor-dependency-review" }));
     expect(formatPlanReview(summary)).toContain("verify scripts, config, generators, and other non-source consumers");
   });

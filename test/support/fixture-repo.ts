@@ -16,9 +16,9 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
-import { scrubbedGitEnv } from "../../src/util/git.ts";
-import { parseConfig, type MonocarveConfig, type MonocarveUserConfig } from "../../src/config.ts";
 import { CONFIG_BASENAME, SCRATCH_ROOT_ENV } from "../../src/branding.ts";
+import { parseConfig, type MonocarveConfig, type MonocarveUserConfig } from "../../src/config.ts";
+import { scrubbedGitEnv } from "../../src/util/git.ts";
 
 export function fixtureGit(root: string, ...args: string[]): string {
   // `cwd` is still set for commands and hooks that need the fixture's files,
@@ -111,9 +111,7 @@ function fixtureConfigArgs(args: readonly string[], commandIndex: number): strin
   if (externalScope !== undefined) {
     throw new Error(`fixture git config may not use ${externalScope}; fixture config is local only`);
   }
-  return args.includes("--local")
-    ? [...args]
-    : [...args.slice(0, commandIndex + 1), "--local", ...args.slice(commandIndex + 1)];
+  return args.includes("--local") ? [...args] : [...args.slice(0, commandIndex + 1), "--local", ...args.slice(commandIndex + 1)];
 }
 
 /** Reject options that would override the helper's pinned repository. */
@@ -124,10 +122,7 @@ function assertFixtureCommandArgs(args: readonly string[]): number {
   if (selector !== undefined) {
     throw new Error(`fixture git may not use repository or config selector ${selector}`);
   }
-  if (
-    args[commandIndex] === "init" &&
-    args.slice(commandIndex + 1).some((arg) => arg === "--separate-git-dir" || arg.startsWith("--separate-git-dir="))
-  ) {
+  if (args[commandIndex] === "init" && args.slice(commandIndex + 1).some((arg) => arg === "--separate-git-dir" || arg.startsWith("--separate-git-dir="))) {
     throw new Error("fixture git init may not use --separate-git-dir");
   }
   return commandIndex;
@@ -269,15 +264,7 @@ export function scratchDirectory(): string {
 /** Validated config for a fixture repository, written into it as JSON. */
 export function fixtureConfig(root: string, overrides: Partial<MonocarveUserConfig> = {}): MonocarveConfig {
   const base: MonocarveUserConfig = {
-    applications: [
-      {
-        name: "api",
-        sourceRoot: "apps/api/src",
-        tsconfig: "apps/api/tsconfig.json",
-        packageName: "@acme/api",
-        compositionRoots: [],
-      },
-    ],
+    applications: [{ name: "api", sourceRoot: "apps/api/src", tsconfig: "apps/api/tsconfig.json", packageName: "@acme/api", compositionRoots: [] }],
     packageRoots: ["libs"],
     packageScope: "@acme/",
     packageManager: "pnpm",

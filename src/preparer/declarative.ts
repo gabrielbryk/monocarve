@@ -15,7 +15,8 @@ export function applyFileCreates(root: string, creates: readonly FileCreate[]): 
       if (!statSync(absolute).isFile()) throw new PreparerError(`file create ${index + 1} path is not a file: ${create.path}`);
       const bytes = readFileSync(absolute);
       const mode = statSync(absolute).mode & 0o111 ? 0o755 : 0o644;
-      if (hashBytes(bytes) !== hashBytes(Buffer.from(create.contents)) || mode !== create.mode) throw new PreparerError(`file create ${index + 1} found different existing content or mode: ${create.path}`);
+      if (hashBytes(bytes) !== hashBytes(Buffer.from(create.contents)) || mode !== create.mode)
+        throw new PreparerError(`file create ${index + 1} found different existing content or mode: ${create.path}`);
       continue;
     }
     mkdirSync(dirname(absolute), { recursive: true });
@@ -33,7 +34,8 @@ export function applyTextReplacements(root: string, replacements: readonly TextR
     const afterState = framed(replacement, replacement.after);
     const first = contents.indexOf(beforeState);
     if (first >= 0) {
-      if (contents.indexOf(beforeState, first + beforeState.length) >= 0) throw new PreparerError(`text replacement ${index + 1} before text is ambiguous in ${replacement.path}`);
+      if (contents.indexOf(beforeState, first + beforeState.length) >= 0)
+        throw new PreparerError(`text replacement ${index + 1} before text is ambiguous in ${replacement.path}`);
       writeFileSync(absolute, `${contents.slice(0, first)}${afterState}${contents.slice(first + beforeState.length)}`);
       continue;
     }
@@ -46,8 +48,15 @@ export function applyTextReplacements(root: string, replacements: readonly TextR
 function terminalReplacementAfter(replacements: readonly TextReplacement[], index: number): string {
   const current = replacements[index]!;
   let terminal = current.after;
-  for (const candidate of replacements.slice(index + 1)) if (candidate.path === current.path && candidate.prefix === current.prefix && candidate.suffix === current.suffix && candidate.before === terminal) terminal = candidate.after;
+  for (const candidate of replacements.slice(index + 1))
+    if (candidate.path === current.path && candidate.prefix === current.prefix && candidate.suffix === current.suffix && candidate.before === terminal)
+      terminal = candidate.after;
   return framed(current, terminal);
 }
-function framed(replacement: Pick<TextReplacement, "prefix" | "suffix">, text: string): string { return `${replacement.prefix ?? ""}${text}${replacement.suffix ?? ""}`; }
-function uniqueOccurrence(contents: string, state: string): boolean { const first = contents.indexOf(state); return first >= 0 && contents.indexOf(state, first + state.length) < 0; }
+function framed(replacement: Pick<TextReplacement, "prefix" | "suffix">, text: string): string {
+  return `${replacement.prefix ?? ""}${text}${replacement.suffix ?? ""}`;
+}
+function uniqueOccurrence(contents: string, state: string): boolean {
+  const first = contents.indexOf(state);
+  return first >= 0 && contents.indexOf(state, first + state.length) < 0;
+}

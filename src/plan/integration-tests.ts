@@ -6,20 +6,28 @@
  */
 
 import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapters/registry.ts";
-import { applicationOwner, getApplication, isFirstPartyPackageOwner, isPackageOwner, renderExtractionProfile, resolveExtractionProfile, type MonocarveConfig } from "../config.ts";
 import { GENERATOR } from "../branding.ts";
+import {
+  applicationOwner,
+  getApplication,
+  isFirstPartyPackageOwner,
+  isPackageOwner,
+  renderExtractionProfile,
+  resolveExtractionProfile,
+  type MonocarveConfig,
+} from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import { resolveCommit } from "../util/git.ts";
 import { hashText, type Sha256 } from "../util/hash.ts";
 import { renderTemplate } from "../util/template.ts";
-import { inferDependencies } from "./dependencies.ts";
+import { boundaryBaselineOf } from "./boundary-baseline.ts";
 import { renderGates, graphDigest, moveOperation } from "./build.ts";
 import { PlanningError, WorkspaceContext } from "./context.ts";
+import { inferDependencies } from "./dependencies.ts";
+import { collectIntegrationTestClosure, selectIntegrationTestRoots } from "./integration-test-closure.ts";
 import { operationPaths, PLAN_SCHEMA_VERSION, type ExtractionManifest, type PlanOperation } from "./manifest.ts";
-import { boundaryBaselineOf } from "./boundary-baseline.ts";
 import { buildPlanProvenance } from "./provenance.ts";
 import { packageOperations } from "./scaffold.ts";
-import { collectIntegrationTestClosure, selectIntegrationTestRoots } from "./integration-test-closure.ts";
 
 export interface BuildIntegrationTestPlanOptions {
   readonly config: MonocarveConfig;
@@ -35,7 +43,8 @@ export function buildIntegrationTestPlanSync(options: BuildIntegrationTestPlanOp
   const suite = config.integrationTestSuites[options.suite];
   if (!suite) throw new PlanningError(`unknown integration test suite ${JSON.stringify(options.suite)}`);
   const application = getApplication(config, suite.application);
-  if (!application.packageName) throw new PlanningError(`integration test suite ${options.suite} requires application ${application.name} to declare packageName`);
+  if (!application.packageName)
+    throw new PlanningError(`integration test suite ${options.suite} requires application ${application.name} to declare packageName`);
   const context = options.context ?? new WorkspaceContext(config, options.rootDir);
   if (context.manifest(applicationOwner(application)).name !== application.packageName) {
     throw new PlanningError(`integration test suite ${options.suite} donor application package.json does not declare ${application.packageName}`);
@@ -95,22 +104,42 @@ export function buildIntegrationTestPlanSync(options: BuildIntegrationTestPlanOp
     if (state === "missing") throw new PlanningError(`integration test source does not exist: ${source}`);
     sourceBlobs[source] = state;
   }
-  const lockOperation = operations.find((operation): operation is Extract<PlanOperation, { kind: "lockfile-importer" }> =>
-    operation.kind === "lockfile-importer" && operation.packageRoot === rendered.packageRoot,
+  const lockOperation = operations.find(
+    (operation): operation is Extract<PlanOperation, { kind: "lockfile-importer" }> =>
+      operation.kind === "lockfile-importer" && operation.packageRoot === rendered.packageRoot,
   );
   const projectId = scaffoldInput.projectId;
-  const commitVars = { package: rendered.packageName, packageRoot: rendered.packageRoot, app: application.name, project: projectId, planId: `tests--${options.suite}`, fileCount: String(tests.length) };
+  const commitVars = {
+    package: rendered.packageName,
+    packageRoot: rendered.packageRoot,
+    app: application.name,
+    project: projectId,
+    planId: `tests--${options.suite}`,
+    fileCount: String(tests.length),
+  };
 
   return {
     schemaVersion: PLAN_SCHEMA_VERSION,
     planId: `tests--${options.suite}`,
     createdAt: baseline.committedAt,
     generator: { ...GENERATOR },
-    provenance: buildPlanProvenance({ config, profileGates: profile.gates, scaffoldTemplates: profile.scaffoldTemplates, packageManager, taskRunner, ...(context.exists("package.json") ? { rootPackageJson: context.text("package.json") } : {}) }),
+    provenance: buildPlanProvenance({
+      config,
+      profileGates: profile.gates,
+      scaffoldTemplates: profile.scaffoldTemplates,
+      packageManager,
+      taskRunner,
+      ...(context.exists("package.json") ? { rootPackageJson: context.text("package.json") } : {}),
+    }),
     baselineCommit: baseline.commit,
     graphDigest: graphDigest(graph),
     application: application.name,
-    boundaryBaseline: boundaryBaselineOf({ config, rootDir: options.rootDir, files: context.repositorySources(), referencesOf: (file) => context.moduleReferences(file) }),
+    boundaryBaseline: boundaryBaselineOf({
+      config,
+      rootDir: options.rootDir,
+      files: context.repositorySources(),
+      referencesOf: (file) => context.moduleReferences(file),
+    }),
     target: {
       packageName: rendered.packageName,
       packageRoot: rendered.packageRoot,
@@ -135,7 +164,13 @@ export function buildIntegrationTestPlanSync(options: BuildIntegrationTestPlanOp
     ...(lockOperation ? { lockfileImporter: { packageRoot: rendered.packageRoot, hash: hashText(lockOperation.block) } } : {}),
     expectedDynamicImportDelta: { added: [], removed: [] },
     evaluationEffects: [],
-    metrics: { movedFiles: tests.length, movedLines: tests.reduce((total, path) => total + (graph.nodes.get(path)?.lineCount ?? 0), 0), applicationLinesBefore: 0, applicationLinesAfter: 0, consumers: 0 },
+    metrics: {
+      movedFiles: tests.length,
+      movedLines: tests.reduce((total, path) => total + (graph.nodes.get(path)?.lineCount ?? 0), 0),
+      applicationLinesBefore: 0,
+      applicationLinesAfter: 0,
+      consumers: 0,
+    },
     commits: {
       plan: { subject: renderTemplate(config.commitTemplates.plan, commitVars) },
       move: { subject: renderTemplate(config.commitTemplates.move, commitVars) },

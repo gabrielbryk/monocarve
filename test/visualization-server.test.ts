@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { startVisualizationServer, type VisualizationServer } from "../src/visualization/server.ts";
 import { VISUALIZATION_SCHEMA, type VisualizationGraph } from "../src/visualization/model.ts";
+import { startVisualizationServer, type VisualizationServer } from "../src/visualization/server.ts";
 
 let running: VisualizationServer | undefined;
-afterEach(() => { running?.server.stop(true); running = undefined; });
+afterEach(() => {
+  running?.server.stop(true);
+  running = undefined;
+});
 
 describe("dependency graph visualization server", () => {
   test("serves only the UI and bounded read-only graph API on loopback", async () => {
@@ -42,13 +45,10 @@ describe("dependency graph visualization server", () => {
       },
       openBrowser: false,
     });
-    const [left, right] = await Promise.all([
-      fetch(`${running.url}/api/rescan`, { method: "POST" }),
-      fetch(`${running.url}/api/rescan`, { method: "POST" }),
-    ]);
+    const [left, right] = await Promise.all([fetch(`${running.url}/api/rescan`, { method: "POST" }), fetch(`${running.url}/api/rescan`, { method: "POST" })]);
     expect(calls).toBe(2);
     expect(await left.json()).toEqual(await right.json());
-    expect((await (await fetch(`${running.url}/api/graph`)).json() as VisualizationGraph).digest).toBe("2".repeat(64));
+    expect(((await (await fetch(`${running.url}/api/graph`)).json()) as VisualizationGraph).digest).toBe("2".repeat(64));
   });
 });
 

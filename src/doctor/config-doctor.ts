@@ -25,8 +25,14 @@ export interface ConfigDoctorReport {
   readonly rootDir: string;
   readonly effective: readonly { key: string; value: unknown; source: ConfigValueSource }[];
   readonly applications: readonly {
-    name: string; sourceRoot: string; tsconfig: string; packageName?: string; project?: string;
-    sourceRootExists: boolean; tsconfigExists: boolean; compilerProfile: MonocarveConfig["applications"][number]["compilerProfile"];
+    name: string;
+    sourceRoot: string;
+    tsconfig: string;
+    packageName?: string;
+    project?: string;
+    sourceRootExists: boolean;
+    tsconfigExists: boolean;
+    compilerProfile: MonocarveConfig["applications"][number]["compilerProfile"];
   }[];
   readonly packageRoots: readonly { path: string; exists: boolean }[];
   readonly workspacePackages: readonly WorkspacePackage[];
@@ -48,21 +54,46 @@ export interface ConfigDoctorReport {
   };
   readonly boundaries: {
     readonly compositionBoundaries: readonly {
-      id: string; strategy: "existing-package" | "port"; retained: string;
-      retainedExists: boolean; referencedByRetainedRoots: boolean;
+      id: string;
+      strategy: "existing-package" | "port";
+      retained: string;
+      retainedExists: boolean;
+      referencedByRetainedRoots: boolean;
     }[];
     readonly portPromotions: readonly {
-      id: string; appConcreteTypes: readonly string[]; appConcreteTypeMissingFiles: readonly string[];
+      id: string;
+      appConcreteTypes: readonly string[];
+      appConcreteTypeMissingFiles: readonly string[];
       referencedByRetainedRoots: boolean;
     }[];
   };
 }
 
 const EFFECTIVE_KEYS = [
-  "root", "packageRoots", "packageScope", "firstPartyRoots", "firstPartyPackages", "packageNamePattern",
-  "packageManager", "taskRunner", "testPathPatterns", "moduleSpecifierCalls",
-  "assetExtensions", "cssImportExtensions", "assetEmissionProofs", "postJournalPreparers",
-  "guardedBranches", "gates", "graph", "pathReferences", "pathReferenceRewrites", "runtimeModuleRegistries", "transaction", "extractionProfiles", "planDir", "campaignDir",
+  "root",
+  "packageRoots",
+  "packageScope",
+  "firstPartyRoots",
+  "firstPartyPackages",
+  "packageNamePattern",
+  "packageManager",
+  "taskRunner",
+  "testPathPatterns",
+  "moduleSpecifierCalls",
+  "assetExtensions",
+  "cssImportExtensions",
+  "assetEmissionProofs",
+  "postJournalPreparers",
+  "guardedBranches",
+  "gates",
+  "graph",
+  "pathReferences",
+  "pathReferenceRewrites",
+  "runtimeModuleRegistries",
+  "transaction",
+  "extractionProfiles",
+  "planDir",
+  "campaignDir",
 ] as const;
 
 /** Build a deterministic, read-only account of the configuration and workspace it resolves. */
@@ -71,31 +102,31 @@ export async function inspectConfig(input: ConfigDoctorInput): Promise<ConfigDoc
   const packageManager = adapterStatus(input.config.packageManager, () => createPackageManagerAdapter(input.config));
   const taskRunner = adapterStatus(input.config.taskRunner, () => createTaskRunnerAdapter(input.config));
   let workspacePackages: readonly WorkspacePackage[] = [];
-  let workspaceResolution: ConfigDoctorReport["workspaceResolution"] = packageManager.status === "available"
-    ? { status: "resolved" }
-    : { status: "unavailable", ...(packageManager.detail ? { detail: packageManager.detail } : {}) };
+  let workspaceResolution: ConfigDoctorReport["workspaceResolution"] =
+    packageManager.status === "available"
+      ? { status: "resolved" }
+      : { status: "unavailable", ...(packageManager.detail ? { detail: packageManager.detail } : {}) };
   if (packageManager.status === "available") {
     try {
       workspacePackages = (await createPackageManagerAdapter(input.config).listPackages(input.rootDir))
-        .slice().sort((a, b) => a.dir.localeCompare(b.dir) || a.name.localeCompare(b.name));
+        .slice()
+        .sort((a, b) => a.dir.localeCompare(b.dir) || a.name.localeCompare(b.name));
     } catch (error) {
       workspaceResolution = { status: "unavailable", detail: errorMessage(error) };
     }
   }
 
   const preparation = input.config.preparation;
-  const gateTiers = preparation.gates
-    ? (["package", "project", "workspace"] as const).filter((tier) => preparation.gates?.[tier] !== undefined)
-    : [];
+  const gateTiers = preparation.gates ? (["package", "project", "workspace"] as const).filter((tier) => preparation.gates?.[tier] !== undefined) : [];
   const boundaries = boundaryReport(input.config, input.rootDir);
   return {
     configPath: input.configPath,
     rootDir: input.rootDir,
-    effective: EFFECTIVE_KEYS.map((key) => ({
-      key, value: input.config[key], source: raw ? (Object.hasOwn(raw, key) ? "explicit" : "default") : "unknown",
-    })),
+    effective: EFFECTIVE_KEYS.map((key) => ({ key, value: input.config[key], source: raw ? (Object.hasOwn(raw, key) ? "explicit" : "default") : "unknown" })),
     applications: input.config.applications.map((application) => ({
-      name: application.name, sourceRoot: application.sourceRoot, tsconfig: application.tsconfig,
+      name: application.name,
+      sourceRoot: application.sourceRoot,
+      tsconfig: application.tsconfig,
       ...(application.packageName ? { packageName: application.packageName } : {}),
       ...(application.project ? { project: application.project } : {}),
       sourceRootExists: existsSync(join(input.rootDir, application.sourceRoot)),
@@ -145,7 +176,9 @@ function boundaryReport(config: MonocarveConfig, rootDir: string): ConfigDoctorR
     portPromotions: config.portPromotions.map((promotion) => ({
       id: promotion.id,
       appConcreteTypes: concreteTypeReferences(promotion),
-      appConcreteTypeMissingFiles: concreteTypeReferences(promotion).map(concreteTypeFile).filter((path) => !existsSync(join(rootDir, path))),
+      appConcreteTypeMissingFiles: concreteTypeReferences(promotion)
+        .map(concreteTypeFile)
+        .filter((path) => !existsSync(join(rootDir, path))),
       referencedByRetainedRoots: promotion.retainedRoots.some((root) => underAnyRetainedRoot(root, config.portfolio.retainedRoots)),
     })),
   };
@@ -167,24 +200,44 @@ function boundaryIssues(config: MonocarveConfig, boundaries: ConfigDoctorReport[
   const issues: { severity: "error"; context: string; detail: string }[] = [];
   for (const boundary of boundaries.compositionBoundaries) {
     if (!boundary.retainedExists) {
-      issues.push({ severity: "error", context: "compositionBoundaries", detail: `boundary "${boundary.id}" retained path "${boundary.retained}" does not exist` });
+      issues.push({
+        severity: "error",
+        context: "compositionBoundaries",
+        detail: `boundary "${boundary.id}" retained path "${boundary.retained}" does not exist`,
+      });
     }
     if (!boundary.referencedByRetainedRoots) {
-      issues.push({ severity: "error", context: "compositionBoundaries", detail: `boundary "${boundary.id}" is declared but no portfolio.retainedRoots entry reaches "${boundary.retained}"; it can never be offered as a preparation recipe` });
+      issues.push({
+        severity: "error",
+        context: "compositionBoundaries",
+        detail: `boundary "${boundary.id}" is declared but no portfolio.retainedRoots entry reaches "${boundary.retained}"; it can never be offered as a preparation recipe`,
+      });
     }
   }
   for (const promotion of boundaries.portPromotions) {
     if (promotion.appConcreteTypeMissingFiles.length > 0) {
-      issues.push({ severity: "error", context: "portPromotions", detail: `promotion "${promotion.id}" app concrete types name files that do not exist: ${promotion.appConcreteTypeMissingFiles.map((path) => JSON.stringify(path)).join(", ")}` });
+      issues.push({
+        severity: "error",
+        context: "portPromotions",
+        detail: `promotion "${promotion.id}" app concrete types name files that do not exist: ${promotion.appConcreteTypeMissingFiles.map((path) => JSON.stringify(path)).join(", ")}`,
+      });
     }
     if (!promotion.referencedByRetainedRoots) {
-      issues.push({ severity: "error", context: "portPromotions", detail: `promotion "${promotion.id}" is declared but no portfolio.retainedRoots entry overlaps its retainedRoots; it can never be offered as a preparation recipe` });
+      issues.push({
+        severity: "error",
+        context: "portPromotions",
+        detail: `promotion "${promotion.id}" is declared but no portfolio.retainedRoots entry overlaps its retainedRoots; it can never be offered as a preparation recipe`,
+      });
     }
   }
   const compositionIds = new Set(config.compositionBoundaries.map((boundary) => boundary.id));
   for (const promotion of config.portPromotions) {
     if (compositionIds.has(promotion.id)) {
-      issues.push({ severity: "error", context: "boundaries", detail: `id "${promotion.id}" is declared in both compositionBoundaries and portPromotions; boundary ids share one namespace across both vocabularies` });
+      issues.push({
+        severity: "error",
+        context: "boundaries",
+        detail: `id "${promotion.id}" is declared in both compositionBoundaries and portPromotions; boundary ids share one namespace across both vocabularies`,
+      });
     }
   }
   return issues;
@@ -195,54 +248,62 @@ function scaffoldSemanticIssues(config: MonocarveConfig, rootDir: string): Confi
   for (const application of config.applications) {
     inspectScaffold(scaffoldFor(config, application), `application ${application.name}`, rootDir, issues);
     for (const name of Object.keys(config.extractionProfiles.profiles).sort()) {
-      inspectScaffold(resolveExtractionProfile(config, application, name).scaffoldTemplates, `application ${application.name}, profile ${name}`, rootDir, issues);
+      inspectScaffold(
+        resolveExtractionProfile(config, application, name).scaffoldTemplates,
+        `application ${application.name}, profile ${name}`,
+        rootDir,
+        issues,
+      );
     }
   }
   if (config.pathReferenceRewrites.enabled) {
     if (config.pathReferenceRewrites.roots.length === 0) {
-      issues.push({
-        severity: "error", context: "pathReferenceRewrites",
-        detail: "enabled: true but roots is empty; this configuration scans nothing",
-      });
+      issues.push({ severity: "error", context: "pathReferenceRewrites", detail: "enabled: true but roots is empty; this configuration scans nothing" });
     }
     if (config.pathReferenceRewrites.minSegments < config.pathReferences.minSegments) {
       issues.push({
-        severity: "error", context: "pathReferenceRewrites",
+        severity: "error",
+        context: "pathReferenceRewrites",
         detail: `minSegments (${config.pathReferenceRewrites.minSegments}) is looser than pathReferences.minSegments (${config.pathReferences.minSegments}); the rewriter would mutate references the warning scanner never warned about`,
       });
     }
     if (config.pathReferenceRewrites.matchExtensionless && !config.pathReferences.matchExtensionless) {
       issues.push({
-        severity: "error", context: "pathReferenceRewrites",
-        detail: "matchExtensionless is true but pathReferences.matchExtensionless is false; the rewriter would mutate extensionless references the warning scanner never warned about",
+        severity: "error",
+        context: "pathReferenceRewrites",
+        detail:
+          "matchExtensionless is true but pathReferences.matchExtensionless is false; the rewriter would mutate extensionless references the warning scanner never warned about",
       });
     }
     if (!config.pathReferences.enabled && config.pathReferenceRewrites.enabled) {
       issues.push({
-        severity: "error", context: "pathReferenceRewrites",
-        detail: "pathReferences.enabled is false while pathReferenceRewrites.enabled is true; the rewriter would mutate references the warning scanner never warned about",
+        severity: "error",
+        context: "pathReferenceRewrites",
+        detail:
+          "pathReferences.enabled is false while pathReferenceRewrites.enabled is true; the rewriter would mutate references the warning scanner never warned about",
       });
     }
     for (const root of config.pathReferenceRewrites.roots) {
       const fullPath = join(rootDir, root.root);
       if (!existsSync(fullPath)) {
-        issues.push({
-          severity: "error", context: "pathReferenceRewrites",
-          detail: `root "${root.root}" does not exist`,
-        });
+        issues.push({ severity: "error", context: "pathReferenceRewrites", detail: `root "${root.root}" does not exist` });
       }
       for (const application of config.applications) {
         if (root.root === application.sourceRoot || root.root.startsWith(application.sourceRoot + "/") || application.sourceRoot.startsWith(root.root + "/")) {
           issues.push({
-            severity: "error", context: "pathReferenceRewrites",
+            severity: "error",
+            context: "pathReferenceRewrites",
             detail: `root "${root.root}" overlaps with application "${application.name}" sourceRoot "${application.sourceRoot}"; the source scan already covers application source trees`,
           });
         }
       }
-      const covered = config.pathReferences.textRoots.some((textRoot) => root.root === textRoot.root || root.root.startsWith(textRoot.root + "/") || textRoot.root.startsWith(root.root + "/"));
+      const covered = config.pathReferences.textRoots.some(
+        (textRoot) => root.root === textRoot.root || root.root.startsWith(textRoot.root + "/") || textRoot.root.startsWith(root.root + "/"),
+      );
       if (!covered) {
         issues.push({
-          severity: "error", context: "pathReferenceRewrites",
+          severity: "error",
+          context: "pathReferenceRewrites",
           detail: `root "${root.root}" is not covered by pathReferences.textRoots; the rewriter would mutate a tree the warning scanner never looked at`,
         });
       }
@@ -252,7 +313,8 @@ function scaffoldSemanticIssues(config: MonocarveConfig, rootDir: string): Confi
         const overlaps = left.root === right.root || left.root.startsWith(right.root + "/") || right.root.startsWith(left.root + "/");
         if (overlaps && left.referenceBase !== right.referenceBase) {
           issues.push({
-            severity: "error", context: "pathReferenceRewrites",
+            severity: "error",
+            context: "pathReferenceRewrites",
             detail: `overlapping roots "${left.root}" and "${right.root}" declare multiple referenceBase values; a document may have only one resolution base`,
           });
         }
@@ -274,16 +336,23 @@ function inspectScaffold(
   try {
     const text = "contents" in source ? source.contents : readFileSync(join(rootDir, source.file), "utf8");
     manifest = JSON.parse(text) as unknown;
-  } catch { return; }
+  } catch {
+    return;
+  }
   if (typeof manifest !== "object" || manifest === null || Array.isArray(manifest)) return;
   const exportsValue = (manifest as Record<string, unknown>).exports;
   if (exportsValue === undefined) return;
-  const rootExport = typeof exportsValue !== "object" || exportsValue === null || Array.isArray(exportsValue) ||
+  const rootExport =
+    typeof exportsValue !== "object" ||
+    exportsValue === null ||
+    Array.isArray(exportsValue) ||
     Object.keys(exportsValue as Record<string, unknown>).some((key) => key === "." || !key.startsWith("."));
-  if (rootExport) issues.push({
-    severity: "error", context,
-    detail: "scaffold package template declares a root export, but publicSurface is subpaths-only; remove the root export or select barrel mode",
-  });
+  if (rootExport)
+    issues.push({
+      severity: "error",
+      context,
+      detail: "scaffold package template declares a root export, but publicSurface is subpaths-only; remove the root export or select barrel mode",
+    });
 }
 
 function adapterStatus(configured: string, factory: () => unknown): AdapterStatus {
@@ -299,7 +368,7 @@ function adapterStatus(configured: string, factory: () => unknown): AdapterStatu
 }
 
 function objectValue(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function errorMessage(error: unknown): string {

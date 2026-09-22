@@ -1,5 +1,5 @@
-import { existsSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
+import { existsSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
 import { parseCampaignLedger, serializeCampaignLedger, type CampaignLedger } from "../campaign/index.ts";
@@ -20,7 +20,8 @@ export function campaignLedgerPath(rootDir: string, config: MonocarveConfig, inp
   if (path !== campaignDir && !path.startsWith(`${campaignDir}/`)) {
     throw new UsageError(`campaign ledger ${path} must live beneath configured campaignDir ${campaignDir}`);
   }
-  if (tryGit({ cwd: rootDir }, "check-ignore", "-q", "--", path) === null) throw new UsageError(`campaign ledger ${path} must be git-ignored operational state`);
+  if (tryGit({ cwd: rootDir }, "check-ignore", "-q", "--", path) === null)
+    throw new UsageError(`campaign ledger ${path} must be git-ignored operational state`);
   return path;
 }
 
@@ -43,11 +44,7 @@ export interface CampaignLedgerWriteIo {
   readonly afterOwnershipAcquired?: (target: string, backup: string) => void;
 }
 
-const WRITE_IO: CampaignLedgerWriteIo = {
-  writeFile: writeFileSync,
-  rename: renameSync,
-  remove: (path) => rmSync(path, { force: true }),
-};
+const WRITE_IO: CampaignLedgerWriteIo = { writeFile: writeFileSync, rename: renameSync, remove: (path) => rmSync(path, { force: true }) };
 
 /** Ownership-transfer CAS: never overwrite a concurrent replacement. */
 export function writeCampaignLedgerAtomically(rootDir: string, path: string, expected: string, contents: string, io: CampaignLedgerWriteIo = WRITE_IO): void {
@@ -68,14 +65,18 @@ export function writeCampaignLedgerAtomically(rootDir: string, path: string, exp
     if (readFileSync(backup, "utf8") !== expected) {
       const restored = restoreOwnedBackup(target, backup);
       ownsBackup = !restored;
-      throw new IoError(`campaign ledger ${path} changed while this command was gathering evidence; refusing to overwrite it${restored ? "" : `; prior ledger retained at ${backup}`}`);
+      throw new IoError(
+        `campaign ledger ${path} changed while this command was gathering evidence; refusing to overwrite it${restored ? "" : `; prior ledger retained at ${backup}`}`,
+      );
     }
     try {
       linkSync(temporary, target);
     } catch (error) {
       const restored = restoreOwnedBackup(target, backup);
       ownsBackup = !restored;
-      throw new IoError(`campaign ledger ${path} was concurrently replaced before publication; replacement preserved${restored ? "" : `; prior ledger retained at ${backup}`}: ${reason(error)}`);
+      throw new IoError(
+        `campaign ledger ${path} was concurrently replaced before publication; replacement preserved${restored ? "" : `; prior ledger retained at ${backup}`}: ${reason(error)}`,
+      );
     }
     rmSync(backup, { force: true });
     ownsBackup = false;
@@ -158,8 +159,9 @@ function sameIdentity(path: string, expected: ReturnType<typeof identity>): bool
 
 function acquireCampaignLock(target: string, lock: string, backup?: string): void {
   const contents = `${JSON.stringify({ pid: process.pid, ...(backup === undefined ? {} : { backup }) })}\n`;
-  try { writeFileSync(lock, contents, { encoding: "utf8", flag: "wx" }); }
-  catch (error) {
+  try {
+    writeFileSync(lock, contents, { encoding: "utf8", flag: "wx" });
+  } catch (error) {
     if (!recoverStaleCampaignLedgerLock(target, lock)) throw error;
     writeFileSync(lock, contents, { encoding: "utf8", flag: "wx" });
   }
@@ -168,8 +170,11 @@ function acquireCampaignLock(target: string, lock: string, backup?: string): voi
 /** Recover only a dead writer's ownership marker; a live or unparseable lock remains authoritative. */
 export function recoverStaleCampaignLedgerLock(target: string, lock = `${target}.lock`): boolean {
   let state: { readonly pid?: unknown; readonly backup?: unknown };
-  try { state = JSON.parse(readFileSync(lock, "utf8")) as typeof state; }
-  catch { return false; }
+  try {
+    state = JSON.parse(readFileSync(lock, "utf8")) as typeof state;
+  } catch {
+    return false;
+  }
   if (!Number.isInteger(state.pid) || (state.pid as number) <= 0 || processAlive(state.pid as number)) return false;
   const backup = typeof state.backup === "string" ? state.backup : undefined;
   if (backup !== undefined && !isOwnedBackupPath(target, backup, state.pid as number)) return false;
@@ -184,13 +189,19 @@ export function recoverStaleCampaignLedgerLock(target: string, lock = `${target}
 function isOwnedBackupPath(target: string, backup: string, pid: number): boolean {
   const prefix = `.${basename(target)}.${pid}.owned.`;
   const name = basename(backup);
-  return dirname(resolve(backup)) === dirname(resolve(target))
-    && name.startsWith(prefix)
-    && name.endsWith(".tmp")
-    && /^[0-9a-f-]{36}$/u.test(name.slice(prefix.length, -4));
+  return (
+    dirname(resolve(backup)) === dirname(resolve(target)) &&
+    name.startsWith(prefix) &&
+    name.endsWith(".tmp") &&
+    /^[0-9a-f-]{36}$/u.test(name.slice(prefix.length, -4))
+  );
 }
 
 function processAlive(pid: number): boolean {
-  try { process.kill(pid, 0); return true; }
-  catch (error) { return (error as NodeJS.ErrnoException).code !== "ESRCH"; }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== "ESRCH";
+  }
 }

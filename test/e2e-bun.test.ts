@@ -19,8 +19,8 @@ import { fileURLToPath } from "node:url";
 import { bunAdapter } from "../src/adapters/bun.ts";
 import { loadConfig } from "../src/config.ts";
 import { scanDependencyGraph } from "../src/graph/cruiser.ts";
-import { buildPortfolio } from "../src/portfolio/rank.ts";
 import { buildPlanSync, serializeManifest } from "../src/plan/build.ts";
+import { buildPortfolio } from "../src/portfolio/rank.ts";
 import { applyPlan } from "../src/transaction/apply.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
 import { verifyPackageImporters } from "../src/transaction/projected-importers.ts";
@@ -55,14 +55,7 @@ describe("end to end, on a bun workspace", () => {
     const candidate = portfolio.candidates.find((entry) => entry.eligible && entry.assets.length > 0);
     expect(candidate).toBeDefined();
 
-    const manifest = buildPlanSync({
-      config,
-      rootDir: root,
-      graph,
-      candidate: candidate!,
-      baselineCommit: graph.commit!,
-      packageName: "@acme/chart",
-    });
+    const manifest = buildPlanSync({ config, rootDir: root, graph, candidate: candidate!, baselineCommit: graph.commit!, packageName: "@acme/chart" });
 
     // The plan declares the two files bun reads for membership and resolution,
     // and declares them once each. A plan missing either is a plan that lands a
@@ -84,9 +77,7 @@ describe("end to end, on a bun workspace", () => {
     expect(result.ok).toBe(true);
 
     // The move commit is nothing but exact renames, on this manager too.
-    const moveDiff = fixtureGit(root, "show", "--name-status", "--find-renames=100%", "--format=", "HEAD~1")
-      .split("\n")
-      .filter(Boolean);
+    const moveDiff = fixtureGit(root, "show", "--name-status", "--find-renames=100%", "--format=", "HEAD~1").split("\n").filter(Boolean);
     expect(moveDiff.length).toBeGreaterThan(0);
     expect(moveDiff.every((line) => line.startsWith("R100"))).toBe(true);
 
@@ -107,10 +98,7 @@ describe("end to end, on a bun workspace", () => {
     expect(projected.checked).toEqual([".", "apps/web", "libs/chart"]);
 
     // The package is real, and the consumer moved to its specifier.
-    const created = JSON.parse(readFileSync(join(root, "libs/chart/package.json"), "utf8")) as {
-      name: string;
-      dependencies: Record<string, string>;
-    };
+    const created = JSON.parse(readFileSync(join(root, "libs/chart/package.json"), "utf8")) as { name: string; dependencies: Record<string, string> };
     expect(created.name).toBe("@acme/chart");
     expect(created.dependencies["@acme/format"]).toBe("workspace:*");
     expect(readFileSync(join(root, "apps/web/src/main.ts"), "utf8")).toContain('from "@acme/chart');

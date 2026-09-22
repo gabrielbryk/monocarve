@@ -1,12 +1,16 @@
 import { z } from "zod";
 
 import { protectedPath, regexSource, relativePath } from "./primitives.ts";
-export { generatedSourceAdoptions, graph, runtimeModuleRegistries, type GeneratedSourceAdoptionsConfig, type GraphConfig, type RuntimeModuleRegistriesConfig } from "./schema-extensions.ts";
+export {
+  generatedSourceAdoptions,
+  graph,
+  runtimeModuleRegistries,
+  type GeneratedSourceAdoptionsConfig,
+  type GraphConfig,
+  type RuntimeModuleRegistriesConfig,
+} from "./schema-extensions.ts";
 
-const domain = z.strictObject({
-  name: z.string().min(1),
-  patterns: z.array(regexSource).min(1),
-});
+const domain = z.strictObject({ name: z.string().min(1), patterns: z.array(regexSource).min(1) });
 
 export const portfolio = z.strictObject({
   domains: z.array(domain).default([]),
@@ -97,9 +101,7 @@ export const portfolio = z.strictObject({
    */
   forbidTargetSuggestion: z.array(z.enum(["root"])).default([]),
   /** Directory names too generic to be useful package boundaries. Advisory only. */
-  genericTargetSegments: z
-    .array(z.string().min(1))
-    .default(["root", "components", "src", "shared", "common", "utils"]),
+  genericTargetSegments: z.array(z.string().min(1)).default(["root", "components", "src", "shared", "common", "utils"]),
   /** Minimum production fan-in before a pure re-export is reported as a compatibility shim. */
   compatibilityShimMinInbound: z.number().int().nonnegative().default(5),
   /** Advisory complexity thresholds; these never make a candidate ineligible. */
@@ -121,18 +123,14 @@ export type PortfolioConfig = z.output<typeof portfolio>;
  * support must not be pulled into a production package. The default still
  * permits computed test-only references; `self-contained` refuses them.
  */
-export const testRelocation = z.strictObject({
-  strategy: z.enum(["all-importers", "self-contained"]).default("all-importers"),
-});
+export const testRelocation = z.strictObject({ strategy: z.enum(["all-importers", "self-contained"]).default("all-importers") });
 
 export type TestRelocationConfig = z.output<typeof testRelocation>;
 
 /** Explicit test intent. When present it replaces the legacy flat matcher. */
-export const testKinds = z.strictObject({
-  unit: z.array(regexSource).default([]),
-  integration: z.array(regexSource).default([]),
-  e2e: z.array(regexSource).default([]),
-}).optional();
+export const testKinds = z
+  .strictObject({ unit: z.array(regexSource).default([]), integration: z.array(regexSource).default([]), e2e: z.array(regexSource).default([]) })
+  .optional();
 
 export type TestKind = "unit" | "integration" | "e2e";
 export type TestKindsConfig = z.output<typeof testKinds>;
@@ -155,10 +153,9 @@ export const integrationTestSuite = z.strictObject({
   donorImports: z.array(z.strictObject({ source: relativePath, specifier: z.string().min(1) })).default([]),
 });
 
-export const integrationTestSuites = z.record(
-  z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "must be a lowercase kebab-case identifier"),
-  integrationTestSuite,
-).default({});
+export const integrationTestSuites = z
+  .record(z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "must be a lowercase kebab-case identifier"), integrationTestSuite)
+  .default({});
 
 export type IntegrationTestSuiteConfig = z.output<typeof integrationTestSuite>;
 
@@ -178,10 +175,7 @@ export type IntegrationTestSuiteConfig = z.output<typeof integrationTestSuite>;
  * a directory whose extensions it never lists: that combination scans nothing,
  * silently, which is the worst way for a heuristic to be wrong.
  */
-export const textScanRoot = z.strictObject({
-  root: relativePath,
-  extensions: z.array(z.string().regex(/^\./, "extension must start with a dot")).min(1),
-});
+export const textScanRoot = z.strictObject({ root: relativePath, extensions: z.array(z.string().regex(/^\./, "extension must start with a dot")).min(1) });
 
 /**
  * Detection of moved paths that appear as **string literals** rather than as
@@ -221,7 +215,11 @@ export const pathReferences = z.strictObject({
    * and snapshots are where a path-shaped substring is most likely to be
    * accidental and least likely to be a reference anyone maintains.
    */
-  maxBytes: z.number().int().positive().default(512 * 1024),
+  maxBytes: z
+    .number()
+    .int()
+    .positive()
+    .default(512 * 1024),
 });
 
 export type PathReferencesConfig = z.output<typeof pathReferences>;
@@ -266,7 +264,11 @@ export const pathReferenceRewrites = z.strictObject({
    * would silently rewrite a reference nobody was told monocarve was watching.
    */
   minSegments: z.number().int().min(2).default(3),
-  maxBytes: z.number().int().positive().default(512 * 1024),
+  maxBytes: z
+    .number()
+    .int()
+    .positive()
+    .default(512 * 1024),
 });
 
 export type PathReferenceRewritesConfig = z.output<typeof pathReferenceRewrites>;
@@ -312,12 +314,7 @@ export const compositionBoundaries = z
          * equivalent import — an unnamed symbol is refused, not silently
          * dropped.
          */
-        replacement: z
-          .strictObject({
-            specifier: z.string().min(1),
-            symbols: z.array(z.string().min(1)).min(1),
-          })
-          .optional(),
+        replacement: z.strictObject({ specifier: z.string().min(1), symbols: z.array(z.string().min(1)).min(1) }).optional(),
         /**
          * Once no importer of the shim remains, delete it. Defaults to false
          * because a shim can be intentionally long-lived (a compatibility
@@ -352,11 +349,7 @@ export const compositionBoundaries = z
       })
       .superRefine((boundary, ctx) => {
         if (boundary.strategy === "existing-package" && boundary.replacement === undefined) {
-          ctx.addIssue({
-            code: "custom",
-            path: ["replacement"],
-            message: 'strategy "existing-package" requires a "replacement" specifier and symbol list',
-          });
+          ctx.addIssue({ code: "custom", path: ["replacement"], message: 'strategy "existing-package" requires a "replacement" specifier and symbol list' });
         }
         if (boundary.selective && (boundary.strategy !== "existing-package" || boundary.retire)) {
           ctx.addIssue({ code: "custom", path: ["selective"], message: "selective boundaries require existing-package strategy with retire false" });
@@ -431,7 +424,11 @@ export const portPromotions = z
       const singleton = promotion.appConcreteType !== undefined || promotion.libraryPort !== undefined;
       const group = promotion.appConcreteTypes !== undefined || promotion.libraryPorts !== undefined;
       if (singleton === group) {
-        ctx.addIssue({ code: "custom", path: [index], message: "portPromotions requires exactly one of appConcreteType/libraryPort or appConcreteTypes/libraryPorts" });
+        ctx.addIssue({
+          code: "custom",
+          path: [index],
+          message: "portPromotions requires exactly one of appConcreteType/libraryPort or appConcreteTypes/libraryPorts",
+        });
       } else if (singleton && (promotion.appConcreteType === undefined || promotion.libraryPort === undefined)) {
         ctx.addIssue({ code: "custom", path: [index], message: "appConcreteType and libraryPort must be declared together" });
       } else if (group && (promotion.appConcreteTypes === undefined || promotion.libraryPorts === undefined)) {
@@ -448,21 +445,26 @@ export type PortPromotionsConfig = z.output<typeof portPromotions>;
  * Reviewed exception to SCC-closure selection: promote one complete module as
  * a byte-identical package surface and let the compiler derive every importer.
  */
-export const modulePromotions = z.array(z.strictObject({
-  id: kebabId,
-  source: relativePath,
-  targetPackage: z.string().min(1),
-  /** Public module key relative to the package root, without an extension. */
-  targetModule: z.string().min(1).default("index"),
-  /** False retains a compatibility re-export at the old path. */
-  retireSource: z.boolean().default(true),
-})).default([]).superRefine((items, ctx) => {
-  const seen = new Set<string>();
-  items.forEach((item, index) => {
-    if (seen.has(item.id)) ctx.addIssue({ code: "custom", path: [index, "id"], message: "modulePromotions id must be unique" });
-    seen.add(item.id);
+export const modulePromotions = z
+  .array(
+    z.strictObject({
+      id: kebabId,
+      source: relativePath,
+      targetPackage: z.string().min(1),
+      /** Public module key relative to the package root, without an extension. */
+      targetModule: z.string().min(1).default("index"),
+      /** False retains a compatibility re-export at the old path. */
+      retireSource: z.boolean().default(true),
+    }),
+  )
+  .default([])
+  .superRefine((items, ctx) => {
+    const seen = new Set<string>();
+    items.forEach((item, index) => {
+      if (seen.has(item.id)) ctx.addIssue({ code: "custom", path: [index, "id"], message: "modulePromotions id must be unique" });
+      seen.add(item.id);
+    });
   });
-});
 
 export type ModulePromotionsConfig = z.output<typeof modulePromotions>;
 
@@ -472,20 +474,25 @@ export type ModulePromotionsConfig = z.output<typeof modulePromotions>;
  * retains a compatibility re-export at the donor; it never accepts declaration
  * spans or generated source text from configuration.
  */
-export const valueSplits = z.array(z.strictObject({
-  id: kebabId,
-  source: relativePath,
-  symbol: z.string().regex(/^[A-Za-z_$][\w$]*$/u, "must be a TypeScript identifier"),
-  target: relativePath,
-  /** Exact specifier rendered from the donor to the target module. */
-  targetModuleSpecifier: z.string().min(1),
-})).default([]).superRefine((items, ctx) => {
-  const seen = new Set<string>();
-  items.forEach((item, index) => {
-    if (seen.has(item.id)) ctx.addIssue({ code: "custom", path: [index, "id"], message: "valueSplits id must be unique" });
-    seen.add(item.id);
-    if (item.source === item.target) ctx.addIssue({ code: "custom", path: [index, "target"], message: "value split target must differ from source" });
+export const valueSplits = z
+  .array(
+    z.strictObject({
+      id: kebabId,
+      source: relativePath,
+      symbol: z.string().regex(/^[A-Za-z_$][\w$]*$/u, "must be a TypeScript identifier"),
+      target: relativePath,
+      /** Exact specifier rendered from the donor to the target module. */
+      targetModuleSpecifier: z.string().min(1),
+    }),
+  )
+  .default([])
+  .superRefine((items, ctx) => {
+    const seen = new Set<string>();
+    items.forEach((item, index) => {
+      if (seen.has(item.id)) ctx.addIssue({ code: "custom", path: [index, "id"], message: "valueSplits id must be unique" });
+      seen.add(item.id);
+      if (item.source === item.target) ctx.addIssue({ code: "custom", path: [index, "target"], message: "value split target must differ from source" });
+    });
   });
-});
 
 export type ValueSplitsConfig = z.output<typeof valueSplits>;

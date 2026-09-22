@@ -25,10 +25,10 @@ import { dirname, join } from "node:path";
 
 import { pnpmAdapter } from "../src/adapters/pnpm.ts";
 import { rewriteResolvedImportSpecifier } from "../src/codemod/imports.ts";
+import type { ExtractionManifest, PlanOperation } from "../src/plan/manifest.ts";
 import { simulatePlan } from "../src/transaction/simulate.ts";
 import { createWorktree, installWorkspaceDependencies, linkPlannedPackage, WorktreeError } from "../src/transaction/worktree.ts";
 import { hashText } from "../src/util/hash.ts";
-import type { ExtractionManifest, PlanOperation } from "../src/plan/manifest.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, read, scratchDirectory, write } from "./support/fixture-repo.ts";
 
 const PACKAGE = "@acme/analytics";
@@ -90,10 +90,7 @@ function installPackage(root: string, owner: string, name: string): string {
  * no bearing on which links it makes, and inventing it would suggest otherwise.
  */
 function linkingManifest(owners: readonly string[]): ExtractionManifest {
-  return {
-    target: { packageName: PACKAGE, packageRoot: PACKAGE_ROOT },
-    consumers: owners.map((owner) => ({ owner })),
-  } as unknown as ExtractionManifest;
+  return { target: { packageName: PACKAGE, packageRoot: PACKAGE_ROOT }, consumers: owners.map((owner) => ({ owner })) } as unknown as ExtractionManifest;
 }
 
 function head(root: string): string {
@@ -101,13 +98,7 @@ function head(root: string): string {
 }
 
 async function symlinkedWorktree(root: string) {
-  return createWorktree({
-    rootDir: root,
-    commit: head(root),
-    worktreeRoot: scratchDirectory(),
-    nodeModules: "symlink",
-    label: "worktree-fixture",
-  });
+  return createWorktree({ rootDir: root, commit: head(root), worktreeRoot: scratchDirectory(), nodeModules: "symlink", label: "worktree-fixture" });
 }
 
 describe("simulation worktree node_modules", () => {
@@ -150,10 +141,7 @@ describe("simulation worktree node_modules", () => {
 
   test("symlink mode preserves dependencies of packages nested below a package root", async () => {
     const nestedPackage = "libs/shared/contracts";
-    const root = fixtureRepo({
-      ...workspaceFiles(),
-      [`${nestedPackage}/package.json`]: packageManifest("@acme/contracts", { "left-pad": "^1.0.0" }),
-    });
+    const root = fixtureRepo({ ...workspaceFiles(), [`${nestedPackage}/package.json`]: packageManifest("@acme/contracts", { "left-pad": "^1.0.0" }) });
     const store = installPackage(root, nestedPackage, "left-pad");
     const worktree = await symlinkedWorktree(root);
 
@@ -296,9 +284,7 @@ describe("simulation worktree node_modules", () => {
 
   test("carries the unlinkable dependency out of the simulation, without failing it", async () => {
     const root = fixtureRepo(workspaceFiles({ "@acme/nowhere": "workspace:*" }));
-    const config = fixtureConfig(root, {
-      transaction: { worktreeRoot: scratchDirectory(), nodeModules: "symlink", cleanup: true, simulateGates: true },
-    });
+    const config = fixtureConfig(root, { transaction: { worktreeRoot: scratchDirectory(), nodeModules: "symlink", cleanup: true, simulateGates: true } });
 
     const result = await simulatePlan({ config, rootDir: root, manifest: simulationManifest(root) });
 
@@ -356,11 +342,19 @@ describe("simulation worktree node_modules", () => {
   test("a second install sees the package created by the landed plan", async () => {
     const root = fixtureRepo(workspaceFiles());
     const worktree = await createWorktree({
-      rootDir: root, commit: head(root), worktreeRoot: scratchDirectory(), nodeModules: "install",
-      installCommand: ["sh", "-c", "true"], label: "planned-install-fixture",
+      rootDir: root,
+      commit: head(root),
+      worktreeRoot: scratchDirectory(),
+      nodeModules: "install",
+      installCommand: ["sh", "-c", "true"],
+      label: "planned-install-fixture",
     });
     write(worktree.workspacePath, "libs/new-package/package.json", '{"name":"@acme/new-package"}\n');
-    installWorkspaceDependencies(worktree.workspacePath, ["sh", "-c", "test -f libs/new-package/package.json && mkdir -p libs/new-package/node_modules/runtime-dependency"]);
+    installWorkspaceDependencies(worktree.workspacePath, [
+      "sh",
+      "-c",
+      "test -f libs/new-package/package.json && mkdir -p libs/new-package/node_modules/runtime-dependency",
+    ]);
     expect(existsSync(join(worktree.workspacePath, "libs/new-package/node_modules/runtime-dependency"))).toBeTrue();
     await worktree.dispose();
   }, 60_000);
@@ -398,9 +392,9 @@ describe("simulation worktree node_modules", () => {
     const root = fixtureRepo(workspaceFiles());
     const worktreeRoot = scratchDirectory();
 
-    await expect(
-      createWorktree({ rootDir: root, commit: head(root), worktreeRoot, nodeModules: "install", installCommand: [] }),
-    ).rejects.toThrow(WorktreeError);
+    await expect(createWorktree({ rootDir: root, commit: head(root), worktreeRoot, nodeModules: "install", installCommand: [] })).rejects.toThrow(
+      WorktreeError,
+    );
     // The failed attempt leaves no worktree behind, registered or on disk.
     expect(readdirSync(worktreeRoot)).toEqual([]);
     expect(fixtureGit(root, "worktree", "list").split("\n")).toHaveLength(1);
@@ -433,14 +427,7 @@ function simulationManifest(root: string): ExtractionManifest {
       preconditionHash: hashText(consumerText),
       resultHash: hashText(rewritten),
     },
-    {
-      kind: "write-file",
-      path: ENTRYPOINT,
-      contents: barrel,
-      preconditionHash: "missing",
-      resultHash: hashText(barrel),
-      generator: "scaffold:entrypoint",
-    },
+    { kind: "write-file", path: ENTRYPOINT, contents: barrel, preconditionHash: "missing", resultHash: hashText(barrel), generator: "scaffold:entrypoint" },
   ];
 
   return {
@@ -451,12 +438,7 @@ function simulationManifest(root: string): ExtractionManifest {
     baselineCommit: head(root),
     graphDigest: hashText("worktree-graph"),
     application: "api",
-    target: {
-      packageName: PACKAGE,
-      packageRoot: PACKAGE_ROOT,
-      entrypoint: "src/index.ts",
-      requiredExports: [{ name: "widgetValue", typeOnly: false }],
-    },
+    target: { packageName: PACKAGE, packageRoot: PACKAGE_ROOT, entrypoint: "src/index.ts", requiredExports: [{ name: "widgetValue", typeOnly: false }] },
     source: { files: [DONOR], tests: [], sccs: { "scc-fixture": [DONOR] } },
     dependencies: { runtime: {}, dev: {}, packageReferences: [] },
     sourceBlobs: { [DONOR]: donorHash },

@@ -18,9 +18,7 @@ export interface RunResult {
 
 export async function runIn(cwd: string, ...args: string[]): Promise<RunResult> {
   const child = Bun.spawn(["bun", CLI, "--cwd", cwd, ...args], { cwd: ROOT, stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
-  ]);
+  const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
   return { code, stdout, stderr };
 }
 

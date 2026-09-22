@@ -159,13 +159,7 @@ export interface PackageManagerAdapter {
    * Used to wire a consuming application to the newly created package.
    * Returns the block unchanged when it already declares the dependency.
    */
-  addBlockDependency(
-    block: string,
-    name: string,
-    specifier: string,
-    version: string,
-    section?: ConsumerDependencySection,
-  ): string;
+  addBlockDependency(block: string, name: string, specifier: string, version: string, section?: ConsumerDependencySection): string;
 
   /**
    * Add the declared dependency sets to an existing importer, resolving exact

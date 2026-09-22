@@ -1,7 +1,7 @@
 /** Traversal mechanics for the runtime evaluation closure. */
 
-import { firstPartyRoots, packageNameOf, type MonocarveConfig } from "../config.ts";
 import type { ModuleReference } from "../codemod/imports.ts";
+import { firstPartyRoots, packageNameOf, type MonocarveConfig } from "../config.ts";
 import type { DependencyGraph, EdgeKind } from "../graph/model.ts";
 import { isDeclarationPath } from "../util/files.ts";
 import { byCodeUnit } from "../util/hash.ts";
@@ -107,20 +107,13 @@ function referenceTarget(state: TraversalState, source: string, reference: Modul
   packageTarget(state, source, specifier, resolved, targets);
 }
 
-function packageTarget(
-  state: TraversalState,
-  source: string,
-  specifier: string,
-  resolved: string | undefined,
-  targets: Set<string>,
-): void {
+function packageTarget(state: TraversalState, source: string, specifier: string, resolved: string | undefined, targets: Set<string>): void {
   const name = packageNameOf(specifier);
   if (isBuiltinModule(name)) return;
   const owner = state.options.graph.workspace.packageNames.get(name);
   if (owner === undefined) return noteExternalPackage(state, source, name);
-  const entry = resolved !== undefined && isFirstParty(state.roots, resolved)
-    ? resolved
-    : specifier === name ? state.options.context.packageEntrypoint(owner) : undefined;
+  const entry =
+    resolved !== undefined && isFirstParty(state.roots, resolved) ? resolved : specifier === name ? state.options.context.packageEntrypoint(owner) : undefined;
   if (entry !== undefined && evaluable(state.options.context, state.roots, entry)) targets.add(entry);
   else state.opaque.add(specifier);
 }

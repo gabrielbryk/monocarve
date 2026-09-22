@@ -92,15 +92,15 @@ Use milestones: readiness complete, prerequisite commit, fresh scan, plan compil
 
 Classify the first failure before acting:
 
-| Class | Examples | Response |
-| --- | --- | --- |
-| Mechanical authoring | Missing declared output, stale hash after an intentional prerequisite, exact anchor mismatch | Correct autonomously, regenerate from the clean baseline, and revalidate |
-| Readiness | Strict-type error, lint debt, missing test scaffold dependency, unresolved external declaration | Land the smallest scoped prerequisite or use a justified preparer, then rescan |
-| Environmental | Inode exhaustion, missing executable, unavailable cache, killed child | Stop the process, preserve state, repair capacity or environment, then make one controlled retry |
-| Generator noise | Unrelated global artifact or pre-existing drift appears | Prove the trigger and causality; exclude or restore unrelated output without weakening the generator |
-| Semantic or scope | Public API changes, new compatibility policy, changed runtime behavior, expanded destination | Stop and request a decision |
-| Invariant or proof | Partial application, non-determinism, impure move commit, conservation or audit failure | Stop; diagnose the tool or plan. Never work around the proof |
-| Monitoring ambiguity | Yielded session, silent command, uncertain exit | Inspect the actual session and process ancestry; do not diagnose product or tool behavior yet |
+| Class                | Examples                                                                                        | Response                                                                                             |
+| -------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Mechanical authoring | Missing declared output, stale hash after an intentional prerequisite, exact anchor mismatch    | Correct autonomously, regenerate from the clean baseline, and revalidate                             |
+| Readiness            | Strict-type error, lint debt, missing test scaffold dependency, unresolved external declaration | Land the smallest scoped prerequisite or use a justified preparer, then rescan                       |
+| Environmental        | Inode exhaustion, missing executable, unavailable cache, killed child                           | Stop the process, preserve state, repair capacity or environment, then make one controlled retry     |
+| Generator noise      | Unrelated global artifact or pre-existing drift appears                                         | Prove the trigger and causality; exclude or restore unrelated output without weakening the generator |
+| Semantic or scope    | Public API changes, new compatibility policy, changed runtime behavior, expanded destination    | Stop and request a decision                                                                          |
+| Invariant or proof   | Partial application, non-determinism, impure move commit, conservation or audit failure         | Stop; diagnose the tool or plan. Never work around the proof                                         |
+| Monitoring ambiguity | Yielded session, silent command, uncertain exit                                                 | Inspect the actual session and process ancestry; do not diagnose product or tool behavior yet        |
 
 Stop at the first real failure. Do not stack speculative fixes. A retry must have one identified cause, evidence that the cause is removed, and confirmation that no prior process is live.
 

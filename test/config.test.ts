@@ -3,7 +3,21 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { CONFIG_FILENAMES, TOOL_NAME } from "../src/branding.ts";
-import { applicationFor, findConfigFile, firstPartyRoots, getApplication, isAssetPath, isGuardedBranch, isTestPath, loadConfig, movableRoots, packageNameMatcher, parseConfig, scaffoldFor, scopedPackageName } from "../src/config.ts";
+import {
+  applicationFor,
+  findConfigFile,
+  firstPartyRoots,
+  getApplication,
+  isAssetPath,
+  isGuardedBranch,
+  isTestPath,
+  loadConfig,
+  movableRoots,
+  packageNameMatcher,
+  parseConfig,
+  scaffoldFor,
+  scopedPackageName,
+} from "../src/config.ts";
 import { ConfigError } from "../src/errors.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -36,12 +50,7 @@ describe("config loading", () => {
     // invalidates. `triggers` is what decides that, and `timeoutMs` is a
     // default the fixture does not set.
     expect(config.generatedArtifacts.artifacts).toEqual([
-      {
-        path: "generated/module-ledger.json",
-        source: "apps/web/src",
-        regenerate: "sh scripts/module-ledger.sh",
-        triggers: ["^apps/web/src/widgets/"],
-      },
+      { path: "generated/module-ledger.json", source: "apps/web/src", regenerate: "sh scripts/module-ledger.sh", triggers: ["^apps/web/src/widgets/"] },
     ]);
     expect(config.generatedArtifacts.timeoutMs).toBeGreaterThan(0);
     expect(config.planDir).toContain(TOOL_NAME);
@@ -117,22 +126,14 @@ describe("config loading", () => {
       scaffoldTemplates: {
         packageJson: { contents: '{"name":"root"}' },
         entrypoint: "src/main.ts",
-        publicSurface: {
-          mode: "subpaths",
-          keyTemplate: "./{pathNoExtension}",
-          targetTemplate: "./src/{path}",
-        },
+        publicSurface: { mode: "subpaths", keyTemplate: "./{pathNoExtension}", targetTemplate: "./src/{path}" },
       },
     });
 
     const web = scaffoldFor(config, config.applications[0]!);
     expect(web.packageJson).toEqual({ contents: '{"name":"override"}' });
     expect(web.entrypoint).toBe("src/main.ts");
-    expect(web.publicSurface).toEqual({
-      mode: "subpaths",
-      keyTemplate: "./{pathNoExtension}",
-      targetTemplate: "./src/{path}",
-    });
+    expect(web.publicSurface).toEqual({ mode: "subpaths", keyTemplate: "./{pathNoExtension}", targetTemplate: "./src/{path}" });
     expect(scaffoldFor(config, config.applications[1]!).packageJson).toEqual({ contents: '{"name":"root"}' });
   });
 
@@ -148,11 +149,29 @@ describe("config loading", () => {
     expect(() => parseConfig({ ...base, firstPartyPackages: [{ root: "libs/nested", name: "@acme/nested" }] }, "<test>")).toThrow(/overlap/);
     // Ancestor of another firstPartyPackages entry.
     expect(() =>
-      parseConfig({ ...base, firstPartyPackages: [{ root: "shared", name: "@acme/shared" }, { root: "shared/inner", name: "@acme/inner" }] }, "<test>"),
+      parseConfig(
+        {
+          ...base,
+          firstPartyPackages: [
+            { root: "shared", name: "@acme/shared" },
+            { root: "shared/inner", name: "@acme/inner" },
+          ],
+        },
+        "<test>",
+      ),
     ).toThrow(/overlap/);
     // Two firstPartyPackages entries at the same root.
     expect(() =>
-      parseConfig({ ...base, firstPartyPackages: [{ root: "shared", name: "@acme/shared" }, { root: "shared", name: "@acme/dup" }] }, "<test>"),
+      parseConfig(
+        {
+          ...base,
+          firstPartyPackages: [
+            { root: "shared", name: "@acme/shared" },
+            { root: "shared", name: "@acme/dup" },
+          ],
+        },
+        "<test>",
+      ),
     ).toThrow(/overlap/);
     // A disjoint root is accepted.
     const ok = parseConfig({ ...base, firstPartyPackages: [{ root: "shared", name: "@acme/shared" }] }, "<test>");
@@ -214,11 +233,7 @@ describe("config loading", () => {
         packageRoots: ["libs"],
         scaffoldTemplates: {
           packageJson: { contents: "{}" },
-          publicSurface: {
-            mode: "subpaths",
-            keyTemplate: "./{filename}",
-            targetTemplate: "./src/{path}",
-          },
+          publicSurface: { mode: "subpaths", keyTemplate: "./{filename}", targetTemplate: "./src/{path}" },
         },
       }),
     ).toThrow(/unknown module placeholder.*filename/);
@@ -241,7 +256,7 @@ describe("config loading", () => {
     expect(config.portfolio.protectedPaths).toEqual(["apps/web/src/widgets"]);
   });
 
-  test.each(["/", "\\", "C:\\"])('refuses root-like protected path %p', (protectedPath) => {
+  test.each(["/", "\\", "C:\\"])("refuses root-like protected path %p", (protectedPath) => {
     expect(() =>
       parseConfig({
         applications: [{ name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json" }],
@@ -251,5 +266,4 @@ describe("config loading", () => {
       }),
     ).toThrow(/protectedPaths/);
   });
-
 });

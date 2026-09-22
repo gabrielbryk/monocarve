@@ -35,12 +35,9 @@ function config(protectedPaths: readonly string[] = []) {
     packageRoots: ["libs"],
     packageScope: "@acme/",
     portfolio: { minFiles: 99, maxFiles: 1, retainedRoots: [`${APP}/db`], protectedPaths },
-    compositionBoundaries: [{
-      id: "route-package",
-      retained: route,
-      strategy: "existing-package",
-      replacement: { specifier: "@acme/routes", symbols: ["route"] },
-    }],
+    compositionBoundaries: [
+      { id: "route-package", retained: route, strategy: "existing-package", replacement: { specifier: "@acme/routes", symbols: ["route"] } },
+    ],
     scaffoldTemplates: { packageJson: { contents: "{}" } },
   });
 }
@@ -50,16 +47,20 @@ function graph(root: string, cfg: ReturnType<typeof config>) {
   return buildDependencyGraph({
     config: cfg,
     rootDir: root,
-    reports: { api: { modules: [
-      module(service, [
-        { module: "../route.ts", resolved: route },
-        { module: "../db/client.ts", resolved: database },
-        { module: "../infra/secrets.ts", resolved: infrastructure },
-      ]),
-      module(database),
-      module(infrastructure),
-      module(route),
-    ] } },
+    reports: {
+      api: {
+        modules: [
+          module(service, [
+            { module: "../route.ts", resolved: route },
+            { module: "../db/client.ts", resolved: database },
+            { module: "../infra/secrets.ts", resolved: infrastructure },
+          ]),
+          module(database),
+          module(infrastructure),
+          module(route),
+        ],
+      },
+    },
   });
 }
 
@@ -70,23 +71,11 @@ describe("evacuation assessment", () => {
     const root = workspace();
     const cfg = config();
     const dependencyGraph = graph(root, cfg);
-    const evacuation = buildEvacuationCandidate({
-      config: cfg,
-      graph: dependencyGraph,
-      application: "api",
-      selected: [route, service, database],
-    });
+    const evacuation = buildEvacuationCandidate({ config: cfg, graph: dependencyGraph, application: "api", selected: [route, service, database] });
     const assessed = assessEvacuationCandidate({ config: cfg, graph: dependencyGraph, evacuation });
 
     expect(assessed.boundaryCuts).toEqual([
-      {
-        from: service,
-        specifier: "../db/client.ts",
-        target: database,
-        kind: "type",
-        reason: "retained-root",
-        remedy: { kind: "unconfigured" },
-      },
+      { from: service, specifier: "../db/client.ts", target: database, kind: "type", reason: "retained-root", remedy: { kind: "unconfigured" } },
       {
         from: service,
         specifier: "../infra/secrets.ts",
@@ -140,11 +129,23 @@ describe("evacuation assessment", () => {
     expect(report.authorizedProtectedRoots).toEqual([`${APP}/estimating`]);
     expect(report.candidate.rejectionReasons.map(({ code }) => code)).not.toContain("protected-path");
 
-    expect(() => analyzeEvacuation({ ...({ config: cfg, graph: dependencyGraph, application: "api", sources: [service], packageName: "@acme/estimating" }), authorizedProtectedRoots: [APP] }))
-      .toThrow(/exactly name a configured/);
-    expect(() => analyzeEvacuation({ ...({ config: cfg, graph: dependencyGraph, application: "api", sources: [database], packageName: "@acme/estimating" }), authorizedProtectedRoots: [`${APP}/estimating`] }))
-      .toThrow(/outside the selected evacuation/);
-    expect(() => analyzeEvacuation({ ...({ config: cfg, graph: dependencyGraph, application: "api", sources: [service], packageName: "@acme/estimating" }), authorizedProtectedRoots: ["../estimating"] }))
-      .toThrow(/workspace-relative/);
+    expect(() =>
+      analyzeEvacuation({
+        ...{ config: cfg, graph: dependencyGraph, application: "api", sources: [service], packageName: "@acme/estimating" },
+        authorizedProtectedRoots: [APP],
+      }),
+    ).toThrow(/exactly name a configured/);
+    expect(() =>
+      analyzeEvacuation({
+        ...{ config: cfg, graph: dependencyGraph, application: "api", sources: [database], packageName: "@acme/estimating" },
+        authorizedProtectedRoots: [`${APP}/estimating`],
+      }),
+    ).toThrow(/outside the selected evacuation/);
+    expect(() =>
+      analyzeEvacuation({
+        ...{ config: cfg, graph: dependencyGraph, application: "api", sources: [service], packageName: "@acme/estimating" },
+        authorizedProtectedRoots: ["../estimating"],
+      }),
+    ).toThrow(/workspace-relative/);
   });
 });

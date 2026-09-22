@@ -7,6 +7,18 @@ import { fileState } from "../util/files.ts";
 import { showBaselineBytes } from "../util/git.ts";
 import { hashBytes, hashJson, hashText, MISSING, type FileState } from "../util/hash.ts";
 import { normalizePath, workspacePath } from "../util/paths.ts";
+// The boundary-specific proofs (retainedRootClearance / adapterSurfaceParity)
+// live in their own module purely to keep this file under the line-count gate.
+import { computeBoundaryAuditProofs } from "./audit-boundary.ts";
+import { verifyGeneratedSourceOperations } from "./audit-generated-source.ts";
+import { verifyTargetImportProofs } from "./audit-imports.ts";
+import { verifyPreparationResultModes } from "./audit-modes.ts";
+import { verifyRenderedReplay } from "./audit-replay.ts";
+// The changed-path scope proof lives in its own module for the same reason.
+import { verifyChangedScope } from "./audit-scope.ts";
+import { verifyCompatibilityResolution, verifyRenderedCompatibilitySurface, verifyTargetDeclarationCoverage } from "./audit-surface.ts";
+import type { PreparationAuditOptions, PreparationAuditReport } from "./audit-types.ts";
+import { preparationProof } from "./audit-types.ts";
 import type {
   CompatibilityReexportIntent,
   ExtractTypeDeclarationsOperation,
@@ -14,18 +26,6 @@ import type {
   PreparationDeclarationSelector,
   PreparationReplayOperation,
 } from "./manifest-types.ts";
-import type { PreparationAuditOptions, PreparationAuditReport } from "./audit-types.ts";
-import { preparationProof } from "./audit-types.ts";
-import { verifyPreparationResultModes } from "./audit-modes.ts";
-import { verifyTargetImportProofs } from "./audit-imports.ts";
-import { verifyRenderedReplay } from "./audit-replay.ts";
-import { verifyCompatibilityResolution, verifyRenderedCompatibilitySurface, verifyTargetDeclarationCoverage } from "./audit-surface.ts";
-// The boundary-specific proofs (retainedRootClearance / adapterSurfaceParity)
-// live in their own module purely to keep this file under the line-count gate.
-import { computeBoundaryAuditProofs } from "./audit-boundary.ts";
-// The changed-path scope proof lives in its own module for the same reason.
-import { verifyChangedScope } from "./audit-scope.ts";
-import { verifyGeneratedSourceOperations } from "./audit-generated-source.ts";
 export type { PreparationAuditOptions, PreparationAuditReport, PreparationProofResult } from "./audit-types.ts";
 export async function auditPreparation(options: PreparationAuditOptions): Promise<PreparationAuditReport> {
   return auditPreparationSync(options);
@@ -58,7 +58,8 @@ export function auditPreparationSync(options: PreparationAuditOptions): Preparat
     verifyMutationBytes(rootDir, manifest.baseline.commit, operation, baselineByPath, byteFailures);
   }
   const modeChecks = verifyPreparationResultModes(rootDir, manifest.operations, modeFailures);
-  for (const operation of manifest.operations) if (operation.kind === "write-file") verifyWriteBytes(rootDir, manifest.baseline.commit, operation, byteFailures);
+  for (const operation of manifest.operations)
+    if (operation.kind === "write-file") verifyWriteBytes(rootDir, manifest.baseline.commit, operation, byteFailures);
   verifyGeneratedSourceOperations(rootDir, manifest.baseline.commit, manifest.operations, byteFailures);
   for (const operation of extracts) verifyRenderedReplay(operation, baselineByPath.get(operation.donor.path), replayFailures);
 
@@ -68,9 +69,7 @@ export function auditPreparationSync(options: PreparationAuditOptions): Preparat
   verifyTypeOnlyOperations(rootDir, extracts, typeValueFailures);
   verifyCompatibility(rootDir, options.config, manifest.compatibilityReexports, extracts, compatibilityFailures, typeValueFailures);
   verifyTargetImportProofs(rootDir, options.config, extracts, baselineByPath, importFailures);
-  const provenancePath = options.approvedManifestPath === undefined
-    ? undefined
-    : normalizePath(options.approvedManifestPath);
+  const provenancePath = options.approvedManifestPath === undefined ? undefined : normalizePath(options.approvedManifestPath);
   verifyChangedScope(rootDir, manifest.baseline.commit, manifest.changedFiles, provenancePath, scopeFailures, [
     ...(manifest.generatedArtifacts ?? []).filter((item) => item.exemptReason !== undefined).map((item) => item.path),
     ...(manifest.postJournalPreparers ?? []).flatMap((item) => item.outputs),
@@ -86,7 +85,8 @@ export function auditPreparationSync(options: PreparationAuditOptions): Preparat
     const current = fileState(workspacePath(rootDir, artifact.path));
     if (current === MISSING) generatedFailures.push(`declared generated artifact is missing: ${artifact.path}`);
     const observed = options.regeneratedArtifacts?.[artifact.path];
-    if (options.regeneratedArtifacts !== undefined && observed === undefined) generatedFailures.push(`generator replay supplied no freshness hash for ${artifact.path}`);
+    if (options.regeneratedArtifacts !== undefined && observed === undefined)
+      generatedFailures.push(`generator replay supplied no freshness hash for ${artifact.path}`);
     else if (observed !== undefined && current !== observed) generatedFailures.push(`generated artifact changed after regeneration: ${artifact.path}`);
   }
 
@@ -96,7 +96,10 @@ export function auditPreparationSync(options: PreparationAuditOptions): Preparat
   const selectorIntegrity = preparationProof(selectorFailures, selectors.length);
   const declarationOwnership = preparationProof(ownershipFailures, manifest.declarations.length);
   const compatibilitySurface = preparationProof(compatibilityFailures, manifest.compatibilityReexports.length);
-  const targetImportResolution = preparationProof(importFailures, extracts.reduce((total, item) => total + item.targetImportProofs.length, 0));
+  const targetImportResolution = preparationProof(
+    importFailures,
+    extracts.reduce((total, item) => total + item.targetImportProofs.length, 0),
+  );
   const changedPathScope = preparationProof(scopeFailures, manifest.changedFiles.length);
   const typeValueClaims = preparationProof(typeValueFailures, extracts.length + manifest.compatibilityReexports.length);
   const graphDigest = preparationProof(graphFailures, 2);
@@ -201,11 +204,7 @@ function stateAt(rootDir: string, path: string): FileState {
   return existsSync(absolute) ? hashBytes(readFileSync(absolute)) : MISSING;
 }
 
-function verifySelectors(
-  selectors: readonly PreparationDeclarationSelector[],
-  baselines: ReadonlyMap<string, Uint8Array>,
-  failures: string[],
-): void {
+function verifySelectors(selectors: readonly PreparationDeclarationSelector[], baselines: ReadonlyMap<string, Uint8Array>, failures: string[]): void {
   const ids = new Set<string>();
   const selectorIds = new Set<string>();
   const spans = new Set<string>();
@@ -227,14 +226,17 @@ function verifySelectors(
     }
     const text = new TextDecoder().decode(baseline);
     if (hashText(text) !== selector.sourceHash) failures.push(`selector source hash differs: ${selector.sourcePath}:${selector.name}`);
-    if (selector.selectorId !== hashJson({
-      declarationId: selector.declarationId,
-      sourcePath: selector.sourcePath,
-      sourceHash: selector.sourceHash,
-      extractionStart: selector.extractionStart,
-      extractionEnd: selector.extractionEnd,
-      extractionHash: selector.extractionHash,
-    })) {
+    if (
+      selector.selectorId !==
+      hashJson({
+        declarationId: selector.declarationId,
+        sourcePath: selector.sourcePath,
+        sourceHash: selector.sourceHash,
+        extractionStart: selector.extractionStart,
+        extractionEnd: selector.extractionEnd,
+        extractionHash: selector.extractionHash,
+      })
+    ) {
       failures.push(`selector removal identity differs: ${selector.sourcePath}:${selector.name}`);
     }
     if (selector.span.start < 0 || selector.span.end <= selector.span.start || selector.span.end > text.length) {
@@ -244,7 +246,12 @@ function verifySelectors(
     if (hashText(text.slice(selector.span.start, selector.span.end)) !== selector.span.hash) {
       failures.push(`selector span hash differs: ${selector.sourcePath}:${selector.name}`);
     }
-    if (selector.extractionStart < 0 || selector.extractionEnd < selector.span.end || selector.extractionStart > selector.span.start || selector.extractionEnd > text.length) {
+    if (
+      selector.extractionStart < 0 ||
+      selector.extractionEnd < selector.span.end ||
+      selector.extractionStart > selector.span.start ||
+      selector.extractionEnd > text.length
+    ) {
       failures.push(`selector extraction region is outside baseline donor: ${selector.sourcePath}:${selector.name}`);
       continue;
     }
@@ -345,14 +352,10 @@ function verifyCompatibility(
   }
 }
 
-function verifyCompatibilityClaims(
-  intent: CompatibilityReexportIntent,
-  extraction: ExtractTypeDeclarationsOperation,
-  failures: string[],
-): void {
-  const expected = new Set(extraction.declarations
-    .filter((group) => group.declarations.some((selector) => selector.originallyExported))
-    .map((group) => group.name));
+function verifyCompatibilityClaims(intent: CompatibilityReexportIntent, extraction: ExtractTypeDeclarationsOperation, failures: string[]): void {
+  const expected = new Set(
+    extraction.declarations.filter((group) => group.declarations.some((selector) => selector.originallyExported)).map((group) => group.name),
+  );
   const actual = new Set(intent.exports.map((item) => item.name));
   for (const name of actual) if (!expected.has(name)) failures.push(`compatibility surface exports a private declaration: ${intent.fromPath}:${name}`);
   for (const name of expected) if (!actual.has(name)) failures.push(`compatibility surface omits a public declaration: ${intent.fromPath}:${name}`);
@@ -363,30 +366,27 @@ function readIfExists(rootDir: string, path: string): string | null {
   return existsSync(absolute) ? readFileSync(absolute, "utf8") : null;
 }
 
-function findTypeReexport(
-  source: ts.SourceFile,
-  moduleSpecifier: string,
-  name: string,
-): boolean {
-  return source.statements.some((statement) => isMatchingReexport(statement, moduleSpecifier) &&
-    statement.exportClause !== undefined && ts.isNamedExports(statement.exportClause) &&
-    statement.exportClause.elements.some((item) => (statement.isTypeOnly || item.isTypeOnly) && item.name.text === name));
+function findTypeReexport(source: ts.SourceFile, moduleSpecifier: string, name: string): boolean {
+  return source.statements.some(
+    (statement) =>
+      isMatchingReexport(statement, moduleSpecifier) &&
+      statement.exportClause !== undefined &&
+      ts.isNamedExports(statement.exportClause) &&
+      statement.exportClause.elements.some((item) => (statement.isTypeOnly || item.isTypeOnly) && item.name.text === name),
+  );
 }
 
-function hasValueReexport(
-  source: ts.SourceFile,
-  moduleSpecifier: string,
-  name: string,
-): boolean {
-  return source.statements.some((statement) => isMatchingReexport(statement, moduleSpecifier) &&
-    statement.exportClause !== undefined && ts.isNamedExports(statement.exportClause) &&
-    statement.exportClause.elements.some((item) => !statement.isTypeOnly && !item.isTypeOnly && item.name.text === name));
+function hasValueReexport(source: ts.SourceFile, moduleSpecifier: string, name: string): boolean {
+  return source.statements.some(
+    (statement) =>
+      isMatchingReexport(statement, moduleSpecifier) &&
+      statement.exportClause !== undefined &&
+      ts.isNamedExports(statement.exportClause) &&
+      statement.exportClause.elements.some((item) => !statement.isTypeOnly && !item.isTypeOnly && item.name.text === name),
+  );
 }
 
-function isMatchingReexport(
-  statement: ts.Statement,
-  moduleSpecifier: string,
-): statement is ts.ExportDeclaration {
+function isMatchingReexport(statement: ts.Statement, moduleSpecifier: string): statement is ts.ExportDeclaration {
   if (!ts.isExportDeclaration(statement) || !statement.moduleSpecifier || !ts.isStringLiteral(statement.moduleSpecifier)) return false;
   return statement.moduleSpecifier.text === moduleSpecifier;
 }
@@ -406,16 +406,19 @@ function importIsTypeOnly(statement: ts.ImportDeclaration): boolean {
   const clause = statement.importClause;
   if (!clause) return false;
   if (clause.isTypeOnly) return true;
-  return clause.name === undefined && clause.namedBindings !== undefined && ts.isNamedImports(clause.namedBindings) &&
-    clause.namedBindings.elements.every((item) => item.isTypeOnly);
+  return (
+    clause.name === undefined &&
+    clause.namedBindings !== undefined &&
+    ts.isNamedImports(clause.namedBindings) &&
+    clause.namedBindings.elements.every((item) => item.isTypeOnly)
+  );
 }
 
 function exportIsTypeOnly(statement: ts.ExportDeclaration): boolean {
   if (statement.isTypeOnly) return true;
-  return statement.exportClause !== undefined && ts.isNamedExports(statement.exportClause) &&
-    statement.exportClause.elements.every((item) => item.isTypeOnly);
+  return statement.exportClause !== undefined && ts.isNamedExports(statement.exportClause) && statement.exportClause.elements.every((item) => item.isTypeOnly);
 }
- 
+
 function verifyTargetOwnership(
   rootDir: string,
   operation: ExtractTypeDeclarationsOperation,
@@ -437,12 +440,17 @@ function verifyTargetOwnership(
     }
     const proof = proofs[0]!;
     const statement = target.statements.find((item) => item.getStart(target) === proof.targetStart && item.end === proof.targetEnd);
-    const fullMatches = statement !== undefined &&
+    const fullMatches =
+      statement !== undefined &&
       statement.getFullStart() === proof.targetExtractionStart &&
       statement.end === proof.targetExtractionEnd &&
       hashText(targetText.slice(proof.targetExtractionStart, proof.targetExtractionEnd)) === proof.targetExtractionHash;
-    if (!statement || !matchesTargetSelector(statement, selector) ||
-      hashText(targetText.slice(proof.targetStart, proof.targetEnd)) !== proof.targetHash || !fullMatches) {
+    if (
+      !statement ||
+      !matchesTargetSelector(statement, selector) ||
+      hashText(targetText.slice(proof.targetStart, proof.targetEnd)) !== proof.targetHash ||
+      !fullMatches
+    ) {
       failures.push(`target does not own selected declaration exactly once: ${selector.sourcePath}:${selector.name}`);
       continue;
     }
@@ -453,14 +461,11 @@ function verifyTargetOwnership(
   }
 }
 
-function verifyFullSpanRemoval(
-  operation: ExtractTypeDeclarationsOperation,
-  baseline: Uint8Array | undefined,
-  failures: string[],
-): void {
+function verifyFullSpanRemoval(operation: ExtractTypeDeclarationsOperation, baseline: Uint8Array | undefined, failures: string[]): void {
   if (baseline === undefined) return;
   const source = new TextDecoder().decode(baseline);
-  const selectors = operation.declarations.flatMap((group) => group.declarations)
+  const selectors = operation.declarations
+    .flatMap((group) => group.declarations)
     .sort((left, right) => left.extractionStart - right.extractionStart || left.extractionEnd - right.extractionEnd);
   let cursor = 0;
   let retained = "";
@@ -479,18 +484,16 @@ function verifyFullSpanRemoval(
 }
 
 function matchesTargetSelector(statement: ts.Statement, selector: PreparationDeclarationSelector): boolean {
-  return (selector.kind === "interface" && ts.isInterfaceDeclaration(statement) && statement.name.text === selector.name)
-    || (selector.kind === "type-alias" && ts.isTypeAliasDeclaration(statement) && statement.name.text === selector.name);
+  return (
+    (selector.kind === "interface" && ts.isInterfaceDeclaration(statement) && statement.name.text === selector.name) ||
+    (selector.kind === "type-alias" && ts.isTypeAliasDeclaration(statement) && statement.name.text === selector.name)
+  );
 }
 
 function statementHasExport(statement: ts.Statement): boolean {
   return ts.canHaveModifiers(statement) && (ts.getModifiers(statement) ?? []).some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
 }
-function containsBaselineDeclaration(
-  text: string,
-  baseline: Uint8Array | undefined,
-  selector: PreparationDeclarationSelector,
-): boolean {
+function containsBaselineDeclaration(text: string, baseline: Uint8Array | undefined, selector: PreparationDeclarationSelector): boolean {
   if (baseline === undefined) return false;
   const source = new TextDecoder().decode(baseline);
   return text.includes(source.slice(selector.span.start, selector.span.end));

@@ -27,19 +27,9 @@ function config(overrides: Record<string, unknown> = {}): MonocarveConfig {
   });
 }
 
-const dbBlocker: RetainedBlocker = {
-  file: `${APP}/orders/service.ts`,
-  specifier: "../db/client.ts",
-  target: `${APP}/db/client.ts`,
-  kind: "value",
-};
+const dbBlocker: RetainedBlocker = { file: `${APP}/orders/service.ts`, specifier: "../db/client.ts", target: `${APP}/db/client.ts`, kind: "value" };
 
-const typeBlocker: RetainedBlocker = {
-  file: `${APP}/orders/service.ts`,
-  specifier: "../config/env.ts",
-  target: `${APP}/config/env.ts`,
-  kind: "type",
-};
+const typeBlocker: RetainedBlocker = { file: `${APP}/orders/service.ts`, specifier: "../config/env.ts", target: `${APP}/config/env.ts`, kind: "type" };
 
 describe("preparationRecipe", () => {
   test("names the compositionBoundaries entry that already covers the blocker", () => {

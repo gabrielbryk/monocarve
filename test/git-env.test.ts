@@ -75,14 +75,10 @@ describe("git environment", () => {
     // valid fixture. The pinned git-dir must refuse before any write occurs.
     const notARepository = join(host, "nested", "not-a-repository");
     mkdirSync(notARepository, { recursive: true });
-    expect(() => fixtureGit(notARepository, "config", "user.name", "Leaked Fixture Identity")).toThrow(
-      "fixture repository does not exist",
-    );
+    expect(() => fixtureGit(notARepository, "config", "user.name", "Leaked Fixture Identity")).toThrow("fixture repository does not exist");
     expect(readFileSync(hostConfig, "utf8")).toBe(before);
     expect(fixtureGit(host, "config", "--local", "--get", "user.name")).toBe("Host Repository");
-    expect(() => fixtureGit(host, "config", "--global", "user.name", "Leaked Global Identity")).toThrow(
-      "fixture git config may not use --global",
-    );
+    expect(() => fixtureGit(host, "config", "--global", "user.name", "Leaked Global Identity")).toThrow("fixture git config may not use --global");
     expect(readFileSync(hostConfig, "utf8")).toBe(before);
     expect(() => fixtureGit(host, "--no-pager", "config", "--global", "user.name", "Leaked Global Identity")).toThrow(
       "fixture git config may not use --global",
@@ -121,9 +117,7 @@ describe("git environment", () => {
     const externalGitDir = join(scratch, "external-git-dir");
     mkdirSync(root);
 
-    expect(() => fixtureGit(root, "init", "--separate-git-dir", externalGitDir)).toThrow(
-      "fixture git init may not use --separate-git-dir",
-    );
+    expect(() => fixtureGit(root, "init", "--separate-git-dir", externalGitDir)).toThrow("fixture git init may not use --separate-git-dir");
     expect(existsSync(externalGitDir)).toBe(false);
     expect(existsSync(join(root, ".git"))).toBe(false);
 

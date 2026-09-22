@@ -18,8 +18,8 @@ import { fileURLToPath } from "node:url";
 import { pnpmAdapter } from "../src/adapters/pnpm.ts";
 import { loadConfig } from "../src/config.ts";
 import { scanDependencyGraph } from "../src/graph/cruiser.ts";
-import { buildPortfolio } from "../src/portfolio/rank.ts";
 import { buildPlanSync, serializeManifest } from "../src/plan/build.ts";
+import { buildPortfolio } from "../src/portfolio/rank.ts";
 import { applyPlan } from "../src/transaction/apply.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
 import { cleanupFixtures, fixtureGit, scratchDirectory, write } from "./support/fixture-repo.ts";
@@ -45,14 +45,8 @@ describe("end to end", () => {
 
   test("compiles, applies, and audits a module-preserving extraction of the widget closure", async () => {
     const root = standaloneWorkspace();
-    const raw = JSON.parse(readFileSync(join(root, "monocarve.config.json"), "utf8")) as {
-      scaffoldTemplates: Record<string, unknown>;
-    };
-    raw.scaffoldTemplates.publicSurface = {
-      mode: "subpaths",
-      keyTemplate: "./{pathNoExtension}",
-      targetTemplate: "./src/{path}",
-    };
+    const raw = JSON.parse(readFileSync(join(root, "monocarve.config.json"), "utf8")) as { scaffoldTemplates: Record<string, unknown> };
+    raw.scaffoldTemplates.publicSurface = { mode: "subpaths", keyTemplate: "./{pathNoExtension}", targetTemplate: "./src/{path}" };
     write(root, "monocarve.config.json", `${JSON.stringify(raw, null, 2)}\n`);
     fixtureGit(root, "add", "--", "monocarve.config.json");
     fixtureGit(root, "commit", "-qm", "test: publish module subpaths");
@@ -63,14 +57,7 @@ describe("end to end", () => {
     const candidate = portfolio.candidates.find((entry) => entry.eligible && entry.assets.length > 0);
     expect(candidate).toBeDefined();
 
-    const manifest = buildPlanSync({
-      config,
-      rootDir: root,
-      graph,
-      candidate: candidate!,
-      baselineCommit: graph.commit!,
-      packageName: "@acme/chart",
-    });
+    const manifest = buildPlanSync({ config, rootDir: root, graph, candidate: candidate!, baselineCommit: graph.commit!, packageName: "@acme/chart" });
 
     // The declared evaluation inventory, from the real builder against real
     // sources, and it covers the closure rather than the moved set.
@@ -86,18 +73,11 @@ describe("end to end", () => {
     // `libs/chart/`, would be describing a file this plan does not produce.
     expect(manifest.evaluationEffects).toEqual([
       { subject: "module", reach: "moved", path: "libs/chart/src/widgets/chart.ts", kinds: ["side-effect-import"] },
-      {
-        subject: "module",
-        reach: "reached",
-        path: "libs/format/src/number.ts",
-        kinds: ["expression-statement", "initializer-call"],
-      },
+      { subject: "module", reach: "reached", path: "libs/format/src/number.ts", kinds: ["expression-statement", "initializer-call"] },
     ]);
     // The generated barrel is inventoried too; `export *` does no work itself,
     // so it contributes nothing here.
-    expect(
-      manifest.evaluationEffects.some((entry) => entry.subject === "module" && entry.path === "libs/chart/src/index.ts"),
-    ).toBe(false);
+    expect(manifest.evaluationEffects.some((entry) => entry.subject === "module" && entry.path === "libs/chart/src/index.ts")).toBe(false);
 
     const manifestPath = "plans/chart.json";
     write(root, manifestPath, serializeManifest(manifest));
@@ -111,9 +91,7 @@ describe("end to end", () => {
     expect(result.wiringCommit).toBeDefined();
 
     // The move commit is nothing but exact renames.
-    const moveDiff = fixtureGit(root, "show", "--name-status", "--find-renames=100%", "--format=", "HEAD~1")
-      .split("\n")
-      .filter(Boolean);
+    const moveDiff = fixtureGit(root, "show", "--name-status", "--find-renames=100%", "--format=", "HEAD~1").split("\n").filter(Boolean);
     expect(moveDiff).toHaveLength(4);
     expect(moveDiff.every((line) => line.startsWith("R100"))).toBe(true);
 
@@ -145,10 +123,7 @@ describe("end to end", () => {
     expect(manifest.changedFiles).toContain("generated/module-ledger.json");
     // The mock-only retained consumer remains alongside the unrelated module;
     // the extracted production closure itself still leaves the application.
-    expect(JSON.parse(readFileSync(join(root, "generated/module-ledger.json"), "utf8"))).toEqual({
-      "apps/web/src": 2,
-      "apps/api/src": 2,
-    });
+    expect(JSON.parse(readFileSync(join(root, "generated/module-ledger.json"), "utf8"))).toEqual({ "apps/web/src": 2, "apps/api/src": 2 });
     expect(fixtureGit(root, "show", "HEAD:generated/module-ledger.json")).toContain('"apps/web/src": 2');
 
     // The package is real: scaffolding, dependencies, project references, barrel.
@@ -162,9 +137,7 @@ describe("end to end", () => {
     expect(created.exports["./widgets/chart"]).toBe("./src/widgets/chart.ts");
     expect(created.exports["./types"]).toBe("./src/types.ts");
     expect(readFileSync(join(root, "libs/chart/src/index.ts"), "utf8")).toBe("");
-    expect(JSON.parse(readFileSync(join(root, "libs/chart/tsconfig.json"), "utf8")).references).toEqual([
-      { path: "../format" },
-    ]);
+    expect(JSON.parse(readFileSync(join(root, "libs/chart/tsconfig.json"), "utf8")).references).toEqual([{ path: "../format" }]);
 
     // The consumer moved to the package specifier, and the asset travelled.
     const consumerText = readFileSync(join(root, "apps/web/src/main.ts"), "utf8");
@@ -206,9 +179,7 @@ describe("end to end", () => {
     created.exports["./widgets/chart"] = "./src/types.ts";
     write(root, packagePath, `${JSON.stringify(created, null, 2)}\n`);
     const tampered = auditPlanSync({ config, rootDir: root, manifest, skipCompileProof: true });
-    expect(tampered.boundaryRules.failures).toContain(
-      "package subpath ./widgets/chart does not target ./src/widgets/chart.ts",
-    );
+    expect(tampered.boundaryRules.failures).toContain("package subpath ./widgets/chart does not target ./src/widgets/chart.ts");
     expect(tampered.passed).toBe(false);
 
     // Deleting the key is observably different from pointing it elsewhere;
@@ -218,26 +189,20 @@ describe("end to end", () => {
     delete withoutChartExport.exports["./widgets/chart"];
     write(root, packagePath, `${JSON.stringify(withoutChartExport, null, 2)}\n`);
     const missingKey = auditPlanSync({ config, rootDir: root, manifest, skipCompileProof: true });
-    expect(missingKey.boundaryRules.failures).toContain(
-      "package subpath ./widgets/chart does not target ./src/widgets/chart.ts",
-    );
+    expect(missingKey.boundaryRules.failures).toContain("package subpath ./widgets/chart does not target ./src/widgets/chart.ts");
 
     // An exports map whose path is right but whose file disappeared cannot
     // pass merely because lexical path resolution still agrees.
     write(root, packagePath, packageBytes);
     rmSync(join(root, chartPath));
     const missingTarget = auditPlanSync({ config, rootDir: root, manifest, skipCompileProof: true });
-    expect(missingTarget.boundaryRules.failures).toContain(
-      "package subpath ./widgets/chart does not expose renderChart",
-    );
+    expect(missingTarget.boundaryRules.failures).toContain("package subpath ./widgets/chart does not expose renderChart");
 
     // The surface check distinguishes runtime symbols and type-only symbols.
     // These two corruptions prove each kind can make the proof fail.
     write(root, chartPath, chartBytes.replace("export function renderChart", "function renderChart"));
     const missingValue = auditPlanSync({ config, rootDir: root, manifest, skipCompileProof: true });
-    expect(missingValue.boundaryRules.failures).toContain(
-      "package subpath ./widgets/chart does not expose renderChart",
-    );
+    expect(missingValue.boundaryRules.failures).toContain("package subpath ./widgets/chart does not expose renderChart");
     write(root, chartPath, chartBytes);
     write(root, typesPath, typesBytes.replace("export interface Point", "interface Point"));
     const missingType = auditPlanSync({ config, rootDir: root, manifest, skipCompileProof: true });
@@ -252,9 +217,7 @@ describe("end to end", () => {
     expect(chartModule).toBeDefined();
     (chartModule!.requiredExports as { name: string; typeOnly: boolean }[]).push({ name: "default", typeOnly: false });
     const missingDefault = auditPlanSync({ config, rootDir: root, manifest: requiringDefault, skipCompileProof: true });
-    expect(missingDefault.boundaryRules.failures).toContain(
-      "package subpath ./widgets/chart does not expose default",
-    );
+    expect(missingDefault.boundaryRules.failures).toContain("package subpath ./widgets/chart does not expose default");
 
     // Finally alter the manifest mapping instead of the landed package. The
     // audit must compare the two sources of truth rather than accepting either
@@ -264,9 +227,7 @@ describe("end to end", () => {
     expect(forgedChart).toBeDefined();
     Object.assign(forgedChart!, { exportTarget: "./src/types.ts", target: typesPath });
     const manifestTamper = auditPlanSync({ config, rootDir: root, manifest: forgedMapping, skipCompileProof: true });
-    expect(manifestTamper.boundaryRules.failures).toContain(
-      "package subpath ./widgets/chart does not target ./src/types.ts",
-    );
+    expect(manifestTamper.boundaryRules.failures).toContain("package subpath ./widgets/chart does not target ./src/types.ts");
   }, 300_000);
 
   test("applies and audits a retained cross-owner test as a dev-only consumer", async () => {
@@ -289,18 +250,9 @@ describe("end to end", () => {
 
     const { config } = await loadConfig({ cwd: root });
     const graph = await scanDependencyGraph({ config, rootDir: root, noCache: true });
-    const candidate = buildPortfolio({ config, graph }).candidates.find(
-      (entry) => entry.eligible && entry.files.includes("apps/web/src/widgets/chart.ts"),
-    );
+    const candidate = buildPortfolio({ config, graph }).candidates.find((entry) => entry.eligible && entry.files.includes("apps/web/src/widgets/chart.ts"));
     expect(candidate).toBeDefined();
-    const manifest = buildPlanSync({
-      config,
-      rootDir: root,
-      graph,
-      candidate: candidate!,
-      baselineCommit: graph.commit!,
-      packageName: "@acme/chart-retained",
-    });
+    const manifest = buildPlanSync({ config, rootDir: root, graph, candidate: candidate!, baselineCommit: graph.commit!, packageName: "@acme/chart-retained" });
     expect(manifest.source.tests).not.toContain("apps/api/src/chart-consumer.test.ts");
     expect(manifest.consumers).toContainEqual(
       expect.objectContaining({ file: "apps/api/src/chart-consumer.test.ts", owner: "apps/api", dependencySection: "dev" }),

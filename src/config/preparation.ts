@@ -16,11 +16,7 @@ export interface PreparationPolicyRenderInput {
 
 export interface RenderedPreparationPolicy {
   readonly commit: { readonly subject: string; readonly body?: string };
-  readonly gates: {
-    readonly package: readonly string[];
-    readonly project: readonly string[];
-    readonly workspace: readonly string[];
-  };
+  readonly gates: { readonly package: readonly string[]; readonly project: readonly string[]; readonly workspace: readonly string[] };
 }
 
 /**
@@ -29,10 +25,7 @@ export interface RenderedPreparationPolicy {
  * are valid for legacy whole-file extraction configs, never a preparation
  * proof.
  */
-export function renderPreparationPolicy(
-  config: MonocarveConfig,
-  input: PreparationPolicyRenderInput,
-): RenderedPreparationPolicy {
+export function renderPreparationPolicy(config: MonocarveConfig, input: PreparationPolicyRenderInput): RenderedPreparationPolicy {
   const app = applicationFor(config, input.sourcePath);
   if (!app) throw new ConfigError(`preparation donor ${JSON.stringify(input.sourcePath)} is not in a configured application`);
   const policy = config.preparation;
@@ -67,11 +60,7 @@ export function renderPreparationPolicy(
  * exactly match the gates and commit metadata that its resolved config renders;
  * otherwise a hand-edited manifest could drop a required repository gate.
  */
-export function assertPreparationPolicyMatches(
-  config: MonocarveConfig,
-  input: PreparationPolicyRenderInput,
-  actual: RenderedPreparationPolicy,
-): void {
+export function assertPreparationPolicyMatches(config: MonocarveConfig, input: PreparationPolicyRenderInput, actual: RenderedPreparationPolicy): void {
   const expected = renderPreparationPolicy(config, input);
   if (!samePolicy(expected, actual)) {
     throw new ConfigError("preparation manifest policy differs from the exact gates or commit metadata rendered by the resolved configuration");
@@ -84,10 +73,12 @@ function renderGates(
   vars: Readonly<Record<(typeof PREPARATION_PLACEHOLDERS)[number], string>>,
 ): string[] {
   if (templates === undefined) return [];
-  const rendered = templates.map((template) => {
-    validateTemplates(template, `preparation.gates.${tier}`);
-    return renderTemplate(template, vars);
-  }).sort(byCodeUnit);
+  const rendered = templates
+    .map((template) => {
+      validateTemplates(template, `preparation.gates.${tier}`);
+      return renderTemplate(template, vars);
+    })
+    .sort(byCodeUnit);
   if (new Set(rendered).size !== rendered.length) {
     throw new ConfigError(`preparation.gates.${tier} renders duplicate commands; each repository gate must be distinct`);
   }
@@ -100,11 +91,13 @@ function validateTemplates(template: string, field: string): void {
 }
 
 function samePolicy(left: RenderedPreparationPolicy, right: RenderedPreparationPolicy): boolean {
-  return left.commit.subject === right.commit.subject
-    && left.commit.body === right.commit.body
-    && sameStrings(left.gates.package, right.gates.package)
-    && sameStrings(left.gates.project, right.gates.project)
-    && sameStrings(left.gates.workspace, right.gates.workspace);
+  return (
+    left.commit.subject === right.commit.subject &&
+    left.commit.body === right.commit.body &&
+    sameStrings(left.gates.package, right.gates.package) &&
+    sameStrings(left.gates.project, right.gates.project) &&
+    sameStrings(left.gates.workspace, right.gates.workspace)
+  );
 }
 
 function sameStrings(left: readonly string[], right: readonly string[]): boolean {

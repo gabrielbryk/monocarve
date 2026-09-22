@@ -7,7 +7,11 @@ import { workspacePath } from "../util/paths.ts";
 import type { ReadEvidence } from "./evidence.ts";
 import type { ReconciliationRecord } from "./types.ts";
 
-export function approveReconciliation(options: { readonly rootDir: string; readonly config: MonocarveConfig; readonly evidence: ReadEvidence<ReconciliationRecord> }): { readonly commit: string; readonly path: string; readonly subject: string } {
+export function approveReconciliation(options: {
+  readonly rootDir: string;
+  readonly config: MonocarveConfig;
+  readonly evidence: ReadEvidence<ReconciliationRecord>;
+}): { readonly commit: string; readonly path: string; readonly subject: string } {
   const { rootDir, config, evidence } = options;
   reconciliationApprovalEvidence(rootDir, evidence);
   const branch = currentBranch(rootDir);
@@ -19,8 +23,10 @@ export function approveReconciliation(options: { readonly rootDir: string; reado
     args.push("--", evidence.path);
     git({ cwd: rootDir }, ...args);
     const commit = headCommit(rootDir);
-    if (git({ cwd: rootDir }, "rev-parse", `${commit}^`) !== evidence.value.observed.headCommit) throw new PreflightError("reconciliation approval parent changed");
-    if (git({ cwd: rootDir }, "log", "-1", "--format=%s", commit) !== evidence.value.approval.subject) throw new PreflightError("reconciliation approval subject changed");
+    if (git({ cwd: rootDir }, "rev-parse", `${commit}^`) !== evidence.value.observed.headCommit)
+      throw new PreflightError("reconciliation approval parent changed");
+    if (git({ cwd: rootDir }, "log", "-1", "--format=%s", commit) !== evidence.value.approval.subject)
+      throw new PreflightError("reconciliation approval subject changed");
     const paths = git({ cwd: rootDir }, "diff-tree", "--no-commit-id", "--name-only", "-r", commit).split("\n").filter(Boolean);
     const expectedPath = `${repositoryPrefix(rootDir)}${evidence.path}`;
     if (paths.length !== 1 || paths[0] !== expectedPath) throw new PreflightError("reconciliation approval changed paths outside its record");
@@ -34,11 +40,19 @@ export function approveReconciliation(options: { readonly rootDir: string; reado
   }
 }
 
-export function reconciliationApprovalEvidence(rootDir: string, evidence: ReadEvidence<ReconciliationRecord>): { readonly path: string; readonly subject: string; readonly observedHead: string } {
+export function reconciliationApprovalEvidence(
+  rootDir: string,
+  evidence: ReadEvidence<ReconciliationRecord>,
+): { readonly path: string; readonly subject: string; readonly observedHead: string } {
   if (headCommit(rootDir) !== evidence.value.observed.headCommit) throw new PreflightError("reconciliation approval must be directly atop its observed head");
   const entries = statusEntries(rootDir);
-  const valid = entries.length === 1 && entries[0]?.paths.length === 1 && entries[0].paths[0] === evidence.path &&
-    (entries[0].index === "?" || entries[0].index === " ") && entries[0].worktree !== " ";
-  if (!valid) throw new PreflightError(`reconciliation approval requires only its unstaged record: ${entries.flatMap((entry) => entry.paths).join(", ") || "none"}`);
+  const valid =
+    entries.length === 1 &&
+    entries[0]?.paths.length === 1 &&
+    entries[0].paths[0] === evidence.path &&
+    (entries[0].index === "?" || entries[0].index === " ") &&
+    entries[0].worktree !== " ";
+  if (!valid)
+    throw new PreflightError(`reconciliation approval requires only its unstaged record: ${entries.flatMap((entry) => entry.paths).join(", ") || "none"}`);
   return { path: evidence.path, subject: evidence.value.approval.subject, observedHead: evidence.value.observed.headCommit };
 }

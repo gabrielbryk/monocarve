@@ -13,17 +13,17 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { triggeredArtifacts, type MonocarveUserConfig } from "../src/config.ts";
 import { rewriteResolvedImportSpecifier } from "../src/codemod/imports.ts";
+import { triggeredArtifacts, type MonocarveUserConfig } from "../src/config.ts";
 import { generatedFilesFor } from "../src/plan/build.ts";
 import { WorkspaceContext } from "../src/plan/context.ts";
+import type { ExtractionManifest, PlanOperation } from "../src/plan/manifest.ts";
 import { assertPlanValid, validatePlan } from "../src/plan/validate.ts";
 import { applyPlan } from "../src/transaction/apply.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
 import { simulatePlan } from "../src/transaction/simulate.ts";
 import { fileState } from "../src/util/files.ts";
 import { hashText } from "../src/util/hash.ts";
-import type { ExtractionManifest, PlanOperation } from "../src/plan/manifest.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, read, write } from "./support/fixture-repo.ts";
 
 const DONOR = "apps/api/src/widget/widget.ts";
@@ -102,14 +102,7 @@ interface FixtureOptions {
 function configFor(root: string, options: FixtureOptions = {}) {
   const artifacts = options.withoutArtifact
     ? []
-    : [
-        {
-          path: LEDGER,
-          source: "apps/api/src",
-          regenerate: options.regenerate ?? REGENERATE,
-          triggers: [...(options.triggers ?? ["^apps/api/src/widget/"])],
-        },
-      ];
+    : [{ path: LEDGER, source: "apps/api/src", regenerate: options.regenerate ?? REGENERATE, triggers: [...(options.triggers ?? ["^apps/api/src/widget/"])] }];
   const overrides: Partial<MonocarveUserConfig> = {
     generatedArtifacts: { artifacts },
     gates: { package: [], project: [], workspace: [...(options.gates ?? ["sh scripts/check-ledger.sh"])] },
@@ -122,10 +115,7 @@ function configFor(root: string, options: FixtureOptions = {}) {
  * barrel. `artifact` decides whether it also declares the ledger regeneration —
  * the single difference every test here turns on.
  */
-function manifestFor(
-  root: string,
-  options: { artifact: boolean; regenerate?: string; gates?: readonly string[] } = { artifact: true },
-): ExtractionManifest {
+function manifestFor(root: string, options: { artifact: boolean; regenerate?: string; gates?: readonly string[] } = { artifact: true }): ExtractionManifest {
   const donorHash = hashText(read(root, DONOR));
   const consumerText = read(root, CONSUMER);
   const rewritten = rewriteResolvedImportSpecifier(consumerText, join(root, CONSUMER), join(root, DONOR), PACKAGE, root);
@@ -141,14 +131,7 @@ function manifestFor(
       preconditionHash: hashText(consumerText),
       resultHash: hashText(rewritten),
     },
-    {
-      kind: "write-file",
-      path: ENTRYPOINT,
-      contents: barrel,
-      preconditionHash: "missing",
-      resultHash: hashText(barrel),
-      generator: "scaffold:entrypoint",
-    },
+    { kind: "write-file", path: ENTRYPOINT, contents: barrel, preconditionHash: "missing", resultHash: hashText(barrel), generator: "scaffold:entrypoint" },
   ];
 
   return {
@@ -159,12 +142,7 @@ function manifestFor(
     baselineCommit: fixtureGit(root, "rev-parse", "HEAD"),
     graphDigest: hashText("fixture-graph"),
     application: "api",
-    target: {
-      packageName: PACKAGE,
-      packageRoot: PACKAGE_ROOT,
-      entrypoint: "src/index.ts",
-      requiredExports: [{ name: "widgetValue", typeOnly: false }],
-    },
+    target: { packageName: PACKAGE, packageRoot: PACKAGE_ROOT, entrypoint: "src/index.ts", requiredExports: [{ name: "widgetValue", typeOnly: false }] },
     source: { files: [DONOR], tests: [], sccs: { "scc-fixture": [DONOR] } },
     dependencies: { runtime: {}, dev: {}, packageReferences: [] },
     sourceBlobs: { [DONOR]: donorHash },
@@ -296,9 +274,7 @@ describe("generated artifacts are regenerated, not merely declared", () => {
 
     // `skipSimulation` puts the failure where the rollback path is: the journal
     // has already replayed in the real checkout when the generator dies.
-    await expect(
-      applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, skipSimulation: true }),
-    ).rejects.toThrow("rollback complete");
+    await expect(applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, skipSimulation: true })).rejects.toThrow("rollback complete");
 
     expect(read(root, DONOR)).toBe("export const widgetValue = 1;\n");
     expect(existsSync(join(root, TARGET))).toBe(false);
@@ -332,9 +308,7 @@ describe("generated artifacts are regenerated, not merely declared", () => {
     expect(read(root, LEDGER)).toBe(EXTRACTED_LEDGER);
     expect(fixtureGit(root, "show", `HEAD:${LEDGER}`)).toContain('"sources": 1');
     // The move commit stays a pure rename: the ledger is content, not a rename.
-    expect(fixtureGit(root, "show", "--name-status", "--find-renames=100%", "--format=", "HEAD~1")).toBe(
-      `R100\t${DONOR}\t${TARGET}`,
-    );
+    expect(fixtureGit(root, "show", "--name-status", "--find-renames=100%", "--format=", "HEAD~1")).toBe(`R100\t${DONOR}\t${TARGET}`);
   }, 180_000);
 
   test("a stale artifact fails the workspace gate, and the failure carries the gate's own output", async () => {
@@ -364,9 +338,7 @@ describe("generated artifacts are regenerated, not merely declared", () => {
 
     const produced = fileState(join(root, LEDGER));
     // Positive control: with the hash regeneration produced, the tree agrees.
-    expect(auditPlanSync({ config, rootDir: root, manifest, regeneratedArtifacts: { [LEDGER]: produced } }).passed).toBe(
-      true,
-    );
+    expect(auditPlanSync({ config, rootDir: root, manifest, regeneratedArtifacts: { [LEDGER]: produced } }).passed).toBe(true);
 
     // Something rewrote the artifact after the generator did — a hook, a second
     // generator, a hand edit. The exemption covers "unknowable at plan time",

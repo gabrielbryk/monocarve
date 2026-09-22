@@ -16,12 +16,7 @@ const route = path("route");
 const pkg = "libs/runtime/src/index.ts";
 
 const config = parseConfig({
-  applications: [{
-    name: "api",
-    sourceRoot: APP,
-    tsconfig: "apps/api/tsconfig.json",
-    compositionRoots: [route],
-  }],
+  applications: [{ name: "api", sourceRoot: APP, tsconfig: "apps/api/tsconfig.json", compositionRoots: [route] }],
   packageRoots: ["libs"],
   packageScope: "@acme/",
   portfolio: { minFiles: 1 },
@@ -84,16 +79,19 @@ describe("evacuation candidate unions", () => {
     const testPath = `${APP}/alpha.test.ts`;
     const dependencyGraph = graph(
       [alpha, beta, shared, cycleA, cycleB, consumer, pkg],
-      [edge(alpha, shared), edge(beta, shared), edge(shared, cycleA), edge(cycleA, cycleB), edge(cycleB, cycleA), edge(consumer, shared), edge(alpha, pkg, "@acme/runtime")],
+      [
+        edge(alpha, shared),
+        edge(beta, shared),
+        edge(shared, cycleA),
+        edge(cycleA, cycleB),
+        edge(cycleB, cycleA),
+        edge(consumer, shared),
+        edge(alpha, pkg, "@acme/runtime"),
+      ],
       new Map([[alpha, new Set([testPath])]]),
     );
 
-    const candidate = buildEvacuationCandidate({
-      config,
-      graph: dependencyGraph,
-      application: "api",
-      selected: [beta, cycleA, shared, alpha, alpha],
-    });
+    const candidate = buildEvacuationCandidate({ config, graph: dependencyGraph, application: "api", selected: [beta, cycleA, shared, alpha, alpha] });
 
     expect(candidate.files).toEqual([alpha, beta, cycleA, cycleB, shared]);
     expect(candidate.absorbedSccPeers).toEqual([cycleB]);
@@ -120,10 +118,7 @@ describe("evacuation candidate unions", () => {
 
   test("retains an entire composition-root SCC while moving its dependency closure", () => {
     const routePeer = path("route-peer");
-    const dependencyGraph = graph(
-      [route, routePeer, shared],
-      [edge(route, routePeer), edge(routePeer, route), edge(route, shared)],
-    );
+    const dependencyGraph = graph([route, routePeer, shared], [edge(route, routePeer), edge(routePeer, route), edge(route, shared)]);
     const candidate = buildEvacuationCandidate({ config, graph: dependencyGraph, application: "api", selected: [route, shared] });
 
     expect(candidate.files).toEqual([shared]);
@@ -131,17 +126,12 @@ describe("evacuation candidate unions", () => {
     expect(candidate.retainedComposition).toHaveLength(1);
     expect(candidate.retainedComposition[0]?.members).toEqual([routePeer, route]);
     expect(candidate.seedSccs).toContainEqual(candidate.retainedComposition[0]!);
-    expect(candidate.consumers).toEqual([
-      { file: route, owner: "apps/api", specifiers: ["./shared.ts"], external: false },
-    ]);
+    expect(candidate.consumers).toEqual([{ file: route, owner: "apps/api", specifiers: ["./shared.ts"], external: false }]);
   });
 
   test("explicitly includes a selected composition root's whole SCC", () => {
     const routePeer = path("route-peer");
-    const dependencyGraph = graph(
-      [route, routePeer, shared],
-      [edge(route, routePeer), edge(routePeer, route), edge(route, shared)],
-    );
+    const dependencyGraph = graph([route, routePeer, shared], [edge(route, routePeer), edge(routePeer, route), edge(route, shared)]);
     const candidate = buildEvacuationCandidate({
       config,
       graph: dependencyGraph,

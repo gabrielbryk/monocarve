@@ -1,11 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  analyzeTypeScriptSource,
-  SymbolAnalysisError,
-  type DeclarationGroup,
-  type SymbolGraph,
-} from "../src/symbols/index.ts";
+import { analyzeTypeScriptSource, SymbolAnalysisError, type DeclarationGroup, type SymbolGraph } from "../src/symbols/index.ts";
 import { stableStringify } from "../src/util/hash.ts";
 
 function analyze(sourceText: string, sourcePath = "apps/service/src/large-module.ts"): SymbolGraph {
@@ -23,9 +18,7 @@ function groupName(graph: SymbolGraph, id: string): string {
 }
 
 function edge(graph: SymbolGraph, source: string, target: string) {
-  const found = graph.edges.find(
-    (candidate) => groupName(graph, candidate.source) === source && groupName(graph, candidate.target) === target,
-  );
+  const found = graph.edges.find((candidate) => groupName(graph, candidate.source) === source && groupName(graph, candidate.target) === target);
   if (!found) throw new Error(`missing edge ${source} -> ${target}`);
   return found;
 }
@@ -71,9 +64,7 @@ export function parse(value: string | number): string | number { return value }
 
     expect(token.space).toBe("both");
     expect(token.declarationIds).toHaveLength(2);
-    expect(
-      graph.declarations.filter((item) => token.declarationIds.includes(item.id)).map((item) => item.space),
-    ).toEqual(["type", "value"]);
+    expect(graph.declarations.filter((item) => token.declarationIds.includes(item.id)).map((item) => item.space)).toEqual(["type", "value"]);
     expect(parse.space).toBe("value");
     expect(parse.declarationIds).toHaveLength(3);
   });
@@ -119,19 +110,14 @@ function recursive(): number { return recursive() }
   });
 
   test("is byte-deterministic and normalizes the stable display path", () => {
-    const input = {
-      sourcePath: "apps\\service\\src\\module.ts",
-      sourceText: "const Zebra = 1; const alpha = Zebra; export { alpha };\n",
-    };
+    const input = { sourcePath: "apps\\service\\src\\module.ts", sourceText: "const Zebra = 1; const alpha = Zebra; export { alpha };\n" };
     const first = analyzeTypeScriptSource(input);
     const second = analyzeTypeScriptSource(input);
 
     expect(stableStringify(first)).toBe(stableStringify(second));
     expect(first.sourcePath).toBe("apps/service/src/module.ts");
     expect(first.groups.map((group) => group.name)).toEqual(["Zebra", "alpha"]);
-    expect(first.edges.map((item) => [groupName(first, item.source), groupName(first, item.target)])).toEqual([
-      ["alpha", "Zebra"],
-    ]);
+    expect(first.edges.map((item) => [groupName(first, item.source), groupName(first, item.target)])).toEqual([["alpha", "Zebra"]]);
   });
 
   test("span identity changes when declaration bytes change", () => {
@@ -139,9 +125,7 @@ function recursive(): number { return recursive() }
     const after = analyze("const stable = 1;\nfunction calculate() { return stable + 1; }\n");
 
     expect(byName(before.declarations, "stable").span.hash).toBe(byName(after.declarations, "stable").span.hash);
-    expect(byName(before.declarations, "calculate").span.hash).not.toBe(
-      byName(after.declarations, "calculate").span.hash,
-    );
+    expect(byName(before.declarations, "calculate").span.hash).not.toBe(byName(after.declarations, "calculate").span.hash);
     expect(byName(before.declarations, "calculate").id).not.toBe(byName(after.declarations, "calculate").id);
   });
 
@@ -153,9 +137,7 @@ const value: Local | undefined = undefined;
 `);
     expect(graph.groups.map((group) => group.name)).toEqual(["Local", "value"]);
     expect(edge(graph, "value", "Local").space).toBe("type");
-    expect(graph.diagnostics).toContainEqual(
-      expect.objectContaining({ phase: "semantic", code: 2307, category: "error" }),
-    );
+    expect(graph.diagnostics).toContainEqual(expect.objectContaining({ phase: "semantic", code: 2307, category: "error" }));
   });
 
   test("parses TSX using the source path instead of treating JSX as ambiguous TypeScript", () => {
@@ -179,12 +161,8 @@ const value: Local | undefined = undefined;
       expect(error).toBeInstanceOf(SymbolAnalysisError);
       expect((error as SymbolAnalysisError).diagnostics.some((diagnostic) => diagnostic.code === 2451)).toBe(true);
     }
-    expect(() => analyze('declare module "third-party" { export const value: number }')).toThrow(
-      "string-literal module declarations",
-    );
-    expect(() => analyzeTypeScriptSource({ sourcePath: "../outside.ts", sourceText: "const value = 1" })).toThrow(
-      "may not leave the repository",
-    );
+    expect(() => analyze('declare module "third-party" { export const value: number }')).toThrow("string-literal module declarations");
+    expect(() => analyzeTypeScriptSource({ sourcePath: "../outside.ts", sourceText: "const value = 1" })).toThrow("may not leave the repository");
   });
 
   test("keeps group IDs independent of map iteration and exposes sorted declaration IDs", () => {

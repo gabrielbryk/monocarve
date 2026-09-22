@@ -37,9 +37,7 @@ export function assertEnumerableGlobs(globs: readonly string[], manager: string)
 export function enumerateWorkspacePackages(rootDir: string, globs: readonly string[]): WorkspacePackage[] {
   const positiveGlobs = globs.filter((glob) => !glob.startsWith("!"));
   const ignoredGlobs = globs.filter((glob) => glob.startsWith("!")).map((glob) => glob.slice(1));
-  const packages = positiveGlobs
-    .flatMap((glob) => packagesForGlob(rootDir, glob))
-    .filter((pkg) => !ignoredGlobs.some((glob) => matchesGlob(pkg.dir, glob)));
+  const packages = positiveGlobs.flatMap((glob) => packagesForGlob(rootDir, glob)).filter((pkg) => !ignoredGlobs.some((glob) => matchesGlob(pkg.dir, glob)));
   assertUniqueNames(packages);
   return packages.sort((left, right) => byCodeUnit(left.name, right.name));
 }
@@ -81,7 +79,10 @@ function packagesForGlob(rootDir: string, glob: string): WorkspacePackage[] {
   const absolute = resolve(rootDir, base);
   if (!existsSync(absolute)) return [];
   const dirs = glob.endsWith("/*")
-    ? readdirSync(absolute, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => join(base, entry.name)).sort(byCodeUnit)
+    ? readdirSync(absolute, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => join(base, entry.name))
+        .sort(byCodeUnit)
     : [base];
   return dirs.flatMap((dir) => packageAt(rootDir, dir));
 }

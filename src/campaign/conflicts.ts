@@ -12,8 +12,8 @@ import { MonocarveError } from "../errors.ts";
 import { byCodeUnit } from "../util/hash.ts";
 import { accessesFor } from "./conflict-accesses.ts";
 import { compareConflicts, conflictsBetween } from "./conflict-resolution.ts";
-import { buildWaves } from "./conflict-waves.ts";
 import type { CampaignPlan, PlanConflict, PlanConflictAnalysis, Subject } from "./conflict-types.ts";
+import { buildWaves } from "./conflict-waves.ts";
 
 export type {
   CampaignPlan,
@@ -39,12 +39,7 @@ export function analyzePlanConflicts(plans: readonly CampaignPlan[]): PlanConfli
   assertCompatiblePlans(plans);
   const subjects = plans.map(toSubject).sort(compareSubjects);
   const conflicts = collectConflicts(subjects);
-  return {
-    baselineCommit: plans[0]!.manifest.baselineCommit,
-    graphDigest: plans[0]!.manifest.graphDigest,
-    conflicts,
-    waves: buildWaves(subjects, conflicts),
-  };
+  return { baselineCommit: plans[0]!.manifest.baselineCommit, graphDigest: plans[0]!.manifest.graphDigest, conflicts, waves: buildWaves(subjects, conflicts) };
 }
 
 function assertCompatiblePlans(plans: readonly CampaignPlan[]): void {
@@ -77,12 +72,7 @@ function assertUnique(plans: readonly CampaignPlan[], value: (plan: CampaignPlan
 }
 
 function toSubject(plan: CampaignPlan): Subject {
-  return {
-    candidateId: plan.candidateId,
-    priority: plan.priority ?? 0,
-    manifest: plan.manifest,
-    accesses: accessesFor(plan),
-  };
+  return { candidateId: plan.candidateId, priority: plan.priority ?? 0, manifest: plan.manifest, accesses: accessesFor(plan) };
 }
 
 function compareSubjects(left: Subject, right: Subject): number {

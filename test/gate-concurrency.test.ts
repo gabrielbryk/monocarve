@@ -63,8 +63,12 @@ describe("gate concurrency", () => {
   test("an explicit retry policy records every failed attempt before success", async () => {
     let calls = 0;
     const result = await runGateTiers({
-      gates: { ...emptyGates, workspace: ["flaky"] }, maxConcurrency: 1, retries: 2,
-      cwd: "/fixture", timeoutMs: 1_000, wrapCommand: (command) => [command],
+      gates: { ...emptyGates, workspace: ["flaky"] },
+      maxConcurrency: 1,
+      retries: 2,
+      cwd: "/fixture",
+      timeoutMs: 1_000,
+      wrapCommand: (command) => [command],
       runner: async () => {
         calls += 1;
         return { exitCode: calls < 3 ? 9 : 0, stdout: `attempt ${calls}`, stderr: "" };
@@ -293,12 +297,7 @@ describe("gate concurrency", () => {
       runner: async () => ({ exitCode: 17, stdout: "context", stderr: "actionable failure" }),
     });
 
-    expect(result.failure).toMatchObject({
-      command: "lint",
-      tier: "workspace",
-      exitCode: 17,
-      logWriteFailure: "scratch is read-only",
-    });
+    expect(result.failure).toMatchObject({ command: "lint", tier: "workspace", exitCode: 17, logWriteFailure: "scratch is read-only" });
     expect(result.failure?.logPath).toBeUndefined();
     expect(result.failure?.outputTail).toContain("actionable failure");
   });

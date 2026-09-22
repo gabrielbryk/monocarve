@@ -22,9 +22,7 @@ describe("candidate CLI", () => {
   });
 
   test("expands an equivalence group by its representative candidate id", async () => {
-    const portfolio = await runJson<{ top: { id: string; equivalenceGroup: { candidateIds: string[] } }[] }>(
-      "portfolio", "--recommendation", "all", "--json",
-    );
+    const portfolio = await runJson<{ top: { id: string; equivalenceGroup: { candidateIds: string[] } }[] }>("portfolio", "--recommendation", "all", "--json");
     const representative = portfolio.top[0];
     if (!representative) throw new Error("fixture produced no portfolio group");
     const details = await runJson<CandidateDetail[]>("candidates", "--equivalence-group", representative.id, "--json");
@@ -58,23 +56,14 @@ describe("candidate CLI", () => {
   }, 240_000);
 
   test("scope renders the concise review through piped stdout unless JSON is explicit", async () => {
-    const human = await run(
-      "scope",
-      "--path", "apps/web/src/widgets/chart.ts",
-      "--package-name", "@acme/chart-ui",
-    );
+    const human = await run("scope", "--path", "apps/web/src/widgets/chart.ts", "--package-name", "@acme/chart-ui");
     expect(human.code).toBe(0);
     expect(human.stderr).toBe("");
     expect(human.stdout).toStartWith("Plan c-");
     expect(human.stdout).toContain("Target: @acme/chart-ui");
     expect(human.stdout).not.toContain('"schema":"scope"');
 
-    const machine = await run(
-      "scope",
-      "--path", "apps/web/src/widgets/chart.ts",
-      "--package-name", "@acme/chart-ui",
-      "--json",
-    );
+    const machine = await run("scope", "--path", "apps/web/src/widgets/chart.ts", "--package-name", "@acme/chart-ui", "--json");
     expect(machine.code).toBe(0);
     expect((JSON.parse(machine.stdout) as { schema: string }).schema).toBe("scope");
   }, 240_000);

@@ -4,8 +4,8 @@ import { readFileSync } from "node:fs";
 
 import type { ParsedArgs } from "../cli/args.ts";
 import { inspectConfig } from "../doctor/config-doctor.ts";
-import type { CommandSpec } from "./types.ts";
 import { load, print } from "./shared.ts";
+import type { CommandSpec } from "./types.ts";
 
 async function configDoctor(args: ParsedArgs): Promise<void> {
   const loaded = await load(args);
@@ -25,7 +25,8 @@ export const configDoctorCommands: Record<string, CommandSpec> = {
   "config-doctor": {
     summary: "diagnose effective configuration and workspace integration",
     usage: "config-doctor",
-    details: "Reports config provenance, roots, workspace packages, adapter support, compiler profiles, generated and path-keyed artifacts, configured module calls, protected and dirty paths, preparation coverage, and semantic scaffold/public-surface conflicts. Read-only; it runs no gates, generators, installers, or preparers.",
+    details:
+      "Reports config provenance, roots, workspace packages, adapter support, compiler profiles, generated and path-keyed artifacts, configured module calls, protected and dirty paths, preparation coverage, and semantic scaffold/public-surface conflicts. Read-only; it runs no gates, generators, installers, or preparers.",
     run: configDoctor,
   },
 };

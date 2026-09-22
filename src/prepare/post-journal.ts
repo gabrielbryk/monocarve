@@ -1,14 +1,14 @@
 import { spawnSync } from "node:child_process";
 
 import { triggeredArtifacts, triggeredPostJournalPreparers, type MonocarveConfig, type PostJournalPreparerConfig } from "../config.ts";
+import { applyFileCreates, applyTextReplacements } from "../preparer/declarative.ts";
 import { failedGateOutput } from "../transaction/gate-diagnostics.ts";
 import { fileState } from "../util/files.ts";
 import { scrubbedGitEnv } from "../util/git.ts";
 import { hashJson, MISSING, type FileState } from "../util/hash.ts";
+import { PreparationApplyError } from "./apply-error.ts";
 import type { PreparationManifest } from "./manifest-types.ts";
 import { preparationOperationPaths } from "./manifest.ts";
-import { applyFileCreates, applyTextReplacements } from "../preparer/declarative.ts";
-import { PreparationApplyError } from "./apply-error.ts";
 
 export interface PreparationPreparerReport {
   readonly ok: boolean;
@@ -18,19 +18,29 @@ export interface PreparationPreparerReport {
 }
 
 export function preparationPostJournalRecords(config: MonocarveConfig, changedPaths: readonly string[]) {
-  return config.postJournalPreparers.filter((preparer) =>
-    preparer.triggers.length === 0 || changedPaths.some((path) => preparer.triggers.some((pattern) => new RegExp(pattern).test(path))),
-  ).map((preparer) => ({
-    id: preparer.id,
-    ...(preparer.command === undefined ? {} : { command: preparer.command }),
-    outputs: [...new Set([...preparer.outputs, ...(preparer.creates?.map((item) => item.path) ?? [])])].sort(),
-    ...(preparer.replacements === undefined ? {} : { replacements: preparer.replacements.map((item) => ({ path: item.path, before: item.before, after: item.after, ...(item.prefix === undefined ? {} : { prefix: item.prefix }), ...(item.suffix === undefined ? {} : { suffix: item.suffix }) })) }),
-    ...(preparer.creates === undefined ? {} : { creates: preparer.creates.map((item) => ({ ...item, mode: item.mode ?? 0o644 })) }),
-    emittedModuleSpecifiers: [...preparer.emittedModuleSpecifiers]
-      .map((item) => ({ ...item }))
-      .sort((left, right) => left.source.localeCompare(right.source) || left.resolutionBase.localeCompare(right.resolutionBase)),
-    ...(preparer.verify === undefined ? {} : { verify: preparer.verify }),
-  }));
+  return config.postJournalPreparers
+    .filter((preparer) => preparer.triggers.length === 0 || changedPaths.some((path) => preparer.triggers.some((pattern) => new RegExp(pattern).test(path))))
+    .map((preparer) => ({
+      id: preparer.id,
+      ...(preparer.command === undefined ? {} : { command: preparer.command }),
+      outputs: [...new Set([...preparer.outputs, ...(preparer.creates?.map((item) => item.path) ?? [])])].sort(),
+      ...(preparer.replacements === undefined
+        ? {}
+        : {
+            replacements: preparer.replacements.map((item) => ({
+              path: item.path,
+              before: item.before,
+              after: item.after,
+              ...(item.prefix === undefined ? {} : { prefix: item.prefix }),
+              ...(item.suffix === undefined ? {} : { suffix: item.suffix }),
+            })),
+          }),
+      ...(preparer.creates === undefined ? {} : { creates: preparer.creates.map((item) => ({ ...item, mode: item.mode ?? 0o644 })) }),
+      emittedModuleSpecifiers: [...preparer.emittedModuleSpecifiers]
+        .map((item) => ({ ...item }))
+        .sort((left, right) => left.source.localeCompare(right.source) || left.resolutionBase.localeCompare(right.resolutionBase)),
+      ...(preparer.verify === undefined ? {} : { verify: preparer.verify }),
+    }));
 }
 
 /** Run exactly the config-bound preparers recorded by the preparation plan. */
@@ -43,9 +53,20 @@ type GeneratedArtifactRecord = NonNullable<GenerationManifest["generatedArtifact
 type PostJournalPreparerRecord = NonNullable<GenerationManifest["postJournalPreparers"]>[number];
 
 /** Failure message when the manifest's recorded artifact set no longer matches what config would trigger, or `undefined` when they still agree. */
-function triggeredArtifactSetMismatch(config: MonocarveConfig, artifacts: readonly GeneratedArtifactRecord[], triggerPaths: readonly string[]): string | undefined {
-  const expectedArtifactPaths = triggeredArtifacts(config, triggerPaths).map((item) => item.path).sort();
-  if (artifacts.map((item) => item.path).sort().join("\n") !== expectedArtifactPaths.join("\n")) {
+function triggeredArtifactSetMismatch(
+  config: MonocarveConfig,
+  artifacts: readonly GeneratedArtifactRecord[],
+  triggerPaths: readonly string[],
+): string | undefined {
+  const expectedArtifactPaths = triggeredArtifacts(config, triggerPaths)
+    .map((item) => item.path)
+    .sort();
+  if (
+    artifacts
+      .map((item) => item.path)
+      .sort()
+      .join("\n") !== expectedArtifactPaths.join("\n")
+  ) {
     return "preparation generated artifact set differs from current triggered configuration; recompile the plan";
   }
   return undefined;
@@ -62,19 +83,32 @@ function regenerateConfiguredArtifacts(config: MonocarveConfig, rootDir: string,
   let changed = false;
   for (const record of artifacts) {
     const configured = configuredArtifacts.get(record.path);
-    const expected = configured === undefined ? undefined : {
-      path: configured.path, source: configured.source, regenerate: configured.regenerate, regenerateOnApply: true as const,
-      ...(configured.exemptReason === undefined ? {} : { exemptReason: configured.exemptReason }),
-    };
+    const expected =
+      configured === undefined
+        ? undefined
+        : {
+            path: configured.path,
+            source: configured.source,
+            regenerate: configured.regenerate,
+            regenerateOnApply: true as const,
+            ...(configured.exemptReason === undefined ? {} : { exemptReason: configured.exemptReason }),
+          };
     if (!configured || hashJson(expected) !== hashJson(record)) {
       return { ok: false, changed, hashes, failure: `preparation generated artifact ${record.path} differs from current configuration` };
     }
     const before = fileState(`${rootDir}/${record.path}`);
     const result = run(record.regenerate, rootDir, config.generatedArtifacts.timeoutMs);
-    if (result.status !== 0) return { ok: false, changed, hashes, failure: `preparation generated artifact ${record.path} failed (exit ${result.status ?? "signal"})${result.output ? `\n${result.output}` : ""}` };
+    if (result.status !== 0)
+      return {
+        ok: false,
+        changed,
+        hashes,
+        failure: `preparation generated artifact ${record.path} failed (exit ${result.status ?? "signal"})${result.output ? `\n${result.output}` : ""}`,
+      };
     const after = fileState(`${rootDir}/${record.path}`);
     if (after === MISSING) return { ok: false, changed, hashes, failure: `preparation generated artifact ${record.path} produced no declared output` };
-    if (after === before && record.exemptReason === undefined) return { ok: false, changed, hashes, failure: `preparation generated artifact ${record.path} was not refreshed by its generator` };
+    if (after === before && record.exemptReason === undefined)
+      return { ok: false, changed, hashes, failure: `preparation generated artifact ${record.path} was not refreshed by its generator` };
     hashes[record.path] = after;
     changed = true;
   }
@@ -82,9 +116,20 @@ function regenerateConfiguredArtifacts(config: MonocarveConfig, rootDir: string,
 }
 
 /** Failure message when the manifest's recorded preparer set no longer matches what config would trigger, or `undefined` when they still agree. */
-function triggeredPreparerSetMismatch(config: MonocarveConfig, records: readonly PostJournalPreparerRecord[], triggerPaths: readonly string[]): string | undefined {
-  const expectedPreparerIds = triggeredPostJournalPreparers(config, triggerPaths).map((item) => item.id).sort();
-  if (records.map((item) => item.id).sort().join("\n") !== expectedPreparerIds.join("\n")) {
+function triggeredPreparerSetMismatch(
+  config: MonocarveConfig,
+  records: readonly PostJournalPreparerRecord[],
+  triggerPaths: readonly string[],
+): string | undefined {
+  const expectedPreparerIds = triggeredPostJournalPreparers(config, triggerPaths)
+    .map((item) => item.id)
+    .sort();
+  if (
+    records
+      .map((item) => item.id)
+      .sort()
+      .join("\n") !== expectedPreparerIds.join("\n")
+  ) {
     return "preparation post-journal preparer set differs from current triggered configuration; recompile the plan";
   }
   return undefined;
@@ -107,8 +152,39 @@ function preparerPolicyMismatch(record: PostJournalPreparerRecord, configured: r
   const emittedModuleSpecifiers = preparer?.emittedModuleSpecifiers
     .map((item) => ({ ...item }))
     .sort((left, right) => left.source.localeCompare(right.source) || left.resolutionBase.localeCompare(right.resolutionBase));
-  const policy = preparer === undefined ? undefined : { ...(preparer.command === undefined ? {} : { command: preparer.command }), outputs: [...new Set([...preparer.outputs, ...(preparer.creates?.map((item) => item.path) ?? [])])].sort(), ...(preparer.replacements === undefined ? {} : { replacements: preparer.replacements.map((item) => ({ path: item.path, before: item.before, after: item.after, ...(item.prefix === undefined ? {} : { prefix: item.prefix }), ...(item.suffix === undefined ? {} : { suffix: item.suffix }) })) }), ...(preparer.creates === undefined ? {} : { creates: preparer.creates.map((item) => ({ ...item, mode: item.mode ?? 0o644 })) }), verify: preparer.verify, emittedModuleSpecifiers };
-  if (!preparer || hashJson(policy) !== hashJson({ ...(record.command === undefined ? {} : { command: record.command }), outputs: [...record.outputs], ...(record.replacements === undefined ? {} : { replacements: record.replacements }), ...(record.creates === undefined ? {} : { creates: record.creates }), verify: record.verify, emittedModuleSpecifiers: record.emittedModuleSpecifiers })) {
+  const policy =
+    preparer === undefined
+      ? undefined
+      : {
+          ...(preparer.command === undefined ? {} : { command: preparer.command }),
+          outputs: [...new Set([...preparer.outputs, ...(preparer.creates?.map((item) => item.path) ?? [])])].sort(),
+          ...(preparer.replacements === undefined
+            ? {}
+            : {
+                replacements: preparer.replacements.map((item) => ({
+                  path: item.path,
+                  before: item.before,
+                  after: item.after,
+                  ...(item.prefix === undefined ? {} : { prefix: item.prefix }),
+                  ...(item.suffix === undefined ? {} : { suffix: item.suffix }),
+                })),
+              }),
+          ...(preparer.creates === undefined ? {} : { creates: preparer.creates.map((item) => ({ ...item, mode: item.mode ?? 0o644 })) }),
+          verify: preparer.verify,
+          emittedModuleSpecifiers,
+        };
+  if (
+    !preparer ||
+    hashJson(policy) !==
+      hashJson({
+        ...(record.command === undefined ? {} : { command: record.command }),
+        outputs: [...record.outputs],
+        ...(record.replacements === undefined ? {} : { replacements: record.replacements }),
+        ...(record.creates === undefined ? {} : { creates: record.creates }),
+        verify: record.verify,
+        emittedModuleSpecifiers: record.emittedModuleSpecifiers,
+      })
+  ) {
     return `preparation post-journal preparer ${record.id} differs from current configuration`;
   }
   return undefined;
@@ -118,7 +194,11 @@ function preparerPolicyMismatch(record: PostJournalPreparerRecord, configured: r
 function applyPreparerDeclarativeEdits(record: PostJournalPreparerRecord, rootDir: string): string | undefined {
   try {
     if (record.replacements !== undefined) applyTextReplacements(rootDir, record.replacements);
-    if (record.creates !== undefined) applyFileCreates(rootDir, record.creates.map((item) => ({ ...item, mode: item.mode as 0o644 | 0o755 })));
+    if (record.creates !== undefined)
+      applyFileCreates(
+        rootDir,
+        record.creates.map((item) => ({ ...item, mode: item.mode as 0o644 | 0o755 })),
+      );
     return undefined;
   } catch (error) {
     return `preparation post-journal preparer ${record.id} declarative edit failed: ${(error as Error).message}`;
@@ -131,16 +211,22 @@ function applyPreparerDeclarativeEdits(record: PostJournalPreparerRecord, rootDi
  * a failure message on a configuration conflict or a non-zero exit, or
  * `undefined` on success (including when the command was skipped).
  */
-function runPreparerCommandIfNeeded(record: PostJournalPreparerRecord, artifacts: readonly GeneratedArtifactRecord[], rootDir: string, config: MonocarveConfig): string | undefined {
+function runPreparerCommandIfNeeded(
+  record: PostJournalPreparerRecord,
+  artifacts: readonly GeneratedArtifactRecord[],
+  rootDir: string,
+  config: MonocarveConfig,
+): string | undefined {
   const overlappingArtifacts = artifacts.filter((artifact) => record.outputs.includes(artifact.path));
-  const whollyCoveredBySameCommand = overlappingArtifacts.length === record.outputs.length
-    && overlappingArtifacts.every((artifact) => artifact.regenerate === record.command);
+  const whollyCoveredBySameCommand =
+    overlappingArtifacts.length === record.outputs.length && overlappingArtifacts.every((artifact) => artifact.regenerate === record.command);
   if (whollyCoveredBySameCommand) return undefined;
   const conflicting = overlappingArtifacts.find((artifact) => artifact.regenerate !== record.command);
   if (conflicting !== undefined) return `generated output ${conflicting.path} has conflicting configured commands`;
   if (record.command === undefined) return undefined;
   const result = run(record.command, rootDir, config.generatedArtifacts.timeoutMs);
-  if (result.status !== 0) return `preparation post-journal preparer ${record.id} failed (exit ${result.status ?? "signal"})${result.output ? `\n${result.output}` : ""}`;
+  if (result.status !== 0)
+    return `preparation post-journal preparer ${record.id} failed (exit ${result.status ?? "signal"})${result.output ? `\n${result.output}` : ""}`;
   return undefined;
 }
 
@@ -148,7 +234,8 @@ function runPreparerCommandIfNeeded(record: PostJournalPreparerRecord, artifacts
 function verifyPreparerRecord(record: PostJournalPreparerRecord, rootDir: string, config: MonocarveConfig): string | undefined {
   if (record.verify === undefined) return undefined;
   const verification = run(record.verify, rootDir, config.generatedArtifacts.timeoutMs);
-  if (verification.status !== 0) return `preparation post-journal preparer ${record.id} verification failed (exit ${verification.status ?? "signal"})${verification.output ? `\n${verification.output}` : ""}`;
+  if (verification.status !== 0)
+    return `preparation post-journal preparer ${record.id} verification failed (exit ${verification.status ?? "signal"})${verification.output ? `\n${verification.output}` : ""}`;
   return undefined;
 }
 
@@ -160,7 +247,11 @@ function verifyPreparerRecord(record: PostJournalPreparerRecord, rootDir: string
  * pipeline; it lives in `./apply-error.ts` so this module can use it
  * without importing `apply.ts`, which already imports this module.
  */
-function collectPreparerOutputs(record: PostJournalPreparerRecord, before: readonly FileState[], rootDir: string): { hashes: Record<string, FileState>; changed: boolean } {
+function collectPreparerOutputs(
+  record: PostJournalPreparerRecord,
+  before: readonly FileState[],
+  rootDir: string,
+): { hashes: Record<string, FileState>; changed: boolean } {
   const hashes: Record<string, FileState> = {};
   let changed = false;
   record.outputs.forEach((path, index) => {
@@ -211,7 +302,8 @@ export function runPreparationPostJournalPreparers(config: MonocarveConfig, root
   const preparerSetMismatch = triggeredPreparerSetMismatch(config, records, triggerPaths);
   if (preparerSetMismatch !== undefined) return { ok: false, changed, hashes, failure: preparerSetMismatch };
   const configured = config.postJournalPreparers.filter((preparer) => records.some((record) => record.id === preparer.id));
-  if (records.length !== configured.length) return { ok: false, changed, hashes, failure: "preparation post-journal preparer is absent from current configuration" };
+  if (records.length !== configured.length)
+    return { ok: false, changed, hashes, failure: "preparation post-journal preparer is absent from current configuration" };
   for (const record of records) {
     const outcome = applyPostJournalPreparerRecord(record, configured, artifacts, rootDir, config);
     if (!outcome.ok) return { ok: false, changed, hashes, failure: outcome.failure };

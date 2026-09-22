@@ -52,11 +52,7 @@ function portfolio(candidates: readonly PortfolioCandidate[]): Portfolio {
 
 describe("candidate portfolio queries", () => {
   test("intersects directories and exact test or asset paths", () => {
-    const billing = candidate({
-      id: "c-billing",
-      files: ["apps/service/src/billing/model.ts"],
-      tests: ["apps/service/test/billing.test.ts"],
-    });
+    const billing = candidate({ id: "c-billing", files: ["apps/service/src/billing/model.ts"], tests: ["apps/service/test/billing.test.ts"] });
     const images = candidate({ id: "c-images", assets: ["apps/service/src/images/logo.svg"] });
     const sourceMatches = queryCandidates(portfolio([images, billing]), config, { path: "apps/service/src/billing" });
     const testMatches = queryCandidates(portfolio([images, billing]), config, { path: "apps/service/test/billing.test.ts" });
@@ -81,17 +77,11 @@ describe("candidate portfolio queries", () => {
   });
 
   test("refuses an absent exact id", () => {
-    expect(() => queryCandidates(portfolio([candidate({ id: "c-present" })]), config, { id: "c-absent" }))
-      .toThrow(CandidateLookupError);
+    expect(() => queryCandidates(portfolio([candidate({ id: "c-present" })]), config, { id: "c-absent" })).toThrow(CandidateLookupError);
   });
 
   test("canonicalizes detail, JSON, and table ordering", () => {
-    const alpha = candidate({
-      id: "c-alpha",
-      score: 20,
-      files: ["apps/service/src/z.ts", "apps/service/src/a.ts"],
-      warnings: ["z warning", "a warning"],
-    });
+    const alpha = candidate({ id: "c-alpha", score: 20, files: ["apps/service/src/z.ts", "apps/service/src/a.ts"], warnings: ["z warning", "a warning"] });
     const beta = candidate({ id: "c-beta", score: 20 });
     const first = queryCandidates(portfolio([beta, alpha]), config);
     const second = queryCandidates(portfolio([alpha, beta]), config);

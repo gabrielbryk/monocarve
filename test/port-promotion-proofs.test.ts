@@ -50,13 +50,7 @@ describe("assertTypeOnlyPromotion", () => {
   });
 
   test("the import binding itself is never mistaken for a value-space use", () => {
-    const consumers = [
-      {
-        path: "apps/api/src/orders/service.ts",
-        text: 'import type { Widget } from "@acme/ports/widget";\n',
-        localName: "Widget",
-      },
-    ];
+    const consumers = [{ path: "apps/api/src/orders/service.ts", text: 'import type { Widget } from "@acme/ports/widget";\n', localName: "Widget" }];
 
     expect(() => assertTypeOnlyPromotion(consumers)).not.toThrow();
   });
@@ -68,9 +62,7 @@ describe("assertNoRetainedValueImport", () => {
   test("refuses a residual value-level import from a retained root, naming the importer and specifier", () => {
     const rewrittenText = 'import { helper } from "../db/util.ts";\nexport function run(): void { helper(); }\n';
 
-    expect(() => assertNoRetainedValueImport(rewrittenText, "apps/api/src/orders/service.ts", retainedRoots)).toThrow(
-      BoundaryProofError,
-    );
+    expect(() => assertNoRetainedValueImport(rewrittenText, "apps/api/src/orders/service.ts", retainedRoots)).toThrow(BoundaryProofError);
     expect(() => assertNoRetainedValueImport(rewrittenText, "apps/api/src/orders/service.ts", retainedRoots)).toThrow(
       /apps\/api\/src\/orders\/service\.ts still imports a value binding from retained root \.\.\/db\/util\.ts after promotion/,
     );
@@ -93,9 +85,7 @@ describe("assertAdapterSurfaceMatchesContract", () => {
   test("refuses an adapter whose surface does not match the contract, naming missing and unexpected symbols", () => {
     const adapterText = "export class Helper {}\n";
 
-    expect(() => assertAdapterSurfaceMatchesContract(adapterText, "apps/api/src/widget-adapter.ts", ["Widget"])).toThrow(
-      BoundaryProofError,
-    );
+    expect(() => assertAdapterSurfaceMatchesContract(adapterText, "apps/api/src/widget-adapter.ts", ["Widget"])).toThrow(BoundaryProofError);
     expect(() => assertAdapterSurfaceMatchesContract(adapterText, "apps/api/src/widget-adapter.ts", ["Widget"])).toThrow(
       /adapter apps\/api\/src\/widget-adapter\.ts surface does not match its contract; missing: Widget; unexpected: Helper/,
     );

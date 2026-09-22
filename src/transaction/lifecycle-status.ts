@@ -2,8 +2,20 @@
 import { TOOL_NAME } from "../branding.ts";
 import type { CommitChainEvidence } from "./commit-evidence.ts";
 
-export type LifecycleState = "baseline" | "uncommitted-plan" | "approved" | "post-move" | "applied" | "applied-with-later-commits" | "applied-and-audited" | "drifted" | "unknown";
-export interface LifecycleRecordEvidence { readonly valid: boolean; readonly failures?: readonly string[] }
+export type LifecycleState =
+  | "baseline"
+  | "uncommitted-plan"
+  | "approved"
+  | "post-move"
+  | "applied"
+  | "applied-with-later-commits"
+  | "applied-and-audited"
+  | "drifted"
+  | "unknown";
+export interface LifecycleRecordEvidence {
+  readonly valid: boolean;
+  readonly failures?: readonly string[];
+}
 export interface LifecycleAuditEvidence {
   readonly passed: boolean;
   readonly reconcilable: boolean;
@@ -52,8 +64,18 @@ export function classifyLifecycle(evidence: LifecycleEvidence): LifecycleStatus 
   return status("unknown", chain?.failures ?? ["no coherent lifecycle boundary found"], path === undefined ? [TOOL_NAME, "portfolio"] : verify(path));
 }
 
-function status(state: LifecycleState, failures: readonly string[], next: readonly string[]): LifecycleStatus { return { schema: "lifecycle-status-v1", state, failures, next }; }
-function required(path: string | undefined): string { return path ?? "<plan>"; }
-function audit(path: string | undefined): readonly string[] { return [TOOL_NAME, "audit", "--plan", required(path)]; }
-function verify(path: string | undefined): readonly string[] { return [TOOL_NAME, "verify", "--plan", required(path)]; }
-function reconcile(path: string | undefined): readonly string[] { return [TOOL_NAME, "reconcile", "--plan", required(path)]; }
+function status(state: LifecycleState, failures: readonly string[], next: readonly string[]): LifecycleStatus {
+  return { schema: "lifecycle-status-v1", state, failures, next };
+}
+function required(path: string | undefined): string {
+  return path ?? "<plan>";
+}
+function audit(path: string | undefined): readonly string[] {
+  return [TOOL_NAME, "audit", "--plan", required(path)];
+}
+function verify(path: string | undefined): readonly string[] {
+  return [TOOL_NAME, "verify", "--plan", required(path)];
+}
+function reconcile(path: string | undefined): readonly string[] {
+  return [TOOL_NAME, "reconcile", "--plan", required(path)];
+}

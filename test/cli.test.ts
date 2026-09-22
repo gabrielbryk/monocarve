@@ -4,10 +4,10 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 
-import { cleanupFixtures } from "./support/fixture-repo.ts";
+import { statusShort } from "../src/util/git.ts";
 import { registerCliTailTests } from "./support/cli-tail.ts";
 import { FIXTURE, PLAN_DIR, committedWorkspace, existsSync, readFileSync, run, runJson, runJsonIn, writeFileSync } from "./support/cli.ts";
-import { statusShort } from "../src/util/git.ts";
+import { cleanupFixtures } from "./support/fixture-repo.ts";
 
 interface CandidateSummary {
   readonly id: string;
@@ -71,15 +71,12 @@ describe("cli pipeline", () => {
     const evaluating = candidate.warnings.filter((warning) => warning.includes("do work when evaluated"));
     expect(evaluating).toHaveLength(1);
     expect(evaluating[0]).toContain("2 of 4 module(s)");
-    expect(candidates.some((entry) =>
-      entry.id !== candidate.id && entry.warnings.some((warning) => warning.includes("1 of 3 module(s)")),
-    )).toBe(true);
+    expect(candidates.some((entry) => entry.id !== candidate.id && entry.warnings.some((warning) => warning.includes("1 of 3 module(s)")))).toBe(true);
   }, 180_000);
 
   test("plan compilation is byte-deterministic and captures all operation kinds", async () => {
-    const compile = (out: string) => runJson<Record<string, unknown>>(
-      "plan", "--candidate", candidate.id, "--package-name", "@acme/chart", "--write", "--out", out,
-    );
+    const compile = (out: string) =>
+      runJson<Record<string, unknown>>("plan", "--candidate", candidate.id, "--package-name", "@acme/chart", "--write", "--out", out);
     const first = await compile(".monocarve/determinism-first.json");
     await compile(".monocarve/determinism-second.json");
     const firstBytes = await Bun.file(join(PLAN_DIR, "determinism-first.json")).text();
@@ -109,9 +106,9 @@ describe("cli pipeline", () => {
     expect(manifest.source.assets).toEqual(["apps/web/src/widgets/chart.css"]);
     expect(manifest.dependencies.runtime["@acme/format"]).toBe("workspace:*");
     expect(manifest.dependencies.packageReferences).toEqual(["libs/format"]);
-    expect(manifest.dependencyDecisions).toContainEqual(expect.objectContaining({
-      name: "@acme/format", decision: "target-runtime", reasons: ["production-import"],
-    }));
+    expect(manifest.dependencyDecisions).toContainEqual(
+      expect.objectContaining({ name: "@acme/format", decision: "target-runtime", reasons: ["production-import"] }),
+    );
     expect(manifest.projectedArtifacts.some(({ path, resultHash }) => path === "pnpm-lock.yaml" && /^[0-9a-f]{64}$/.test(resultHash))).toBeTrue();
     const kinds = new Set(manifest.operations.map((operation) => operation.kind));
     expect(["move", "rewrite-import", "write-file", "lockfile-importer"].every((kind) => kinds.has(kind))).toBe(true);
@@ -121,19 +118,21 @@ describe("cli pipeline", () => {
   }, 180_000);
 
   test("plan and next classify an existing target from the baseline inventory", async () => {
-    const planned = await runJson<{ targetMode: string; targetPackageRoot: string }>(
-      "plan", "--candidate", candidate.id, "--package-name", "@acme/format",
-    );
-    const selected = await runJson<{ targetMode: string; targetPackageRoot: string }>(
-      "next", "--package-name", "@acme/format",
-    );
+    const planned = await runJson<{ targetMode: string; targetPackageRoot: string }>("plan", "--candidate", candidate.id, "--package-name", "@acme/format");
+    const selected = await runJson<{ targetMode: string; targetPackageRoot: string }>("next", "--package-name", "@acme/format");
     expect(planned).toMatchObject({ targetMode: "existing", targetPackageRoot: "libs/format" });
     expect(selected).toMatchObject({ targetMode: "existing", targetPackageRoot: "libs/format" });
   }, 180_000);
 
   test("plan can require a real package-manager lockfile round-trip before writing", async () => {
     const planned = await runJsonIn<{ written: boolean; lockfileVerification: { ok: boolean; command: string } }>(
-      committedWorkspace(), "plan", "--candidate", candidate.id, "--package-name", "@acme/chart", "--verify-lockfile",
+      committedWorkspace(),
+      "plan",
+      "--candidate",
+      candidate.id,
+      "--package-name",
+      "@acme/chart",
+      "--verify-lockfile",
     );
     expect(planned.written).toBeFalse();
     expect(planned.lockfileVerification).toMatchObject({ ok: true, command: expect.stringContaining("pnpm") });
@@ -150,7 +149,11 @@ describe("cli pipeline", () => {
 
   test("doctor replays gates and refuses gate bypasses", async () => {
     const statusBefore = statusShort(FIXTURE);
-    const report = await runJson<{ schema: string; manifest: string; validation: { ok: boolean }; simulation: { ok: boolean; gates: { command: string }[] } }>("doctor", "--plan", planPath);
+    const report = await runJson<{ schema: string; manifest: string; validation: { ok: boolean }; simulation: { ok: boolean; gates: { command: string }[] } }>(
+      "doctor",
+      "--plan",
+      planPath,
+    );
     expect(report.schema).toBe("doctor");
     expect(report.manifest).toBe(planPath);
     expect(report.validation.ok).toBe(true);

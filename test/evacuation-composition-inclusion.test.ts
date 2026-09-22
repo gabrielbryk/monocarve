@@ -12,17 +12,47 @@ const config = parseConfig({
     { name: "api", sourceRoot: "apps/api/src", tsconfig: "apps/api/tsconfig.json", compositionRoots: [root] },
     { name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json", compositionRoots: [other] },
   ],
-  packageRoots: ["libs"], packageScope: "@acme/", portfolio: { minFiles: 1 },
+  packageRoots: ["libs"],
+  packageScope: "@acme/",
+  portfolio: { minFiles: 1 },
   scaffoldTemplates: { packageJson: { contents: "{}" } },
 });
 
 function graph(): DependencyGraph {
-  const nodes = new Map<string, ModuleNode>([root, service, other].map((path) => [path, {
-    path, zone: "application", application: path.startsWith("apps/api/") ? "api" : "web",
-    owner: path.startsWith("apps/api/") ? "apps/api" : "apps/web", domain: "core",
-    isTest: false, isAsset: false, isDeclaration: false, lineCount: 1, hasExports: true,
-  }]));
-  return { rootDir: "/workspace", nodes, paths: [...nodes.keys()].sort(), edges: [], outgoing: new Map(), incoming: new Map(), unresolved: [], specifiers: new Map(), externalPackages: new Map(), externalBySource: new Map(), workspaceDependenciesBySource: new Map(), unresolvedWorkspaceEdges: [], testImporters: new Map(), testKinds: new Map(), workspace: { files: [], owners: [], packageNames: new Map() } };
+  const nodes = new Map<string, ModuleNode>(
+    [root, service, other].map((path) => [
+      path,
+      {
+        path,
+        zone: "application",
+        application: path.startsWith("apps/api/") ? "api" : "web",
+        owner: path.startsWith("apps/api/") ? "apps/api" : "apps/web",
+        domain: "core",
+        isTest: false,
+        isAsset: false,
+        isDeclaration: false,
+        lineCount: 1,
+        hasExports: true,
+      },
+    ]),
+  );
+  return {
+    rootDir: "/workspace",
+    nodes,
+    paths: [...nodes.keys()].sort(),
+    edges: [],
+    outgoing: new Map(),
+    incoming: new Map(),
+    unresolved: [],
+    specifiers: new Map(),
+    externalPackages: new Map(),
+    externalBySource: new Map(),
+    workspaceDependenciesBySource: new Map(),
+    unresolvedWorkspaceEdges: [],
+    testImporters: new Map(),
+    testKinds: new Map(),
+    workspace: { files: [], owners: [], packageNames: new Map() },
+  };
 }
 
 describe("evacuation composition-root inclusion", () => {

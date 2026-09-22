@@ -2,10 +2,10 @@ import { z } from "zod";
 
 import { ConfigError } from "../errors.ts";
 import { renderTemplate, templatePlaceholders } from "../util/template.ts";
+import { packageNameMatcher } from "./helpers.ts";
+import type { ScaffoldTemplateOverrides } from "./primitives.ts";
 import type { ApplicationConfig, RenderedExtractionProfile, ResolvedExtractionProfile, ScaffoldTemplatesConfig } from "./schema-core.ts";
 import type { MonocarveConfig } from "./schema.ts";
-import type { ScaffoldTemplateOverrides } from "./primitives.ts";
-import { packageNameMatcher } from "./helpers.ts";
 
 export function scaffoldFor(config: MonocarveConfig, app: ApplicationConfig): ScaffoldTemplatesConfig {
   const override = app.scaffoldTemplates;
@@ -28,11 +28,7 @@ export function scaffoldFor(config: MonocarveConfig, app: ApplicationConfig): Sc
  * special case downstream: it becomes a synthetic profile that reproduces the
  * pre-profile root, naming, scaffold, and gate behavior exactly.
  */
-export function resolveExtractionProfile(
-  config: MonocarveConfig,
-  app: ApplicationConfig,
-  requested?: string,
-): ResolvedExtractionProfile {
+export function resolveExtractionProfile(config: MonocarveConfig, app: ApplicationConfig, requested?: string): ResolvedExtractionProfile {
   const name = requested ?? config.extractionProfiles.default;
   if (name === undefined) {
     return {
@@ -62,10 +58,7 @@ export function resolveExtractionProfile(
     projectIdTemplate: profile.projectIdTemplate,
     // An application is the narrowest workspace context, so its explicit
     // override wins: root baseline < package-kind profile < application.
-    scaffoldTemplates: mergeScaffoldTemplates(
-      mergeScaffoldTemplates(config.scaffoldTemplates, profile.scaffoldTemplates),
-      app.scaffoldTemplates,
-    ),
+    scaffoldTemplates: mergeScaffoldTemplates(mergeScaffoldTemplates(config.scaffoldTemplates, profile.scaffoldTemplates), app.scaffoldTemplates),
     gates: {
       ...config.gates,
       ...(profile.gates?.package === undefined ? {} : { package: profile.gates.package }),
@@ -97,20 +90,14 @@ export function renderExtractionProfile(
     throw new ConfigError(`extraction profile package name does not match the configured pattern: ${JSON.stringify(packageName)}`);
   }
   const packageRoot = `${profile.destinationRoot}/${directory}`;
-  const projectId =
-    profile.projectIdTemplate === undefined
-      ? undefined
-      : renderTemplate(profile.projectIdTemplate, { ...base, package: packageName });
+  const projectId = profile.projectIdTemplate === undefined ? undefined : renderTemplate(profile.projectIdTemplate, { ...base, package: packageName });
   if (projectId !== undefined && projectId.length === 0) {
     throw new ConfigError("extraction profile project id must not render empty");
   }
   return { packageName, packageRoot, projectId };
 }
 
-function mergeScaffoldTemplates(
-  base: ScaffoldTemplatesConfig,
-  override: ScaffoldTemplateOverrides | undefined,
-): ScaffoldTemplatesConfig {
+function mergeScaffoldTemplates(base: ScaffoldTemplatesConfig, override: ScaffoldTemplateOverrides | undefined): ScaffoldTemplatesConfig {
   if (!override) return base;
   return {
     ...base,
@@ -141,11 +128,7 @@ export function validateExtractionProfiles(config: MonocarveConfig, ctx: z.Refin
   for (const [name, profile] of Object.entries(profiles)) {
     const path = ["extractionProfiles", "profiles", name] as const;
     if (!config.packageRoots.includes(profile.destinationRoot)) {
-      ctx.addIssue({
-        code: "custom",
-        path: [...path, "destinationRoot"],
-        message: "must be one of packageRoots",
-      });
+      ctx.addIssue({ code: "custom", path: [...path, "destinationRoot"], message: "must be one of packageRoots" });
     }
 
     for (const app of config.applications) {
@@ -155,16 +138,30 @@ export function validateExtractionProfiles(config: MonocarveConfig, ctx: z.Refin
           ? undefined
           : `must render one direct-child directory without traversal for application ${JSON.stringify(app.name)}`;
       });
-      const packageTemplateValid = validateProfileTemplate(ctx, [...path, "packageNameTemplate"], profile.packageNameTemplate, vars, ["app", "name", "profile", "scope"], (rendered) => {
-        return packageNameMatcher(config).test(rendered)
-          ? undefined
-          : `must render a name matching packageNamePattern for application ${JSON.stringify(app.name)} (${rendered})`;
-      });
+      const packageTemplateValid = validateProfileTemplate(
+        ctx,
+        [...path, "packageNameTemplate"],
+        profile.packageNameTemplate,
+        vars,
+        ["app", "name", "profile", "scope"],
+        (rendered) => {
+          return packageNameMatcher(config).test(rendered)
+            ? undefined
+            : `must render a name matching packageNamePattern for application ${JSON.stringify(app.name)} (${rendered})`;
+        },
+      );
       if (profile.projectIdTemplate !== undefined && packageTemplateValid) {
         const packageName = renderTemplate(profile.packageNameTemplate, vars);
-        validateProfileTemplate(ctx, [...path, "projectIdTemplate"], profile.projectIdTemplate, { ...vars, package: packageName }, PROFILE_TEMPLATE_VARIABLES, (rendered) => {
-          return rendered.length > 0 ? undefined : `must render a non-empty project id for application ${JSON.stringify(app.name)}`;
-        });
+        validateProfileTemplate(
+          ctx,
+          [...path, "projectIdTemplate"],
+          profile.projectIdTemplate,
+          { ...vars, package: packageName },
+          PROFILE_TEMPLATE_VARIABLES,
+          (rendered) => {
+            return rendered.length > 0 ? undefined : `must render a non-empty project id for application ${JSON.stringify(app.name)}`;
+          },
+        );
       }
     }
   }
@@ -176,13 +173,7 @@ function profileTemplateVars(
   profile: string | undefined,
   name: string,
 ): Readonly<Record<(typeof PROFILE_TEMPLATE_VARIABLES)[number], string>> {
-  return {
-    app: app.name,
-    name,
-    package: `${config.packageScope}${name}`,
-    profile: profile ?? "legacy",
-    scope: config.packageScope,
-  };
+  return { app: app.name, name, package: `${config.packageScope}${name}`, profile: profile ?? "legacy", scope: config.packageScope };
 }
 
 function validateProfileTemplate(

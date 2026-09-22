@@ -2,9 +2,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import type { MoveOperation } from "../src/plan/manifest.ts";
 import { assertExactMoveDiff, assertExactScope } from "../src/transaction/apply.ts";
 import { hashText } from "../src/util/hash.ts";
-import type { MoveOperation } from "../src/plan/manifest.ts";
 import { cleanupFixtures, fixtureGit, fixtureRepo, write } from "./support/fixture-repo.ts";
 
 describe("commit scope assertions", () => {
@@ -45,9 +45,7 @@ describe("commit scope assertions", () => {
     const root = fixtureRepo({ "source.ts": VALUE, "extra.ts": "export const extra = 2;\n" });
     fixtureGit(root, "mv", "source.ts", "target.ts");
     fixtureGit(root, "mv", "extra.ts", "moved-extra.ts");
-    expect(() => assertExactMoveDiff(stagedDiff(root), [move("source.ts", "target.ts", VALUE)], root)).toThrow(
-      "declared move",
-    );
+    expect(() => assertExactMoveDiff(stagedDiff(root), [move("source.ts", "target.ts", VALUE)], root)).toThrow("declared move");
   }, 60_000);
 
   test("rejects a move whose content changed on the way", () => {
@@ -69,18 +67,13 @@ describe("commit scope assertions", () => {
     const diff = stagedDiff(root);
     expect(diff).toContain("R100");
     write(root, "target.ts", `${VALUE}export const sneaked = 2;\n`);
-    expect(() => assertExactMoveDiff(diff, [move("source.ts", "target.ts", VALUE)], root)).toThrow(
-      "do not match the plan",
-    );
+    expect(() => assertExactMoveDiff(diff, [move("source.ts", "target.ts", VALUE)], root)).toThrow("do not match the plan");
   }, 60_000);
 
   test("rejects a declared move that did not happen", () => {
     const root = fixtureRepo({ "source.ts": VALUE, "other.ts": "export const other = 2;\n" });
     fixtureGit(root, "mv", "source.ts", "target.ts");
-    const declared = [
-      move("source.ts", "target.ts", VALUE),
-      move("other.ts", "other-target.ts", "export const other = 2;\n"),
-    ];
+    const declared = [move("source.ts", "target.ts", VALUE), move("other.ts", "other-target.ts", "export const other = 2;\n")];
     expect(() => assertExactMoveDiff(stagedDiff(root), declared, root)).toThrow("declared move");
     expect(existsSync(join(root, "other.ts"))).toBe(true);
     expect(existsSync(join(root, "other-target.ts"))).toBe(false);

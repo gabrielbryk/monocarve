@@ -23,7 +23,9 @@ export function includeCompositionRoots(
     }
     const node = graph.nodes.get(root);
     if (node?.zone !== "application" || node.application !== applicationName || !isCompositionRoot(config, root)) {
-      throw new EvacuationSelectorError(`composition-root inclusion must exactly name a configured composition root in application ${JSON.stringify(applicationName)}: ${root}`);
+      throw new EvacuationSelectorError(
+        `composition-root inclusion must exactly name a configured composition root in application ${JSON.stringify(applicationName)}: ${root}`,
+      );
     }
     if (!requested.includes(root)) {
       throw new EvacuationSelectorError(`composition-root inclusion is outside the selected evacuation: ${root}`);

@@ -176,11 +176,7 @@ describe("lockfile verification against real bun", () => {
       // and deliberately not asserted here: 1.3.14 saved the regenerated
       // lockfile over the divergent one, 1.4.2 leaves the divergent bytes in
       // place. Either way the run reports success, which is the whole point.
-      const agreeing = Bun.spawnSync([BUN!, "install", "--lockfile-only", "--frozen-lockfile"], {
-        cwd: workspace(),
-        stdout: "pipe",
-        stderr: "pipe",
-      });
+      const agreeing = Bun.spawnSync([BUN!, "install", "--lockfile-only", "--frozen-lockfile"], { cwd: workspace(), stdout: "pipe", stderr: "pipe" });
 
       const root = workspace();
       const baseline = readFileSync(join(root, LOCKFILE), "utf8");
@@ -188,11 +184,7 @@ describe("lockfile verification against real bun", () => {
       expect(divergent).not.toBe(baseline);
       writeFileSync(join(root, LOCKFILE), divergent);
 
-      const run = Bun.spawnSync([BUN!, "install", "--lockfile-only", "--frozen-lockfile"], {
-        cwd: root,
-        stdout: "pipe",
-        stderr: "pipe",
-      });
+      const run = Bun.spawnSync([BUN!, "install", "--lockfile-only", "--frozen-lockfile"], { cwd: root, stdout: "pipe", stderr: "pipe" });
       expect(run.exitCode).toBe(0);
       // Indistinguishable from the agreeing lockfile: no refusal, nothing a
       // caller could branch on.

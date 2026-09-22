@@ -30,9 +30,7 @@ function underRoot(path: string, root: string): boolean {
  * on every run.
  */
 function matchingBoundary(boundaries: CompositionBoundariesConfig, target: string): Boundary | undefined {
-  return [...boundaries]
-    .sort((left, right) => byCodeUnit(left.id, right.id))
-    .find((boundary) => boundary.retained === target);
+  return [...boundaries].sort((left, right) => byCodeUnit(left.id, right.id)).find((boundary) => boundary.retained === target);
 }
 
 function matchingPromotion(promotions: PortPromotionsConfig, target: string): Promotion | undefined {
@@ -67,9 +65,5 @@ function step(config: MonocarveConfig, blocker: RetainedBlocker): RecipeStep {
     };
   }
 
-  return {
-    blocker,
-    remedy: { kind: "unconfigured" },
-    detail: `no configured substitution for ${edge} (${blocker.kind} edge into ${blocker.target})`,
-  };
+  return { blocker, remedy: { kind: "unconfigured" }, detail: `no configured substitution for ${edge} (${blocker.kind} edge into ${blocker.target})` };
 }

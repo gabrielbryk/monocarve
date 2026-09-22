@@ -12,23 +12,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import type { MonocarveConfig } from "../config.ts";
 import { inventoryModuleReferences } from "../codemod/imports.ts";
-import {
-  applicationTargetOf,
-  boundaryEdgeKey,
-  isBoundaryGovernedFile,
-  recordedBoundaryEdgeKeys,
-} from "../plan/boundary-baseline.ts";
-import { showBaseline } from "../util/git.ts";
-import type {
-  ExtractionManifest,
-  MoveOperation,
-  MoveWithRewriteOperation,
-} from "../plan/manifest.ts";
+import type { MonocarveConfig } from "../config.ts";
+import { applicationTargetOf, boundaryEdgeKey, isBoundaryGovernedFile, recordedBoundaryEdgeKeys } from "../plan/boundary-baseline.ts";
+import type { ExtractionManifest, MoveOperation, MoveWithRewriteOperation } from "../plan/manifest.ts";
 import { findStaticFsReferences } from "../plan/static-fs-references.ts";
-import { relativeCandidates, repositorySources } from "./audit-helpers.ts";
+import { showBaseline } from "../util/git.ts";
 import { stillNamesADonor } from "./audit-graph.ts";
+import { relativeCandidates, repositorySources } from "./audit-helpers.ts";
 
 type AnyMove = MoveOperation | MoveWithRewriteOperation;
 type ModuleReference = ReturnType<typeof inventoryModuleReferences>[number];
@@ -57,13 +48,7 @@ interface ScanState {
 // introduced none, not to re-litigate debt the reviewer approved with the
 // plan. An absent record is an empty baseline, so a manifest compiled
 // before the baseline existed still fails on every edge.
-function collectBoundaryEdges(
-  config: MonocarveConfig,
-  rootDir: string,
-  file: string,
-  references: readonly ModuleReference[],
-  state: ScanState,
-): void {
+function collectBoundaryEdges(config: MonocarveConfig, rootDir: string, file: string, references: readonly ModuleReference[], state: ScanState): void {
   if (!isBoundaryGovernedFile(config, file)) return;
   for (const reference of references) {
     const target = applicationTargetOf(config, rootDir, reference);
@@ -77,13 +62,7 @@ function collectBoundaryEdges(
   }
 }
 
-function collectMovedPathEdges(
-  config: MonocarveConfig,
-  absolute: string,
-  file: string,
-  references: readonly ModuleReference[],
-  state: ScanState,
-): void {
+function collectMovedPathEdges(config: MonocarveConfig, absolute: string, file: string, references: readonly ModuleReference[], state: ScanState): void {
   for (const reference of references) {
     const specifier = reference.specifier;
     if (!specifier) continue;
@@ -102,14 +81,7 @@ function collectMovedPathEdges(
   }
 }
 
-function scanSource(
-  config: MonocarveConfig,
-  manifest: ExtractionManifest,
-  rootDir: string,
-  moves: readonly AnyMove[],
-  file: string,
-  state: ScanState,
-): void {
+function scanSource(config: MonocarveConfig, manifest: ExtractionManifest, rootDir: string, moves: readonly AnyMove[], file: string, state: ScanState): void {
   const absolute = resolve(rootDir, file);
   if (!existsSync(absolute)) return;
   const current = readFileSync(absolute, "utf8");
@@ -142,11 +114,7 @@ function scanSource(
  * explicit, so verify the landed owner manifest rather than trusting the
  * wiring operation that happened to be planned.
  */
-function dependencySectionFailures(
-  manifest: ExtractionManifest,
-  rootDir: string,
-  consumer: ExtractionManifest["consumers"][number],
-): string[] {
+function dependencySectionFailures(manifest: ExtractionManifest, rootDir: string, consumer: ExtractionManifest["consumers"][number]): string[] {
   const manifestPath = resolve(rootDir, consumer.owner, "package.json");
   // A low-level journal fixture can model an import rewrite without modelling
   // the owning workspace package at all. There is no package section to
@@ -166,9 +134,7 @@ function dependencySectionFailures(
     // manifest that wires a new consumer either writes its owner package.json
     // or starts from one already declaring the package, and must satisfy the
     // exact-section proof below.
-    const declaredByPlan = manifest.operations.some(
-      (operation) => operation.kind === "write-file" && operation.path === `${consumer.owner}/package.json`,
-    );
+    const declaredByPlan = manifest.operations.some((operation) => operation.kind === "write-file" && operation.path === `${consumer.owner}/package.json`);
     const declaredOnDisk = section?.[manifest.target.packageName] !== undefined || opposite?.[manifest.target.packageName] !== undefined;
     if ((declaredByPlan || declaredOnDisk) && (section?.[manifest.target.packageName] === undefined || opposite?.[manifest.target.packageName] !== undefined)) {
       return [`consumer dependency section does not match manifest: ${consumer.file}`];
@@ -179,15 +145,9 @@ function dependencySectionFailures(
   return [];
 }
 
-function collectDeclaredConsumerFailures(
-  manifest: ExtractionManifest,
-  rootDir: string,
-  failures: string[],
-): void {
+function collectDeclaredConsumerFailures(manifest: ExtractionManifest, rootDir: string, failures: string[]): void {
   for (const consumer of manifest.consumers) {
-    const operation = manifest.operations.find(
-      (candidate) => candidate.kind === "rewrite-import" && candidate.file === consumer.file,
-    );
+    const operation = manifest.operations.find((candidate) => candidate.kind === "rewrite-import" && candidate.file === consumer.file);
     if (!operation) {
       failures.push(`declared consumer has no rewrite operation: ${consumer.file}`);
       continue;
@@ -208,12 +168,7 @@ function collectDeclaredConsumerFailures(
   }
 }
 
-export function consumerEvidence(
-  config: MonocarveConfig,
-  manifest: ExtractionManifest,
-  rootDir: string,
-  moves: readonly AnyMove[],
-): ConsumerEvidence {
+export function consumerEvidence(config: MonocarveConfig, manifest: ExtractionManifest, rootDir: string, moves: readonly AnyMove[]): ConsumerEvidence {
   const state: ScanState = {
     consumerFailures: [],
     boundaryFailures: [],

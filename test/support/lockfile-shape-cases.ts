@@ -1,10 +1,6 @@
 import type { PackageShape, WorkspaceShape } from "./lockfile-shape-harness.ts";
 
-function pkg(
-  root: string,
-  name: string,
-  sections: Omit<PackageShape, "root" | "name"> = {},
-): PackageShape {
+function pkg(root: string, name: string, sections: Omit<PackageShape, "root" | "name"> = {}): PackageShape {
   return { root, name, ...sections };
 }
 
@@ -73,10 +69,7 @@ export const CORE_SHAPES: readonly WorkspaceShape[] = [
   {
     id: "unscoped-names",
     why: "no `@scope/`, so every lockfile key is unquoted and `yamlKey` takes its other branch",
-    packages: [
-      pkg("apps/api", "acme-api", { dependencies: { "acme-format": "workspace:*" } }),
-      pkg("libs/format", "acme-format"),
-    ],
+    packages: [pkg("apps/api", "acme-api", { dependencies: { "acme-format": "workspace:*" } }), pkg("libs/format", "acme-format")],
     target: pkg("libs/analytics", "acme-analytics", { dependencies: { "acme-format": "workspace:*" } }),
     consumers: ["apps/api"],
     expect: "match",
@@ -89,9 +82,7 @@ export const CORE_SHAPES: readonly WorkspaceShape[] = [
       pkg("libs/format", "@acme/format"),
       pkg("libs/logger", "acme-logger"),
     ],
-    target: pkg("libs/analytics", "@acme/analytics", {
-      dependencies: { "@acme/format": "workspace:*", "acme-logger": "workspace:*" },
-    }),
+    target: pkg("libs/analytics", "@acme/analytics", { dependencies: { "@acme/format": "workspace:*", "acme-logger": "workspace:*" } }),
     consumers: ["apps/api"],
     expect: "match",
   },
@@ -150,10 +141,7 @@ export const CORE_SHAPES: readonly WorkspaceShape[] = [
   {
     id: "target-sorts-first",
     why: "the insertion point is the first entry after the workspace root",
-    packages: [
-      pkg("apps/api", "@acme/api", { dependencies: { "@acme/format": "workspace:*" } }),
-      pkg("libs/format", "@acme/format"),
-    ],
+    packages: [pkg("apps/api", "@acme/api", { dependencies: { "@acme/format": "workspace:*" } }), pkg("libs/format", "@acme/format")],
     target: pkg("apps/aaa", "@acme/aaa", { dependencies: { "@acme/format": "workspace:*" } }),
     consumers: ["apps/api"],
     expect: "match",
@@ -161,10 +149,7 @@ export const CORE_SHAPES: readonly WorkspaceShape[] = [
   {
     id: "target-sorts-last-workspace-only",
     why: "insertion at the end of the section when `importers:` is the last block in the file",
-    packages: [
-      pkg("apps/api", "@acme/api", { dependencies: { "@acme/format": "workspace:*" } }),
-      pkg("libs/format", "@acme/format"),
-    ],
+    packages: [pkg("apps/api", "@acme/api", { dependencies: { "@acme/format": "workspace:*" } }), pkg("libs/format", "@acme/format")],
     target: pkg("libs/zzz", "@acme/zzz"),
     consumers: ["apps/api"],
     expect: "match",
@@ -172,10 +157,7 @@ export const CORE_SHAPES: readonly WorkspaceShape[] = [
   {
     id: "target-sorts-last-with-packages-section",
     why: "the same end-of-section insertion, but with `packages:` immediately below it",
-    packages: [
-      pkg("apps/api", "@acme/api", { dependencies: { "@acme/format": "workspace:*", "left-pad": "1.3.0" } }),
-      pkg("libs/format", "@acme/format"),
-    ],
+    packages: [pkg("apps/api", "@acme/api", { dependencies: { "@acme/format": "workspace:*", "left-pad": "1.3.0" } }), pkg("libs/format", "@acme/format")],
     target: pkg("libs/zzz", "@acme/zzz", { dependencies: { "left-pad": "1.3.0" } }),
     consumers: ["apps/api"],
     expect: "match",
@@ -186,10 +168,7 @@ export const CORE_SHAPES: readonly WorkspaceShape[] = [
     id: "root-importer-non-empty",
     why: "`.` carries dependencies, so the first entry in the section is a block rather than `.: {}`",
     rootDependencies: { "left-pad": "1.3.0" },
-    packages: [
-      pkg("apps/api", "@acme/api", { dependencies: { "@acme/format": "workspace:*" } }),
-      pkg("libs/format", "@acme/format"),
-    ],
+    packages: [pkg("apps/api", "@acme/api", { dependencies: { "@acme/format": "workspace:*" } }), pkg("libs/format", "@acme/format")],
     target: pkg("libs/analytics", "@acme/analytics", { dependencies: { "left-pad": "1.3.0" } }),
     consumers: ["apps/api"],
     expect: "match",
@@ -218,9 +197,7 @@ export const CORE_SHAPES: readonly WorkspaceShape[] = [
     why: "the new dependency sorts before, after, and between the ones a consumer already has — and one consumer already depends on the new package's own dependency",
     packages: [
       pkg("apps/api", "@acme/api", { dependencies: { "@acme/format": "workspace:*" } }),
-      pkg("apps/edge", "@acme/edge", {
-        dependencies: { "@acme/aardvark": "workspace:*", "@acme/format": "workspace:*" },
-      }),
+      pkg("apps/edge", "@acme/edge", { dependencies: { "@acme/aardvark": "workspace:*", "@acme/format": "workspace:*" } }),
       pkg("apps/web", "@acme/web", { dependencies: { "@acme/aardvark": "workspace:*" } }),
       pkg("libs/aardvark", "@acme/aardvark"),
       pkg("libs/format", "@acme/format"),
@@ -232,10 +209,7 @@ export const CORE_SHAPES: readonly WorkspaceShape[] = [
   {
     id: "consumer-has-only-dev-dependencies",
     why: "wiring must create a `dependencies:` section above the existing `devDependencies:`, in pnpm's order",
-    packages: [
-      pkg("apps/api", "@acme/api", { devDependencies: { "@acme/format": "workspace:*" } }),
-      pkg("libs/format", "@acme/format"),
-    ],
+    packages: [pkg("apps/api", "@acme/api", { devDependencies: { "@acme/format": "workspace:*" } }), pkg("libs/format", "@acme/format")],
     target: pkg("libs/analytics", "@acme/analytics"),
     consumers: ["apps/api"],
     expect: "match",
@@ -244,10 +218,7 @@ export const CORE_SHAPES: readonly WorkspaceShape[] = [
     id: "consumer-has-dev-and-optional-dependencies",
     why: "the same insertion with two existing sections below it, one of which the renderer cannot express",
     packages: [
-      pkg("apps/api", "@acme/api", {
-        devDependencies: { "@acme/format": "workspace:*" },
-        optionalDependencies: { "@acme/logger": "workspace:*" },
-      }),
+      pkg("apps/api", "@acme/api", { devDependencies: { "@acme/format": "workspace:*" }, optionalDependencies: { "@acme/logger": "workspace:*" } }),
       pkg("libs/format", "@acme/format"),
       pkg("libs/logger", "@acme/logger"),
     ],
@@ -260,10 +231,7 @@ export const CORE_SHAPES: readonly WorkspaceShape[] = [
   {
     id: "target-dev-dependencies-only",
     why: "a new package whose only section is `devDependencies:`",
-    packages: [
-      pkg("apps/api", "@acme/api", { dependencies: { "@acme/format": "workspace:*" } }),
-      pkg("libs/format", "@acme/format"),
-    ],
+    packages: [pkg("apps/api", "@acme/api", { dependencies: { "@acme/format": "workspace:*" } }), pkg("libs/format", "@acme/format")],
     target: pkg("libs/analytics", "@acme/analytics", { devDependencies: { "@acme/format": "workspace:*" } }),
     consumers: ["apps/api"],
     expect: "match",
@@ -276,10 +244,7 @@ export const CORE_SHAPES: readonly WorkspaceShape[] = [
       pkg("libs/format", "@acme/format"),
       pkg("libs/logger", "@acme/logger"),
     ],
-    target: pkg("libs/analytics", "@acme/analytics", {
-      dependencies: { "@acme/format": "workspace:*" },
-      devDependencies: { "@acme/logger": "workspace:*" },
-    }),
+    target: pkg("libs/analytics", "@acme/analytics", { dependencies: { "@acme/format": "workspace:*" }, devDependencies: { "@acme/logger": "workspace:*" } }),
     consumers: ["apps/api"],
     expect: "match",
   },
@@ -297,10 +262,7 @@ export const CORE_SHAPES: readonly WorkspaceShape[] = [
   {
     id: "pinned-version-the-lockfile-already-carries",
     why: "no importer resolves `1.3.0` — the workspace declares `^1.3.0` — but `packages:`/`snapshots:` carry left-pad@1.3.0, so the version is taken from the lockfile rather than invented",
-    packages: [
-      pkg("apps/api", "@acme/api", { dependencies: { "left-pad": "^1.3.0" } }),
-      pkg("libs/format", "@acme/format"),
-    ],
+    packages: [pkg("apps/api", "@acme/api", { dependencies: { "left-pad": "^1.3.0" } }), pkg("libs/format", "@acme/format")],
     target: pkg("libs/analytics", "@acme/analytics", { dependencies: { "left-pad": "1.3.0" } }),
     consumers: ["apps/api"],
     expect: "match",
@@ -308,10 +270,7 @@ export const CORE_SHAPES: readonly WorkspaceShape[] = [
   {
     id: "pinned-version-nothing-in-the-lockfile-carries",
     why: "the fallback that used to echo any digit-leading specifier; the lockfile has no left-pad at all, and an importer entry with nothing behind it is what `--frozen-lockfile` refuses",
-    packages: [
-      pkg("apps/api", "@acme/api", { dependencies: { "@acme/format": "workspace:*" } }),
-      pkg("libs/format", "@acme/format"),
-    ],
+    packages: [pkg("apps/api", "@acme/api", { dependencies: { "@acme/format": "workspace:*" } }), pkg("libs/format", "@acme/format")],
     target: pkg("libs/analytics", "@acme/analytics", { dependencies: { "left-pad": "1.3.0" } }),
     consumers: ["apps/api"],
     expect: "throw",
@@ -320,10 +279,7 @@ export const CORE_SHAPES: readonly WorkspaceShape[] = [
   {
     id: "pinned-version-whose-snapshot-carries-a-peer-suffix",
     why: "`packages:` has react-dom@18.3.1 but the snapshot is react-dom@18.3.1(react@18.3.1); measured on pnpm 11.17.0, an importer naming the unsuffixed version regenerates byte-identically and then fails `--frozen-lockfile`, so a `packages:`-only attestation would not be one",
-    packages: [
-      pkg("apps/api", "@acme/api", { dependencies: { react: "^18.0.0", "react-dom": "^18.0.0" } }),
-      pkg("libs/format", "@acme/format"),
-    ],
+    packages: [pkg("apps/api", "@acme/api", { dependencies: { react: "^18.0.0", "react-dom": "^18.0.0" } }), pkg("libs/format", "@acme/format")],
     target: pkg("libs/analytics", "@acme/analytics", { dependencies: { "react-dom": "18.3.1" } }),
     consumers: ["apps/api"],
     expect: "throw",
@@ -383,14 +339,10 @@ export const CORE_SHAPES: readonly WorkspaceShape[] = [
     id: "catalog-specifier-nothing-else-declares",
     why: "no importer holds a version to copy, and inventing one is the thing the adapter refuses to do",
     catalog: { "left-pad": "1.3.0", "is-odd": "3.0.1" },
-    packages: [
-      pkg("apps/api", "@acme/api", { dependencies: { "left-pad": "catalog:" } }),
-      pkg("libs/format", "@acme/format"),
-    ],
+    packages: [pkg("apps/api", "@acme/api", { dependencies: { "left-pad": "catalog:" } }), pkg("libs/format", "@acme/format")],
     target: pkg("libs/analytics", "@acme/analytics", { dependencies: { "is-odd": "catalog:" } }),
     consumers: ["apps/api"],
     expect: "throw",
     throwMessage: /cannot resolve a lockfile version for is-odd@catalog:/,
   },
-
 ];

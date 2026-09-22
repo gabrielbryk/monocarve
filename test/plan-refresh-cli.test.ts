@@ -1,8 +1,8 @@
 import { afterAll, expect, test } from "bun:test";
 import { join } from "node:path";
 
-import { cleanupFixtures, fixtureGit, write } from "./support/fixture-repo.ts";
 import { committedWorkspace, existsSync, readFileSync, runIn, runJsonIn } from "./support/cli.ts";
+import { cleanupFixtures, fixtureGit, write } from "./support/fixture-repo.ts";
 
 afterAll(cleanupFixtures);
 
@@ -20,22 +20,20 @@ test("refresh is read-only by default and writes only to an explicit output", as
   fixtureGit(root, "commit", "-qm", "docs: advance refresh baseline");
   const refreshedPath = ".monocarve/refreshed.json";
 
-  const preview = await runJsonIn<{
-    schema: string;
-    written: boolean;
-    semanticDiff: unknown[];
-    previousBaselineCommit: string;
-    currentBaselineCommit: string;
-  }>(root, "refresh", "--plan", stale, "--no-cache");
+  const preview = await runJsonIn<{ schema: string; written: boolean; semanticDiff: unknown[]; previousBaselineCommit: string; currentBaselineCommit: string }>(
+    root,
+    "refresh",
+    "--plan",
+    stale,
+    "--no-cache",
+  );
   expect(preview.schema).toBe("plan-refresh");
   expect(preview.written).toBe(false);
   expect(preview.semanticDiff).toEqual([]);
   expect(preview.currentBaselineCommit).not.toBe(preview.previousBaselineCommit);
   expect(existsSync(join(root, refreshedPath))).toBe(false);
 
-  const written = await runJsonIn<{ written: boolean; output: string }>(
-    root, "refresh", "--plan", stale, "--out", refreshedPath, "--write", "--no-cache",
-  );
+  const written = await runJsonIn<{ written: boolean; output: string }>(root, "refresh", "--plan", stale, "--out", refreshedPath, "--write", "--no-cache");
   expect(written).toMatchObject({ written: true, output: refreshedPath });
   const manifest = JSON.parse(readFileSync(join(root, refreshedPath), "utf8")) as { baselineCommit: string };
   expect(manifest.baselineCommit).toBe(fixtureGit(root, "rev-parse", "HEAD"));

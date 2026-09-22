@@ -2,14 +2,7 @@
 
 import type { LockfileImporterMode } from "../plan/manifest.ts";
 import { hashText, type Sha256 } from "../util/hash.ts";
-import {
-  blockDeclaresImporter,
-  deleteImporter,
-  importerBlock,
-  insertImporter,
-  missingResolutions,
-  replaceImporter,
-} from "./bun-importers.ts";
+import { blockDeclaresImporter, deleteImporter, importerBlock, insertImporter, missingResolutions, replaceImporter } from "./bun-importers.ts";
 import { addBlockDependencies, addBlockDependency, removeBlockDependency, renderImporterBlock } from "./bun-render.ts";
 import { listPackages, workspaceManifestEdit } from "./bun-workspace.ts";
 import { declaredPackageManagerVersion } from "./package-manager-version.ts";

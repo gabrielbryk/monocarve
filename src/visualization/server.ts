@@ -1,19 +1,19 @@
 import open from "open";
 
+import elkSource from "../../node_modules/elkjs/lib/elk.bundled.js" with { type: "text" };
 // TypeScript resolves the underlying asset declarations and ignores Bun's text
 // loader attribute; Bun embeds these exact bytes in bundled and compiled CLIs.
 // @ts-expect-error imported as text, not as the library module it declares
 import visSource from "../../node_modules/vis-network/standalone/umd/vis-network.min.js" with { type: "text" };
 // @ts-expect-error Bun text asset
-import visStyles from "../../node_modules/vis-network/styles/vis-network.css" with { type: "text" };
-import elkSource from "../../node_modules/elkjs/lib/elk.bundled.js" with { type: "text" };
-// @ts-expect-error Bun text asset
-import layoutSource from "./layout.js" with { type: "text" };
-// @ts-expect-error Bun text asset
 import clientSource from "./client.js" with { type: "text" };
 // @ts-expect-error Bun text asset
-import clientStyles from "./client.css" with { type: "text" };
+import layoutSource from "./layout.js" with { type: "text" };
 import type { VisualizationGraph } from "./model.ts";
+// @ts-expect-error Bun text asset
+import visStyles from "../../node_modules/vis-network/styles/vis-network.css" with { type: "text" };
+// @ts-expect-error Bun text asset
+import clientStyles from "./client.css" with { type: "text" };
 
 export interface VisualizationServerOptions {
   readonly loadGraph: () => Promise<VisualizationGraph>;
@@ -31,10 +31,15 @@ export async function startVisualizationServer(options: VisualizationServerOptio
   let current = await options.loadGraph();
   let activeRefresh: Promise<VisualizationGraph> | undefined;
   const refresh = (): Promise<VisualizationGraph> => {
-    activeRefresh ??= options.loadGraph().then((graph) => {
-      current = graph;
-      return graph;
-    }).finally(() => { activeRefresh = undefined; });
+    activeRefresh ??= options
+      .loadGraph()
+      .then((graph) => {
+        current = graph;
+        return graph;
+      })
+      .finally(() => {
+        activeRefresh = undefined;
+      });
     return activeRefresh;
   };
   const server = Bun.serve({
@@ -42,8 +47,12 @@ export async function startVisualizationServer(options: VisualizationServerOptio
     port: options.port ?? 0,
     routes: {
       "/": () => new Response(PAGE, { headers: { "content-type": "text/html; charset=utf-8" } }),
-      "/assets/vis.js": () => new Response(visSource, { headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "public, max-age=31536000, immutable" } }),
-      "/assets/elk.js": () => new Response(elkSource as unknown as string, { headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "public, max-age=31536000, immutable" } }),
+      "/assets/vis.js": () =>
+        new Response(visSource, { headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "public, max-age=31536000, immutable" } }),
+      "/assets/elk.js": () =>
+        new Response(elkSource as unknown as string, {
+          headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "public, max-age=31536000, immutable" },
+        }),
       "/assets/layout.js": () => new Response(layoutSource, { headers: { "content-type": "text/javascript; charset=utf-8" } }),
       "/assets/client.js": () => new Response(clientSource, { headers: { "content-type": "text/javascript; charset=utf-8" } }),
       "/assets/styles.css": () => new Response(`${visStyles}\n${clientStyles}`, { headers: { "content-type": "text/css; charset=utf-8" } }),

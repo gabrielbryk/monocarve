@@ -28,11 +28,13 @@ export function compilerBuildIdentity(): CompilerBuildIdentity {
 
 export function sourceTreeIntegrity(sourceRoot: string): Sha256 {
   const paths = sourceFiles(sourceRoot).sort(byCodeUnit);
-  const canonical = paths.map((path) => {
-    const relativePath = relative(sourceRoot, path).replaceAll("\\", "/");
-    const contents = readFileSync(path, "utf8");
-    return `${relativePath.length}:${relativePath}${contents.length}:${contents}`;
-  }).join("");
+  const canonical = paths
+    .map((path) => {
+      const relativePath = relative(sourceRoot, path).replaceAll("\\", "/");
+      const contents = readFileSync(path, "utf8");
+      return `${relativePath.length}:${relativePath}${contents.length}:${contents}`;
+    })
+    .join("");
   return hashText(canonical);
 }
 

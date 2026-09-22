@@ -28,30 +28,33 @@ export function partitionTypes(
 ): { readonly types: string[]; readonly ambient: string[] } {
   const host = ts.createCompilerHost(options, true);
   const containingFiles = owners.map((owner) => join(installedRoot, owner, `__${TOOL_NAME}_types__.ts`));
-  return names.reduce<{ types: string[]; ambient: string[] }>((partition, name) => {
-    // A name with a "/" (`vite/client`, `@cloudflare/workers-types`) names a
-    // real package or subpath shipping its own declarations, never a
-    // DefinitelyTyped-style `@types/<name>` wrapper — it is not reachable
-    // through `compilerOptions.typeRoots` at all regardless of hoisting, only
-    // through ordinary module resolution. `ts.createProgram`'s own automatic
-    // type-directive lookup for `compilerOptions.types` also only consults
-    // `typeRoots` (using its own implicit, cwd-derived containing file, not
-    // any of `owners`), so classifying such a name as `types` here — even
-    // though our own owner-scoped `resolveTypeReferenceDirective` probe
-    // below happens to also resolve it — sends it back through a lookup that
-    // will not find it there and misreports as TS2688. Resolve it as an
-    // ambient root file first and only fall back to `types` if that fails.
-    if (name.includes("/")) {
-      addAmbientModule(partition, name, containingFiles, options, host);
+  return names.reduce<{ types: string[]; ambient: string[] }>(
+    (partition, name) => {
+      // A name with a "/" (`vite/client`, `@cloudflare/workers-types`) names a
+      // real package or subpath shipping its own declarations, never a
+      // DefinitelyTyped-style `@types/<name>` wrapper — it is not reachable
+      // through `compilerOptions.typeRoots` at all regardless of hoisting, only
+      // through ordinary module resolution. `ts.createProgram`'s own automatic
+      // type-directive lookup for `compilerOptions.types` also only consults
+      // `typeRoots` (using its own implicit, cwd-derived containing file, not
+      // any of `owners`), so classifying such a name as `types` here — even
+      // though our own owner-scoped `resolveTypeReferenceDirective` probe
+      // below happens to also resolve it — sends it back through a lookup that
+      // will not find it there and misreports as TS2688. Resolve it as an
+      // ambient root file first and only fall back to `types` if that fails.
+      if (name.includes("/")) {
+        addAmbientModule(partition, name, containingFiles, options, host);
+        return partition;
+      }
+      const typeReference = containingFiles
+        .map((containingFile) => ts.resolveTypeReferenceDirective(name, containingFile, options, host).resolvedTypeReferenceDirective)
+        .find((reference) => reference?.resolvedFileName !== undefined);
+      if (typeReference?.resolvedFileName) partition.types.push(name);
+      else addAmbientModule(partition, name, containingFiles, options, host);
       return partition;
-    }
-    const typeReference = containingFiles
-      .map((containingFile) => ts.resolveTypeReferenceDirective(name, containingFile, options, host).resolvedTypeReferenceDirective)
-      .find((reference) => reference?.resolvedFileName !== undefined);
-    if (typeReference?.resolvedFileName) partition.types.push(name);
-    else addAmbientModule(partition, name, containingFiles, options, host);
-    return partition;
-  }, { types: [], ambient: [] });
+    },
+    { types: [], ambient: [] },
+  );
 }
 
 function addAmbientModule(

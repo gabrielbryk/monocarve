@@ -106,11 +106,10 @@ export function selectTypeOnlyDeclarations(input: SelectTypeOnlyDeclarationsInpu
   const imports = collectRequiredImports(semantic.sourceFile, semantic.checker, selected, statements);
   const relativeInlineImportTypes = collectRelativeInlineImportTypes(selected, statements, input.sourceText);
   const declarations = selected.flatMap((group) => selectedDeclarations(group, graph, statements, input.sourceText));
-  const compatibilitySurface = selected.filter((group) => group.exported).map((group) => ({
-    name: group.name,
-    groupId: group.id,
-    reexportAs: "type" as const,
-  })).sort(compareCompatibility);
+  const compatibilitySurface = selected
+    .filter((group) => group.exported)
+    .map((group) => ({ name: group.name, groupId: group.id, reexportAs: "type" as const }))
+    .sort(compareCompatibility);
   return {
     sourcePath: graph.sourcePath,
     sourceHash: graph.sourceHash,
@@ -176,10 +175,10 @@ function createSemanticSource(sourcePath: string, sourceText: string, compilerOp
   const originalGetSourceFile = host.getSourceFile.bind(host);
   const originalFileExists = host.fileExists.bind(host);
   const originalReadFile = host.readFile.bind(host);
-  host.getSourceFile = (path, languageVersion, onError, shouldCreateNewSourceFile) => path === virtualPath
-    ? parsed : originalGetSourceFile(path, languageVersion, onError, shouldCreateNewSourceFile);
+  host.getSourceFile = (path, languageVersion, onError, shouldCreateNewSourceFile) =>
+    path === virtualPath ? parsed : originalGetSourceFile(path, languageVersion, onError, shouldCreateNewSourceFile);
   host.fileExists = (path) => path === virtualPath || originalFileExists(path);
-  host.readFile = (path) => path === virtualPath ? sourceText : originalReadFile(path);
+  host.readFile = (path) => (path === virtualPath ? sourceText : originalReadFile(path));
   const program = ts.createProgram([virtualPath], compilerOptions, host);
   const sourceFile = program.getSourceFile(virtualPath);
   if (!sourceFile) throw new PreparationSelectionError(`cannot parse ${sourcePath}`);
@@ -187,7 +186,9 @@ function createSemanticSource(sourcePath: string, sourceText: string, compilerOp
 }
 
 function statementsByDeclaration(graph: SymbolGraph, sourceFile: ts.SourceFile): Map<Sha256, ts.Statement> {
-  const declarations = new Map(graph.declarations.map((declaration) => [`${declaration.name}\0${declaration.span.start}\0${declaration.span.end}`, declaration]));
+  const declarations = new Map(
+    graph.declarations.map((declaration) => [`${declaration.name}\0${declaration.span.start}\0${declaration.span.end}`, declaration]),
+  );
   const result = new Map<Sha256, ts.Statement>();
   for (const statement of sourceFile.statements) {
     const name = namedStatement(statement);
@@ -199,18 +200,20 @@ function statementsByDeclaration(graph: SymbolGraph, sourceFile: ts.SourceFile):
 }
 
 function namedStatement(statement: ts.Statement): string | undefined {
-  if (!ts.isInterfaceDeclaration(statement) && !ts.isTypeAliasDeclaration(statement) && !ts.isClassDeclaration(statement) &&
-    !ts.isEnumDeclaration(statement) && !ts.isFunctionDeclaration(statement) && !ts.isModuleDeclaration(statement)) return undefined;
+  if (
+    !ts.isInterfaceDeclaration(statement) &&
+    !ts.isTypeAliasDeclaration(statement) &&
+    !ts.isClassDeclaration(statement) &&
+    !ts.isEnumDeclaration(statement) &&
+    !ts.isFunctionDeclaration(statement) &&
+    !ts.isModuleDeclaration(statement)
+  )
+    return undefined;
   const name = statement.name;
   return name && ts.isIdentifier(name) ? name.text : "default";
 }
 
-function assertEligibleGroup(
-  group: DeclarationGroup,
-  graph: SymbolGraph,
-  statements: ReadonlyMap<Sha256, ts.Statement>,
-  sourceText: string,
-): void {
+function assertEligibleGroup(group: DeclarationGroup, graph: SymbolGraph, statements: ReadonlyMap<Sha256, ts.Statement>, sourceText: string): void {
   if (group.space !== "type") throw new PreparationSelectionError(`${group.name} occupies type and/or value space`);
   const members = group.declarationIds.map((id) => declarationForId(graph.declarations, id));
   if (members.length !== group.declarationIds.length) throw new PreparationSelectionError(`incomplete declaration group: ${group.name}`);
@@ -277,26 +280,27 @@ function collectRelativeInlineImportTypes(
   sourceText: string,
 ): RelativeInlineImportType[] {
   const result: RelativeInlineImportType[] = [];
-  for (const group of groups) for (const id of group.declarationIds) {
-    const statement = statements.get(id);
-    if (!statement) continue;
-    const visit = (node: ts.Node): void => {
-      if (ts.isImportTypeNode(node)) {
-        if (node.isTypeOf) throw new PreparationSelectionError(`${group.name} contains a value-space inline import type`);
-        if (!ts.isLiteralTypeNode(node.argument) || !ts.isStringLiteral(node.argument.literal)) {
-          throw new PreparationSelectionError(`${group.name} contains an unsupported inline import type argument`);
+  for (const group of groups)
+    for (const id of group.declarationIds) {
+      const statement = statements.get(id);
+      if (!statement) continue;
+      const visit = (node: ts.Node): void => {
+        if (ts.isImportTypeNode(node)) {
+          if (node.isTypeOf) throw new PreparationSelectionError(`${group.name} contains a value-space inline import type`);
+          if (!ts.isLiteralTypeNode(node.argument) || !ts.isStringLiteral(node.argument.literal)) {
+            throw new PreparationSelectionError(`${group.name} contains an unsupported inline import type argument`);
+          }
+          const literal = node.argument.literal;
+          if (literal.text.startsWith("./") || literal.text.startsWith("../")) {
+            const start = literal.getStart(statement.getSourceFile());
+            const end = literal.end;
+            result.push({ originalSpecifier: literal.text, start, end, sourceHash: hashText(sourceText.slice(start, end)) });
+          }
         }
-        const literal = node.argument.literal;
-        if (literal.text.startsWith("./") || literal.text.startsWith("../")) {
-          const start = literal.getStart(statement.getSourceFile());
-          const end = literal.end;
-          result.push({ originalSpecifier: literal.text, start, end, sourceHash: hashText(sourceText.slice(start, end)) });
-        }
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(statement);
-  }
+        ts.forEachChild(node, visit);
+      };
+      visit(statement);
+    }
   return result.sort((left, right) => left.start - right.start || left.end - right.end || byCodeUnit(left.originalSpecifier, right.originalSpecifier));
 }
 
@@ -362,15 +366,36 @@ function importBindings(sourceFile: ts.SourceFile, checker: ts.TypeChecker): Map
     const moduleSpecifier = statement.moduleSpecifier.text;
     const clauseTypeOnly = statement.importClause.isTypeOnly;
     if (statement.importClause.name) {
-      addImport(result, checker, statement.importClause.name, { localName: statement.importClause.name.text, importedName: "default", moduleSpecifier, kind: "default", originallyTypeOnly: clauseTypeOnly, requiredAs: "type" });
+      addImport(result, checker, statement.importClause.name, {
+        localName: statement.importClause.name.text,
+        importedName: "default",
+        moduleSpecifier,
+        kind: "default",
+        originallyTypeOnly: clauseTypeOnly,
+        requiredAs: "type",
+      });
     }
     const bindings = statement.importClause.namedBindings;
     if (bindings && ts.isNamespaceImport(bindings)) {
-      addImport(result, checker, bindings.name, { localName: bindings.name.text, importedName: "*", moduleSpecifier, kind: "namespace", originallyTypeOnly: clauseTypeOnly, requiredAs: "type" });
+      addImport(result, checker, bindings.name, {
+        localName: bindings.name.text,
+        importedName: "*",
+        moduleSpecifier,
+        kind: "namespace",
+        originallyTypeOnly: clauseTypeOnly,
+        requiredAs: "type",
+      });
     }
     if (bindings && ts.isNamedImports(bindings)) {
       for (const element of bindings.elements) {
-        addImport(result, checker, element.name, { localName: element.name.text, importedName: element.propertyName?.text ?? element.name.text, moduleSpecifier, kind: "named", originallyTypeOnly: clauseTypeOnly || element.isTypeOnly, requiredAs: "type" });
+        addImport(result, checker, element.name, {
+          localName: element.name.text,
+          importedName: element.propertyName?.text ?? element.name.text,
+          moduleSpecifier,
+          kind: "named",
+          originallyTypeOnly: clauseTypeOnly || element.isTypeOnly,
+          requiredAs: "type",
+        });
       }
     }
   }
@@ -384,7 +409,11 @@ function addImport(result: Map<ts.Symbol, RequiredImportBinding>, checker: ts.Ty
   result.set(symbol, binding);
 }
 
-function symbolAt(checker: ts.TypeChecker, identifier: ts.Identifier, bindings: ReadonlyMap<ts.Symbol, RequiredImportBinding>): RequiredImportBinding | undefined {
+function symbolAt(
+  checker: ts.TypeChecker,
+  identifier: ts.Identifier,
+  bindings: ReadonlyMap<ts.Symbol, RequiredImportBinding>,
+): RequiredImportBinding | undefined {
   const symbol = checker.getSymbolAtLocation(identifier);
   return symbol ? bindings.get(symbol) : undefined;
 }
@@ -415,11 +444,9 @@ function retainedConsumers(graph: SymbolGraph, selectedIds: ReadonlySet<Sha256>)
     set.add(edge.source);
     consumers.set(edge.target, set);
   }
-  return [...consumers].map(([groupId, ids]) => ({
-    groupId,
-    name: groupForId(graph, groupId).name,
-    consumedByGroupIds: [...ids].sort(byCodeUnit),
-  })).sort((left, right) => byCodeUnit(left.groupId, right.groupId));
+  return [...consumers]
+    .map(([groupId, ids]) => ({ groupId, name: groupForId(graph, groupId).name, consumedByGroupIds: [...ids].sort(byCodeUnit) }))
+    .sort((left, right) => byCodeUnit(left.groupId, right.groupId));
 }
 
 function compareSelectedDeclaration(left: SelectedTypeDeclaration, right: SelectedTypeDeclaration): number {

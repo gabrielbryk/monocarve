@@ -2,12 +2,17 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { pureRenames, regeneratedArtifactPaths, wiringPaths, type ExtractionManifest, type MoveOperation, type WriteFileOperation } from "../plan/manifest.ts";
 import { fileState } from "../util/files.ts";
 import { git, headCommit } from "../util/git.ts";
-import { pureRenames, regeneratedArtifactPaths, wiringPaths, type ExtractionManifest, type MoveOperation, type WriteFileOperation } from "../plan/manifest.ts";
 import { ApplyError, type ApplyResult, type ApplyState } from "./apply-types.ts";
 
-export function commitAppliedPlan(rootDir: string, manifest: ExtractionManifest, state: ApplyState, onMoveCommitted?: (commit: string) => void): Pick<ApplyResult, "moveCommit" | "wiringCommit"> {
+export function commitAppliedPlan(
+  rootDir: string,
+  manifest: ExtractionManifest,
+  state: ApplyState,
+  onMoveCommitted?: (commit: string) => void,
+): Pick<ApplyResult, "moveCommit" | "wiringCommit"> {
   const moves = pureRenames(manifest);
   const moveCommit = commitMoves(rootDir, manifest, state, moves);
   if (moveCommit !== undefined) onMoveCommitted?.(moveCommit);
@@ -18,9 +23,15 @@ export function commitAppliedPlan(rootDir: string, manifest: ExtractionManifest,
 function commitMoves(rootDir: string, manifest: ExtractionManifest, state: ApplyState, moves: readonly MoveOperation[]): string | undefined {
   const paths = moves.flatMap((move) => [move.source, move.target]);
   if (state !== "pre-apply" || paths.length === 0) return undefined;
-  const compatibility = manifest.modulePromotion?.retireSource === false
-    ? manifest.operations.find((operation): operation is WriteFileOperation => operation.kind === "write-file" && operation.path === manifest.modulePromotion?.source && operation.generator === "module-promotion:compatibility-reexport")
-    : undefined;
+  const compatibility =
+    manifest.modulePromotion?.retireSource === false
+      ? manifest.operations.find(
+          (operation): operation is WriteFileOperation =>
+            operation.kind === "write-file" &&
+            operation.path === manifest.modulePromotion?.source &&
+            operation.generator === "module-promotion:compatibility-reexport",
+        )
+      : undefined;
   const compatibilityBytes = compatibility === undefined ? undefined : readFileSync(resolve(rootDir, compatibility.path));
   try {
     if (compatibility !== undefined) rmSync(resolve(rootDir, compatibility.path));
@@ -54,10 +65,22 @@ function commitStaged(rootDir: string, subject: string, body: string | undefined
 }
 
 export function assertExactMoveDiff(diff: string, moves: readonly MoveOperation[], rootDir: string): void {
-  const entries = diff.split("\n").filter(Boolean).map((line) => line.split("\t"));
+  const entries = diff
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => line.split("\t"));
   if (entries.some((entry) => entry[0] !== "R100")) throw new ApplyError("move commit must contain only exact R100 renames");
   const reported = (index: number): string[] => entries.map((entry) => entry[index] ?? "");
-  if (!sameMultiset(reported(1), moves.map((move) => move.source)) || !sameMultiset(reported(2), moves.map((move) => move.target))) {
+  if (
+    !sameMultiset(
+      reported(1),
+      moves.map((move) => move.source),
+    ) ||
+    !sameMultiset(
+      reported(2),
+      moves.map((move) => move.target),
+    )
+  ) {
     throw new ApplyError("move commit renames are not exactly the declared move sources and targets");
   }
   for (const move of moves) {

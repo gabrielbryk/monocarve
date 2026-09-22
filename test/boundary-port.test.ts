@@ -16,18 +16,12 @@ import { cleanupFixtures, fixtureRepo } from "./support/fixture-repo.ts";
 
 afterAll(cleanupFixtures);
 
-const COMPILER_OPTIONS: ts.CompilerOptions = {
-  module: ts.ModuleKind.ESNext,
-  moduleResolution: ts.ModuleResolutionKind.Bundler,
-  strict: true,
-  noEmit: true,
-};
+const COMPILER_OPTIONS: ts.CompilerOptions = { module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler, strict: true, noEmit: true };
 
 const RETAINED = "apps/api/src/widget.ts";
 const RETAINED_SOURCE = "export interface Widget { amount: number }\n";
 const CONSUMER_PATH = "apps/api/src/orders/service.ts";
-const CONSUMER_SOURCE =
-  'import type { Widget } from "../widget.ts";\nexport function run(input: Widget): void { void input; }\n';
+const CONSUMER_SOURCE = 'import type { Widget } from "../widget.ts";\nexport function run(input: Widget): void { void input; }\n';
 const CONTRACT_TARGET_PATH = "libs/ports/src/widget.ts";
 const ADAPTER_PATH = "apps/api/src/widget-adapter.ts";
 const ADAPTER_TEMPLATE_TEXT = "export class Widget {\n  amount = 0;\n}\n";
@@ -54,21 +48,11 @@ function boundary(overrides: Partial<ResolvedPortBoundary> = {}): ResolvedPortBo
 }
 
 function consumer(overrides: Partial<PortConsumerInput> = {}): PortConsumerInput {
-  return {
-    path: CONSUMER_PATH,
-    preconditionHash: hashText(CONSUMER_SOURCE),
-    mode: 0o644,
-    text: CONSUMER_SOURCE,
-    specifier: "../widget.ts",
-    ...overrides,
-  };
+  return { path: CONSUMER_PATH, preconditionHash: hashText(CONSUMER_SOURCE), mode: 0o644, text: CONSUMER_SOURCE, specifier: "../widget.ts", ...overrides };
 }
 
 function repo(): string {
-  return fixtureRepo({
-    [RETAINED]: RETAINED_SOURCE,
-    [CONSUMER_PATH]: CONSUMER_SOURCE,
-  });
+  return fixtureRepo({ [RETAINED]: RETAINED_SOURCE, [CONSUMER_PATH]: CONSUMER_SOURCE });
 }
 
 function baseInput(root: string, overrides: Record<string, unknown> = {}) {
@@ -106,9 +90,7 @@ describe("planPortBoundary", () => {
 
     expect(result.rewrites).toHaveLength(1);
     const rewrite = result.rewrites[0]!;
-    expect(rewrite.contents).toBe(
-      'import type { Widget } from "@acme/ports/widget";\nexport function run(input: Widget): void { void input; }\n',
-    );
+    expect(rewrite.contents).toBe('import type { Widget } from "@acme/ports/widget";\nexport function run(input: Widget): void { void input; }\n');
     expect(rewrite.rewrites).toEqual([{ from: "../widget.ts", to: "@acme/ports/widget", symbols: ["Widget"] }]);
   });
 
@@ -144,11 +126,21 @@ describe("planPortBoundary", () => {
       "",
     ].join("\n");
     const consumerText = 'import type { ObjectStorage } from "../widget.ts";\nexport type Store = ObjectStorage;\n';
-    const result = planPortBoundary(baseInput(repo(), {
-      boundary: boundary({ source: "portPromotions", declarationName: "ObjectStorage", contractName: "ObjectStorage", atomicDeclarationGroup: true, symbols: ["DownloadedObject", "ObjectStorage"], appAdapter: undefined, template: undefined }),
-      retainedSourceText,
-      consumers: [consumer({ text: consumerText, preconditionHash: hashText(consumerText) })],
-    }));
+    const result = planPortBoundary(
+      baseInput(repo(), {
+        boundary: boundary({
+          source: "portPromotions",
+          declarationName: "ObjectStorage",
+          contractName: "ObjectStorage",
+          atomicDeclarationGroup: true,
+          symbols: ["DownloadedObject", "ObjectStorage"],
+          appAdapter: undefined,
+          template: undefined,
+        }),
+        retainedSourceText,
+        consumers: [consumer({ text: consumerText, preconditionHash: hashText(consumerText) })],
+      }),
+    );
 
     expect(result.contract.contents).toBe(
       "export interface DownloadedObject { body: Uint8Array }\n\nexport interface ObjectStorage { get(): Promise<DownloadedObject> }\n",
@@ -158,28 +150,54 @@ describe("planPortBoundary", () => {
 
   test("refuses an omitted declaration dependency instead of widening the reviewed group", () => {
     const retainedSourceText = "export interface DownloadedObject { body: Uint8Array }\nexport interface ObjectStorage { get(): Promise<DownloadedObject> }\n";
-    expect(() => planPortBoundary(baseInput(repo(), {
-      boundary: boundary({ source: "portPromotions", declarationName: "ObjectStorage", contractName: "ObjectStorage", atomicDeclarationGroup: true, symbols: ["ObjectStorage"], appAdapter: undefined, template: undefined }),
-      retainedSourceText,
-    }))).toThrow(/omitted declarations are required/);
+    expect(() =>
+      planPortBoundary(
+        baseInput(repo(), {
+          boundary: boundary({
+            source: "portPromotions",
+            declarationName: "ObjectStorage",
+            contractName: "ObjectStorage",
+            atomicDeclarationGroup: true,
+            symbols: ["ObjectStorage"],
+            appAdapter: undefined,
+            template: undefined,
+          }),
+          retainedSourceText,
+        }),
+      ),
+    ).toThrow(/omitted declarations are required/);
   });
 
   test("refuses a value-space dependency in an otherwise selected group", () => {
     const retainedSourceText = "export const token = Symbol();\nexport interface ObjectStorage { token: typeof token }\n";
-    expect(() => planPortBoundary(baseInput(repo(), {
-      boundary: boundary({ source: "portPromotions", declarationName: "ObjectStorage", contractName: "ObjectStorage", atomicDeclarationGroup: true, symbols: ["ObjectStorage"], appAdapter: undefined, template: undefined }),
-      retainedSourceText,
-    }))).toThrow(/value dependency|unsafe/);
+    expect(() =>
+      planPortBoundary(
+        baseInput(repo(), {
+          boundary: boundary({
+            source: "portPromotions",
+            declarationName: "ObjectStorage",
+            contractName: "ObjectStorage",
+            atomicDeclarationGroup: true,
+            symbols: ["ObjectStorage"],
+            appAdapter: undefined,
+            template: undefined,
+          }),
+          retainedSourceText,
+        }),
+      ),
+    ).toThrow(/value dependency|unsafe/);
   });
 
   test("leaves an importer of only retained declarations untouched", () => {
     const retainedSourceText = "export interface Widget { amount: number }\nexport const makeWidget = (): Widget => ({ amount: 0 });\n";
     const retainedConsumer = 'import { makeWidget } from "../widget.ts";\nexport const value = makeWidget();\n';
-    const result = planPortBoundary(baseInput(repo(), {
-      retainedSourceText,
-      consumers: [consumer({ text: retainedConsumer, preconditionHash: hashText(retainedConsumer) })],
-      boundary: boundary({ appAdapter: undefined, template: undefined }),
-    }));
+    const result = planPortBoundary(
+      baseInput(repo(), {
+        retainedSourceText,
+        consumers: [consumer({ text: retainedConsumer, preconditionHash: hashText(retainedConsumer) })],
+        boundary: boundary({ appAdapter: undefined, template: undefined }),
+      }),
+    );
 
     expect(result.rewrites).toEqual([]);
     expect(result.contract.contents).toBe("export interface Widget { amount: number }\n");
@@ -188,27 +206,31 @@ describe("planPortBoundary", () => {
   test("splits a mixed importer, retaining value bindings on the donor and moving only promoted type bindings", () => {
     const retainedSourceText = "export interface Widget { amount: number }\nexport const makeWidget = (): Widget => ({ amount: 0 });\n";
     const mixedConsumer = 'import { type Widget as Input, makeWidget } from "../widget.ts";\nexport const value: Input = makeWidget();\n';
-    const result = planPortBoundary(baseInput(repo(), {
-      retainedSourceText,
-      consumers: [consumer({ text: mixedConsumer, preconditionHash: hashText(mixedConsumer) })],
-      boundary: boundary({ appAdapter: undefined, template: undefined }),
-    }));
+    const result = planPortBoundary(
+      baseInput(repo(), {
+        retainedSourceText,
+        consumers: [consumer({ text: mixedConsumer, preconditionHash: hashText(mixedConsumer) })],
+        boundary: boundary({ appAdapter: undefined, template: undefined }),
+      }),
+    );
 
     expect(result.rewrites[0]?.contents).toContain('import { makeWidget } from "../widget.ts";');
     expect(result.rewrites[0]?.contents).toContain('import { type Widget as Input } from "@acme/ports/widget";');
-    expect(result.rewrites[0]?.rewrites).toEqual([{
-      from: "../widget.ts", to: "@acme/ports/widget", symbols: ["Widget"], retainedSymbols: ["makeWidget"],
-    }]);
+    expect(result.rewrites[0]?.rewrites).toEqual([{ from: "../widget.ts", to: "@acme/ports/widget", symbols: ["Widget"], retainedSymbols: ["makeWidget"] }]);
   });
 
   test("a mixed importer still refuses a promoted binding used in value space", () => {
     const retainedSourceText = "export interface Widget { amount: number }\nexport const makeWidget = (): Widget => ({ amount: 0 });\n";
     const unsafeConsumer = 'import { Widget, makeWidget } from "../widget.ts";\nexport const value = [Widget, makeWidget()];\n';
-    expect(() => planPortBoundary(baseInput(repo(), {
-      retainedSourceText,
-      consumers: [consumer({ text: unsafeConsumer, preconditionHash: hashText(unsafeConsumer) })],
-      boundary: boundary({ appAdapter: undefined, template: undefined }),
-    }))).toThrow(/uses Widget in value space/);
+    expect(() =>
+      planPortBoundary(
+        baseInput(repo(), {
+          retainedSourceText,
+          consumers: [consumer({ text: unsafeConsumer, preconditionHash: hashText(unsafeConsumer) })],
+          boundary: boundary({ appAdapter: undefined, template: undefined }),
+        }),
+      ),
+    ).toThrow(/uses Widget in value space/);
   });
 
   test("rewrites only selected import declarations when one file imports promoted types and retained values separately", () => {
@@ -225,29 +247,38 @@ describe("planPortBoundary", () => {
       "export const error = new ObjectStorageError();",
       "",
     ].join("\n");
-    const result = planPortBoundary(baseInput(repo(), {
-      retainedSourceText,
-      consumers: [consumer({ text: consumerText, preconditionHash: hashText(consumerText) })],
-      boundary: boundary({
-        source: "portPromotions", atomicDeclarationGroup: true,
-        declarationName: "ObjectStorage", contractName: "ObjectStorage",
-        symbols: ["DownloadedObject", "ObjectStorage"], appAdapter: undefined, template: undefined,
+    const result = planPortBoundary(
+      baseInput(repo(), {
+        retainedSourceText,
+        consumers: [consumer({ text: consumerText, preconditionHash: hashText(consumerText) })],
+        boundary: boundary({
+          source: "portPromotions",
+          atomicDeclarationGroup: true,
+          declarationName: "ObjectStorage",
+          contractName: "ObjectStorage",
+          symbols: ["DownloadedObject", "ObjectStorage"],
+          appAdapter: undefined,
+          template: undefined,
+        }),
       }),
-    }));
+    );
 
     expect(result.rewrites[0]?.contents).toContain('import type { DownloadedObject, ObjectStorage as Store } from "@acme/ports/widget";');
     expect(result.rewrites[0]?.contents).toContain('import { ObjectStorageError } from "../widget.ts";');
-    expect(result.rewrites[0]?.rewrites).toEqual([{
-      from: "../widget.ts", to: "@acme/ports/widget",
-      symbols: ["DownloadedObject", "ObjectStorage"], retainedSymbols: ["ObjectStorageError"],
-    }]);
+    expect(result.rewrites[0]?.rewrites).toEqual([
+      { from: "../widget.ts", to: "@acme/ports/widget", symbols: ["DownloadedObject", "ObjectStorage"], retainedSymbols: ["ObjectStorageError"] },
+    ]);
   });
 
   test("refuses an unprovable side-effect import beside a selected declaration", () => {
     const consumerText = 'import type { Widget } from "../widget.ts";\nimport "../widget.ts";\nexport type Input = Widget;\n';
-    expect(() => planPortBoundary(baseInput(repo(), {
-      consumers: [consumer({ text: consumerText, preconditionHash: hashText(consumerText) })],
-      boundary: boundary({ appAdapter: undefined, template: undefined }),
-    }))).toThrow(/side-effect import.*cannot prove its retained binding identity/);
+    expect(() =>
+      planPortBoundary(
+        baseInput(repo(), {
+          consumers: [consumer({ text: consumerText, preconditionHash: hashText(consumerText) })],
+          boundary: boundary({ appAdapter: undefined, template: undefined }),
+        }),
+      ),
+    ).toThrow(/side-effect import.*cannot prove its retained binding identity/);
   });
 });

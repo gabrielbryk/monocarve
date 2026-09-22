@@ -1,8 +1,8 @@
 import { flagBool, flagNumber, type ParsedArgs } from "../cli/args.ts";
 import { UsageError } from "../errors.ts";
 import { projectVisualizationGraph, startVisualizationServer } from "../visualization/index.ts";
-import type { CommandSpec } from "./types.ts";
 import { loadGraph } from "./shared.ts";
+import type { CommandSpec } from "./types.ts";
 
 async function visualize(args: ParsedArgs): Promise<void> {
   const port = flagNumber(args, "port", 0);
@@ -15,7 +15,10 @@ async function visualize(args: ParsedArgs): Promise<void> {
   });
   process.stdout.write(`Interactive dependency graph: ${server.url}\nPress Ctrl-C to stop.\n`);
   await new Promise<void>((resolve) => {
-    const stop = (): void => { server.server.stop(); resolve(); };
+    const stop = (): void => {
+      server.server.stop();
+      resolve();
+    };
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);
   });
@@ -31,7 +34,8 @@ export const visualizationCommands: Record<string, CommandSpec> = {
   visualize: {
     summary: "explore the dependency graph in a local web UI",
     usage: "visualize [--app <name>] [--port <number>] [--no-open] [--no-cache] [--include-extracted]",
-    details: "Scans the configured workspace, serves an interactive SCC-level graph on 127.0.0.1, and opens it in the default browser. Search and edge filters run locally; Rescan refreshes the graph without changing the workspace.",
+    details:
+      "Scans the configured workspace, serves an interactive SCC-level graph on 127.0.0.1, and opens it in the default browser. Search and edge filters run locally; Rescan refreshes the graph without changing the workspace.",
     run: visualize,
   },
 };

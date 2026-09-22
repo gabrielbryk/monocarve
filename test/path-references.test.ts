@@ -54,21 +54,10 @@ function tree(files: Record<string, string>): string {
 function fixtureConfigFor(overrides: Partial<MonocarveUserConfig> = {}) {
   return parseConfig(
     {
-      applications: [
-        {
-          name: "web",
-          sourceRoot: "apps/web/src",
-          tsconfig: "apps/web/tsconfig.json",
-          packageName: "@acme/web",
-          compositionRoots: [],
-        },
-      ],
+      applications: [{ name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json", packageName: "@acme/web", compositionRoots: [] }],
       packageRoots: ["libs"],
       packageScope: "@acme/",
-      scaffoldTemplates: {
-        entrypoint: "src/index.ts",
-        packageJson: { contents: '{ "name": "{package}" }\n' },
-      },
+      scaffoldTemplates: { entrypoint: "src/index.ts", packageJson: { contents: '{ "name": "{package}" }\n' } },
       ...overrides,
     },
     "<path-references fixture>",
@@ -95,11 +84,11 @@ describe("path references: what is found", () => {
       [CHART]: CHART_SOURCE,
       "apps/web/src/widgets/chart.test.ts": [
         'import { readFileSync } from "node:fs";',
-        '',
+        "",
         'import { chart } from "./chart.ts";',
-        '',
+        "",
         'export const source = readFileSync("apps/web/src/widgets/chart.ts", "utf8");',
-        'export const used = chart;',
+        "export const used = chart;",
       ].join("\n"),
     });
 
@@ -107,14 +96,7 @@ describe("path references: what is found", () => {
     // the second is this scanner's business — the first is an import edge the
     // graph already carries and the codemod already rewrites.
     expect(index.referencesTo([CHART])).toEqual([
-      {
-        file: "apps/web/src/widgets/chart.test.ts",
-        line: 5,
-        column: 36,
-        target: CHART,
-        form: "path",
-        text: CHART,
-      },
+      { file: "apps/web/src/widgets/chart.test.ts", line: 5, column: 36, target: CHART, form: "path", text: CHART },
     ]);
   });
 
@@ -130,39 +112,28 @@ describe("path references: what is found", () => {
         'export type Y = import("apps/web/src/widgets/chart.ts").X;',
         'export const late = () => import("apps/web/src/widgets/chart.ts");',
         'export const old = require("apps/web/src/widgets/chart.ts");',
-        'export const used = chart;',
+        "export const used = chart;",
       ].join("\n"),
       // The control: the same path, in a position that is not a specifier.
-      "apps/web/src/reader.ts": [
-        'import { readFileSync } from "node:fs";',
-        'export const raw = readFileSync("apps/web/src/widgets/chart.ts", "utf8");',
-      ].join("\n"),
+      "apps/web/src/reader.ts": ['import { readFileSync } from "node:fs";', 'export const raw = readFileSync("apps/web/src/widgets/chart.ts", "utf8");'].join(
+        "\n",
+      ),
     });
 
     expect(index.referencesTo([CHART]).map((reference) => reference.file)).toEqual(["apps/web/src/reader.ts"]);
   });
 
   test("an absolute literal carrying a machine prefix still names the path", () => {
-    const index = indexOver({
-      [CHART]: CHART_SOURCE,
-      "apps/web/src/reader.ts": 'export const p = "/opt/ci/checkout/apps/web/src/widgets/chart.ts";\n',
-    });
+    const index = indexOver({ [CHART]: CHART_SOURCE, "apps/web/src/reader.ts": 'export const p = "/opt/ci/checkout/apps/web/src/widgets/chart.ts";\n' });
 
-    expect(index.referencesTo([CHART]).map((reference) => reference.text)).toEqual([
-      "opt/ci/checkout/apps/web/src/widgets/chart.ts",
-    ]);
+    expect(index.referencesTo([CHART]).map((reference) => reference.text)).toEqual(["opt/ci/checkout/apps/web/src/widgets/chart.ts"]);
   });
 
   test("the extensionless spelling is found, and only when config asks for it", () => {
-    const files = {
-      [CHART]: CHART_SOURCE,
-      "apps/web/src/registry.ts": 'export const modules = ["apps/web/src/widgets/chart"];\n',
-    };
+    const files = { [CHART]: CHART_SOURCE, "apps/web/src/registry.ts": 'export const modules = ["apps/web/src/widgets/chart"];\n' };
 
     const found = indexOver(files).referencesTo([CHART]);
-    expect(found.map((reference) => [reference.file, reference.form])).toEqual([
-      ["apps/web/src/registry.ts", "stem"],
-    ]);
+    expect(found.map((reference) => [reference.file, reference.form])).toEqual([["apps/web/src/registry.ts", "stem"]]);
 
     expect(indexOver(files, { pathReferences: { matchExtensionless: false } }).referencesTo([CHART])).toEqual([]);
   });
@@ -174,16 +145,16 @@ describe("path references: the false-positive boundary", () => {
       [CHART]: CHART_SOURCE,
       "apps/web/src/lookalikes.ts": [
         'import { readFileSync } from "node:fs";',
-        '',
-        '// apps/web/src/widgets/chart.ts is mentioned in this comment and does not stop resolving',
+        "",
+        "// apps/web/src/widgets/chart.ts is mentioned in this comment and does not stop resolving",
         'export const sibling = readFileSync("apps/web/src/widgets/chart.tsx");',
         'export const output = readFileSync("dist/apps/web/src/widgets/chart.ts");',
         'export const vendored = readFileSync("vendor/apps/web/src/widgets/chart.ts");',
         'export const namesake = readFileSync("apps/web/src/panels/chart.ts");',
         'export const stemmed = readFileSync("apps/web/src/widgets/chart.d.ts");',
         'export const relative = readFileSync("../widgets/chart.ts");',
-        '',
-        '// The control, so an index that found nothing at all could not pass this.',
+        "",
+        "// The control, so an index that found nothing at all could not pass this.",
         'export const real = readFileSync("apps/web/src/widgets/chart.ts");',
       ].join("\n"),
     });
@@ -192,10 +163,7 @@ describe("path references: the false-positive boundary", () => {
   });
 
   test("minSegments is the boundary, and it comes from config", () => {
-    const files = {
-      "libs/logger/index.ts": "export const log = 1;\n",
-      "apps/web/src/reader.ts": 'export const p = "libs/logger/index.ts";\n',
-    };
+    const files = { "libs/logger/index.ts": "export const log = 1;\n", "apps/web/src/reader.ts": 'export const p = "libs/logger/index.ts";\n' };
     const target = "libs/logger/index.ts";
 
     expect(indexOver(files).referencesTo([target])).toHaveLength(1);
@@ -206,10 +174,7 @@ describe("path references: the false-positive boundary", () => {
 
   test("the whole scan can be turned off", () => {
     const index = indexOver(
-      {
-        [CHART]: CHART_SOURCE,
-        "apps/web/src/reader.ts": 'export const p = "apps/web/src/widgets/chart.ts";\n',
-      },
+      { [CHART]: CHART_SOURCE, "apps/web/src/reader.ts": 'export const p = "apps/web/src/widgets/chart.ts";\n' },
       { pathReferences: { enabled: false } },
     );
 
@@ -225,21 +190,18 @@ describe("path references: what it cannot see", () => {
       "apps/web/src/computed.ts": [
         'import { readFileSync } from "node:fs";',
         'import { join } from "node:path";',
-        '',
+        "",
         'const dir = "apps/web/src/widgets";',
         'const name = "chart";',
-        '',
-        'export const interpolated = readFileSync(`${dir}/chart.ts`);',
+        "",
+        "export const interpolated = readFileSync(`${dir}/chart.ts`);",
         'export const concatenated = readFileSync("apps/web/src/widgets/" + "chart.ts");',
         'export const joined = readFileSync(join("apps", "web", "src", "widgets", "chart.ts"));',
-        'export const built = readFileSync(join(dir, `${name}.ts`));',
+        "export const built = readFileSync(join(dir, `${name}.ts`));",
       ].join("\n"),
       // Control in the same tree: the scanner is working, it simply cannot
       // reconstruct any of the four spellings above.
-      "apps/web/src/literal.ts": [
-        'import { readFileSync } from "node:fs";',
-        'export const raw = readFileSync("apps/web/src/widgets/chart.ts");',
-      ].join("\n"),
+      "apps/web/src/literal.ts": ['import { readFileSync } from "node:fs";', 'export const raw = readFileSync("apps/web/src/widgets/chart.ts");'].join("\n"),
     });
 
     const found = index.referencesTo([CHART]);
@@ -248,22 +210,15 @@ describe("path references: what it cannot see", () => {
   });
 
   test("a tree outside the source roots is missed until config names it", () => {
-    const files = {
-      [CHART]: CHART_SOURCE,
-      "scripts/verify.sh": ['#!/bin/sh', 'set -eu', 'wc -l apps/web/src/widgets/chart.ts'].join("\n"),
-    };
+    const files = { [CHART]: CHART_SOURCE, "scripts/verify.sh": ["#!/bin/sh", "set -eu", "wc -l apps/web/src/widgets/chart.ts"].join("\n") };
 
     const byDefault = indexOver(files);
     expect(byDefault.referencesTo([CHART])).toEqual([]);
     expect(byDefault.filesScanned).toBe(1);
 
-    const configured = indexOver(files, {
-      pathReferences: { textRoots: [{ root: "scripts", extensions: [".sh"] }] },
-    });
+    const configured = indexOver(files, { pathReferences: { textRoots: [{ root: "scripts", extensions: [".sh"] }] } });
     expect(configured.filesScanned).toBe(2);
-    expect(configured.referencesTo([CHART])).toEqual([
-      { file: "scripts/verify.sh", line: 3, column: 7, target: CHART, form: "path", text: CHART },
-    ]);
+    expect(configured.referencesTo([CHART])).toEqual([{ file: "scripts/verify.sh", line: 3, column: 7, target: CHART, form: "path", text: CHART }]);
   });
 });
 
@@ -355,9 +310,7 @@ describe("portfolio warnings", () => {
     try {
       portfolio = buildPortfolio({ config, graph });
       // Read before restoring: `mockRestore` resets the call list.
-      scriptReads = reads.mock.calls
-        .map((call) => String(call[0]))
-        .filter((path) => path.includes("/scripts/gate-") && path.endsWith(".sh"));
+      scriptReads = reads.mock.calls.map((call) => String(call[0])).filter((path) => path.includes("/scripts/gate-") && path.endsWith(".sh"));
     } finally {
       reads.mockRestore();
     }

@@ -1,25 +1,25 @@
 import { createPackageManagerAdapter } from "../adapters/registry.ts";
 import { createTaskRunnerAdapter } from "../adapters/registry.ts";
 import type { PackageManagerAdapter } from "../adapters/types.ts";
+import { SIMULATION_GIT_IDENTITY } from "../branding.ts";
 import { resetCodemodCaches } from "../codemod/imports.ts";
 import type { MonocarveConfig } from "../config.ts";
-import { SIMULATION_GIT_IDENTITY } from "../branding.ts";
+import { packageContainerRoots } from "../config.ts";
 import { MonocarveError } from "../errors.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
 import { git } from "../util/git.ts";
-import { auditPlanSync } from "./audit.ts";
 import { compareAssetEmission, type AssetEmissionReport } from "./asset-emission.ts";
+import { auditPlanSync } from "./audit.ts";
 import { executeJournal, preflightJournal } from "./journal.ts";
 import { verifyLockfile, type LockfileVerification } from "./lockfile-verify.ts";
-import type { ProjectedImporterVerification } from "./projected-importers.ts";
 import { auditRepositoryPostconditions, type RepositoryPostconditionReport } from "./postconditions.ts";
+import type { ProjectedImporterVerification } from "./projected-importers.ts";
 import { regenerateArtifacts, type RegenerationReport } from "./regenerate.ts";
 // The gate-tier scheduler lives in its own module purely to keep this file
 // under the line-count gate; re-exported here so every existing importer of
 // `runGateTiers` from `simulate.ts` keeps working unchanged.
 import { runGateTiers } from "./simulate-gates.ts";
 import { createWorktree, installWorkspaceDependencies, linkPlannedPackage } from "./worktree.ts";
-import { packageContainerRoots } from "../config.ts";
 
 export { runGateTiers } from "./simulate-gates.ts";
 export type { GateTierOptions, GateTierRun } from "./simulate-gates.ts";
@@ -50,10 +50,7 @@ export interface GateCommandOutput {
   readonly stderr: string;
 }
 /** Injectable process boundary for deterministic scheduler tests. */
-export type GateCommandRunner = (
-  command: readonly string[],
-  options: { readonly cwd: string; readonly timeoutMs: number },
-) => Promise<GateCommandOutput>;
+export type GateCommandRunner = (command: readonly string[], options: { readonly cwd: string; readonly timeoutMs: number }) => Promise<GateCommandOutput>;
 
 export interface SimulationResult {
   readonly ok: boolean;
@@ -121,7 +118,8 @@ export async function simulatePlan(options: SimulateOptions): Promise<Simulation
   const worktree = await createWorktree({
     rootDir,
     commit: manifest.baselineCommit,
-    worktreeRoot: config.transaction.worktreeRoot, packageRoots: packageContainerRoots(config),
+    worktreeRoot: config.transaction.worktreeRoot,
+    packageRoots: packageContainerRoots(config),
     nodeModules: config.transaction.nodeModules,
     installCommand: packageManager.installCommand(),
     label: manifest.planId,
@@ -158,12 +156,15 @@ export async function simulatePlan(options: SimulateOptions): Promise<Simulation
     if (lockfileVerification && !lockfileVerification.ok) {
       keep = !config.transaction.cleanup;
       return {
-        ok: false, planId: manifest.planId,
+        ok: false,
+        planId: manifest.planId,
         ...(keep ? { worktreePath: worktree.path } : {}),
-        operationsApplied: journal.entries.length, gates, lockfileVerification,
-        failure: `${lockfileVerification.lockfile} is not what \`${lockfileVerification.command}\` produces: ${(
-          lockfileVerification.differences ?? []
-        ).join("\n")}`,
+        operationsApplied: journal.entries.length,
+        gates,
+        lockfileVerification,
+        failure: `${lockfileVerification.lockfile} is not what \`${lockfileVerification.command}\` produces: ${(lockfileVerification.differences ?? []).join(
+          "\n",
+        )}`,
       };
     }
 
@@ -190,9 +191,7 @@ export async function simulatePlan(options: SimulateOptions): Promise<Simulation
       rootDir: worktree.workspacePath,
       manifest,
       installedRoot: config.transaction.nodeModules === "install" ? worktree.workspacePath : rootDir,
-      regeneratedArtifacts: Object.fromEntries(
-        regeneration.artifacts.map((artifact) => [artifact.path, artifact.hash]),
-      ),
+      regeneratedArtifacts: Object.fromEntries(regeneration.artifacts.map((artifact) => [artifact.path, artifact.hash])),
     });
     if (!audit.passed) {
       keep = !config.transaction.cleanup;
@@ -220,8 +219,14 @@ export async function simulatePlan(options: SimulateOptions): Promise<Simulation
     if (!repositoryPostconditions.passed) {
       keep = !config.transaction.cleanup;
       return {
-        ok: false, planId: manifest.planId, ...(keep ? { worktreePath: worktree.path } : {}),
-        operationsApplied: journal.entries.length, gates, regeneration, projectedImporterVerification, repositoryPostconditions,
+        ok: false,
+        planId: manifest.planId,
+        ...(keep ? { worktreePath: worktree.path } : {}),
+        operationsApplied: journal.entries.length,
+        gates,
+        regeneration,
+        projectedImporterVerification,
+        repositoryPostconditions,
         failure: `repository postconditions failed: ${repositoryPostconditions.failures.join("; ")}`,
       };
     }
@@ -231,10 +236,22 @@ export async function simulatePlan(options: SimulateOptions): Promise<Simulation
       assetEmission = await compareAssetEmission({ config, rootDir, candidateRoot: worktree.workspacePath, manifest });
       if (!assetEmission.passed) {
         keep = !config.transaction.cleanup;
-        const failures = assetEmission.checks.filter((check) => !check.passed).map((check) =>
-          `${check.id}: ${check.failure ?? `missing selectors [${check.missingSelectors.join(", ")}]; changed declaration order [${check.changedDeclarationOrder.join(", ")}]`}`,
-        );
-        return { ok: false, planId: manifest.planId, ...(keep ? { worktreePath: worktree.path } : {}), operationsApplied: journal.entries.length, gates, regeneration, assetEmission, failure: `asset-emission proof failed: ${failures.join("; ")}` };
+        const failures = assetEmission.checks
+          .filter((check) => !check.passed)
+          .map(
+            (check) =>
+              `${check.id}: ${check.failure ?? `missing selectors [${check.missingSelectors.join(", ")}]; changed declaration order [${check.changedDeclarationOrder.join(", ")}]`}`,
+          );
+        return {
+          ok: false,
+          planId: manifest.planId,
+          ...(keep ? { worktreePath: worktree.path } : {}),
+          operationsApplied: journal.entries.length,
+          gates,
+          regeneration,
+          assetEmission,
+          failure: `asset-emission proof failed: ${failures.join("; ")}`,
+        };
       }
     }
 
@@ -246,9 +263,10 @@ export async function simulatePlan(options: SimulateOptions): Promise<Simulation
       // now-clean extraction into a false failure). Force Moon only when a
       // declared generator actually changed an output; every other simulation
       // keeps ordinary cache behaviour.
-      const wrapCommand = regeneration.artifacts.some((artifact) => artifact.changed) && taskRunner.id === "moon"
-        ? (command: string) => taskRunner.wrapGateCommand(`MOON_FORCE=true MOON_CONCURRENCY=1 ${command}`)
-        : taskRunner.wrapGateCommand;
+      const wrapCommand =
+        regeneration.artifacts.some((artifact) => artifact.changed) && taskRunner.id === "moon"
+          ? (command: string) => taskRunner.wrapGateCommand(`MOON_FORCE=true MOON_CONCURRENCY=1 ${command}`)
+          : taskRunner.wrapGateCommand;
       const gateRun = await runGateTiers({
         gates: manifest.gates,
         maxConcurrency: config.gates.maxConcurrency,
@@ -283,9 +301,12 @@ export async function simulatePlan(options: SimulateOptions): Promise<Simulation
     }
 
     return {
-      ok: true, planId: manifest.planId,
+      ok: true,
+      planId: manifest.planId,
       ...(config.transaction.cleanup ? {} : { worktreePath: worktree.path }),
-      operationsApplied: journal.entries.length, gates, regeneration,
+      operationsApplied: journal.entries.length,
+      gates,
+      regeneration,
       ...(assetEmission === undefined ? {} : { assetEmission }),
       ...unlinkedField(unlinked),
       ...(lockfileVerification === undefined ? {} : { lockfileVerification }),
@@ -337,11 +358,7 @@ export function commitSimulatedExtraction(workspacePath: string, manifest: Extra
  * to verify. The command is the adapter's, and it runs in the worktree rather
  * than the checkout because that is the only tree a package manager may rewrite.
  */
-function maybeVerifyLockfile(
-  options: SimulateOptions,
-  workspacePath: string,
-  packageManager: PackageManagerAdapter,
-): LockfileVerification | undefined {
+function maybeVerifyLockfile(options: SimulateOptions, workspacePath: string, packageManager: PackageManagerAdapter): LockfileVerification | undefined {
   if (!options.verifyLockfile) return undefined;
   const splices = options.manifest.operations.some((operation) => operation.kind === "lockfile-importer");
   if (!splices) return undefined;

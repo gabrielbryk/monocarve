@@ -2,17 +2,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import {
-  rewriteResolvedImportSpecifier,
-  unsupportedModuleReferences,
-} from "../src/codemod/imports.ts";
-import {
-  createCodemodPropertyHarness,
-  LONG_PACKAGE,
-  report,
-  specifierSpans,
-  spliceAll,
-} from "./support/codemod-property-harness.ts";
+import { rewriteResolvedImportSpecifier, unsupportedModuleReferences } from "../src/codemod/imports.ts";
+import { createCodemodPropertyHarness, LONG_PACKAGE, report, specifierSpans, spliceAll } from "./support/codemod-property-harness.ts";
 
 const harness = createCodemodPropertyHarness();
 const { workspace, DONOR, TS_IMPORTER } = harness;
@@ -59,28 +50,20 @@ describe("regressions: spans the declaration text cannot locate", () => {
 
   test("an escaped specifier is spliced over its raw bytes", () => {
     const source = 'import { a } from "./hel\\u0070ers";\n';
-    expect(rewriteResolvedImportSpecifier(source, TS_IMPORTER, DONOR, LONG_PACKAGE, workspace)).toBe(
-      `import { a } from "${LONG_PACKAGE}";\n`,
-    );
+    expect(rewriteResolvedImportSpecifier(source, TS_IMPORTER, DONOR, LONG_PACKAGE, workspace)).toBe(`import { a } from "${LONG_PACKAGE}";\n`);
   });
 
   test("a no-substitution template specifier is rewritten, not reported", () => {
     const source = "const lazy = import(`./helpers`);\n";
     expect(unsupportedModuleReferences(source, TS_IMPORTER, workspace)).toHaveLength(0);
-    expect(rewriteResolvedImportSpecifier(source, TS_IMPORTER, DONOR, LONG_PACKAGE, workspace)).toBe(
-      `const lazy = import(\`${LONG_PACKAGE}\`);\n`,
-    );
+    expect(rewriteResolvedImportSpecifier(source, TS_IMPORTER, DONOR, LONG_PACKAGE, workspace)).toBe(`const lazy = import(\`${LONG_PACKAGE}\`);\n`);
   });
 
   test("a package specifier that cannot be written into the literal is refused", () => {
     const quoted = 'import { a } from "./helpers";\n';
-    expect(() => rewriteResolvedImportSpecifier(quoted, TS_IMPORTER, DONOR, '@acme/we"ird', workspace)).toThrow(
-      "cannot be written inside",
-    );
+    expect(() => rewriteResolvedImportSpecifier(quoted, TS_IMPORTER, DONOR, '@acme/we"ird', workspace)).toThrow("cannot be written inside");
     const template = "const lazy = import(`./helpers`);\n";
-    expect(() => rewriteResolvedImportSpecifier(template, TS_IMPORTER, DONOR, "@acme/${x}", workspace)).toThrow(
-      "cannot be written inside",
-    );
+    expect(() => rewriteResolvedImportSpecifier(template, TS_IMPORTER, DONOR, "@acme/${x}", workspace)).toThrow("cannot be written inside");
     const other = 'import { u } from "./unrelated";\n';
     expect(rewriteResolvedImportSpecifier(other, TS_IMPORTER, DONOR, '@acme/we"ird', workspace)).toBe(other);
   });

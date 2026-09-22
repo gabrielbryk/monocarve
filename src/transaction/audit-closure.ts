@@ -3,22 +3,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import type { ExtractionManifest, MoveOperation, MoveWithRewriteOperation } from "../plan/manifest.ts";
 import { showBaseline } from "../util/git.ts";
-import type {
-  ExtractionManifest,
-  MoveOperation,
-  MoveWithRewriteOperation,
-} from "../plan/manifest.ts";
 import { entrypointRelativeKey, evaluatedModuleKeys } from "./audit-graph.ts";
 import { proof, type ProofResult } from "./audit-types.ts";
 
 type AnyMove = MoveOperation | MoveWithRewriteOperation;
 
-export function entrypointClosureProof(
-  manifest: ExtractionManifest,
-  rootDir: string,
-  moves: readonly AnyMove[],
-): ProofResult {
+export function entrypointClosureProof(manifest: ExtractionManifest, rootDir: string, moves: readonly AnyMove[]): ProofResult {
   const entrypointRelative = `${manifest.target.packageRoot}/${manifest.target.entrypoint}`;
   const entrypoint = resolve(rootDir, entrypointRelative);
   const closureFailures: string[] = [];
@@ -33,10 +25,7 @@ export function entrypointClosureProof(
   // this extraction's delta: every importer of this package was evaluating
   // them before the plan existed. Read from git rather than from the plan, so
   // a plan cannot widen its own allowance by describing the barrel it wants.
-  const inherited = evaluatedModuleKeys(
-    showBaseline(rootDir, manifest.baselineCommit, entrypointRelative) ?? "",
-    entrypointRelative,
-  );
+  const inherited = evaluatedModuleKeys(showBaseline(rootDir, manifest.baselineCommit, entrypointRelative) ?? "", entrypointRelative);
   const landed = evaluatedModuleKeys(readFileSync(entrypoint, "utf8"), entrypointRelative);
   // Counted, not merely sized: only the inventory records this proof actually
   // examines belong here. Adding `evaluationEffects.length` would credit the
@@ -44,9 +33,7 @@ export function entrypointClosureProof(
   // package too, which it does not and cannot — and a check count that grows
   // with unchecked declarations is how a proof starts looking stronger than it
   // is.
-  const inventoried = manifest.evaluationEffects.filter(
-    (record) => record.subject === "module" && record.reach !== "reached",
-  );
+  const inventoried = manifest.evaluationEffects.filter((record) => record.subject === "module" && record.reach !== "reached");
   const closureChecks = declared.size + landed.size + inventoried.length;
 
   // One direction only, and the direction matters. "The entrypoint reaches

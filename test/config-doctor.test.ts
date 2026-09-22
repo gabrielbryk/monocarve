@@ -4,8 +4,8 @@ import { join } from "node:path";
 
 import { parseConfig } from "../src/config.ts";
 import { inspectConfig } from "../src/doctor/config-doctor.ts";
-import { fixtureGit, scratchDirectory } from "./support/fixture-repo.ts";
 import { runJsonIn } from "./support/cli.ts";
+import { fixtureGit, scratchDirectory } from "./support/fixture-repo.ts";
 
 describe("config doctor", () => {
   test("reports effective provenance, workspace resolution, and preparation coverage without writing", async () => {
@@ -25,9 +25,17 @@ describe("config doctor", () => {
     writeFileSync(join(root, "scratch.txt"), "dirty\n");
 
     const userConfig = {
-      applications: [{ name: "consumer", sourceRoot: "apps/consumer/src", tsconfig: "apps/consumer/tsconfig.json",
-        compilerProfile: { types: ["runtime-types"], moduleResolution: "bundler" } }],
-      packageRoots: ["packages"], packageScope: "@acme/", moduleSpecifierCalls: ["mock.module"],
+      applications: [
+        {
+          name: "consumer",
+          sourceRoot: "apps/consumer/src",
+          tsconfig: "apps/consumer/tsconfig.json",
+          compilerProfile: { types: ["runtime-types"], moduleResolution: "bundler" },
+        },
+      ],
+      packageRoots: ["packages"],
+      packageScope: "@acme/",
+      moduleSpecifierCalls: ["mock.module"],
       portfolio: { protectedPaths: ["shared/registry.ts"] },
       scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
       transaction: { allowDirtyPaths: ["scratch.txt"] },
@@ -38,8 +46,11 @@ describe("config doctor", () => {
 
     expect(report.effective.find((item) => item.key === "packageScope")?.source).toBe("explicit");
     expect(report.effective.find((item) => item.key === "taskRunner")?.source).toBe("default");
-    expect(report.applications[0]).toMatchObject({ sourceRootExists: true, tsconfigExists: true,
-      compilerProfile: { types: ["runtime-types"], moduleResolution: "bundler" } });
+    expect(report.applications[0]).toMatchObject({
+      sourceRootExists: true,
+      tsconfigExists: true,
+      compilerProfile: { types: ["runtime-types"], moduleResolution: "bundler" },
+    });
     expect(report.workspacePackages).toEqual([{ dir: "packages/tool", name: "@acme/tool" }]);
     expect(report.adapters).toMatchObject({ packageManager: { status: "available" }, taskRunner: { status: "available" } });
     expect(report.dirtyPaths).toEqual(["scratch.txt"]);
@@ -52,14 +63,26 @@ describe("config doctor", () => {
     mkdirSync(join(root, "apps/consumer/src"), { recursive: true });
     writeFileSync(join(root, "apps/consumer/tsconfig.json"), "{}\n");
     fixtureGit(root, "init", "-q");
-    const config = parseConfig({ applications: [{ name: "consumer", sourceRoot: "apps/consumer/src", tsconfig: "apps/consumer/tsconfig.json" }], packageRoots: ["packages"], packageManager: "npm", taskRunner: "nx", scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } } });
+    const config = parseConfig({
+      applications: [{ name: "consumer", sourceRoot: "apps/consumer/src", tsconfig: "apps/consumer/tsconfig.json" }],
+      packageRoots: ["packages"],
+      packageManager: "npm",
+      taskRunner: "nx",
+      scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
+    });
     const report = await inspectConfig({ config, configPath: join(root, "config.ts"), rootDir: root });
 
     expect(report.adapters.packageManager).toMatchObject({ configured: "npm", status: "not-yet-ported" });
     // The other half of the same claim: a *ported* adapter has to report
     // `available`, or "not-yet-ported" would be the only answer the doctor
     // knows how to give and reporting it would prove nothing.
-    const portedSource = { applications: [{ name: "consumer", sourceRoot: "apps/consumer/src", tsconfig: "apps/consumer/tsconfig.json" }], packageRoots: ["packages"], packageManager: "bun", taskRunner: "nx", scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } } };
+    const portedSource = {
+      applications: [{ name: "consumer", sourceRoot: "apps/consumer/src", tsconfig: "apps/consumer/tsconfig.json" }],
+      packageRoots: ["packages"],
+      packageManager: "bun",
+      taskRunner: "nx",
+      scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
+    };
     const ported = await inspectConfig({ config: parseConfig(portedSource), configPath: join(root, "config.ts"), rootDir: root });
     expect(ported.adapters.packageManager).toMatchObject({ configured: "bun", status: "available" });
     expect(report.adapters.taskRunner).toMatchObject({ configured: "nx", status: "not-yet-ported" });
@@ -83,10 +106,13 @@ describe("config doctor", () => {
     });
 
     const report = await inspectConfig({ config, configPath: join(root, "config.ts"), rootDir: root });
-    expect(report.semanticIssues).toEqual([{
-      severity: "error", context: "application consumer",
-      detail: "scaffold package template declares a root export, but publicSurface is subpaths-only; remove the root export or select barrel mode",
-    }]);
+    expect(report.semanticIssues).toEqual([
+      {
+        severity: "error",
+        context: "application consumer",
+        detail: "scaffold package template declares a root export, but publicSurface is subpaths-only; remove the root export or select barrel mode",
+      },
+    ]);
   });
 
   test("CLI exposes the report without changing the checkout", async () => {
@@ -96,7 +122,11 @@ describe("config doctor", () => {
     writeFileSync(join(root, "package.json"), '{"private":true}\n');
     writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
     writeFileSync(join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
-    const userConfig = { applications: [{ name: "consumer", sourceRoot: "apps/consumer/src", tsconfig: "apps/consumer/tsconfig.json" }], packageRoots: ["packages"], scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } } };
+    const userConfig = {
+      applications: [{ name: "consumer", sourceRoot: "apps/consumer/src", tsconfig: "apps/consumer/tsconfig.json" }],
+      packageRoots: ["packages"],
+      scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
+    };
     writeFileSync(join(root, "monocarve.config.json"), `${JSON.stringify(userConfig)}\n`);
     fixtureGit(root, "init", "-q");
     fixtureGit(root, "config", "user.email", "fixture@example.invalid");
@@ -130,8 +160,10 @@ describe("config doctor", () => {
     const report = await inspectConfig({ config, configPath: join(root, "config.ts"), rootDir: root });
 
     expect(report.semanticIssues).toContainEqual({
-      severity: "error", context: "pathReferenceRewrites",
-      detail: "matchExtensionless is true but pathReferences.matchExtensionless is false; the rewriter would mutate extensionless references the warning scanner never warned about",
+      severity: "error",
+      context: "pathReferenceRewrites",
+      detail:
+        "matchExtensionless is true but pathReferences.matchExtensionless is false; the rewriter would mutate extensionless references the warning scanner never warned about",
     });
   });
 
@@ -152,8 +184,10 @@ describe("config doctor", () => {
     const report = await inspectConfig({ config, configPath: join(root, "config.ts"), rootDir: root });
 
     expect(report.semanticIssues).toContainEqual({
-      severity: "error", context: "pathReferenceRewrites",
-      detail: "pathReferences.enabled is false while pathReferenceRewrites.enabled is true; the rewriter would mutate references the warning scanner never warned about",
+      severity: "error",
+      context: "pathReferenceRewrites",
+      detail:
+        "pathReferences.enabled is false while pathReferenceRewrites.enabled is true; the rewriter would mutate references the warning scanner never warned about",
     });
   });
 
@@ -176,8 +210,9 @@ describe("config doctor", () => {
     const report = await inspectConfig({ config, configPath: join(root, "config.ts"), rootDir: root });
 
     expect(report.semanticIssues).toContainEqual({
-      severity: "error", context: "pathReferenceRewrites",
-      detail: "root \"scripts\" is not covered by pathReferences.textRoots; the rewriter would mutate a tree the warning scanner never looked at",
+      severity: "error",
+      context: "pathReferenceRewrites",
+      detail: 'root "scripts" is not covered by pathReferences.textRoots; the rewriter would mutate a tree the warning scanner never looked at',
     });
   });
 
@@ -191,10 +226,13 @@ describe("config doctor", () => {
       applications: [{ name: "consumer", sourceRoot: "apps/consumer/src", tsconfig: "apps/consumer/tsconfig.json" }],
       packageRoots: ["packages"],
       pathReferences: { textRoots: [{ root: "config", extensions: [".md"] }] },
-      pathReferenceRewrites: { enabled: true, roots: [
-        { root: "config", extensions: [".md"], mode: "exact-path-token", referenceBase: "apps/api/src" },
-        { root: "config/nested", extensions: [".md"], mode: "exact-path-token", referenceBase: "apps/web/src" },
-      ] },
+      pathReferenceRewrites: {
+        enabled: true,
+        roots: [
+          { root: "config", extensions: [".md"], mode: "exact-path-token", referenceBase: "apps/api/src" },
+          { root: "config/nested", extensions: [".md"], mode: "exact-path-token", referenceBase: "apps/web/src" },
+        ],
+      },
       scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
     });
     const report = await inspectConfig({ config, rootDir: root, configPath: join(root, "monocarve.config.ts") });

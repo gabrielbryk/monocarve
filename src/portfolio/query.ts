@@ -59,11 +59,7 @@ export class CandidateLookupError extends MonocarveError {
 }
 
 /** Query portfolio candidates and return a canonical, presentation-safe view. */
-export function queryCandidates(
-  portfolio: Portfolio,
-  config: MonocarveConfig,
-  query: CandidateQuery = {},
-): CandidateDetail[] {
+export function queryCandidates(portfolio: Portfolio, config: MonocarveConfig, query: CandidateQuery = {}): CandidateDetail[] {
   if (query.id !== undefined && !portfolio.candidates.some((candidate) => candidate.id === query.id)) {
     throw new CandidateLookupError(`candidate not found: ${query.id}`);
   }
@@ -84,19 +80,28 @@ export function serializeCandidateDetails(details: readonly CandidateDetail[]): 
 
 /** Deterministic compact text intended for terminals and orchestration logs. */
 export function formatCandidateTable(details: readonly CandidateDetail[]): string {
-  const rows = [...details].sort(compareDetails).map((candidate) => [
-    candidate.id,
-    candidate.eligible ? "eligible" : "blocked",
-    candidate.classification ?? "-",
-    candidate.recommendation?.status ?? "-",
-    String(candidate.score),
-    String(candidate.lineCount),
-    String(candidate.closure.length),
-    candidate.targetSuggestion.packageName,
-  ]);
+  const rows = [...details]
+    .sort(compareDetails)
+    .map((candidate) => [
+      candidate.id,
+      candidate.eligible ? "eligible" : "blocked",
+      candidate.classification ?? "-",
+      candidate.recommendation?.status ?? "-",
+      String(candidate.score),
+      String(candidate.lineCount),
+      String(candidate.closure.length),
+      candidate.targetSuggestion.packageName,
+    ]);
   const table = [["ID", "STATE", "CLASS", "RECOMMENDATION", "SCORE", "LOC", "PATHS", "TARGET"], ...rows];
   const widths = table[0]!.map((_, column) => Math.max(...table.map((row) => row[column]!.length)));
-  return `${table.map((row) => row.map((cell, column) => cell.padEnd(widths[column]!)).join("  ").trimEnd()).join("\n")}\n`;
+  return `${table
+    .map((row) =>
+      row
+        .map((cell, column) => cell.padEnd(widths[column]!))
+        .join("  ")
+        .trimEnd(),
+    )
+    .join("\n")}\n`;
 }
 
 function candidateDetail(candidate: PortfolioCandidate, config: MonocarveConfig): CandidateDetail {
@@ -131,13 +136,8 @@ function canonicalScc(scc: Scc): Scc {
 }
 
 function targetSuggestion(packageName: string, config: MonocarveConfig): CandidateTargetSuggestion {
-  const bareName = config.packageScope && packageName.startsWith(config.packageScope)
-    ? packageName.slice(config.packageScope.length)
-    : packageName;
-  return {
-    packageName,
-    packageRoot: normalizePath(`${config.packageRoots[0]!}/${bareName}`),
-  };
+  const bareName = config.packageScope && packageName.startsWith(config.packageScope) ? packageName.slice(config.packageScope.length) : packageName;
+  return { packageName, packageRoot: normalizePath(`${config.packageRoots[0]!}/${bareName}`) };
 }
 
 function queryPath(rootDir: string, path: string): string {
@@ -150,8 +150,7 @@ function queryPath(rootDir: string, path: string): string {
 
 function intersects(candidate: PortfolioCandidate, path: string): boolean {
   const prefix = `${path}/`;
-  return [...candidate.files, ...candidate.tests, ...candidate.assets]
-    .some((claimed) => claimed === path || claimed.startsWith(prefix));
+  return [...candidate.files, ...candidate.tests, ...candidate.assets].some((claimed) => claimed === path || claimed.startsWith(prefix));
 }
 
 function matchesEligibility(candidate: PortfolioCandidate, eligibility: CandidateEligibility): boolean {

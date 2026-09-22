@@ -9,12 +9,7 @@ import {
   type CampaignStatus,
   type GraphMetricSnapshot,
 } from "./ledger-types.ts";
-import {
-  assertAppendableChild,
-  assertCampaignLedgerInputValid,
-  assertCampaignLedgerValid,
-  CampaignLedgerValidationError,
-} from "./ledger-validation.ts";
+import { assertAppendableChild, assertCampaignLedgerInputValid, assertCampaignLedgerValid, CampaignLedgerValidationError } from "./ledger-validation.ts";
 
 export * from "./ledger-types.ts";
 export { CampaignLedgerValidationError, assertCampaignLedgerValid } from "./ledger-validation.ts";
@@ -36,7 +31,10 @@ export function appendCampaignChild(ledger: CampaignLedger, child: CampaignChild
   const evaluated = evaluateCampaignStopConditions(ledger);
   if (evaluated.outcome !== "active") throw new CampaignLedgerValidationError(`cannot plan a child: campaign is ${evaluated.outcome}`);
   assertAppendableChild(evaluated.ledger, child);
-  const next = { ...evaluated.ledger, children: [...evaluated.ledger.children, { ...child, graphDigest: child.graphDigest ?? evaluated.ledger.currentGraph.digest, status: "planned" as const }] };
+  const next = {
+    ...evaluated.ledger,
+    children: [...evaluated.ledger.children, { ...child, graphDigest: child.graphDigest ?? evaluated.ledger.currentGraph.digest, status: "planned" as const }],
+  };
   assertCampaignLedgerValid(next);
   return next;
 }

@@ -9,11 +9,7 @@ import type { PreparationReplayOperation } from "./manifest-types.ts";
  * A mismatch means the landed object is not the exact regular file approved
  * by the manifest, even if its bytes happen to match.
  */
-export function verifyPreparationResultModes(
-  rootDir: string,
-  operations: readonly PreparationReplayOperation[],
-  failures: string[],
-): number {
+export function verifyPreparationResultModes(rootDir: string, operations: readonly PreparationReplayOperation[], failures: string[]): number {
   let checked = 0;
   for (const operation of operations) {
     if (operation.kind === "delete-module" || operation.kind === "delete-generated-source-generator") {
@@ -27,9 +23,7 @@ export function verifyPreparationResultModes(
       }
       continue;
     }
-    const mutations = operation.kind === "extract-type-declarations"
-      ? [operation.donor, operation.target]
-      : [operation.file];
+    const mutations = operation.kind === "extract-type-declarations" ? [operation.donor, operation.target] : [operation.file];
     for (const mutation of mutations) {
       checked += 1;
       const actual = modeAt(rootDir, mutation.path);

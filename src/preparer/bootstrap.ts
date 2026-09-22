@@ -5,16 +5,22 @@ import { join } from "node:path";
 import type { MonocarveConfig } from "../config.ts";
 import { isGuardedBranch } from "../config.ts";
 import { executePreparationJournal, rollbackCompletedPreparationJournal } from "../prepare/journal.ts";
-import { byCodeUnit } from "../util/hash.ts";
-import { currentBranch, git, headCommit, repositoryPrefix, scrubbedGitEnv, statusEntries, tryGit } from "../util/git.ts";
 import { fileState } from "../util/files.ts";
+import { currentBranch, git, headCommit, repositoryPrefix, scrubbedGitEnv, statusEntries, tryGit } from "../util/git.ts";
+import { byCodeUnit } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";
-import type { PreparerManifest } from "./manifest.ts";
-import { assertApprovedPreparerManifest, assertPreparerManifest, PreparerError, simulatePreparerManifest } from "./core.ts";
 import { ensureScratchDir } from "../util/scratch-root.ts";
+import { assertApprovedPreparerManifest, assertPreparerManifest, PreparerError, simulatePreparerManifest } from "./core.ts";
+import type { PreparerManifest } from "./manifest.ts";
 
 /** Commit a new preparer configuration and its approval while hooks observe its reviewed outputs. */
-export async function commitPreparerBootstrap(rootDir: string, config: MonocarveConfig, path: string, manifest: PreparerManifest, subject: string): Promise<string> {
+export async function commitPreparerBootstrap(
+  rootDir: string,
+  config: MonocarveConfig,
+  path: string,
+  manifest: PreparerManifest,
+  subject: string,
+): Promise<string> {
   assertPreparerManifest(config, manifest);
   const bootstrap = manifest.bootstrapConfig;
   if (bootstrap === undefined) throw new PreparerError("preparer manifest does not declare a bootstrap config");
@@ -26,7 +32,10 @@ export async function commitPreparerBootstrap(rootDir: string, config: Monocarve
   await simulatePreparerManifest({ rootDir, config, manifest });
 
   const journal = executePreparationJournal({ rootDir, operations: manifest.mutations.map((item) => ({ kind: "write" as const, ...item })) });
-  const temporary = createTemporaryIndex(rootDir, manifest.mutations.map((item) => item.path));
+  const temporary = createTemporaryIndex(
+    rootDir,
+    manifest.mutations.map((item) => item.path),
+  );
   let committed = false;
   try {
     temporary.run("add", "-f", "--", bootstrap.path, path);
@@ -34,7 +43,8 @@ export async function commitPreparerBootstrap(rootDir: string, config: Monocarve
     committed = true;
     const result = headCommit(rootDir);
     assertExactCommit(rootDir, baseline, result, [bootstrap.path, path]);
-    if (temporary.run("status", "--porcelain=v1", "--untracked-files=all", "--", ".") !== "") throw new PreparerError("commit hooks changed the reviewed bootstrap tree");
+    if (temporary.run("status", "--porcelain=v1", "--untracked-files=all", "--", ".") !== "")
+      throw new PreparerError("commit hooks changed the reviewed bootstrap tree");
     // The real index was never exposed to the temporary outputs. Advance it to
     // the new two-file commit before restoring those outputs in the worktree.
     git({ cwd: rootDir, quiet: true }, "reset", "--mixed", result);
@@ -46,7 +56,8 @@ export async function commitPreparerBootstrap(rootDir: string, config: Monocarve
   } finally {
     temporary.dispose();
     const restored = rollbackCompletedPreparationJournal(journal.recovery);
-    if (restored.failures.length > 0) throw new PreparerError(`bootstrap output rollback was incomplete: ${restored.failures.map((item) => item.path).join(", ")}`);
+    if (restored.failures.length > 0)
+      throw new PreparerError(`bootstrap output rollback was incomplete: ${restored.failures.map((item) => item.path).join(", ")}`);
   }
 }
 
@@ -54,7 +65,8 @@ function assertInitialState(rootDir: string, path: string, manifest: PreparerMan
   const bootstrap = manifest.bootstrapConfig!;
   const allowedDirty = new Set([bootstrap.path, path]);
   const dirty = unique(statusEntries(rootDir).flatMap((entry) => entry.paths));
-  if (!dirty.includes(bootstrap.path) || dirty.some((item) => !allowedDirty.has(item))) throw new PreparerError(`bootstrap commit requires only config and manifest dirty paths; found: ${dirty.join(", ") || "(none)"}`);
+  if (!dirty.includes(bootstrap.path) || dirty.some((item) => !allowedDirty.has(item)))
+    throw new PreparerError(`bootstrap commit requires only config and manifest dirty paths; found: ${dirty.join(", ") || "(none)"}`);
   const actual = state(rootDir, bootstrap.path);
   if (actual.hash !== bootstrap.resultHash || actual.mode !== bootstrap.resultMode) throw new PreparerError("bootstrap config differs from reviewed result");
   if (git({ cwd: rootDir }, "diff", "--cached", "--name-only") !== "") throw new PreparerError("bootstrap commit requires an initially empty index");
@@ -96,14 +108,27 @@ function assertExactCommit(rootDir: string, baseline: string, result: string, pa
   if (git({ cwd: rootDir }, "rev-parse", `${result}^`) !== baseline) throw new PreparerError("bootstrap hook changed commit ancestry");
   const actual = git({ cwd: rootDir }, "diff-tree", "--no-commit-id", "--name-only", "-r", result).split("\n").filter(Boolean).sort(byCodeUnit);
   const expected = paths.map((path) => `${repositoryPrefix(rootDir)}${path}`).sort(byCodeUnit);
-  if (actual.length !== expected.length || actual.some((item, index) => item !== expected[index])) throw new PreparerError(`bootstrap commit scope differs from config and manifest: ${actual.join(", ")}`);
+  if (actual.length !== expected.length || actual.some((item, index) => item !== expected[index]))
+    throw new PreparerError(`bootstrap commit scope differs from config and manifest: ${actual.join(", ")}`);
 }
 
-function escapeIgnore(path: string): string { return path.replaceAll("\\", "\\\\").replaceAll("[", "\\[").replaceAll("]", "\\]").replaceAll("*", "\\*").replaceAll("?", "\\?").replace(/^([#!])/, "\\$1"); }
+function escapeIgnore(path: string): string {
+  return path
+    .replaceAll("\\", "\\\\")
+    .replaceAll("[", "\\[")
+    .replaceAll("]", "\\]")
+    .replaceAll("*", "\\*")
+    .replaceAll("?", "\\?")
+    .replace(/^([#!])/, "\\$1");
+}
 
 function state(root: string, path: string): { readonly hash: ReturnType<typeof fileState>; readonly mode: number | "missing" } {
   const absolute = workspacePath(root, path);
-  return existsSync(absolute) ? { hash: fileState(absolute), mode: (statSync(absolute).mode & 0o111) === 0 ? 0o644 : 0o755 } : { hash: "missing", mode: "missing" };
+  return existsSync(absolute)
+    ? { hash: fileState(absolute), mode: (statSync(absolute).mode & 0o111) === 0 ? 0o644 : 0o755 }
+    : { hash: "missing", mode: "missing" };
 }
 
-function unique(items: readonly string[]): string[] { return [...new Set(items)].sort(byCodeUnit); }
+function unique(items: readonly string[]): string[] {
+  return [...new Set(items)].sort(byCodeUnit);
+}

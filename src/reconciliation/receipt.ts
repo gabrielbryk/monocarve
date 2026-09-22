@@ -1,9 +1,9 @@
-import type { AuditReport } from "../transaction/audit.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
+import type { AuditReport } from "../transaction/audit.ts";
 import { hashJson, hashText, stableStringify } from "../util/hash.ts";
+import { normalizedAudit } from "./compile.ts";
 import type { AppliedPlanReceipt, AppliedPlanReceiptPayload, ReconciliationRecord } from "./types.ts";
 import { appliedPlanReceiptId, assertAppliedPlanReceiptValid, assertReconciliationRecordValid, ReconciliationValidationError } from "./validate.ts";
-import { normalizedAudit } from "./compile.ts";
 
 export interface CompileAppliedPlanReceiptInput {
   readonly record?: { readonly path: string; readonly bytes: string; readonly value: ReconciliationRecord; readonly approvalCommit: string };
@@ -26,12 +26,19 @@ export function compileAppliedPlanReceipt(input: CompileAppliedPlanReceiptInput)
   if (input.record !== undefined) {
     assertReconciliationRecordValid(input.record.value);
     let parsed: unknown;
-    try { parsed = JSON.parse(input.record.bytes); } catch { throw new ReconciliationValidationError("reconciliation bytes are not JSON"); }
+    try {
+      parsed = JSON.parse(input.record.bytes);
+    } catch {
+      throw new ReconciliationValidationError("reconciliation bytes are not JSON");
+    }
     if (stableStringify(parsed) !== stableStringify(input.record.value)) {
       throw new ReconciliationValidationError("reconciliation bytes do not encode the supplied record");
     }
-    if (input.record.value.generator.name !== input.manifest.generator.name || input.record.value.generator.version !== input.manifest.generator.version ||
-        stableStringify(input.record.value.provenance) !== stableStringify(input.manifest.provenance)) {
+    if (
+      input.record.value.generator.name !== input.manifest.generator.name ||
+      input.record.value.generator.version !== input.manifest.generator.version ||
+      stableStringify(input.record.value.provenance) !== stableStringify(input.manifest.provenance)
+    ) {
       throw new ReconciliationValidationError("reconciliation provenance does not match the supplied manifest");
     }
   }
@@ -47,10 +54,16 @@ export function compileAppliedPlanReceipt(input: CompileAppliedPlanReceiptInput)
     plan: input.plan,
     application: input.application,
     audit: { observedCommit: input.observedCommit, report: audit, digest: hashJson(audit) },
-    ...(input.record === undefined ? {} : { reconciliation: {
-      path: input.record.path, digest: hashText(input.record.bytes), recordId: input.record.value.recordId,
-      approvalCommit: input.record.approvalCommit,
-    } }),
+    ...(input.record === undefined
+      ? {}
+      : {
+          reconciliation: {
+            path: input.record.path,
+            digest: hashText(input.record.bytes),
+            recordId: input.record.value.recordId,
+            approvalCommit: input.record.approvalCommit,
+          },
+        }),
   };
   const receipt = { ...payload, receiptId: appliedPlanReceiptId(payload) };
   assertAppliedPlanReceiptValid(receipt);

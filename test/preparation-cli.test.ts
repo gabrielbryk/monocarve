@@ -10,23 +10,18 @@ import {
   type CampaignChildPlan,
   type GraphMetricSnapshot,
 } from "../src/campaign/index.ts";
-import { writeCampaignLedgerAtomically } from "../src/commands/preparation.ts";
 import { createCampaignLedgerFile } from "../src/commands/campaign-ledger-file.ts";
+import { writeCampaignLedgerAtomically } from "../src/commands/preparation.ts";
 import type { PreparationAuditReport } from "../src/prepare/audit.ts";
 import type { AuditReport } from "../src/transaction/audit.ts";
 import { hashJson, stableStringify } from "../src/util/hash.ts";
-import { cleanupFixtures, fixtureGit } from "./support/fixture-repo.ts";
 import { committedWorkspace, existsSync, readFileSync, runIn, runJsonIn, writeFileSync } from "./support/cli.ts";
+import { cleanupFixtures, fixtureGit } from "./support/fixture-repo.ts";
 afterAll(cleanupFixtures);
 
 test("seams compiles a deterministic read-only proposal from a selected declaration SCC", async () => {
   const root = committedWorkspace();
-  const candidates = await runJsonIn<{ splitCandidates: { id: string }[] }>(
-    root,
-    "split-candidates",
-    "--file",
-    "apps/web/src/widgets/chart.ts",
-  );
+  const candidates = await runJsonIn<{ splitCandidates: { id: string }[] }>(root, "split-candidates", "--file", "apps/web/src/widgets/chart.ts");
   const candidate = candidates.splitCandidates[0];
   if (!candidate) throw new Error("fixture did not produce a split candidate");
 
@@ -37,16 +32,7 @@ test("seams compiles a deterministic read-only proposal from a selected declarat
     targetPath?: string;
     movedGroups: { name: string }[];
     requiredImports: unknown[];
-  }>(
-    root,
-    "seams",
-    "--file",
-    "apps/web/src/widgets/chart.ts",
-    "--candidate",
-    candidate.id,
-    "--target",
-    "apps/web/src/widgets/chart-types.ts",
-  );
+  }>(root, "seams", "--file", "apps/web/src/widgets/chart.ts", "--candidate", candidate.id, "--target", "apps/web/src/widgets/chart-types.ts");
 
   expect(seam.schemaVersion).toBe(1);
   expect(seam.sourcePath).toBe("apps/web/src/widgets/chart.ts");
@@ -60,11 +46,7 @@ test("prepare-apply refuses a schema-v1 preparer manifest with the correct recov
   const root = committedWorkspace();
   const path = "plans/preparer.json";
   mkdirSync(join(root, "plans"), { recursive: true });
-  writeFileSync(join(root, path), JSON.stringify({
-    schemaVersion: 1,
-    planId: "preparer-plan",
-    preparer: { id: "rewrite-boundary", phase: "pre-extraction" },
-  }));
+  writeFileSync(join(root, path), JSON.stringify({ schemaVersion: 1, planId: "preparer-plan", preparer: { id: "rewrite-boundary", phase: "pre-extraction" } }));
   const result = await runIn(root, "prepare-apply", "--plan", path, "--commit");
   expect(result.code).toBe(64);
   expect(result.stderr).toContain(`is a preparer manifest; use preparer-apply --plan ${path}`);
@@ -73,22 +55,21 @@ test("prepare-apply refuses a schema-v1 preparer manifest with the correct recov
 
 test("seams-multi deterministically analyzes an explicit configured file scope", async () => {
   const root = committedWorkspace();
-  const arguments_ = [
-    "seams-multi", "--file", "apps/web/src/widgets/chart.ts", "--file", "apps/web/src/types.ts",
-  ] as const;
-  const first = await runJsonIn<{
-    id: string;
-    sourceHashes: Record<string, string>;
-    edges: { sourceName: string; targetName: string; confidence: string }[];
-  }>(root, ...arguments_);
+  const arguments_ = ["seams-multi", "--file", "apps/web/src/widgets/chart.ts", "--file", "apps/web/src/types.ts"] as const;
+  const first = await runJsonIn<{ id: string; sourceHashes: Record<string, string>; edges: { sourceName: string; targetName: string; confidence: string }[] }>(
+    root,
+    ...arguments_,
+  );
   const second = await runJsonIn<typeof first>(root, ...arguments_);
 
   expect(stableStringify(second)).toBe(stableStringify(first));
   expect(Object.keys(first.sourceHashes)).toEqual(["apps/web/src/types.ts", "apps/web/src/widgets/chart.ts"]);
-  expect(first.edges).toEqual(expect.arrayContaining([
-    expect.objectContaining({ sourceName: "renderChart", targetName: "Series", confidence: "exact" }),
-    expect.objectContaining({ sourceName: "toLabel", targetName: "Point", confidence: "exact" }),
-  ]));
+  expect(first.edges).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ sourceName: "renderChart", targetName: "Series", confidence: "exact" }),
+      expect.objectContaining({ sourceName: "toLabel", targetName: "Point", confidence: "exact" }),
+    ]),
+  );
 
   const refused = await runIn(root, "seams-multi", "--file", "apps/web/src/types.ts");
   expect(refused.code).toBe(64);
@@ -100,20 +81,12 @@ test("prepare-plan persists only an explicitly reviewed type-only preparation ma
   const source = "apps/web/src/preparation-fixture.ts";
   const configPath = join(root, "monocarve.config.json");
   const config = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
-  config.preparation = {
-    commit: { subject: "refactor: prepare {sourcePath}" },
-    gates: { workspace: ["bun run typecheck"] },
-  };
+  config.preparation = { commit: { subject: "refactor: prepare {sourcePath}" }, gates: { workspace: ["bun run typecheck"] } };
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
   writeFileSync(join(root, source), "export interface PreparationFixture { readonly id: string; }\n");
   fixtureGit(root, "add", "--", "monocarve.config.json", source);
   fixtureGit(root, "commit", "-qm", "test: add preparation fixture");
-  const candidates = await runJsonIn<{ splitCandidates: { id: string; groupIds: string[] }[] }>(
-    root,
-    "split-candidates",
-    "--file",
-    source,
-  );
+  const candidates = await runJsonIn<{ splitCandidates: { id: string; groupIds: string[] }[] }>(root, "split-candidates", "--file", source);
   const candidate = candidates.splitCandidates[0];
   const group = candidate?.groupIds[0];
   if (!candidate || !group) throw new Error("fixture did not produce a declaration SCC");
@@ -155,18 +128,20 @@ test("campaign advance writes exactly one fresh reviewed preparation child", asy
 
   const result = await runJsonIn<{ written: boolean; campaign: { children: { status: string; pairId: string }[] } }>(
     root,
-    "campaign", "advance",
-    "--campaign", campaignPath,
-    "--next-plan", manifest.output,
-    "--pair", "preparation-fixture",
+    "campaign",
+    "advance",
+    "--campaign",
+    campaignPath,
+    "--next-plan",
+    manifest.output,
+    "--pair",
+    "preparation-fixture",
     "--write",
   );
 
   expect(result.written).toBe(true);
   expect(result.campaign.children).toMatchObject([{ status: "planned", pairId: "preparation-fixture" }]);
-  expect(JSON.parse(readFileSync(join(root, campaignPath), "utf8"))).toMatchObject({
-    children: [{ status: "planned", pairId: "preparation-fixture" }],
-  });
+  expect(JSON.parse(readFileSync(join(root, campaignPath), "utf8"))).toMatchObject({ children: [{ status: "planned", pairId: "preparation-fixture" }] });
 }, 30_000);
 
 test("campaign record audits, rescans, and atomically writes an applied preparation child", async () => {
@@ -180,13 +155,16 @@ test("campaign record audits, rescans, and atomically writes an applied preparat
     planId: manifest.planId,
     baselineCommit: manifest.baseline.commit,
   };
-  const ledger = appendCampaignChild(createCampaignLedger({
-    campaignId: "record-fixture",
-    objective: "record one verified preparation",
-    stopConditions: [],
-    baselineCommit: manifest.baseline.commit,
-    initialGraph: graph,
-  }), child);
+  const ledger = appendCampaignChild(
+    createCampaignLedger({
+      campaignId: "record-fixture",
+      objective: "record one verified preparation",
+      stopConditions: [],
+      baselineCommit: manifest.baseline.commit,
+      initialGraph: graph,
+    }),
+    child,
+  );
 
   const applied = await runJsonIn<{ ok: boolean }>(root, "prepare-apply", "--plan", manifest.output, "--commit");
   expect(applied.ok).toBe(true);
@@ -196,10 +174,14 @@ test("campaign record audits, rescans, and atomically writes an applied preparat
   writeFileSync(join(root, campaignPath), serializeCampaignLedger(ledger));
   const result = await runJsonIn<{ written: boolean; campaign: { children: { status: string }[] } }>(
     root,
-    "campaign", "record",
-    "--campaign", campaignPath,
-    "--plan", manifest.output,
-    "--pair", "preparation-fixture",
+    "campaign",
+    "record",
+    "--campaign",
+    campaignPath,
+    "--plan",
+    manifest.output,
+    "--pair",
+    "preparation-fixture",
     "--write",
   );
 
@@ -220,7 +202,12 @@ test("campaign advance durably records the no-next-child completion", async () =
   writeFileSync(join(root, campaignPath), serializeCampaignLedger(ledger));
 
   const result = await runJsonIn<{ written: boolean; reason: string; campaign: { status: string } }>(
-    root, "campaign", "advance", "--campaign", campaignPath, "--write",
+    root,
+    "campaign",
+    "advance",
+    "--campaign",
+    campaignPath,
+    "--write",
   );
 
   expect(result).toMatchObject({ written: true, reason: "no-next-child", campaign: { status: "completed" } });
@@ -241,9 +228,17 @@ test("prepare-plan refuses an unresolved selected relative type import", async (
 
   const result = await runIn(
     root,
-    "prepare-plan", "--file", source, "--candidate", candidate.id,
-    "--target", "apps/web/src/unresolved-import-fixture-types.ts",
-    "--module-specifier", "./unresolved-import-fixture-types.ts", "--group", group,
+    "prepare-plan",
+    "--file",
+    source,
+    "--candidate",
+    candidate.id,
+    "--target",
+    "apps/web/src/unresolved-import-fixture-types.ts",
+    "--module-specifier",
+    "./unresolved-import-fixture-types.ts",
+    "--group",
+    group,
   );
   expect(result.code).toBe(64);
   expect(result.stderr).toContain("could not resolve required relative type import");
@@ -260,8 +255,18 @@ test("campaign init scans stable HEAD, creates exclusively, and status detects s
   const root = committedWorkspace();
   const campaignPath = ".monocarve/campaigns/initialized.json";
   const initialized = await runJsonIn<{ written: boolean; campaign: { baselineCommit: string; children: unknown[] } }>(
-    root, "campaign", "init", "--campaign", campaignPath, "--id", "fixture-init",
-    "--objective", "decompose the fixture", "--max-pairs", "2", "--write",
+    root,
+    "campaign",
+    "init",
+    "--campaign",
+    campaignPath,
+    "--id",
+    "fixture-init",
+    "--objective",
+    "decompose the fixture",
+    "--max-pairs",
+    "2",
+    "--write",
   );
   expect(initialized).toMatchObject({ written: true, campaign: { children: [] } });
   expect(initialized.campaign.baselineCommit).toBe(fixtureGit(root, "rev-parse", "HEAD"));
@@ -270,8 +275,18 @@ test("campaign init scans stable HEAD, creates exclusively, and status detects s
   expect(status).toMatchObject({ phase: "needs-preparation-review", staleHead: false });
 
   const overwrite = await runIn(
-    root, "campaign", "init", "--campaign", campaignPath, "--id", "fixture-init",
-    "--objective", "decompose the fixture", "--max-pairs", "2", "--write",
+    root,
+    "campaign",
+    "init",
+    "--campaign",
+    campaignPath,
+    "--id",
+    "fixture-init",
+    "--objective",
+    "decompose the fixture",
+    "--max-pairs",
+    "2",
+    "--write",
   );
   expect(overwrite.code).not.toBe(0);
   expect(overwrite.stderr).toContain("without overwriting an existing file");
@@ -279,7 +294,13 @@ test("campaign init scans stable HEAD, creates exclusively, and status detects s
   writeFileSync(join(root, "README.md"), "changed\n");
   fixtureGit(root, "add", "README.md");
   fixtureGit(root, "commit", "-qm", "test: advance head");
-  const stale = await runJsonIn<{ phase: string; canProceed: boolean; staleHead: boolean; expectedCommit: string; observedCommit: string }>(root, "campaign", "status", "--campaign", campaignPath);
+  const stale = await runJsonIn<{ phase: string; canProceed: boolean; staleHead: boolean; expectedCommit: string; observedCommit: string }>(
+    root,
+    "campaign",
+    "status",
+    "--campaign",
+    campaignPath,
+  );
   expect(stale).toMatchObject({ phase: "stale-head", staleHead: true, canProceed: false });
   expect(stale.observedCommit).not.toBe(stale.expectedCommit);
 }, 30_000);
@@ -289,7 +310,21 @@ test("campaign init requires an explicit bounded stop condition and native scan"
   const missingStop = await runIn(root, "campaign", "init", "--campaign", ".monocarve/plans/init.json", "--id", "fixture", "--objective", "split fixture");
   expect(missingStop.code).toBe(64);
   expect(missingStop.stderr).toContain("--max-pairs <count> is required");
-  const captured = await runIn(root, "campaign", "init", "--campaign", ".monocarve/plans/init.json", "--id", "fixture", "--objective", "split fixture", "--max-pairs", "1", "--graph", "web=stale.json");
+  const captured = await runIn(
+    root,
+    "campaign",
+    "init",
+    "--campaign",
+    ".monocarve/plans/init.json",
+    "--id",
+    "fixture",
+    "--objective",
+    "split fixture",
+    "--max-pairs",
+    "1",
+    "--graph",
+    "web=stale.json",
+  );
   expect(captured.code).toBe(64);
   expect(captured.stderr).toContain("refuses --graph");
 });
@@ -318,8 +353,18 @@ test("campaign init refuses a configured campaign directory that is not ignored"
   fixtureGit(root, "commit", "-qm", "test: configure versioned campaign state");
 
   const result = await runIn(
-    root, "campaign", "init", "--campaign", "plans/campaign.json", "--id", "fixture",
-    "--objective", "split fixture", "--max-pairs", "1", "--write",
+    root,
+    "campaign",
+    "init",
+    "--campaign",
+    "plans/campaign.json",
+    "--id",
+    "fixture",
+    "--objective",
+    "split fixture",
+    "--max-pairs",
+    "1",
+    "--write",
   );
   expect(result).toMatchObject({ code: 64 });
   expect(result.stderr).toContain("must be git-ignored operational state");
@@ -340,29 +385,41 @@ test("campaign ledger CAS persistence preserves an intervening writer and a rena
   const initial = serializeCampaignLedger(ledger);
   writeFileSync(absolute, initial);
   const external = `${initial}\nexternal writer\n`;
-  expect(() => writeCampaignLedgerAtomically(root, path, initial, "replacement\n", {
-    writeFile: (temporary, contents) => {
-      writeFileSync(temporary, contents);
-      writeFileSync(absolute, external);
-    },
-    rename: renameSync,
-    remove: () => {},
-  })).toThrow("changed while this command was gathering evidence");
+  expect(() =>
+    writeCampaignLedgerAtomically(root, path, initial, "replacement\n", {
+      writeFile: (temporary, contents) => {
+        writeFileSync(temporary, contents);
+        writeFileSync(absolute, external);
+      },
+      rename: renameSync,
+      remove: () => {},
+    }),
+  ).toThrow("changed while this command was gathering evidence");
   expect(readFileSync(absolute, "utf8")).toBe(external);
 
   writeFileSync(absolute, initial);
-  expect(() => writeCampaignLedgerAtomically(root, path, initial, "replacement\n", {
-    writeFile: writeFileSync,
-    rename: () => { throw new Error("rename failure"); },
-    remove: () => {},
-  })).toThrow("could not atomically persist campaign ledger");
+  expect(() =>
+    writeCampaignLedgerAtomically(root, path, initial, "replacement\n", {
+      writeFile: writeFileSync,
+      rename: () => {
+        throw new Error("rename failure");
+      },
+      remove: () => {},
+    }),
+  ).toThrow("could not atomically persist campaign ledger");
   expect(readFileSync(absolute, "utf8")).toBe(initial);
 
-  expect(() => writeCampaignLedgerAtomically(root, path, initial, "replacement\n", {
-    writeFile: () => { throw new Error("write failure"); },
-    rename: () => { throw new Error("rename should not run"); },
-    remove: () => {},
-  })).toThrow("could not atomically persist campaign ledger");
+  expect(() =>
+    writeCampaignLedgerAtomically(root, path, initial, "replacement\n", {
+      writeFile: () => {
+        throw new Error("write failure");
+      },
+      rename: () => {
+        throw new Error("rename should not run");
+      },
+      remove: () => {},
+    }),
+  ).toThrow("could not atomically persist campaign ledger");
   expect(readFileSync(absolute, "utf8")).toBe(initial);
 });
 
@@ -370,8 +427,11 @@ test("campaign ledger lock serializes mutation and init HEAD race publishes noth
   const root = committedWorkspace();
   const metrics = { modules: 1 };
   const ledger = createCampaignLedger({
-    campaignId: "race-proof", objective: "prove mutation boundaries", stopConditions: [],
-    baselineCommit: "baseline", initialGraph: { metrics, digest: hashJson(metrics) },
+    campaignId: "race-proof",
+    objective: "prove mutation boundaries",
+    stopConditions: [],
+    baselineCommit: "baseline",
+    initialGraph: { metrics, digest: hashJson(metrics) },
   });
   const path = ".monocarve/plans/race.json";
   const absolute = join(root, path);
@@ -383,7 +443,11 @@ test("campaign ledger lock serializes mutation and init HEAD race publishes noth
 
   // Remove only the synthetic lock; production never removes a lock it does not own.
   unlinkSync(`${absolute}.lock`);
-  expect(() => createCampaignLedgerFile(root, path, ledger, () => { throw new Error("HEAD changed"); })).toThrow("HEAD changed");
+  expect(() =>
+    createCampaignLedgerFile(root, path, ledger, () => {
+      throw new Error("HEAD changed");
+    }),
+  ).toThrow("HEAD changed");
   expect(existsSync(absolute)).toBe(false);
   expect(existsSync(`${absolute}.lock`)).toBe(false);
 });
@@ -392,29 +456,38 @@ test("campaign ledger ownership transfer preserves replacements at both publicat
   const root = committedWorkspace();
   const metrics = { modules: 1 };
   const ledger = createCampaignLedger({
-    campaignId: "ownership", objective: "prove replacement preservation", stopConditions: [],
-    baselineCommit: "baseline", initialGraph: { metrics, digest: hashJson(metrics) },
+    campaignId: "ownership",
+    objective: "prove replacement preservation",
+    stopConditions: [],
+    baselineCommit: "baseline",
+    initialGraph: { metrics, digest: hashJson(metrics) },
   });
   const path = ".monocarve/plans/ownership.json";
   const absolute = join(root, path);
   mkdirSync(join(root, ".monocarve/plans"), { recursive: true });
   const initial = serializeCampaignLedger(ledger);
   writeFileSync(absolute, initial);
-  expect(() => writeCampaignLedgerAtomically(root, path, initial, "updated\n", {
-    writeFile: writeFileSync,
-    rename: renameSync,
-    remove: (file) => { if (existsSync(file)) unlinkSync(file); },
-    afterOwnershipAcquired: () => writeFileSync(absolute, "concurrent replacement\n"),
-  })).toThrow("replacement preserved");
+  expect(() =>
+    writeCampaignLedgerAtomically(root, path, initial, "updated\n", {
+      writeFile: writeFileSync,
+      rename: renameSync,
+      remove: (file) => {
+        if (existsSync(file)) unlinkSync(file);
+      },
+      afterOwnershipAcquired: () => writeFileSync(absolute, "concurrent replacement\n"),
+    }),
+  ).toThrow("replacement preserved");
   expect(readFileSync(absolute, "utf8")).toBe("concurrent replacement\n");
   expect(readdirSync(join(root, ".monocarve/plans")).some((name) => name.includes(".owned."))).toBe(true);
 
   unlinkSync(absolute);
-  expect(() => createCampaignLedgerFile(root, path, ledger, () => {
-    renameSync(absolute, `${absolute}.published-by-init`);
-    writeFileSync(absolute, "post-publication replacement\n");
-    throw new Error("HEAD changed after publication");
-  })).toThrow("concurrent replacement preserved");
+  expect(() =>
+    createCampaignLedgerFile(root, path, ledger, () => {
+      renameSync(absolute, `${absolute}.published-by-init`);
+      writeFileSync(absolute, "post-publication replacement\n");
+      throw new Error("HEAD changed after publication");
+    }),
+  ).toThrow("concurrent replacement preserved");
   expect(readFileSync(absolute, "utf8")).toBe("post-publication replacement\n");
 });
 
@@ -438,9 +511,18 @@ async function reviewedPreparationPlan(): Promise<{ root: string; manifest: Prep
   if (!candidate || !group) throw new Error("fixture did not produce a declaration SCC");
   const manifest = await runJsonIn<PreparedManifestOutput>(
     root,
-    "prepare-plan", "--file", source, "--candidate", candidate.id,
-    "--target", "apps/web/src/campaign-preparation-types.ts",
-    "--module-specifier", "./campaign-preparation-types.ts", "--group", group, "--write",
+    "prepare-plan",
+    "--file",
+    source,
+    "--candidate",
+    candidate.id,
+    "--target",
+    "apps/web/src/campaign-preparation-types.ts",
+    "--module-specifier",
+    "./campaign-preparation-types.ts",
+    "--group",
+    group,
+    "--write",
   );
   return { root, manifest, graph: await scanMetrics(root) };
 }
@@ -448,10 +530,7 @@ async function reviewedPreparationPlan(): Promise<{ root: string; manifest: Prep
 function configurePreparationPolicy(root: string): void {
   const configPath = join(root, "monocarve.config.json");
   const config = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
-  config.preparation = {
-    commit: { subject: "refactor: prepare {sourcePath}" },
-    gates: { workspace: ["true"] },
-  };
+  config.preparation = { commit: { subject: "refactor: prepare {sourcePath}" }, gates: { workspace: ["true"] } };
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 }
 
@@ -477,14 +556,24 @@ async function scanMetrics(root: string): Promise<GraphMetricSnapshot> {
 
 function appliedPairLedger(head: string, graph: GraphMetricSnapshot) {
   const preparation: CampaignChildPlan = { id: "prepare", pairId: "fixture-pair", kind: "preparation", planId: "prepare-plan", baselineCommit: head };
-  const preparationApplied = recordCampaignChildApplication(appendCampaignChild(createCampaignLedger({
-    campaignId: "terminal-fixture", objective: "finish a complete pair", stopConditions: [], baselineCommit: head, initialGraph: graph,
-  }), preparation), {
-    childId: preparation.id,
-    resultingCommit: head,
-    audit: { kind: "preparation", report: preparationAudit(preparation), digest: hashJson(preparationAudit(preparation)) },
-    graph: { before: graph, after: graph },
-  });
+  const preparationApplied = recordCampaignChildApplication(
+    appendCampaignChild(
+      createCampaignLedger({
+        campaignId: "terminal-fixture",
+        objective: "finish a complete pair",
+        stopConditions: [],
+        baselineCommit: head,
+        initialGraph: graph,
+      }),
+      preparation,
+    ),
+    {
+      childId: preparation.id,
+      resultingCommit: head,
+      audit: { kind: "preparation", report: preparationAudit(preparation), digest: hashJson(preparationAudit(preparation)) },
+      graph: { before: graph, after: graph },
+    },
+  );
   const extraction: CampaignChildPlan = { id: "extract", pairId: "fixture-pair", kind: "extraction", planId: "extract-plan", baselineCommit: head };
   const report = extractionAudit(extraction);
   return recordCampaignChildApplication(appendCampaignChild(preparationApplied, extraction), {
@@ -496,20 +585,46 @@ function appliedPairLedger(head: string, graph: GraphMetricSnapshot) {
 }
 function preparationAudit(plan: CampaignChildPlan): PreparationAuditReport {
   return {
-    planId: plan.planId, baselineCommit: plan.baselineCommit, auditedRoot: "/synthetic", passed: true,
-    byteReplay: proof(), fileModes: proof(), selectorIntegrity: proof(), declarationOwnership: proof(), compatibilitySurface: proof(),
-    targetImportResolution: proof(), renderedReplay: proof(), changedPathScope: proof(), typeValueClaims: proof(), graphDigest: proof(),
-    retainedRootClearance: proof(), adapterSurfaceParity: proof(), failures: [],
+    planId: plan.planId,
+    baselineCommit: plan.baselineCommit,
+    auditedRoot: "/synthetic",
+    passed: true,
+    byteReplay: proof(),
+    fileModes: proof(),
+    selectorIntegrity: proof(),
+    declarationOwnership: proof(),
+    compatibilitySurface: proof(),
+    targetImportResolution: proof(),
+    renderedReplay: proof(),
+    changedPathScope: proof(),
+    typeValueClaims: proof(),
+    graphDigest: proof(),
+    retainedRootClearance: proof(),
+    adapterSurfaceParity: proof(),
+    failures: [],
   };
 }
 function extractionAudit(plan: CampaignChildPlan): AuditReport {
   return {
-    planId: plan.planId, baselineCommit: plan.baselineCommit, auditedRoot: "/synthetic", passed: true,
-    byteFidelity: proof(), consumerCompleteness: proof(), boundaryRules: proof(), externalConsumerCompile: proof(), codemodReplay: proof(),
-    entrypointClosure: proof(), lockfileIntegrity: proof(), generatedArtifacts: proof(),
+    planId: plan.planId,
+    baselineCommit: plan.baselineCommit,
+    auditedRoot: "/synthetic",
+    passed: true,
+    byteFidelity: proof(),
+    consumerCompleteness: proof(),
+    boundaryRules: proof(),
+    externalConsumerCompile: proof(),
+    codemodReplay: proof(),
+    entrypointClosure: proof(),
+    lockfileIntegrity: proof(),
+    generatedArtifacts: proof(),
     sourceConservation: { ...proof(), plannedFiles: 1, plannedTests: 0, plannedAssets: 0, landedFiles: 1, landedTests: 0, landedAssets: 0 },
-    boundaryBaseline: { recorded: 0, observed: [], cleared: [] }, graphEvidence: { dynamicImportDelta: { added: [], removed: [] }, movedPathEdges: [], passed: true }, failures: [],
+    boundaryBaseline: { recorded: 0, observed: [], cleared: [] },
+    graphEvidence: { dynamicImportDelta: { added: [], removed: [] }, movedPathEdges: [], passed: true },
+    failures: [],
   };
 }
 
-function proof() { return { passed: true, checked: 1, failures: [] }; }
+function proof() {
+  return { passed: true, checked: 1, failures: [] };
+}

@@ -11,8 +11,8 @@
 import type { MonocarveConfig } from "../config.ts";
 import { buildApplicationGraph, toSccs } from "../graph/components.ts";
 import type { DependencyGraph } from "../graph/model.ts";
-import { byCodeUnit, hashText } from "../util/hash.ts";
 import type { ConsumerRef } from "../portfolio/types.ts";
+import { byCodeUnit, hashText } from "../util/hash.ts";
 
 export interface ConsolidationCandidate {
   /** Stable, content-derived id safe to reference across runs. */
@@ -56,13 +56,17 @@ export function buildConsolidationCandidate(options: ConsolidationCandidateOptio
   for (const donor of donors) {
     const donorRoot = donor.root.replace(/\/+$/, "");
     const donorFiles = graph.paths.filter(
-      (path) => path.startsWith(`${donorRoot}/`) && path !== donorRoot && !path.endsWith(".test.ts") && !path.endsWith(".test.tsx") && graph.nodes.get(path)?.isAsset !== true,
+      (path) =>
+        path.startsWith(`${donorRoot}/`) &&
+        path !== donorRoot &&
+        !path.endsWith(".test.ts") &&
+        !path.endsWith(".test.tsx") &&
+        graph.nodes.get(path)?.isAsset !== true,
     );
-    const donorTests = graph.paths.filter(
-      (path) => path.startsWith(`${donorRoot}/`) && (path.endsWith(".test.ts") || path.endsWith(".test.tsx")),
-    );
+    const donorTests = graph.paths.filter((path) => path.startsWith(`${donorRoot}/`) && (path.endsWith(".test.ts") || path.endsWith(".test.tsx")));
     const donorAssets = graph.paths.filter(
-      (path) => path.startsWith(`${donorRoot}/`) && !path.endsWith(".ts") && !path.endsWith(".tsx") && !path.endsWith(".test.ts") && !path.endsWith(".test.tsx"),
+      (path) =>
+        path.startsWith(`${donorRoot}/`) && !path.endsWith(".ts") && !path.endsWith(".tsx") && !path.endsWith(".test.ts") && !path.endsWith(".test.tsx"),
     );
 
     allFiles.push(...donorFiles);
@@ -114,11 +118,7 @@ export function buildConsolidationCandidate(options: ConsolidationCandidateOptio
   };
 }
 
-function collectConsumers(
-  graph: DependencyGraph,
-  fileSet: Set<string>,
-  donors: readonly { readonly name: string; readonly root: string }[],
-): ConsumerRef[] {
+function collectConsumers(graph: DependencyGraph, fileSet: Set<string>, donors: readonly { readonly name: string; readonly root: string }[]): ConsumerRef[] {
   const byFile = new Map<string, Set<string>>();
   const donorRoots = new Set(donors.map((d) => d.root));
 
@@ -136,12 +136,7 @@ function collectConsumers(
   }
 
   return [...byFile.entries()]
-    .map(([file, specifiers]) => ({
-      file,
-      owner: graph.nodes.get(file)?.owner ?? "",
-      specifiers: [...specifiers].sort(byCodeUnit),
-      external: false,
-    }))
+    .map(([file, specifiers]) => ({ file, owner: graph.nodes.get(file)?.owner ?? "", specifiers: [...specifiers].sort(byCodeUnit), external: false }))
     .sort((a, b) => byCodeUnit(a.file, b.file));
 }
 
@@ -150,12 +145,6 @@ function consolidationId(
   donors: readonly { readonly name: string; readonly root: string }[],
   files: readonly string[],
 ): string {
-  const identity = [
-    "consolidation",
-    target.name,
-    ...donors.map((d) => d.name).sort(),
-    "--files--",
-    ...[...files].sort(byCodeUnit),
-  ].join("\n");
+  const identity = ["consolidation", target.name, ...donors.map((d) => d.name).sort(), "--files--", ...[...files].sort(byCodeUnit)].join("\n");
   return `c-${hashText(identity).slice(0, 12)}`;
 }

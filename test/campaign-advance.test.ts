@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  advanceCampaign,
-  type CampaignCompileNextInput,
-  type CampaignRescanInput,
-} from "../src/campaign/advance.ts";
+import { advanceCampaign, type CampaignCompileNextInput, type CampaignRescanInput } from "../src/campaign/advance.ts";
 import {
   appendCampaignChild,
   createCampaignLedger,
@@ -146,7 +142,9 @@ describe("campaign advancement", () => {
   test("refuses a stale checkout before rescanning or compiling", async () => {
     const callback = callbacks(child("extraction"));
 
-    await expect(advanceCampaign({ campaign: appliedPreparation(), ...callback, headCommit: () => "different-head" })).rejects.toThrow("campaign HEAD is stale");
+    await expect(advanceCampaign({ campaign: appliedPreparation(), ...callback, headCommit: () => "different-head" })).rejects.toThrow(
+      "campaign HEAD is stale",
+    );
 
     expect(callback.calls).toEqual({ rescans: [], compiles: [] });
   });
@@ -200,22 +198,14 @@ describe("campaign advancement", () => {
 
   test("durably completes a fully applied campaign when review finds no next child", async () => {
     const campaign = appliedExtraction();
-    const result = await advanceCampaign({
-      campaign,
-      headCommit: () => EXTRACTED,
-      rescan: () => EXTRACTION_GRAPH,
-      compileNext: () => undefined,
-    });
+    const result = await advanceCampaign({ campaign, headCommit: () => EXTRACTED, rescan: () => EXTRACTION_GRAPH, compileNext: () => undefined });
 
     expect(result).toMatchObject({ outcome: "stopped", reason: "no-next-child", campaign: { status: "completed" } });
   });
 
   test("refuses to call a preparation-only campaign complete when no child is available", async () => {
-    await expect(advanceCampaign({
-      campaign: appliedPreparation(),
-      headCommit: () => APPLIED,
-      rescan: () => RESCANNED_GRAPH,
-      compileNext: () => undefined,
-    })).rejects.toThrow("before an applied extraction closes the current pair");
+    await expect(
+      advanceCampaign({ campaign: appliedPreparation(), headCommit: () => APPLIED, rescan: () => RESCANNED_GRAPH, compileNext: () => undefined }),
+    ).rejects.toThrow("before an applied extraction closes the current pair");
   });
 });

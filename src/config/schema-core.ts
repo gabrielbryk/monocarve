@@ -117,7 +117,11 @@ export const gates = z.strictObject({
   /** Whole-workspace gates: lint, format, typecheck, test. The expensive tier. */
   workspace: z.array(z.string().min(1)).default([]),
   /** Per-command timeout in milliseconds. */
-  timeoutMs: z.number().int().positive().default(20 * 60 * 1000),
+  timeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .default(20 * 60 * 1000),
   /**
    * Maximum number of commands that may run at once within one gate tier.
    * Tiers remain ordered: package gates finish before project gates begin, and
@@ -163,10 +167,7 @@ export const preparationCommitTemplate = z.strictObject({
  * config load time, but a planner must refuse it rather than certify no gates
  * or invent a commit subject.
  */
-export const preparationPolicy = z.strictObject({
-  gates: preparationGates.optional(),
-  commit: preparationCommitTemplate.optional(),
-}).prefault({});
+export const preparationPolicy = z.strictObject({ gates: preparationGates.optional(), commit: preparationCommitTemplate.optional() }).prefault({});
 
 export type PreparationGateTemplatesConfig = z.output<typeof preparationGates>;
 export type PreparationCommitTemplateConfig = z.output<typeof preparationCommitTemplate>;
@@ -185,45 +186,59 @@ export type PreparationPolicyConfig = z.output<typeof preparationPolicy>;
  * Templates receive `{app}`, `{package}`, `{packageRoot}`, `{planId}`,
  * `{sourcePath}`, and `{targetPath}` from one reviewed move operation.
  */
-export const preparer = z.strictObject({
-  id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "must be a lowercase kebab-case identifier"),
-  phase: z.literal("pre-extraction"),
-  command: z.string().min(1).optional(),
-  replacements: z.array(z.strictObject({
-    path: z.string().min(1),
-    before: z.string().min(1),
-    after: z.string(),
-    prefix: z.string().min(1).optional(),
-    suffix: z.string().min(1).optional(),
-  }).superRefine((replacement, ctx) => {
-    if (replacement.prefix === undefined && replacement.suffix === undefined) {
-      ctx.addIssue({ code: "custom", message: "text replacement must configure prefix or suffix context" });
+export const preparer = z
+  .strictObject({
+    id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "must be a lowercase kebab-case identifier"),
+    phase: z.literal("pre-extraction"),
+    command: z.string().min(1).optional(),
+    replacements: z
+      .array(
+        z
+          .strictObject({
+            path: z.string().min(1),
+            before: z.string().min(1),
+            after: z.string(),
+            prefix: z.string().min(1).optional(),
+            suffix: z.string().min(1).optional(),
+          })
+          .superRefine((replacement, ctx) => {
+            if (replacement.prefix === undefined && replacement.suffix === undefined) {
+              ctx.addIssue({ code: "custom", message: "text replacement must configure prefix or suffix context" });
+            }
+          }),
+      )
+      .min(1)
+      .optional(),
+    creates: z
+      .array(z.strictObject({ path: z.string().min(1), contents: z.string(), mode: z.union([z.literal(0o644), z.literal(0o755)]).optional() }))
+      .min(1)
+      .optional(),
+    outputs: z.array(z.string().min(1)).default([]),
+    verify: z.string().min(1).optional(),
+    commit: z.strictObject({
+      subject: z
+        .string()
+        .min(1)
+        .refine((value) => !value.includes("\n"), { message: "commit subject must be a single line" }),
+      body: z.string().optional(),
+    }),
+  })
+  .superRefine((item, ctx) => {
+    if (item.command === undefined && item.replacements === undefined && item.creates === undefined) {
+      ctx.addIssue({ code: "custom", message: "preparer must configure command, replacements, or creates" });
     }
-  })).min(1).optional(),
-  creates: z.array(z.strictObject({
-    path: z.string().min(1),
-    contents: z.string(),
-    mode: z.union([z.literal(0o644), z.literal(0o755)]).optional(),
-  })).min(1).optional(),
-  outputs: z.array(z.string().min(1)).default([]),
-  verify: z.string().min(1).optional(),
-  commit: z.strictObject({
-    subject: z.string().min(1).refine((value) => !value.includes("\n"), { message: "commit subject must be a single line" }),
-    body: z.string().optional(),
-  }),
-}).superRefine((item, ctx) => {
-  if (item.command === undefined && item.replacements === undefined && item.creates === undefined) {
-    ctx.addIssue({ code: "custom", message: "preparer must configure command, replacements, or creates" });
-  }
-});
+  });
 
-export const preparers = z.array(preparer).default([]).superRefine((items, ctx) => {
-  const seen = new Set<string>();
-  for (const [index, item] of items.entries()) {
-    if (seen.has(item.id)) ctx.addIssue({ code: "custom", path: [index, "id"], message: "preparer id must be unique" });
-    seen.add(item.id);
-  }
-});
+export const preparers = z
+  .array(preparer)
+  .default([])
+  .superRefine((items, ctx) => {
+    const seen = new Set<string>();
+    for (const [index, item] of items.entries()) {
+      if (seen.has(item.id)) ctx.addIssue({ code: "custom", path: [index, "id"], message: "preparer id must be unique" });
+      seen.add(item.id);
+    }
+  });
 
 export type PreparerConfig = z.output<typeof preparer>;
 
@@ -287,10 +302,7 @@ export const scaffoldTemplates = z.strictObject({
    */
   devDependencies: z.record(z.string().min(1), z.string().min(1)).prefault({}),
   /** Extra dev dependencies keyed by an inferred runtime or dev dependency. */
-  devDependenciesByDependency: z.record(
-    z.string().min(1),
-    z.record(z.string().min(1), z.string().min(1)),
-  ).prefault({}),
+  devDependenciesByDependency: z.record(z.string().min(1), z.record(z.string().min(1), z.string().min(1))).prefault({}),
   /**
    * Statement template appended to the generated entrypoint barrel for each
    * moved production file. `{specifier}` is the package-relative specifier.

@@ -27,9 +27,7 @@ describe("prune worktrees", () => {
   test("reclaims a worktree whose run was interrupted", async () => {
     const root = fixtureRepo(FILES);
     const worktreeRoot = scratchDirectory();
-    const worktree = await createWorktree({
-      rootDir: root, commit: fixtureGit(root, "rev-parse", "HEAD"), worktreeRoot, nodeModules: "none",
-    });
+    const worktree = await createWorktree({ rootDir: root, commit: fixtureGit(root, "rev-parse", "HEAD"), worktreeRoot, nodeModules: "none" });
     // No dispose: exactly what a killed process leaves behind.
     age(worktree.path, 2 * HOUR);
 
@@ -43,9 +41,7 @@ describe("prune worktrees", () => {
   test("skips a worktree younger than the threshold, which may be a live run", async () => {
     const root = fixtureRepo(FILES);
     const worktreeRoot = scratchDirectory();
-    const worktree = await createWorktree({
-      rootDir: root, commit: fixtureGit(root, "rev-parse", "HEAD"), worktreeRoot, nodeModules: "none",
-    });
+    const worktree = await createWorktree({ rootDir: root, commit: fixtureGit(root, "rev-parse", "HEAD"), worktreeRoot, nodeModules: "none" });
 
     const result = await pruneWorktrees(root, worktreeRoot, { minimumAgeMs: HOUR });
 
@@ -58,9 +54,7 @@ describe("prune worktrees", () => {
   test("removes regardless of age when no threshold is given", async () => {
     const root = fixtureRepo(FILES);
     const worktreeRoot = scratchDirectory();
-    const worktree = await createWorktree({
-      rootDir: root, commit: fixtureGit(root, "rev-parse", "HEAD"), worktreeRoot, nodeModules: "none",
-    });
+    const worktree = await createWorktree({ rootDir: root, commit: fixtureGit(root, "rev-parse", "HEAD"), worktreeRoot, nodeModules: "none" });
 
     const result = await pruneWorktrees(root, worktreeRoot);
 

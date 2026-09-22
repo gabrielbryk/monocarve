@@ -39,7 +39,8 @@ export function assertReconciliationRecordValid(record: ReconciliationRecord): v
     if (discrepancy.expected === discrepancy.actual) fail(`discrepancy ${discrepancy.path} does not differ`);
     if (discrepancy.ownership !== "operation" && discrepancy.ownership !== "generated-artifact") fail(`invalid ownership for ${discrepancy.path}`);
     if (!strictlyIncreasing(discrepancy.operationIndexes)) fail(`operation indexes for ${discrepancy.path} must be unique and sorted`);
-    if (discrepancy.ownership === "operation" && discrepancy.operationIndexes.length === 0) fail(`operation-owned discrepancy ${discrepancy.path} names no operation`);
+    if (discrepancy.ownership === "operation" && discrepancy.operationIndexes.length === 0)
+      fail(`operation-owned discrepancy ${discrepancy.path} names no operation`);
   }
   if (hashJson(payload.observed.audit) !== payload.observed.auditDigest) fail("observed audit digest does not match its report");
   sha(payload.observed.auditDigest, "observed audit digest");
@@ -53,8 +54,15 @@ export function assertReconcilableAudit(report: AuditReport): void {
   if (report.passed || (report.byteFidelity.passed && report.generatedArtifacts.passed)) {
     fail("reconciliation requires a failed byte-fidelity or generated-artifact proof");
   }
-  const structural = [report.consumerCompleteness, report.boundaryRules, report.externalConsumerCompile, report.codemodReplay,
-    report.entrypointClosure, report.lockfileIntegrity, report.sourceConservation];
+  const structural = [
+    report.consumerCompleteness,
+    report.boundaryRules,
+    report.externalConsumerCompile,
+    report.codemodReplay,
+    report.entrypointClosure,
+    report.lockfileIntegrity,
+    report.sourceConservation,
+  ];
   if (structural.some((proof) => !proof.passed) || !report.graphEvidence.passed || report.unauditable?.length) {
     fail("structural or semantic audit failures cannot be reconciled as byte drift");
   }
@@ -107,7 +115,15 @@ function strictlyIncreasing(values: readonly number[]): boolean {
   return values.every((value, index) => Number.isSafeInteger(value) && value >= 0 && (index === 0 || value > values[index - 1]!));
 }
 
-function sha(value: string, label: string): void { if (!isSha256(value)) fail(`${label} must be sha256`); }
-function commit(value: string, label: string): void { if (!/^[0-9a-f]{40}$/.test(value)) fail(`${label} must be a full commit id`); }
-function nonEmpty(value: string, label: string): void { if (value.trim().length === 0) fail(`${label} must be non-empty`); }
-function fail(message: string): never { throw new ReconciliationValidationError(message); }
+function sha(value: string, label: string): void {
+  if (!isSha256(value)) fail(`${label} must be sha256`);
+}
+function commit(value: string, label: string): void {
+  if (!/^[0-9a-f]{40}$/.test(value)) fail(`${label} must be a full commit id`);
+}
+function nonEmpty(value: string, label: string): void {
+  if (value.trim().length === 0) fail(`${label} must be non-empty`);
+}
+function fail(message: string): never {
+  throw new ReconciliationValidationError(message);
+}

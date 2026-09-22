@@ -24,11 +24,13 @@ export function collectDependencyUsage(input: {
   const retained = new Map(names.map((name) => [name, [] as string[]]));
   for (const path of input.context.repositorySources()) {
     if (moved.has(path) || input.context.ownerOf(path) !== input.donorRoot) continue;
-    const used = new Set(input.context.moduleReferences(path).flatMap((reference) => {
-      if (reference.specifier === null || reference.specifier.startsWith(".")) return [];
-      const name = input.context.packageNameOf(reference.specifier);
-      return name === undefined ? [] : [name];
-    }));
+    const used = new Set(
+      input.context.moduleReferences(path).flatMap((reference) => {
+        if (reference.specifier === null || reference.specifier.startsWith(".")) return [];
+        const name = input.context.packageNameOf(reference.specifier);
+        return name === undefined ? [] : [name];
+      }),
+    );
     for (const name of used) retained.get(name)?.push(path);
   }
   const configTypes = configuredTypes(input.context, input.donorRoot);
@@ -41,18 +43,21 @@ export function collectDependencyUsage(input: {
 }
 
 function configuredTypes(context: WorkspaceContext, donorRoot: string): { tsconfig: string; type: string; packages: readonly string[] }[] {
-  return context.config.applications.filter((application) => applicationOwner(application) === donorRoot)
+  return context.config.applications
+    .filter((application) => applicationOwner(application) === donorRoot)
     .flatMap((application) => {
-      const parsed = ts.getParsedCommandLineOfConfigFile(resolve(context.rootDir, application.tsconfig), {}, {
-        ...ts.sys,
-        onUnRecoverableConfigFileDiagnostic: () => undefined,
-      });
+      const parsed = ts.getParsedCommandLineOfConfigFile(
+        resolve(context.rootDir, application.tsconfig),
+        {},
+        { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => undefined },
+      );
       return (parsed?.options.types ?? []).map((type) => ({
         tsconfig: application.tsconfig,
         type,
         packages: [...new Set([inputPackageName(context, type), typesPackageName(type)].filter((name): name is string => name !== undefined))],
       }));
-    }).sort((left, right) => byCodeUnit(left.tsconfig, right.tsconfig) || byCodeUnit(left.type, right.type));
+    })
+    .sort((left, right) => byCodeUnit(left.tsconfig, right.tsconfig) || byCodeUnit(left.type, right.type));
 }
 
 function inputPackageName(context: WorkspaceContext, type: string): string | undefined {

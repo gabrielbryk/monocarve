@@ -6,8 +6,8 @@ Read this before touching anything in this repository.
 
 This is the rule that outranks the others. Every fact about a particular
 repository lives in `src/config.ts` and nowhere else. Before adding any
-constant, ask whether it is a fact about *this tool* or a fact about *some
-workspace*. The second kind is a config field.
+constant, ask whether it is a fact about _this tool_ or a fact about _some
+workspace_. The second kind is a config field.
 
 Concretely, this is a defect anywhere in `src/`:
 
@@ -50,7 +50,7 @@ decision.
 - **Git is selected by `cwd` alone.** Every git invocation goes through
   `src/util/git.ts`, which strips `GIT_INDEX_FILE`, `GIT_DIR`, `GIT_WORK_TREE`
   and friends from the child environment. Inheriting them lets a command run
-  under a hook write into a *different* repository's index while `cwd` looks
+  under a hook write into a _different_ repository's index while `cwd` looks
   correct. Never call `execFileSync("git", …)` directly, in `src/` or in tests.
 
 ## 3. Proof discipline

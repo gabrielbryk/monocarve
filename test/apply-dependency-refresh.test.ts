@@ -25,7 +25,9 @@ describe("committed dependency refresh", () => {
       const root = fixtureRepo({ "README.md": "fixture\n" });
       const config = fixtureConfig(root, { transaction: { worktreeRoot: ".scratch", nodeModules, cleanup: true } });
       let called = false;
-      refreshCommittedDependencies(config, root, () => { called = true; });
+      refreshCommittedDependencies(config, root, () => {
+        called = true;
+      });
       expect(called).toBe(false);
     }
   });

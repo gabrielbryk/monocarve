@@ -29,11 +29,6 @@ export interface InferredDependencies {
   resolutionRoots?: Readonly<Record<string, readonly string[]>>;
 }
 
-export function inferDependencies(
-  context: WorkspaceContext,
-  graph: DependencyGraph,
-  sources: readonly string[],
-  packageName: string,
-): InferredDependencies {
+export function inferDependencies(context: WorkspaceContext, graph: DependencyGraph, sources: readonly string[], packageName: string): InferredDependencies {
   return resolveDependencies(context, graph, collectDependencyEvidence(context, graph, sources, packageName));
 }

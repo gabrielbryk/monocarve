@@ -56,9 +56,7 @@ export function assertCampaignLedgerValid(ledger: CampaignLedger): void {
     assertChildIdentity(child, index, childIds, planIds);
     assertChildSequence(ledger.children[index - 1], child, completedPairs);
     if (child.baselineCommit !== expectedCommit) {
-      throw new CampaignLedgerValidationError(
-        `stale or misordered child ${child.id}: baseline ${child.baselineCommit}, expected ${expectedCommit}`,
-      );
+      throw new CampaignLedgerValidationError(`stale or misordered child ${child.id}: baseline ${child.baselineCommit}, expected ${expectedCommit}`);
     }
     if (pending) throw new CampaignLedgerValidationError(`child ${child.id} follows an un-applied child`);
     if (child.status === "planned") {
@@ -93,9 +91,7 @@ export function assertAppendableChild(ledger: CampaignLedger, child: CampaignChi
   nonEmpty(child.baselineCommit, "child baseline commit");
   if (child.graphDigest !== undefined && !isSha256(child.graphDigest)) throw new CampaignLedgerValidationError(`invalid graph digest for child ${child.id}`);
   if (child.baselineCommit !== ledger.currentCommit) {
-    throw new CampaignLedgerValidationError(
-      `stale child ${child.id}: baseline ${child.baselineCommit}, campaign is at ${ledger.currentCommit}`,
-    );
+    throw new CampaignLedgerValidationError(`stale child ${child.id}: baseline ${child.baselineCommit}, campaign is at ${ledger.currentCommit}`);
   }
   if (ledger.children.some((entry) => entry.id === child.id)) throw new CampaignLedgerValidationError(`duplicate child id: ${child.id}`);
   if (ledger.children.some((entry) => entry.planId === child.planId)) throw new CampaignLedgerValidationError(`duplicate child plan id: ${child.planId}`);
@@ -170,11 +166,7 @@ function assertGraphSnapshot(snapshot: GraphMetricSnapshot, label: string): void
   }
 }
 
-function assertChildSequence(
-  previous: CampaignChildRecord | undefined,
-  child: CampaignChildRecord,
-  completedPairs: ReadonlySet<string>,
-): void {
+function assertChildSequence(previous: CampaignChildRecord | undefined, child: CampaignChildRecord, completedPairs: ReadonlySet<string>): void {
   if (previous === undefined) {
     if (child.kind !== "preparation") throw new CampaignLedgerValidationError(`first child ${child.id} must be a preparation`);
     if (completedPairs.has(child.pairId)) throw new CampaignLedgerValidationError(`duplicate completed pair id: ${child.pairId}`);

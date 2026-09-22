@@ -18,11 +18,11 @@ import { applicationOwner } from "../config/helpers.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
 import { relativePosix } from "../util/paths.ts";
 
+import { ensureScratchDir } from "../util/scratch-root.ts";
 import { partitionTypes } from "./external-consumer/ambient-types.ts";
 import { externalDependencyPaths } from "./external-consumer/dependency-paths.ts";
 import { writeExternalConsumerFixture } from "./external-consumer/fixture.ts";
 import { workspacePaths } from "./external-consumer/workspace-paths.ts";
-import { ensureScratchDir } from "../util/scratch-root.ts";
 
 export interface ExternalConsumerProof {
   readonly passed: boolean;
@@ -68,15 +68,8 @@ export function compileExternalConsumer(options: CompileExternalConsumerOptions)
     // build would see are available here too.
     const workspaceTypes = workspacePackageTypes(config, rootDir);
     const requestedTypes = [...new Set([...application.compilerProfile.types, ...configured, ...workspaceTypes])];
-    const declaredTypes = partitionTypes(
-      requestedTypes,
-      installedRoot,
-      compilerOptions,
-      owners,
-    );
-    const resolvedTypesByName = new Map(
-      declaredTypes.types.map((name) => [name, resolveTypeFile(name, installedRoot, compilerOptions, owners)] as const),
-    );
+    const declaredTypes = partitionTypes(requestedTypes, installedRoot, compilerOptions, owners);
+    const resolvedTypesByName = new Map(declaredTypes.types.map((name) => [name, resolveTypeFile(name, installedRoot, compilerOptions, owners)] as const));
     const ownerResolvedTypes = [...resolvedTypesByName.values()].flat();
     const unresolvedTypes = declaredTypes.types.filter((name) => resolvedTypesByName.get(name)?.length === 0);
     const configuredAmbient = configured.flatMap((name) => resolveTypeFile(name, installedRoot, compilerOptions, owners));
@@ -89,10 +82,7 @@ export function compileExternalConsumer(options: CompileExternalConsumerOptions)
       // exactly the lookup that just failed for it.
       ...(requestedTypes.length > 0 ? { types: unresolvedTypes } : {}),
     });
-    const diagnostics = [
-      ...ts.getPreEmitDiagnostics(program).map(formatDiagnostic),
-      ...typeOnlyImportDiagnostics(program, fixture),
-    ];
+    const diagnostics = [...ts.getPreEmitDiagnostics(program).map(formatDiagnostic), ...typeOnlyImportDiagnostics(program, fixture)];
     return { passed: diagnostics.length === 0, fixture, diagnostics };
   } finally {
     rmSync(fixtureRoot, { recursive: true, force: true });
@@ -140,12 +130,7 @@ function formatDiagnostic(diagnostic: ts.Diagnostic): string {
   return `${diagnostic.file.fileName}(${position.line + 1},${position.character + 1}): TS${diagnostic.code}: ${message}`;
 }
 
-function compilerOptionsFor(
-  config: MonocarveConfig,
-  manifest: ExtractionManifest,
-  rootDir: string,
-  installedRoot: string,
-): ts.CompilerOptions {
+function compilerOptionsFor(config: MonocarveConfig, manifest: ExtractionManifest, rootDir: string, installedRoot: string): ts.CompilerOptions {
   const application = getApplication(config, manifest.application);
   const profile = application.compilerProfile;
   const entrypoint = resolve(rootDir, manifest.target.packageRoot, manifest.target.entrypoint);
@@ -155,15 +140,18 @@ function compilerOptionsFor(
   // requires JSX support even when the application profile omitted an
   // explicit jsx field and relied on its root tsconfig.
   const jsx = manifest.operations.some((operation) => operation.kind === "move" && operation.target.endsWith(".tsx"))
-    ? (profile.jsx || ts.JsxEmit.ReactJSX)
+    ? profile.jsx || ts.JsxEmit.ReactJSX
     : profile.jsx;
   return {
     target: ts.ScriptTarget.ES2022,
-    lib: [...new Set([
-      ...configuredLib.filter((value): value is string => typeof value === "string").map((value) =>
-        value.toLowerCase().startsWith("lib.") ? value.toLowerCase() : `lib.${value.toLowerCase()}.d.ts`),
-      ...profile.lib,
-    ])],
+    lib: [
+      ...new Set([
+        ...configuredLib
+          .filter((value): value is string => typeof value === "string")
+          .map((value) => (value.toLowerCase().startsWith("lib.") ? value.toLowerCase() : `lib.${value.toLowerCase()}.d.ts`)),
+        ...profile.lib,
+      ]),
+    ],
     ...moduleOptions(profile.moduleResolution),
     strict: true,
     noEmit: true,
@@ -245,10 +233,7 @@ function configuredTypes(rootDir: string, tsconfig: string): string[] {
  */
 function configuredAmbientDeclarationFiles(rootDir: string, tsconfig: string): string[] {
   const configPath = resolve(rootDir, tsconfig);
-  const parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, {
-    ...ts.sys,
-    onUnRecoverableConfigFileDiagnostic: () => undefined,
-  });
+  const parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => undefined });
   return parsed?.fileNames.filter((file) => file.endsWith(".d.ts")) ?? [];
 }
 
@@ -272,11 +257,7 @@ function typeRootsFor(config: MonocarveConfig, manifest: ExtractionManifest, ins
 
 /** Every directory a `node_modules` lookup for this extraction could plausibly start from. */
 function ownerRootsFor(config: MonocarveConfig, manifest: ExtractionManifest): string[] {
-  return [
-    ...config.applications.map(applicationOwner),
-    manifest.target.packageRoot,
-    "",
-  ];
+  return [...config.applications.map(applicationOwner), manifest.target.packageRoot, ""];
 }
 
 /** Read a file relative to a tree without throwing when it is absent. */

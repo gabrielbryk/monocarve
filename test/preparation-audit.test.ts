@@ -56,9 +56,7 @@ describe("preparation audit", () => {
     });
 
     expect(report.byteReplay.passed).toBe(true);
-    expect(report.fileModes.failures).toEqual([
-      `landed mode differs: ${DONOR} (expected 420, got 493)`,
-    ]);
+    expect(report.fileModes.failures).toEqual([`landed mode differs: ${DONOR} (expected 420, got 493)`]);
   });
 
   test("fails each proof when target bytes, selector ownership, surface, or scope is false", () => {
@@ -70,23 +68,27 @@ describe("preparation audit", () => {
     const tampered: PreparationManifest = {
       ...base,
       declarations: [duplicate, duplicate],
-      operations: base.operations.map((operation) => operation.kind === "extract-type-declarations"
-        ? {
-            ...operation,
-            declarations: [duplicate, duplicate],
-            targetImportProofs: [{
-              originalSpecifier: "./contracts-types.ts",
-              targetSpecifier: "./rewritten-contracts.ts",
-              resolvedSourcePath: TARGET,
-              localName: "Contract",
-              importedName: "Contract",
-              kind: "named",
-              originallyTypeOnly: true,
-              requiredAs: "type",
-              proofBaselineHash: hashText(ORIGINAL),
-            }],
-          }
-        : operation),
+      operations: base.operations.map((operation) =>
+        operation.kind === "extract-type-declarations"
+          ? {
+              ...operation,
+              declarations: [duplicate, duplicate],
+              targetImportProofs: [
+                {
+                  originalSpecifier: "./contracts-types.ts",
+                  targetSpecifier: "./rewritten-contracts.ts",
+                  resolvedSourcePath: TARGET,
+                  localName: "Contract",
+                  importedName: "Contract",
+                  kind: "named",
+                  originallyTypeOnly: true,
+                  requiredAs: "type",
+                  proofBaselineHash: hashText(ORIGINAL),
+                },
+              ],
+            }
+          : operation,
+      ),
       compatibilityReexports: [{ ...base.compatibilityReexports[0]!, exports: [{ name: "Contract", typeOnly: true }] }],
     };
     // This changes the compatibility surface without changing the declared
@@ -141,12 +143,11 @@ describe("preparation audit", () => {
     write(root, DONOR, wrongDonor);
     const tampered: PreparationManifest = {
       ...base,
-      operations: base.operations.map((operation) => operation.kind === "extract-type-declarations" ? {
-        ...operation,
-        donor: { ...operation.donor, resultHash: hashText(wrongDonor) },
-        moduleSpecifier: wrongSpecifier,
-        donorContents: wrongDonor,
-      } : operation),
+      operations: base.operations.map((operation) =>
+        operation.kind === "extract-type-declarations"
+          ? { ...operation, donor: { ...operation.donor, resultHash: hashText(wrongDonor) }, moduleSpecifier: wrongSpecifier, donorContents: wrongDonor }
+          : operation,
+      ),
       compatibilityReexports: base.compatibilityReexports.map((intent) => ({ ...intent, moduleSpecifier: wrongSpecifier })),
     };
 
@@ -159,9 +160,7 @@ describe("preparation audit", () => {
     });
 
     expect(report.byteReplay.passed).toBe(true);
-    expect(report.typeValueClaims.failures).toContain(
-      "compatibility export resolves to a different target symbol: apps/api/src/contracts.ts:Contract",
-    );
+    expect(report.typeValueClaims.failures).toContain("compatibility export resolves to a different target symbol: apps/api/src/contracts.ts:Contract");
   });
 
   test("fails a type-only compatibility re-export that dangles after target tampering", () => {
@@ -178,9 +177,7 @@ describe("preparation audit", () => {
     });
 
     expect(report.compatibilitySurface.passed).toBe(true);
-    expect(report.typeValueClaims.failures).toContain(
-      "compatibility export does not resolve from donor to target: apps/api/src/contracts.ts:Contract",
-    );
+    expect(report.typeValueClaims.failures).toContain("compatibility export does not resolve from donor to target: apps/api/src/contracts.ts:Contract");
   });
 
   test("does not mistake a comment containing the selected bytes for target ownership", () => {
@@ -196,9 +193,7 @@ describe("preparation audit", () => {
       freshGraph: { commit: fixtureGit(root, "rev-parse", "HEAD"), digest: hashText("fixture-graph") },
     });
 
-    expect(report.declarationOwnership.failures).toContain(
-      "target does not own selected declaration exactly once: apps/api/src/contracts.ts:Contract",
-    );
+    expect(report.declarationOwnership.failures).toContain("target does not own selected declaration exactly once: apps/api/src/contracts.ts:Contract");
     expect(report.declarationOwnership.failures).toContain(
       "target contains an unproven type declaration: apps/api/src/contracts-types.ts:InterfaceDeclaration",
     );
@@ -209,14 +204,18 @@ describe("preparation audit", () => {
     const base = manifest(root);
     const tampered: PreparationManifest = {
       ...base,
-      operations: base.operations.map((operation) => operation.kind === "extract-type-declarations" ? {
-        ...operation,
-        targetDeclarationProofs: operation.targetDeclarationProofs.map((proof) => ({
-          ...proof,
-          targetExtractionEnd: proof.targetExtractionEnd + 1,
-          targetExtractionHash: hashText(`${EXTRACTED}\n`),
-        })),
-      } : operation),
+      operations: base.operations.map((operation) =>
+        operation.kind === "extract-type-declarations"
+          ? {
+              ...operation,
+              targetDeclarationProofs: operation.targetDeclarationProofs.map((proof) => ({
+                ...proof,
+                targetExtractionEnd: proof.targetExtractionEnd + 1,
+                targetExtractionHash: hashText(`${EXTRACTED}\n`),
+              })),
+            }
+          : operation,
+      ),
     };
 
     const report = auditPreparationSync({
@@ -227,9 +226,7 @@ describe("preparation audit", () => {
       freshGraph: { commit: fixtureGit(root, "rev-parse", "HEAD"), digest: hashText("fixture-graph") },
     });
 
-    expect(report.declarationOwnership.failures).toContain(
-      "target does not own selected declaration exactly once: apps/api/src/contracts.ts:Contract",
-    );
+    expect(report.declarationOwnership.failures).toContain("target does not own selected declaration exactly once: apps/api/src/contracts.ts:Contract");
   });
 
   test("fails hash-consistent extra target imports that the recorded recipe never renders", () => {
@@ -240,18 +237,22 @@ describe("preparation audit", () => {
     write(root, TARGET, injectedTarget);
     const tampered: PreparationManifest = {
       ...base,
-      operations: base.operations.map((operation) => operation.kind === "extract-type-declarations" ? {
-        ...operation,
-        target: { ...operation.target, resultHash: hashText(injectedTarget) },
-        targetContents: injectedTarget,
-        targetDeclarationProofs: operation.targetDeclarationProofs.map((proof) => ({
-          ...proof,
-          targetStart: proof.targetStart + prefix.length,
-          targetEnd: proof.targetEnd + prefix.length,
-          targetExtractionStart: proof.targetExtractionStart + prefix.length,
-          targetExtractionEnd: proof.targetExtractionEnd + prefix.length,
-        })),
-      } : operation),
+      operations: base.operations.map((operation) =>
+        operation.kind === "extract-type-declarations"
+          ? {
+              ...operation,
+              target: { ...operation.target, resultHash: hashText(injectedTarget) },
+              targetContents: injectedTarget,
+              targetDeclarationProofs: operation.targetDeclarationProofs.map((proof) => ({
+                ...proof,
+                targetStart: proof.targetStart + prefix.length,
+                targetEnd: proof.targetEnd + prefix.length,
+                targetExtractionStart: proof.targetExtractionStart + prefix.length,
+                targetExtractionEnd: proof.targetExtractionEnd + prefix.length,
+              })),
+            }
+          : operation,
+      ),
     };
 
     const report = auditPreparationSync({
@@ -286,17 +287,13 @@ describe("preparation audit", () => {
 });
 
 function preparedFixture(): string {
-  const root = fixtureRepo({
-    "package.json": '{"name":"fixture","private":true}\n',
-    "apps/api/tsconfig.json": '{"include":["src"]}\n',
-    [DONOR]: ORIGINAL,
-  });
+  const root = fixtureRepo({ "package.json": '{"name":"fixture","private":true}\n', "apps/api/tsconfig.json": '{"include":["src"]}\n', [DONOR]: ORIGINAL });
   fixtureConfig(root);
   write(root, DONOR, DONOR_AFTER);
   write(root, TARGET, TARGET_AFTER);
   chmodSync(`${root}/${DONOR}`, 0o644);
   chmodSync(`${root}/${TARGET}`, 0o644);
-  write(root, MANIFEST_PATH, "{\"plan\":\"provenance only\"}\n");
+  write(root, MANIFEST_PATH, '{"plan":"provenance only"}\n');
   return root;
 }
 
@@ -307,34 +304,29 @@ function manifest(root: string): PreparationManifest {
   const spanHash = hashText(EXTRACTED);
   const declarationId = hashJson({ sourcePath: DONOR, name: "Contract", kind: "interface", start, end, spanHash });
   const extractionHash = hashText(EXTRACTED);
-  const selectorId = hashJson({
-    declarationId,
-    sourcePath: DONOR,
-    sourceHash,
-    extractionStart: start,
-    extractionEnd: end,
-    extractionHash,
-  });
+  const selectorId = hashJson({ declarationId, sourcePath: DONOR, sourceHash, extractionStart: start, extractionEnd: end, extractionHash });
   const groupId = hashJson({ sourcePath: DONOR, name: "Contract", declarationIds: [declarationId] });
   const group = {
     groupId,
     sourcePath: DONOR,
     name: "Contract",
     space: "type" as const,
-    declarations: [{
-      declarationId,
-      selectorId,
-      sourcePath: DONOR,
-      sourceHash,
-      name: "Contract",
-      kind: "interface" as const,
-      space: "type" as const,
-      originallyExported: true,
-      span: { start, end, hash: spanHash },
-      extractionStart: start,
-      extractionEnd: end,
-      extractionHash,
-    }],
+    declarations: [
+      {
+        declarationId,
+        selectorId,
+        sourcePath: DONOR,
+        sourceHash,
+        name: "Contract",
+        kind: "interface" as const,
+        space: "type" as const,
+        originallyExported: true,
+        span: { start, end, hash: spanHash },
+        extractionStart: start,
+        extractionEnd: end,
+        extractionHash,
+      },
+    ],
   };
   return {
     schemaVersion: 1,
@@ -348,32 +340,34 @@ function manifest(root: string): PreparationManifest {
       configDigest: hashText("fixture-config"),
     },
     declarations: [group],
-    operations: [{
-      kind: "extract-type-declarations",
-      donor: { path: DONOR, preconditionHash: sourceHash, preconditionMode: 0o644, resultHash: hashText(DONOR_AFTER), resultMode: 0o644 },
-      target: { path: TARGET, preconditionHash: "missing", preconditionMode: "missing", resultHash: hashText(TARGET_AFTER), resultMode: 0o644 },
-      moduleSpecifier: "./contracts-types.ts",
-      declarations: [group],
-      targetImportProofs: [],
-      targetImports: [],
-      donorImports: [],
-      reExportNames: ["Contract"],
-      targetDeclarationProofs: [{
-        selectorId,
-        targetStart: 0,
-        targetEnd: EXTRACTED.length,
-        targetHash: hashText(EXTRACTED),
-        targetExtractionStart: 0,
-        targetExtractionEnd: EXTRACTED.length,
-        targetExtractionHash: hashText(EXTRACTED),
-        synthesizedExport: false,
-      }],
-      donorContents: DONOR_AFTER,
-      targetContents: TARGET_AFTER,
-    }],
-    compatibilityReexports: [{
-      fromPath: DONOR, toPath: TARGET, moduleSpecifier: "./contracts-types.ts", exports: [{ name: "Contract", typeOnly: true }],
-    }],
+    operations: [
+      {
+        kind: "extract-type-declarations",
+        donor: { path: DONOR, preconditionHash: sourceHash, preconditionMode: 0o644, resultHash: hashText(DONOR_AFTER), resultMode: 0o644 },
+        target: { path: TARGET, preconditionHash: "missing", preconditionMode: "missing", resultHash: hashText(TARGET_AFTER), resultMode: 0o644 },
+        moduleSpecifier: "./contracts-types.ts",
+        declarations: [group],
+        targetImportProofs: [],
+        targetImports: [],
+        donorImports: [],
+        reExportNames: ["Contract"],
+        targetDeclarationProofs: [
+          {
+            selectorId,
+            targetStart: 0,
+            targetEnd: EXTRACTED.length,
+            targetHash: hashText(EXTRACTED),
+            targetExtractionStart: 0,
+            targetExtractionEnd: EXTRACTED.length,
+            targetExtractionHash: hashText(EXTRACTED),
+            synthesizedExport: false,
+          },
+        ],
+        donorContents: DONOR_AFTER,
+        targetContents: TARGET_AFTER,
+      },
+    ],
+    compatibilityReexports: [{ fromPath: DONOR, toPath: TARGET, moduleSpecifier: "./contracts-types.ts", exports: [{ name: "Contract", typeOnly: true }] }],
     changedFiles: [DONOR, TARGET],
     commits: { prepare: { subject: "refactor: prepare contracts" } },
     gates: { package: [], project: [], workspace: [] },
@@ -391,7 +385,7 @@ function privateClosureFixture(): string {
   write(root, TARGET, PRIVATE_TARGET);
   chmodSync(`${root}/${DONOR}`, 0o644);
   chmodSync(`${root}/${TARGET}`, 0o644);
-  write(root, MANIFEST_PATH, "{\"plan\":\"private-provenance\"}\n");
+  write(root, MANIFEST_PATH, '{"plan":"private-provenance"}\n');
   return root;
 }
 
@@ -403,16 +397,18 @@ function privateClosureManifest(root: string): PreparationManifest {
   const target = ts.createSourceFile(TARGET, PRIVATE_TARGET, ts.ScriptTarget.Latest, true);
   const sourceHash = hashText(PRIVATE_ORIGINAL);
   const selectors = original.statements.map((statement, index) => makeSelector(statement, index === 0, sourceHash, original));
-  const targetProofs = target.statements.map((statement, index) => ({
-    selectorId: selectors[index]!.selectorId,
-    targetStart: statement.getStart(target),
-    targetEnd: statement.end,
-    targetHash: hashText(target.text.slice(statement.getStart(target), statement.end)),
-    targetExtractionStart: statement.getFullStart(),
-    targetExtractionEnd: statement.end,
-    targetExtractionHash: hashText(target.text.slice(statement.getFullStart(), statement.end)),
-    synthesizedExport: index === 1,
-  })).sort((left, right) => left.selectorId < right.selectorId ? -1 : left.selectorId > right.selectorId ? 1 : 0);
+  const targetProofs = target.statements
+    .map((statement, index) => ({
+      selectorId: selectors[index]!.selectorId,
+      targetStart: statement.getStart(target),
+      targetEnd: statement.end,
+      targetHash: hashText(target.text.slice(statement.getStart(target), statement.end)),
+      targetExtractionStart: statement.getFullStart(),
+      targetExtractionEnd: statement.end,
+      targetExtractionHash: hashText(target.text.slice(statement.getFullStart(), statement.end)),
+      synthesizedExport: index === 1,
+    }))
+    .sort((left, right) => (left.selectorId < right.selectorId ? -1 : left.selectorId > right.selectorId ? 1 : 0));
   const groups = selectors.map((selector) => ({
     groupId: hashJson({ sourcePath: DONOR, name: selector.name, declarationIds: [selector.declarationId] }),
     sourcePath: DONOR,
@@ -424,29 +420,29 @@ function privateClosureManifest(root: string): PreparationManifest {
     ...manifest(root),
     graphDigest: hashText("private-graph"),
     declarations: groups,
-    operations: [{
-      kind: "extract-type-declarations",
-      donor: { path: DONOR, preconditionHash: sourceHash, preconditionMode: 0o644, resultHash: hashText(readPrivateDonor()), resultMode: 0o644 },
-      target: { path: TARGET, preconditionHash: "missing", preconditionMode: "missing", resultHash: hashText(PRIVATE_TARGET), resultMode: 0o644 },
-      moduleSpecifier: "./contracts-types.ts",
-      declarations: groups,
-      targetImportProofs: [],
-      targetImports: [],
-      donorImports: [],
-      reExportNames: ["Public"],
-      targetDeclarationProofs: targetProofs,
-      donorContents: readPrivateDonor(),
-      targetContents: PRIVATE_TARGET,
-    }],
-    compatibilityReexports: [{
-      fromPath: DONOR, toPath: TARGET, moduleSpecifier: "./contracts-types.ts", exports: [{ name: "Public", typeOnly: true }],
-    }],
+    operations: [
+      {
+        kind: "extract-type-declarations",
+        donor: { path: DONOR, preconditionHash: sourceHash, preconditionMode: 0o644, resultHash: hashText(readPrivateDonor()), resultMode: 0o644 },
+        target: { path: TARGET, preconditionHash: "missing", preconditionMode: "missing", resultHash: hashText(PRIVATE_TARGET), resultMode: 0o644 },
+        moduleSpecifier: "./contracts-types.ts",
+        declarations: groups,
+        targetImportProofs: [],
+        targetImports: [],
+        donorImports: [],
+        reExportNames: ["Public"],
+        targetDeclarationProofs: targetProofs,
+        donorContents: readPrivateDonor(),
+        targetContents: PRIVATE_TARGET,
+      },
+    ],
+    compatibilityReexports: [{ fromPath: DONOR, toPath: TARGET, moduleSpecifier: "./contracts-types.ts", exports: [{ name: "Public", typeOnly: true }] }],
     changedFiles: [DONOR, TARGET],
   };
 }
 
 function makeSelector(statement: ts.Statement, originallyExported: boolean, sourceHash: string, source: ts.SourceFile) {
-  const kind = ts.isInterfaceDeclaration(statement) ? "interface" as const : "type-alias" as const;
+  const kind = ts.isInterfaceDeclaration(statement) ? ("interface" as const) : ("type-alias" as const);
   const name = (statement as ts.InterfaceDeclaration | ts.TypeAliasDeclaration).name.text;
   const start = statement.getStart(source);
   const end = statement.end;

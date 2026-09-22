@@ -85,14 +85,14 @@ import { chmodSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { pnpmAdapter } from "../../src/adapters/pnpm.ts";
+import { CONFIG_BASENAME } from "../../src/branding.ts";
 import { rewriteResolvedImportSpecifier } from "../../src/codemod/imports.ts";
+import type { MonocarveConfig } from "../../src/config.ts";
+import type { ExtractionManifest, PlanOperation } from "../../src/plan/manifest.ts";
 import { assertPlanValid } from "../../src/plan/validate.ts";
 import { fileState } from "../../src/util/files.ts";
 import { hashText } from "../../src/util/hash.ts";
-import type { ExtractionManifest, PlanOperation } from "../../src/plan/manifest.ts";
 import { fixtureConfig, fixtureGit, fixtureRepo, read, write } from "./fixture-repo.ts";
-import { CONFIG_BASENAME } from "../../src/branding.ts";
-import type { MonocarveConfig } from "../../src/config.ts";
 
 export { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, read, write } from "./fixture-repo.ts";
 
@@ -112,10 +112,7 @@ export const BARREL = 'export * from "./widget/widget.ts";\n';
 const TOKENS_TEXT = "export const tokens = 1;\n";
 
 export const LOCKFILE = ["lockfileVersion: '9.0'", "", "importers:", "", "  .: {}", "", "  libs/zeta: {}", ""].join("\n");
-export const IMPORTER_BLOCK = pnpmAdapter.importerBlock(
-  LOCKFILE.replace("  libs/zeta: {}", "  libs/analytics: {}\n\n  libs/zeta: {}"),
-  PACKAGE_ROOT,
-)!;
+export const IMPORTER_BLOCK = pnpmAdapter.importerBlock(LOCKFILE.replace("  libs/zeta: {}", "  libs/analytics: {}\n\n  libs/zeta: {}"), PACKAGE_ROOT)!;
 export const LOCKFILE_APPLIED = pnpmAdapter.insertImporter(LOCKFILE, PACKAGE_ROOT, IMPORTER_BLOCK);
 
 export function packageManifest(name: string): string {
@@ -167,14 +164,7 @@ export function baseManifest(root: string): ExtractionManifest {
       preconditionHash: hashText(consumerText),
       resultHash: hashText(rewritten),
     },
-    {
-      kind: "write-file",
-      path: ENTRYPOINT,
-      contents: BARREL,
-      preconditionHash: "missing",
-      resultHash: hashText(BARREL),
-      generator: "scaffold:entrypoint",
-    },
+    { kind: "write-file", path: ENTRYPOINT, contents: BARREL, preconditionHash: "missing", resultHash: hashText(BARREL), generator: "scaffold:entrypoint" },
     {
       kind: "lockfile-importer",
       lockfile: "pnpm-lock.yaml",
@@ -184,14 +174,7 @@ export function baseManifest(root: string): ExtractionManifest {
       preconditionHash: hashText(LOCKFILE),
       resultHash: hashText(LOCKFILE_APPLIED),
     },
-    {
-      kind: "write-file",
-      path: TOKENS,
-      contents: TOKENS_TEXT,
-      preconditionHash: "missing",
-      resultHash: hashText(TOKENS_TEXT),
-      generator: "scaffold:tokens",
-    },
+    { kind: "write-file", path: TOKENS, contents: TOKENS_TEXT, preconditionHash: "missing", resultHash: hashText(TOKENS_TEXT), generator: "scaffold:tokens" },
   ];
 
   return {
@@ -202,12 +185,7 @@ export function baseManifest(root: string): ExtractionManifest {
     baselineCommit: fixtureGit(root, "rev-parse", "HEAD"),
     graphDigest: hashText("fixture-graph"),
     application: "api",
-    target: {
-      packageName: PACKAGE,
-      packageRoot: PACKAGE_ROOT,
-      entrypoint: "src/index.ts",
-      requiredExports: [{ name: "widgetValue", typeOnly: false }],
-    },
+    target: { packageName: PACKAGE, packageRoot: PACKAGE_ROOT, entrypoint: "src/index.ts", requiredExports: [{ name: "widgetValue", typeOnly: false }] },
     source: { files: [DONOR], tests: [], sccs: { "scc-fixture": [DONOR] } },
     dependencies: { runtime: {}, dev: {}, packageReferences: [] },
     sourceBlobs: { [DONOR]: donorHash },
@@ -230,10 +208,7 @@ export function baseManifest(root: string): ExtractionManifest {
     metrics: { movedFiles: 1, movedLines: 1, applicationLinesBefore: 4, applicationLinesAfter: 3, consumers: 1 },
     commits: {
       plan: { subject: `chore(${PACKAGE}): compile extraction plan fixture-rollback` },
-      move: {
-        subject: `refactor(${PACKAGE}): move 1 files into ${PACKAGE_ROOT}`,
-        body: "Extraction-Proof: simulated fixture-rollback",
-      },
+      move: { subject: `refactor(${PACKAGE}): move 1 files into ${PACKAGE_ROOT}`, body: "Extraction-Proof: simulated fixture-rollback" },
       wiring: { subject: `refactor(${PACKAGE}): wire ${PACKAGE} into the workspace` },
     },
     gates: { package: [], project: [], workspace: ["true"] },

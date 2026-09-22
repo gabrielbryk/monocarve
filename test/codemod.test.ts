@@ -11,12 +11,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  inventoryModuleReferences,
-  rewriteResolvedImportSpecifier,
-  unsupportedModuleReferences,
-  applyEscapeRewrites,
-} from "../src/codemod/imports.ts";
+import { inventoryModuleReferences, rewriteResolvedImportSpecifier, unsupportedModuleReferences, applyEscapeRewrites } from "../src/codemod/imports.ts";
 import { sourceExportsFromBaseline, sourceExportsFromFile } from "../src/plan/public-surface.ts";
 import { cleanupFixtures, fixtureGit, fixtureRepo } from "./support/fixture-repo.ts";
 
@@ -45,12 +40,7 @@ describe("module reference inventory", () => {
     ].join("\n");
     const references = inventoryModuleReferences(source, "/workspace/apps/api/src/service.ts");
 
-    expect(references.map((reference) => reference.kind)).toEqual([
-      "dynamic-import",
-      "require",
-      "require-resolve",
-      "import-type",
-    ]);
+    expect(references.map((reference) => reference.kind)).toEqual(["dynamic-import", "require", "require-resolve", "import-type"]);
     expect(references.every((reference) => reference.supported)).toBe(true);
     expect(references.filter((reference) => reference.dynamic)).toHaveLength(1);
   });
@@ -61,14 +51,8 @@ describe("module reference inventory", () => {
   });
 
   test("inventories only config-declared module-specifier calls", () => {
-    const source = [
-      'vi.mock("./helpers", () => ({}));',
-      'custom.mock("./ignored", () => ({}));',
-      "vi.mock(`./${name}`);",
-    ].join("\n");
-    const references = inventoryModuleReferences(
-      source, "/workspace/apps/api/src/service.test.ts", false, "/workspace", ["vi.mock"],
-    );
+    const source = ['vi.mock("./helpers", () => ({}));', 'custom.mock("./ignored", () => ({}));', "vi.mock(`./${name}`);"].join("\n");
+    const references = inventoryModuleReferences(source, "/workspace/apps/api/src/service.test.ts", false, "/workspace", ["vi.mock"]);
 
     expect(references.map(({ kind, specifier, supported }) => ({ kind, specifier, supported }))).toEqual([
       { kind: "configured-call", specifier: "./helpers", supported: true },
@@ -86,25 +70,18 @@ describe("resolution boundary", () => {
     scratch.push(outside);
     const root = join(outside, "repo");
     mkdirSync(join(root, "src"), { recursive: true });
-    writeFileSync(
-      join(outside, "tsconfig.json"),
-      JSON.stringify({ compilerOptions: { baseUrl: ".", paths: { "outside/*": ["repo/src/*"] } } }),
-    );
+    writeFileSync(join(outside, "tsconfig.json"), JSON.stringify({ compilerOptions: { baseUrl: ".", paths: { "outside/*": ["repo/src/*"] } } }));
     writeFileSync(join(root, "src", "target.ts"), "export const value = 1;\n");
     const importer = join(root, "src", "service.ts");
     const source = 'import { value } from "outside/target";\n';
     writeFileSync(importer, source);
 
-    expect(inventoryModuleReferences(source, importer, true, root).map((reference) => reference.resolved)).toEqual([
-      null,
-    ]);
+    expect(inventoryModuleReferences(source, importer, true, root).map((reference) => reference.resolved)).toEqual([null]);
     // The same specifier does resolve when nothing bounds the walk. That is what
     // makes the assertion above a proof rather than a specifier that was never
     // going to resolve — and, because it runs second, it also proves the
     // boundary reaches the resolution cache key.
-    expect(inventoryModuleReferences(source, importer).map((reference) => reference.resolved)).toEqual([
-      join(root, "src", "target.ts"),
-    ]);
+    expect(inventoryModuleReferences(source, importer).map((reference) => reference.resolved)).toEqual([join(root, "src", "target.ts")]);
   });
 });
 
@@ -116,43 +93,30 @@ describe("import rewriting", () => {
     const importer = join(directory, "service.test.ts");
     const source = 'vi.mock("./helpers", () => ({ value: 2 }));\n';
 
-    expect(rewriteResolvedImportSpecifier(
-      source, importer, join(directory, "helpers.ts"), "@acme/helpers", directory, ["vi.mock"],
-    )).toBe('vi.mock("@acme/helpers", () => ({ value: 2 }));\n');
+    expect(rewriteResolvedImportSpecifier(source, importer, join(directory, "helpers.ts"), "@acme/helpers", directory, ["vi.mock"])).toBe(
+      'vi.mock("@acme/helpers", () => ({ value: 2 }));\n',
+    );
   });
 
   test("rewrites a tsconfig path alias after its donor has been removed", () => {
     const directory = mkdtempSync(join(tmpdir(), "monocarve-alias-rewrite-"));
     scratch.push(directory);
     mkdirSync(join(directory, "src", "features", "agent-graph"), { recursive: true });
-    writeFileSync(join(directory, "tsconfig.json"), JSON.stringify({
-      compilerOptions: { baseUrl: ".", paths: { "#/*": ["./src/*"] } },
-    }));
+    writeFileSync(join(directory, "tsconfig.json"), JSON.stringify({ compilerOptions: { baseUrl: ".", paths: { "#/*": ["./src/*"] } } }));
     const donor = join(directory, "src", "features", "agent-graph", "graph-schema.ts");
     writeFileSync(donor, "export const value = 1;\n");
     rmSync(donor);
     const importer = join(directory, "src", "consumer.ts");
     const source = 'import { value } from "#/features/agent-graph/graph-schema";\n';
 
-    expect(rewriteResolvedImportSpecifier(
-      source,
-      importer,
-      donor,
-      "@acme/agent-graph",
-      directory,
-    )).toBe('import { value } from "@acme/agent-graph";\n');
+    expect(rewriteResolvedImportSpecifier(source, importer, donor, "@acme/agent-graph", directory)).toBe('import { value } from "@acme/agent-graph";\n');
   });
 
   test("rewrites a type-position import after the donor has been removed", () => {
     const source = 'type Row = import("./helpers").TimingEntry;\n';
-    expect(
-      rewriteResolvedImportSpecifier(
-        source,
-        "/workspace/apps/api/src/service.test.ts",
-        "/workspace/apps/api/src/helpers.ts",
-        "@acme/analytics",
-      ),
-    ).toBe('type Row = import("@acme/analytics").TimingEntry;\n');
+    expect(rewriteResolvedImportSpecifier(source, "/workspace/apps/api/src/service.test.ts", "/workspace/apps/api/src/helpers.ts", "@acme/analytics")).toBe(
+      'type Row = import("@acme/analytics").TimingEntry;\n',
+    );
   });
 
   test("rewrites every reference form and touches nothing else", () => {
@@ -174,12 +138,7 @@ describe("import rewriting", () => {
       "",
     ].join("\n");
     writeFileSync(importer, source);
-    const rewritten = rewriteResolvedImportSpecifier(
-      source,
-      importer,
-      join(directory, "helpers.ts"),
-      "@acme/analytics",
-    );
+    const rewritten = rewriteResolvedImportSpecifier(source, importer, join(directory, "helpers.ts"), "@acme/analytics");
 
     expect(rewritten).toContain("// keep this comment exactly as it is");
     expect(rewritten).toContain('import { a } from "@acme/analytics";');
@@ -201,10 +160,7 @@ describe("import rewriting", () => {
 
 describe("public surface", () => {
   test("preserves aliased type-only exports and rejects export assignment", () => {
-    const path = scratchFile(
-      "surface.ts",
-      "interface Internal { value: string }\nexport type { Internal as PublicRow };\nexport const value = 1;\n",
-    );
+    const path = scratchFile("surface.ts", "interface Internal { value: string }\nexport type { Internal as PublicRow };\nexport const value = 1;\n");
     expect(sourceExportsFromFile(path)).toEqual([
       { name: "PublicRow", typeOnly: true },
       { name: "value", typeOnly: false },
@@ -217,10 +173,7 @@ describe("public surface", () => {
   test("infers default, namespace, export-star, and destructured exports", () => {
     const directory = mkdtempSync(join(tmpdir(), "monocarve-surface-"));
     scratch.push(directory);
-    writeFileSync(
-      join(directory, "nested.ts"),
-      "export const nested = 1;\nexport interface NestedType { value: string }\n",
-    );
+    writeFileSync(join(directory, "nested.ts"), "export const nested = 1;\nexport interface NestedType { value: string }\n");
     const path = join(directory, "surface.ts");
     writeFileSync(
       path,
@@ -262,20 +215,14 @@ describe("public surface", () => {
   });
 
   test("resolves baseline facades through installed package exports", () => {
-    const root = fixtureRepo({
-      "src/surface.ts": 'export * from "@acme/contracts";\n',
-    });
+    const root = fixtureRepo({ "src/surface.ts": 'export * from "@acme/contracts";\n' });
     const baseline = fixtureGit(root, "rev-parse", "HEAD");
     mkdirSync(join(root, "node_modules/@acme/contracts"), { recursive: true });
-    writeFileSync(join(root, "node_modules/@acme/contracts/package.json"), JSON.stringify({
-      name: "@acme/contracts",
-      type: "module",
-      exports: { ".": "./index.ts" },
-    }));
     writeFileSync(
-      join(root, "node_modules/@acme/contracts/index.ts"),
-      "export interface Contract { value: string }\nexport const contract = 1;\n",
+      join(root, "node_modules/@acme/contracts/package.json"),
+      JSON.stringify({ name: "@acme/contracts", type: "module", exports: { ".": "./index.ts" } }),
     );
+    writeFileSync(join(root, "node_modules/@acme/contracts/index.ts"), "export interface Contract { value: string }\nexport const contract = 1;\n");
 
     expect(sourceExportsFromBaseline(root, baseline, "src/surface.ts")).toEqual([
       { name: "Contract", typeOnly: true },

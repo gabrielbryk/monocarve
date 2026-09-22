@@ -1,5 +1,5 @@
-import type { AuditReport } from "../transaction/audit.ts";
 import type { PreparationAuditReport } from "../prepare/audit.ts";
+import type { AuditReport } from "../transaction/audit.ts";
 import type { Sha256 } from "../util/hash.ts";
 
 /** The stable on-disk shape for a sequential decomposition campaign. */
@@ -18,12 +18,7 @@ export interface GraphMetricSnapshot {
 export type CampaignStopCondition =
   | { readonly kind: "all-children-applied" }
   | { readonly kind: "max-children"; readonly maximum: number }
-  | {
-    readonly kind: "metric-threshold";
-    readonly metric: string;
-    readonly comparison: "at-most" | "at-least";
-    readonly value: number;
-  };
+  | { readonly kind: "metric-threshold"; readonly metric: string; readonly comparison: "at-most" | "at-least"; readonly value: number };
 
 interface CampaignAuditEvidenceBase {
   /** The immediate, unmodified audit result for this exact child application. */

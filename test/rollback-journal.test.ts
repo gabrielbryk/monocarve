@@ -2,8 +2,18 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { applyPlan } from "../src/transaction/apply.ts";
 import {
-  PACKAGE_ROOT, RESTORED_BEFORE_OPERATION, TOKENS, TOKENS_DIR, cleanupFixtures, expectApplyToFail, expectRestored,
-  fixture, type Fixture, repoState, restoreNote, withReadOnlyDirectory,
+  PACKAGE_ROOT,
+  RESTORED_BEFORE_OPERATION,
+  TOKENS,
+  TOKENS_DIR,
+  cleanupFixtures,
+  expectApplyToFail,
+  expectRestored,
+  fixture,
+  type Fixture,
+  repoState,
+  restoreNote,
+  withReadOnlyDirectory,
 } from "./support/rollback-fixture.ts";
 
 describe("rollback restores the checkout from every journal position", () => {
@@ -24,9 +34,7 @@ describe("rollback restores the checkout from every journal position", () => {
         // The seam fires in the simulation's journal too, which would abort the
         // apply before the checkout was ever touched; the simulation has its own
         // proofs elsewhere and is not what this case is about.
-        error = await expectApplyToFail(
-          applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, skipSimulation: true }),
-        );
+        error = await expectApplyToFail(applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, skipSimulation: true }));
       } finally {
         delete process.env.MONOCARVE_FAIL_OPERATION;
       }
@@ -55,9 +63,7 @@ describe("rollback restores the checkout from every journal position", () => {
     const before = repoState(root);
 
     await withReadOnlyDirectory(join(root, TOKENS_DIR), async () => {
-      const error = await expectApplyToFail(
-        applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true }),
-      );
+      const error = await expectApplyToFail(applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true }));
       expect(error.name).toBe("ApplyError");
       expect(error.message).toContain("EACCES");
       expect(error.message).toContain(`[rollback complete: HEAD and index reset to ${before.head}`);
@@ -74,9 +80,7 @@ describe("rollback restores the checkout from every journal position", () => {
     const before = repoState(root);
 
     await withReadOnlyDirectory(join(root, `${PACKAGE_ROOT}/src`), async () => {
-      const error = await expectApplyToFail(
-        applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true }),
-      );
+      const error = await expectApplyToFail(applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true }));
       expect(error.message).toContain("EACCES");
       expect(error.message).toContain("rollback complete");
       // Nothing applied, so nothing to put back: the recovery is silent about

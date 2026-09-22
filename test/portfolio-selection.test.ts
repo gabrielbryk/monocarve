@@ -10,8 +10,8 @@ import { afterAll, describe, expect, test } from "bun:test";
 
 import { parseConfig } from "../src/config.ts";
 import { buildDependencyGraph, type ScanReport } from "../src/graph/build.ts";
-import { buildPortfolio } from "../src/portfolio/rank.ts";
 import { assertAssetImportersReachable } from "../src/plan/build.ts";
+import { buildPortfolio } from "../src/portfolio/rank.ts";
 import { cleanupFixtures, fixtureRepo, write } from "./support/fixture-repo.ts";
 
 const APP = "apps/api/src";
@@ -34,7 +34,13 @@ function workspace(shared: SharedMovable, selfContained = false): { readonly roo
     [`${APP}/charlie.ts`]: candidateFiles("charlie", 8),
     [`${APP}/delta.ts`]: candidateFiles("delta", 6),
     ...(sharedAsset ? { [`${APP}/shared.css`]: ".shared { color: rebeccapurple; }\n" } : {}),
-    ...(shared === "test" ? { [`${APP}/shared.test.ts`]: selfContained ? 'import { alpha } from "./alpha.ts"; import { bravo } from "./bravo.ts"; void alpha; void bravo;\n' : "export {};\n" } : {}),
+    ...(shared === "test"
+      ? {
+          [`${APP}/shared.test.ts`]: selfContained
+            ? 'import { alpha } from "./alpha.ts"; import { bravo } from "./bravo.ts"; void alpha; void bravo;\n'
+            : "export {};\n",
+        }
+      : {}),
   });
   const config = parseConfig({
     applications: [{ name: "api", sourceRoot: APP, tsconfig: "apps/api/tsconfig.json", packageName: "@acme/api" }],
@@ -141,10 +147,7 @@ describe("portfolio same-baseline selection", () => {
 
   test("retained shared tests neither conflict selection nor become protected movable paths", () => {
     const { root, config: base } = workspace("test", true);
-    const config = parseConfig({
-      ...base,
-      portfolio: { ...base.portfolio, protectedPaths: [`${APP}/shared.test.ts`] },
-    });
+    const config = parseConfig({ ...base, portfolio: { ...base.portfolio, protectedPaths: [`${APP}/shared.test.ts`] } });
     const portfolio = buildPortfolio({ config, graph: graphFor(root, config, "test") });
     const byFile = (file: string) => portfolio.candidates.find((candidate) => candidate.files.includes(file));
     const alpha = byFile(`${APP}/alpha.ts`);

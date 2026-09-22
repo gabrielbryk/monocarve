@@ -1,23 +1,23 @@
+import { createPackageManagerAdapter } from "../adapters/registry.ts";
+import { TOOL_NAME } from "../branding.ts";
 /** Apply a reviewed extraction plan, or refuse before touching the checkout. */
 import { resetCodemodCaches } from "../codemod/imports.ts";
-import { createPackageManagerAdapter } from "../adapters/registry.ts";
 import { isGuardedBranch, type MonocarveConfig } from "../config.ts";
 import { PreflightError } from "../errors.ts";
-import { TOOL_NAME } from "../branding.ts";
-import { disallowedDirtyPaths } from "../util/dirty-tree.ts";
-import { currentBranch, git, headCommit, tryGit } from "../util/git.ts";
 import { manifestPaths, planSensitivePaths, regeneratedArtifactPaths, pureRenames } from "../plan/manifest.ts";
 import { assertPlanValid } from "../plan/validate.ts";
+import { disallowedDirtyPaths } from "../util/dirty-tree.ts";
+import { currentBranch, git, headCommit, tryGit } from "../util/git.ts";
 import { commitAppliedPlan } from "./apply-commit.ts";
+import { beginApplyTransaction } from "./apply-state.ts";
 import { ApplyError, type ApplyOptions, type ApplyResult, type ApplyState } from "./apply-types.ts";
+import { inspectCommitChain } from "./commit-evidence.ts";
 import { executeJournal, preflightJournal, snapshotPaths } from "./journal.ts";
+import { auditRepositoryPostconditions, repositoryPostconditionPaths } from "./postconditions.ts";
 import { regenerateArtifacts } from "./regenerate.ts";
 import { rollback } from "./rollback.ts";
 import { simulatePlan, type SimulationResult } from "./simulate.ts";
 import { installWorkspaceDependencies, linkPlannedPackage } from "./worktree.ts";
-import { beginApplyTransaction } from "./apply-state.ts";
-import { auditRepositoryPostconditions, repositoryPostconditionPaths } from "./postconditions.ts";
-import { inspectCommitChain } from "./commit-evidence.ts";
 
 export { assertExactMoveDiff, assertExactScope } from "./apply-commit.ts";
 export { ApplyError, type ApplyOptions, type ApplyResult, type ApplyState } from "./apply-types.ts";
@@ -79,13 +79,18 @@ async function simulateBeforeApply(options: ApplyOptions): Promise<ApplyResult |
     ...(options.skipGates ? { skipGates: true } : {}),
     ...(options.verifyLockfile ? { verifyLockfile: true } : {}),
   });
-  return simulation.ok ? undefined : {
-    ok: false, planId: options.manifest.planId, rolledBack: false, failure: simulationFailure(simulation),
-    ...(simulation.failedGate === undefined ? {} : { failedGate: simulation.failedGate }),
-    ...(simulation.worktreePath === undefined ? {} : { worktreePath: simulation.worktreePath }),
-    ...(simulation.gateRetry === undefined ? {} : { gateRetry: simulation.gateRetry }),
-    ...(simulation.repositoryPostconditions === undefined ? {} : { repositoryPostconditions: simulation.repositoryPostconditions }),
-  };
+  return simulation.ok
+    ? undefined
+    : {
+        ok: false,
+        planId: options.manifest.planId,
+        rolledBack: false,
+        failure: simulationFailure(simulation),
+        ...(simulation.failedGate === undefined ? {} : { failedGate: simulation.failedGate }),
+        ...(simulation.worktreePath === undefined ? {} : { worktreePath: simulation.worktreePath }),
+        ...(simulation.gateRetry === undefined ? {} : { gateRetry: simulation.gateRetry }),
+        ...(simulation.repositoryPostconditions === undefined ? {} : { repositoryPostconditions: simulation.repositoryPostconditions }),
+      };
 }
 
 async function applyCommittedPlan(options: ApplyOptions, state: ApplyState, transaction?: ReturnType<typeof beginApplyTransaction>): Promise<ApplyResult> {
@@ -96,7 +101,11 @@ async function applyCommittedPlan(options: ApplyOptions, state: ApplyState, tran
   const recoveryPoint = {
     headCommit: headCommit(rootDir),
     branch: currentBranch(rootDir),
-    snapshots: snapshotPaths(rootDir, [...manifestPaths(manifest), ...regeneratedArtifactPaths(manifest), ...await repositoryPostconditionPaths(rootDir, packageManager)]),
+    snapshots: snapshotPaths(rootDir, [
+      ...manifestPaths(manifest),
+      ...regeneratedArtifactPaths(manifest),
+      ...(await repositoryPostconditionPaths(rootDir, packageManager)),
+    ]),
     staged: true,
     ...(indexTree === null ? {} : { indexTree }),
   };
@@ -118,7 +127,14 @@ async function applyCommittedPlan(options: ApplyOptions, state: ApplyState, tran
       packageRoots: [".", ...(manifest.target === undefined ? [] : [manifest.target.packageRoot])],
     });
     if (!repositoryPostconditions.passed) throw new ApplyError(`repository postconditions failed: ${repositoryPostconditions.failures.join("; ")}`);
-    return { ok: true, planId: manifest.planId, ...commits, rolledBack: false, repositoryPostconditions, ...(dependencyRefresh === undefined ? {} : { dependencyRefresh }) };
+    return {
+      ok: true,
+      planId: manifest.planId,
+      ...commits,
+      rolledBack: false,
+      repositoryPostconditions,
+      ...(dependencyRefresh === undefined ? {} : { dependencyRefresh }),
+    };
   } catch (error) {
     const recovery = await rollback(rootDir, recoveryPoint);
     throw new ApplyError(`apply failed: ${(error as Error).message} [${recovery.message}]`, recovery.residue);
@@ -147,8 +163,10 @@ function approvedManifestState(options: ApplyOptions, head: string): ApplyState 
   const path = options.manifestPath;
   if (!path) throw new PreflightError("applying a plan requires the path of its committed manifest");
   const planSubject = options.manifest.commits.plan?.subject;
-  const expectedApproval = planSubject === undefined ? "the manifest has no configured approval subject" :
-    `expected manifest-only approval: git add -- ${path} && git commit -m ${JSON.stringify(planSubject)}`;
+  const expectedApproval =
+    planSubject === undefined
+      ? "the manifest has no configured approval subject"
+      : `expected manifest-only approval: git add -- ${path} && git commit -m ${JSON.stringify(planSubject)}`;
   const baseline = git({ cwd: options.rootDir }, "rev-parse", options.manifest.baselineCommit);
   const resolvedHead = git({ cwd: options.rootDir }, "rev-parse", head);
   if (baseline === resolvedHead) throw new PreflightError(`the plan manifest must be committed before apply; ${expectedApproval}`);
@@ -167,19 +185,36 @@ function approvedManifestState(options: ApplyOptions, head: string): ApplyState 
         "a plan whose wiring commit already landed is fully applied and cannot be re-applied",
     );
   }
-  if (changed.length !== 1 || changed[0] !== path) throw new PreflightError(`HEAD must contain exactly the approved manifest over the baseline; ${expectedApproval}`);
+  if (changed.length !== 1 || changed[0] !== path)
+    throw new PreflightError(`HEAD must contain exactly the approved manifest over the baseline; ${expectedApproval}`);
   throw new PreflightError(`the approved manifest commit subject is ${JSON.stringify(subject)}; expected ${JSON.stringify(planSubject)}`);
 }
 
 function isApprovedMoveResume(
   options: ApplyOptions,
-  state: { readonly baseline: string; readonly parent: string; readonly path: string; readonly subject: string; readonly changed: readonly string[]; readonly planSubject: string | undefined },
+  state: {
+    readonly baseline: string;
+    readonly parent: string;
+    readonly path: string;
+    readonly subject: string;
+    readonly changed: readonly string[];
+    readonly planSubject: string | undefined;
+  },
 ): boolean {
   const moves = pureRenames(options.manifest);
-  if (!options.resume || state.subject !== options.manifest.commits.move.subject || !sameSet(state.changed, [state.path, ...moves.flatMap((move) => [move.source, move.target])])) return false;
+  if (
+    !options.resume ||
+    state.subject !== options.manifest.commits.move.subject ||
+    !sameSet(state.changed, [state.path, ...moves.flatMap((move) => [move.source, move.target])])
+  )
+    return false;
   const manifestParent = git({ cwd: options.rootDir }, "rev-parse", `${state.parent}^`);
   const manifestSubject = git({ cwd: options.rootDir }, "log", "-1", "--format=%s", state.parent);
-  return manifestParent === state.baseline && manifestSubject === state.planSubject && sameSet(changedPaths(options.rootDir, `${state.baseline}..${state.parent}`), [state.path]);
+  return (
+    manifestParent === state.baseline &&
+    manifestSubject === state.planSubject &&
+    sameSet(changedPaths(options.rootDir, `${state.baseline}..${state.parent}`), [state.path])
+  );
 }
 
 function changedPaths(rootDir: string, range: string): string[] {
@@ -201,20 +236,33 @@ function uncleanForPlan(options: ApplyOptions): readonly string[] {
 
 export async function preflight(options: ApplyOptions): Promise<string[]> {
   const blockers: string[] = [];
-  try { assertPlanValid(options.manifest, { config: options.config, rootDir: options.rootDir }); } catch (error) { blockers.push((error as Error).message); }
-  try { preflightJournal(options.config, options.manifest, options.rootDir); } catch (error) { blockers.push((error as Error).message); }
+  try {
+    assertPlanValid(options.manifest, { config: options.config, rootDir: options.rootDir });
+  } catch (error) {
+    blockers.push((error as Error).message);
+  }
+  try {
+    preflightJournal(options.config, options.manifest, options.rootDir);
+  } catch (error) {
+    blockers.push((error as Error).message);
+  }
   const branch = currentBranch(options.rootDir);
   if (isGuardedBranch(options.config, branch)) blockers.push(`current branch ${branch} is guarded`);
   const dirty = uncleanForPlan(options);
   if (dirty.length > 0) blockers.push(`working tree is not clean: ${dirty.join(", ")}`);
   if (headCommit(options.rootDir) !== options.manifest.baselineCommit) {
     const head = headCommit(options.rootDir);
-    if (options.manifestPath !== undefined && inspectCommitChain({
-      rootDir: options.rootDir, manifest: options.manifest, manifestPath: options.manifestPath, headCommit: head,
-    }).phase === "applied") {
+    if (
+      options.manifestPath !== undefined &&
+      inspectCommitChain({ rootDir: options.rootDir, manifest: options.manifest, manifestPath: options.manifestPath, headCommit: head }).phase === "applied"
+    ) {
       blockers.push(`plan ${options.manifest.planId} is already applied; run ${TOOL_NAME} audit --plan ${options.manifestPath}`);
     } else {
-      try { approvedManifestState(options, head); } catch (error) { blockers.push((error as Error).message); }
+      try {
+        approvedManifestState(options, head);
+      } catch (error) {
+        blockers.push((error as Error).message);
+      }
     }
   }
   return blockers;

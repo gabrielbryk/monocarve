@@ -196,11 +196,7 @@ function verifyPrecondition(rootDir: string, operation: PreparationFilesystemOpe
   }
 }
 
-function assertSnapshotPrecondition(
-  rootDir: string,
-  operation: PreparationFilesystemOperation,
-  snapshots: ReadonlyMap<string, Snapshot>,
-): void {
+function assertSnapshotPrecondition(rootDir: string, operation: PreparationFilesystemOperation, snapshots: ReadonlyMap<string, Snapshot>): void {
   const snapshot = snapshots.get(canonicalPath(rootDir, operation.path))!;
   const actual = snapshotState(snapshot);
   if (actual !== operation.preconditionHash) {
@@ -271,9 +267,7 @@ function missingAncestorDirectories(rootDir: string, path: string): string[] {
 
 function producedState(operation: PreparationFilesystemOperation, snapshot: Snapshot): ProducedState {
   if (operation.kind === "delete") return { kind: "missing" };
-  const mode = snapshot.kind === "file" && canonicalGitMode(snapshot.mode) === operation.resultMode
-    ? snapshot.mode
-    : operation.resultMode;
+  const mode = snapshot.kind === "file" && canonicalGitMode(snapshot.mode) === operation.resultMode ? snapshot.mode : operation.resultMode;
   return { kind: "file", hash: operation.resultHash, mode };
 }
 
@@ -301,9 +295,10 @@ function applyOperation(
   try {
     writeFileSync(temporaryFile, operation.contents, "utf8");
     chmodSync(temporaryFile, produced.kind === "file" ? produced.mode : 0o644);
-    const record = existing === undefined
-      ? { snapshot, privateDirectory: temporaryDirectory }
-      : acquireExistingPath(rootDir, operation.path, snapshot, undefined, mutations, temporaryDirectory);
+    const record =
+      existing === undefined
+        ? { snapshot, privateDirectory: temporaryDirectory }
+        : acquireExistingPath(rootDir, operation.path, snapshot, undefined, mutations, temporaryDirectory);
     mutations.set(canonicalPath(rootDir, operation.path), record);
     linkSync(temporaryFile, absolute);
     record.produced = produced;
@@ -379,12 +374,7 @@ function restoreSnapshots(
   return { restored, failures, residue: failures.map((failure) => failure.path) };
 }
 
-function restoreOwnedMutation(
-  rootDir: string,
-  path: string,
-  mutation: MutationRecord,
-  failures: PreparationRestoreFailure[],
-): boolean {
+function restoreOwnedMutation(rootDir: string, path: string, mutation: MutationRecord, failures: PreparationRestoreFailure[]): boolean {
   const absolute = workspacePath(rootDir, path);
   try {
     if (mutation.produced?.kind === "file") {
@@ -434,9 +424,7 @@ function assertSnapshotCurrent(rootDir: string, path: string, snapshot: Snapshot
 
 function matchesProducedAt(absolute: string, produced: Extract<ProducedState, { kind: "file" }>): boolean {
   const stat = lstatOrMissing(absolute);
-  return stat?.isFile() === true &&
-    (Number(stat.mode) & 0o777) === produced.mode &&
-    hashBytes(readFileSync(absolute)) === produced.hash;
+  return stat?.isFile() === true && (Number(stat.mode) & 0o777) === produced.mode && hashBytes(readFileSync(absolute)) === produced.hash;
 }
 
 function matchesSnapshotAt(absolute: string, snapshot: Snapshot): boolean {
@@ -453,11 +441,7 @@ function matchesSnapshot(rootDir: string, path: string, snapshot: Snapshot): boo
   return matchesSnapshotAt(workspacePath(rootDir, path), snapshot);
 }
 
-function pruneCreatedDirectories(
-  rootDir: string,
-  directories: ReadonlySet<string>,
-  failures: PreparationRestoreFailure[],
-): void {
+function pruneCreatedDirectories(rootDir: string, directories: ReadonlySet<string>, failures: PreparationRestoreFailure[]): void {
   for (const directory of [...directories].sort((left, right) => right.split("/").length - left.split("/").length || (left < right ? 1 : -1))) {
     try {
       rmdirSync(workspacePath(rootDir, directory));

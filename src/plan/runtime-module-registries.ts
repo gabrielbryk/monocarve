@@ -12,7 +12,10 @@ export interface RuntimeModuleRegistryDeclaration {
   readonly stripPrefix?: string;
 }
 
-interface PointerValue { readonly pointer: string; readonly value: string }
+interface PointerValue {
+  readonly pointer: string;
+  readonly value: string;
+}
 
 function unescapePointer(segment: string): string {
   return segment.replaceAll("~1", "/").replaceAll("~0", "~");
@@ -30,9 +33,7 @@ function selectedValues(value: unknown, pattern: readonly string[], at: readonly
     return Object.entries(value).flatMap(([key, child]) => selectedValues(child, tail, [...at, key]));
   }
   const key = unescapePointer(head!);
-  return Object.prototype.hasOwnProperty.call(value, key)
-    ? selectedValues((value as Record<string, unknown>)[key], tail, [...at, key])
-    : [];
+  return Object.prototype.hasOwnProperty.call(value, key) ? selectedValues((value as Record<string, unknown>)[key], tail, [...at, key]) : [];
 }
 
 function positionAt(text: string, offset: number): { line: number; column: number } {
@@ -63,22 +64,28 @@ export function scanRuntimeModuleRegistry(
   moves: readonly PathMove[],
 ): PathReferenceRewriteMatch[] {
   let document: unknown;
-  try { document = JSON.parse(text); } catch { throw new PlanningError(`runtime module registry is not valid JSON: ${declaration.file}`); }
+  try {
+    document = JSON.parse(text);
+  } catch {
+    throw new PlanningError(`runtime module registry is not valid JSON: ${declaration.file}`);
+  }
   const pattern = declaration.pointer.slice(1).split("/");
   const selected = selectedValues(document, pattern);
   const results: PathReferenceRewriteMatch[] = [];
   for (const entry of selected) {
     const encoded = JSON.stringify(entry.value);
-    if (encoded.slice(1, -1) !== entry.value) throw new PlanningError(`runtime module registry value requires JSON escaping at ${declaration.file}${entry.pointer}`);
+    if (encoded.slice(1, -1) !== entry.value)
+      throw new PlanningError(`runtime module registry value requires JSON escaping at ${declaration.file}${entry.pointer}`);
     const first = text.indexOf(encoded);
     if (first < 0 || text.indexOf(encoded, first + encoded.length) >= 0) {
       throw new PlanningError(`runtime module registry value is not byte-unique at ${declaration.file}${entry.pointer}`);
     }
-    const stripped = declaration.stripPrefix === undefined
-      ? entry.value
-      : entry.value.startsWith(declaration.stripPrefix)
-        ? entry.value.slice(declaration.stripPrefix.length)
-        : null;
+    const stripped =
+      declaration.stripPrefix === undefined
+        ? entry.value
+        : entry.value.startsWith(declaration.stripPrefix)
+          ? entry.value.slice(declaration.stripPrefix.length)
+          : null;
     if (stripped === null) throw new PlanningError(`runtime module registry value lacks configured prefix at ${declaration.file}${entry.pointer}`);
     const donorPath = normalized(posix.join(declaration.resolveFrom, stripped));
     const matching = moves.filter((move) => normalized(move.source) === donorPath);

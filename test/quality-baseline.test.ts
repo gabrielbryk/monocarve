@@ -1,15 +1,13 @@
+import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, test } from "bun:test";
 import { judge, readBaseline, summarizeBaselineUpdate, validateBaseline } from "../scripts/quality/baseline.ts";
 import type { BaselinedFinding, QualityBaseline } from "../scripts/quality/baseline.ts";
 
 describe("judge", () => {
   test("finding absent from baseline lands in failures", () => {
-    const findings: BaselinedFinding[] = [
-      { path: "src/index.ts", metric: "maxLines", actual: 250, detail: "maxLines 250 > 200" },
-    ];
+    const findings: BaselinedFinding[] = [{ path: "src/index.ts", metric: "maxLines", actual: 250, detail: "maxLines 250 > 200" }];
     const baseline: QualityBaseline = {};
 
     const verdict = judge(findings, baseline);
@@ -23,9 +21,7 @@ describe("judge", () => {
   });
 
   test("finding whose actual exceeds recorded value lands in failures", () => {
-    const findings: BaselinedFinding[] = [
-      { path: "src/app.ts", metric: "maxCyclo", actual: 16, detail: "maxCyclo 16 > 15" },
-    ];
+    const findings: BaselinedFinding[] = [{ path: "src/app.ts", metric: "maxCyclo", actual: 16, detail: "maxCyclo 16 > 15" }];
     const baseline: QualityBaseline = { "src/app.ts": { maxCyclo: 14 } };
 
     const verdict = judge(findings, baseline);
@@ -39,9 +35,7 @@ describe("judge", () => {
   });
 
   test("finding whose actual is below recorded value lands in improved", () => {
-    const findings: BaselinedFinding[] = [
-      { path: "src/utils.ts", metric: "maxLines", actual: 180, detail: "maxLines 180 < 200" },
-    ];
+    const findings: BaselinedFinding[] = [{ path: "src/utils.ts", metric: "maxLines", actual: 180, detail: "maxLines 180 < 200" }];
     const baseline: QualityBaseline = { "src/utils.ts": { maxLines: 200 } };
 
     const verdict = judge(findings, baseline);
@@ -55,9 +49,7 @@ describe("judge", () => {
   });
 
   test("finding whose actual equals recorded value lands in accepted", () => {
-    const findings: BaselinedFinding[] = [
-      { path: "src/core.ts", metric: "maxCyclo", actual: 15, detail: "maxCyclo 15" },
-    ];
+    const findings: BaselinedFinding[] = [{ path: "src/core.ts", metric: "maxCyclo", actual: 15, detail: "maxCyclo 15" }];
     const baseline: QualityBaseline = { "src/core.ts": { maxCyclo: 15 } };
 
     const verdict = judge(findings, baseline);
@@ -71,9 +63,7 @@ describe("judge", () => {
 
   test("baseline entry with no corresponding finding lands in stale", () => {
     const findings: BaselinedFinding[] = [];
-    const baseline: QualityBaseline = {
-      "src/old.ts": { maxLines: 300, maxCyclo: 20 },
-    };
+    const baseline: QualityBaseline = { "src/old.ts": { maxLines: 300, maxCyclo: 20 } };
 
     const verdict = judge(findings, baseline);
 
@@ -105,9 +95,7 @@ describe("judge", () => {
       { path: "src/mixed.ts", metric: "maxLines", actual: 180, detail: "maxLines 180" },
       { path: "src/mixed.ts", metric: "maxCyclo", actual: 18, detail: "maxCyclo 18" },
     ];
-    const baseline: QualityBaseline = {
-      "src/mixed.ts": { maxLines: 200, maxCyclo: 15 },
-    };
+    const baseline: QualityBaseline = { "src/mixed.ts": { maxLines: 200, maxCyclo: 15 } };
 
     const verdict = judge(findings, baseline);
 
@@ -122,9 +110,7 @@ describe("judge", () => {
 
 describe("summarizeBaselineUpdate", () => {
   test("an unbaselined finding is listed in newEntries", () => {
-    const findings: BaselinedFinding[] = [
-      { path: "src/new.ts", metric: "maxLines", actual: 250, detail: "maxLines 250 > 200" },
-    ];
+    const findings: BaselinedFinding[] = [{ path: "src/new.ts", metric: "maxLines", actual: 250, detail: "maxLines 250 > 200" }];
     const baseline: QualityBaseline = {};
 
     const summary = summarizeBaselineUpdate(findings, baseline);
@@ -138,9 +124,7 @@ describe("summarizeBaselineUpdate", () => {
   });
 
   test("a finding worse than its recorded value is listed in worsened with both values", () => {
-    const findings: BaselinedFinding[] = [
-      { path: "src/app.ts", metric: "maxCyclo", actual: 18, detail: "maxCyclo 18 > 15" },
-    ];
+    const findings: BaselinedFinding[] = [{ path: "src/app.ts", metric: "maxCyclo", actual: 18, detail: "maxCyclo 18 > 15" }];
     const baseline: QualityBaseline = { "src/app.ts": { maxCyclo: 14 } };
 
     const summary = summarizeBaselineUpdate(findings, baseline);
@@ -155,9 +139,7 @@ describe("summarizeBaselineUpdate", () => {
   });
 
   test("an improved finding is counted but not listed", () => {
-    const findings: BaselinedFinding[] = [
-      { path: "src/utils.ts", metric: "maxLines", actual: 180, detail: "maxLines 180 < 200" },
-    ];
+    const findings: BaselinedFinding[] = [{ path: "src/utils.ts", metric: "maxLines", actual: 180, detail: "maxLines 180 < 200" }];
     const baseline: QualityBaseline = { "src/utils.ts": { maxLines: 200 } };
 
     const summary = summarizeBaselineUpdate(findings, baseline);
@@ -181,9 +163,7 @@ describe("summarizeBaselineUpdate", () => {
   });
 
   test("an unchanged (accepted) finding produces an empty summary", () => {
-    const findings: BaselinedFinding[] = [
-      { path: "src/core.ts", metric: "maxCyclo", actual: 15, detail: "maxCyclo 15" },
-    ];
+    const findings: BaselinedFinding[] = [{ path: "src/core.ts", metric: "maxCyclo", actual: 15, detail: "maxCyclo 15" }];
     const baseline: QualityBaseline = { "src/core.ts": { maxCyclo: 15 } };
 
     const summary = summarizeBaselineUpdate(findings, baseline);

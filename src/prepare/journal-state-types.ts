@@ -20,9 +20,7 @@ interface SymlinkSnapshot {
   readonly absentAncestors: readonly string[];
 }
 
-export type PreparationProducedState =
-  | { readonly kind: "missing" }
-  | { readonly kind: "file"; readonly hash: string; readonly mode: number };
+export type PreparationProducedState = { readonly kind: "missing" } | { readonly kind: "file"; readonly hash: string; readonly mode: number };
 
 export interface PreparationMutationRecord {
   readonly snapshot: PreparationSnapshot;

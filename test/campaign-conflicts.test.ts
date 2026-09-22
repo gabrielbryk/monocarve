@@ -8,12 +8,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import {
-  analyzePlanConflicts,
-  CampaignConflictAnalysisError,
-  type CampaignPlan,
-  type ConflictCategory,
-} from "../src/campaign/conflicts.ts";
+import { analyzePlanConflicts, CampaignConflictAnalysisError, type CampaignPlan, type ConflictCategory } from "../src/campaign/conflicts.ts";
 import type { GeneratedFileRecord, PlanOperation } from "../src/plan/manifest.ts";
 
 const HASH = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -39,11 +34,7 @@ function plan(id: string, operations: readonly PlanOperation[], options: PlanOpt
       planId: `plan-${id}`,
       baselineCommit: options.baselineCommit ?? BASELINE,
       graphDigest: options.graphDigest ?? GRAPH,
-      target: {
-        packageName: options.packageName ?? `@acme/${id}`,
-        packageRoot,
-        ...(options.projectId === undefined ? {} : { projectId: options.projectId }),
-      },
+      target: { packageName: options.packageName ?? `@acme/${id}`, packageRoot, ...(options.projectId === undefined ? {} : { projectId: options.projectId }) },
       operations,
       generatedFiles: options.generatedFiles ?? [],
     },
@@ -51,26 +42,11 @@ function plan(id: string, operations: readonly PlanOperation[], options: PlanOpt
 }
 
 function write(path: string, generator: string): PlanOperation {
-  return {
-    kind: "write-file",
-    path,
-    contents: `${generator}\n`,
-    preconditionHash: HASH,
-    resultHash: HASH,
-    generator,
-  };
+  return { kind: "write-file", path, contents: `${generator}\n`, preconditionHash: HASH, resultHash: HASH, generator };
 }
 
 function lock(packageRoot: string, mode: "insert" | "replace" = "insert"): PlanOperation {
-  return {
-    kind: "lockfile-importer",
-    lockfile: "workspace.lock",
-    packageRoot,
-    block: `${packageRoot}: {}\n`,
-    mode,
-    preconditionHash: HASH,
-    resultHash: HASH,
-  };
+  return { kind: "lockfile-importer", lockfile: "workspace.lock", packageRoot, block: `${packageRoot}: {}\n`, mode, preconditionHash: HASH, resultHash: HASH };
 }
 
 function rewrite(donor: string): PlanOperation {
@@ -99,10 +75,7 @@ function rewritePathReference(donor: string, file: string = "docs/architecture.m
   };
 }
 
-function category(
-  analysis: ReturnType<typeof analyzePlanConflicts>,
-  name: ConflictCategory,
-): ReturnType<typeof analyzePlanConflicts>["conflicts"][number] {
+function category(analysis: ReturnType<typeof analyzePlanConflicts>, name: ConflictCategory): ReturnType<typeof analyzePlanConflicts>["conflicts"][number] {
   const conflict = analysis.conflicts.find((entry) => entry.category === name);
   if (conflict === undefined) throw new Error(`missing ${name} conflict`);
   return conflict;
@@ -152,46 +125,26 @@ describe("same-baseline operation conflict analysis", () => {
     const consumer = category(analysis, "consumer-source");
     expect(consumer.path).toBe("apps/consumer/src/main.ts");
     expect(consumer.candidates).toEqual(["alpha", "bravo"]);
-    expect(consumer.left).toEqual([
-      expect.objectContaining({ candidateId: "alpha", operationIndex: 0, operationKind: "rewrite-import" }),
-    ]);
+    expect(consumer.left).toEqual([expect.objectContaining({ candidateId: "alpha", operationIndex: 0, operationKind: "rewrite-import" })]);
     expect(consumer.right[0]?.keys).toEqual(["apps/api/src/bravo.ts"]);
     expect(consumer.explanation).toContain("compose them by replanning");
 
     const importer = category(analysis, "lockfile-importer");
-    expect(importer.left.map((evidence) => evidence.keys)).toEqual([
-      ["importer:libs/alpha"],
-      ["dependency:@acme/alpha"],
-    ]);
-    expect(importer.right.map((evidence) => evidence.keys)).toEqual([
-      ["importer:libs/bravo"],
-      ["dependency:@acme/bravo"],
-    ]);
+    expect(importer.left.map((evidence) => evidence.keys)).toEqual([["importer:libs/alpha"], ["dependency:@acme/alpha"]]);
+    expect(importer.right.map((evidence) => evidence.keys)).toEqual([["importer:libs/bravo"], ["dependency:@acme/bravo"]]);
   });
 
   test("produces deterministic, path-disjoint waves independent of input order", () => {
     const alpha = plan("alpha", [rewrite("apps/api/src/alpha.ts")], { priority: 20 });
     const bravo = plan("bravo", [rewrite("apps/api/src/bravo.ts")], { priority: 10 });
-    const charlie = plan("charlie", [move("apps/api/src/charlie.ts", "libs/charlie/src/charlie.ts")], {
-      priority: 1,
-    });
+    const charlie = plan("charlie", [move("apps/api/src/charlie.ts", "libs/charlie/src/charlie.ts")], { priority: 1 });
 
     const forward = analyzePlanConflicts([alpha, bravo, charlie]);
     const reversed = analyzePlanConflicts([charlie, bravo, alpha]);
     expect(reversed).toEqual(forward);
     expect(forward.waves).toEqual([
-      {
-        index: 0,
-        candidateIds: ["alpha", "charlie"],
-        requiresReplanAfterPreviousWave: false,
-        execution: "replan-between-every-child",
-      },
-      {
-        index: 1,
-        candidateIds: ["bravo"],
-        requiresReplanAfterPreviousWave: true,
-        execution: "replan-between-every-child",
-      },
+      { index: 0, candidateIds: ["alpha", "charlie"], requiresReplanAfterPreviousWave: false, execution: "replan-between-every-child" },
+      { index: 1, candidateIds: ["bravo"], requiresReplanAfterPreviousWave: true, execution: "replan-between-every-child" },
     ]);
   });
 
@@ -200,10 +153,7 @@ describe("same-baseline operation conflict analysis", () => {
     const bravo = plan("bravo", [move("apps/api/src/shared.ts", "libs/other/src/shared.ts"), lock("apps/api")]);
     const analysis = analyzePlanConflicts([alpha, bravo]);
 
-    expect(category(analysis, "moved-path")).toMatchObject({
-      path: "apps/api/src/shared.ts",
-      disposition: "hard",
-    });
+    expect(category(analysis, "moved-path")).toMatchObject({ path: "apps/api/src/shared.ts", disposition: "hard" });
     expect(category(analysis, "lockfile-importer")).toMatchObject({ disposition: "hard" });
   });
 
@@ -229,10 +179,7 @@ describe("same-baseline operation conflict analysis", () => {
     const analysis = analyzePlanConflicts([alpha, bravo]);
 
     expect(category(analysis, "package-manifest").disposition).toBe("hard");
-    expect(category(analysis, "scaffold-output")).toMatchObject({
-      path: "libs/shared/src/index.ts",
-      disposition: "hard",
-    });
+    expect(category(analysis, "scaffold-output")).toMatchObject({ path: "libs/shared/src/index.ts", disposition: "hard" });
     expect(category(analysis, "path-key-artifact").disposition).toBe("hard");
   });
 
@@ -245,25 +192,15 @@ describe("same-baseline operation conflict analysis", () => {
       regenerateOnApply: true,
     });
     const alpha = plan("alpha", [], { generatedFiles: [generated("generated/index.json", "apps/api/src")] });
-    const bravo = plan(
-      "bravo",
-      [move("apps/api/src/bravo.ts", "libs/bravo/src/bravo.ts")],
-      { generatedFiles: [generated("generated/index.json", "apps/worker/src")] },
-    );
+    const bravo = plan("bravo", [move("apps/api/src/bravo.ts", "libs/bravo/src/bravo.ts")], {
+      generatedFiles: [generated("generated/index.json", "apps/worker/src")],
+    });
     const analysis = analyzePlanConflicts([alpha, bravo]);
     const generatedConflicts = analysis.conflicts.filter((conflict) => conflict.category === "generated-artifact");
 
-    expect(generatedConflicts.map((conflict) => conflict.path)).toEqual([
-      "apps/api/src/bravo.ts",
-      "generated/index.json",
-    ]);
+    expect(generatedConflicts.map((conflict) => conflict.path)).toEqual(["apps/api/src/bravo.ts", "generated/index.json"]);
     expect(generatedConflicts.every((conflict) => conflict.disposition === "hard")).toBe(true);
-    expect(generatedConflicts[0]?.left[0]).toMatchObject({
-      role: "generated-source",
-      scope: "tree",
-      mode: "read",
-      operationKind: "regenerate-artifact",
-    });
+    expect(generatedConflicts[0]?.left[0]).toMatchObject({ role: "generated-source", scope: "tree", mode: "read", operationKind: "regenerate-artifact" });
   });
 
   test("does not invent edges for disjoint paths or shared read-only generator inputs", () => {
@@ -274,25 +211,15 @@ describe("same-baseline operation conflict analysis", () => {
       exemptReason: "fixture",
       regenerateOnApply: true,
     });
-    const alpha = plan("alpha", [move("apps/api/src/alpha.ts", "libs/alpha/src/alpha.ts")], {
-      generatedFiles: [generated("generated/alpha.json")],
-    });
-    const bravo = plan("bravo", [move("apps/api/src/bravo.ts", "libs/bravo/src/bravo.ts")], {
-      generatedFiles: [generated("generated/bravo.json")],
-    });
+    const alpha = plan("alpha", [move("apps/api/src/alpha.ts", "libs/alpha/src/alpha.ts")], { generatedFiles: [generated("generated/alpha.json")] });
+    const bravo = plan("bravo", [move("apps/api/src/bravo.ts", "libs/bravo/src/bravo.ts")], { generatedFiles: [generated("generated/bravo.json")] });
 
     expect(analyzePlanConflicts([alpha, bravo]).conflicts).toEqual([]);
   });
 
   test("treats disjoint rewrite-path-reference operations as mergeable", () => {
-    const alpha = plan("alpha", [
-      move("apps/api/src/alpha.ts", "libs/alpha/src/alpha.ts"),
-      rewritePathReference("apps/api/src/alpha.ts", "docs/alpha.md"),
-    ]);
-    const bravo = plan("bravo", [
-      move("apps/api/src/bravo.ts", "libs/bravo/src/bravo.ts"),
-      rewritePathReference("apps/api/src/bravo.ts", "docs/bravo.md"),
-    ]);
+    const alpha = plan("alpha", [move("apps/api/src/alpha.ts", "libs/alpha/src/alpha.ts"), rewritePathReference("apps/api/src/alpha.ts", "docs/alpha.md")]);
+    const bravo = plan("bravo", [move("apps/api/src/bravo.ts", "libs/bravo/src/bravo.ts"), rewritePathReference("apps/api/src/bravo.ts", "docs/bravo.md")]);
 
     const analysis = analyzePlanConflicts([alpha, bravo]);
     expect(analysis.conflicts).toEqual([]);
@@ -300,23 +227,12 @@ describe("same-baseline operation conflict analysis", () => {
 
   test("refuses mixed baselines, mixed graph inputs, and duplicate identities", () => {
     const alpha = plan("alpha", []);
-    expect(() => analyzePlanConflicts([alpha, plan("bravo", [], { baselineCommit: "other" })])).toThrow(
-      "plans do not share a baseline commit",
+    expect(() => analyzePlanConflicts([alpha, plan("bravo", [], { baselineCommit: "other" })])).toThrow("plans do not share a baseline commit");
+    expect(() => analyzePlanConflicts([alpha, plan("bravo", [], { graphDigest: "other" })])).toThrow("plans do not share a graph digest");
+    expect(() => analyzePlanConflicts([alpha, { ...plan("bravo", []), candidateId: "alpha" }])).toThrow(CampaignConflictAnalysisError);
+    expect(() => analyzePlanConflicts([alpha, { ...plan("bravo", []), manifest: { ...plan("bravo", []).manifest, planId: "plan-alpha" } }])).toThrow(
+      "duplicate plan id",
     );
-    expect(() => analyzePlanConflicts([alpha, plan("bravo", [], { graphDigest: "other" })])).toThrow(
-      "plans do not share a graph digest",
-    );
-    expect(() => analyzePlanConflicts([alpha, { ...plan("bravo", []), candidateId: "alpha" }])).toThrow(
-      CampaignConflictAnalysisError,
-    );
-    expect(() =>
-      analyzePlanConflicts([
-        alpha,
-        { ...plan("bravo", []), manifest: { ...plan("bravo", []).manifest, planId: "plan-alpha" } },
-      ]),
-    ).toThrow("duplicate plan id");
-    expect(() => analyzePlanConflicts([{ ...alpha, priority: Number.NaN }])).toThrow(
-      "candidate priority must be finite",
-    );
+    expect(() => analyzePlanConflicts([{ ...alpha, priority: Number.NaN }])).toThrow("candidate priority must be finite");
   });
 });

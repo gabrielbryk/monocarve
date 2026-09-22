@@ -78,7 +78,10 @@ function importerDependencies(text: string): ImporterDependency[] {
   return entries.flatMap((entry) => importerDependencyEntries(lines, entry));
 }
 
-function importerDependencyEntries(lines: readonly string[], entry: { readonly root: string; readonly start: number; readonly end: number }): ImporterDependency[] {
+function importerDependencyEntries(
+  lines: readonly string[],
+  entry: { readonly root: string; readonly start: number; readonly end: number },
+): ImporterDependency[] {
   const found: ImporterDependency[] = [];
   for (let index = entry.start + 1; index < entry.end; index += 1) {
     const key = lines[index]?.match(/^ {6}(?:'([^']+)'|([^:]+)):\s*$/);

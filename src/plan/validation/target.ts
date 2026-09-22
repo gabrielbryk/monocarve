@@ -1,12 +1,20 @@
-import { applicationOwner, getApplication, isPackageOwner, packageNameMatcher, renderExtractionProfile, resolveExtractionProfile, scaffoldFor } from "../../config.ts";
 import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../../adapters/registry.ts";
-import { WorkspaceContext } from "../context.ts";
+import {
+  applicationOwner,
+  getApplication,
+  isPackageOwner,
+  packageNameMatcher,
+  renderExtractionProfile,
+  resolveExtractionProfile,
+  scaffoldFor,
+} from "../../config.ts";
+import { showBaseline } from "../../util/git.ts";
+import { hashText } from "../../util/hash.ts";
 import { renderGates } from "../build.ts";
+import { WorkspaceContext } from "../context.ts";
 import { isAnyMove, type ExtractionManifest, type PlanOperation } from "../manifest.ts";
 import { renderPublicModulePaths } from "../public-modules.ts";
 import { sourceExportsFromBaseline } from "../public-surface.ts";
-import { hashText } from "../../util/hash.ts";
-import { showBaseline } from "../../util/git.ts";
 import { packageOperations } from "../scaffold.ts";
 import { packageModulePath } from "../target-layout.ts";
 import { validateIntegrationTestSuite } from "./integration.ts";
@@ -20,7 +28,12 @@ export function validateTarget(
   issues: Issues,
   files: readonly string[],
   containedPath: (path: string, rule: string) => boolean,
-): { readonly packageName: string; readonly packageRoot: string; readonly entrypoint: string; readonly publicModules: NonNullable<ExtractionManifest["target"]["publicModules"]> } {
+): {
+  readonly packageName: string;
+  readonly packageRoot: string;
+  readonly entrypoint: string;
+  readonly publicModules: NonNullable<ExtractionManifest["target"]["publicModules"]>;
+} {
   const target = manifest.target;
   const packageName = target?.packageName ?? "";
   const packageRoot = target?.packageRoot ?? "";
@@ -75,11 +88,7 @@ function validatePublicModuleShape(
 }
 
 /** Re-derive configured subpaths and the source export evidence they carry. */
-export function validatePublicModules(
-  manifest: ExtractionManifest,
-  options: ValidatePlanOptions,
-  issues: Issues,
-): void {
+export function validatePublicModules(manifest: ExtractionManifest, options: ValidatePlanOptions, issues: Issues): void {
   try {
     const application = getApplication(options.config, manifest.application);
     const templates = manifest.target.profile
@@ -100,11 +109,7 @@ export function validatePublicModules(
     // there is no extraction template to re-render here.
     if (publicSurface.mode === "barrel" && existingEntrypoint && actual.length > 0 && manifest.modulePromotion === undefined) return;
     const context = new WorkspaceContext(options.config, options.rootDir);
-    const moves = new Map(
-      manifest.operations
-        .filter(isAnyMove)
-        .map((operation) => [operation.source, operation.target]),
-    );
+    const moves = new Map(manifest.operations.filter(isAnyMove).map((operation) => [operation.source, operation.target]));
     const moduleSources = [...manifest.source.files, ...(manifest.source.assets ?? [])];
     const rendered = renderPublicModulePaths(
       publicSurface,
@@ -118,16 +123,16 @@ export function validatePublicModules(
       if (hashText(baseline) !== manifest.sourceBlobs[source]) {
         throw new Error(`baseline source does not match recorded source blob: ${source}`);
       }
-      return [{
-        source,
-        target: moves.get(source),
-        specifier: `${manifest.target.packageName}/${paths.exportKey.slice(2)}`,
-        exportKey: paths.exportKey,
-        exportTarget: paths.exportTarget,
-        requiredExports: index < manifest.source.files.length
-          ? sourceExportsFromBaseline(options.rootDir, manifest.baselineCommit, source)
-          : [],
-      }];
+      return [
+        {
+          source,
+          target: moves.get(source),
+          specifier: `${manifest.target.packageName}/${paths.exportKey.slice(2)}`,
+          exportKey: paths.exportKey,
+          exportTarget: paths.exportTarget,
+          requiredExports: index < manifest.source.files.length ? sourceExportsFromBaseline(options.rootDir, manifest.baselineCommit, source) : [],
+        },
+      ];
     });
     if (manifest.modulePromotion !== undefined) {
       const promotion = manifest.modulePromotion;
@@ -262,13 +267,8 @@ function validateProfilePackageOperations(
         ? { workspaceDependencyRoots: { [application.packageName]: applicationOwner(application) } }
         : {}),
     }).filter((operation) => isProfilePackageOperation(operation, rendered.packageRoot));
-    const actual = manifest.operations.filter(
-      (operation) => isProfilePackageOperation(operation, rendered.packageRoot),
-    );
-    if (
-      expected.length !== actual.length ||
-      expected.some((operation, index) => !sameProfilePackageOperation(operation, actual[index]))
-    ) {
+    const actual = manifest.operations.filter((operation) => isProfilePackageOperation(operation, rendered.packageRoot));
+    if (expected.length !== actual.length || expected.some((operation, index) => !sameProfilePackageOperation(operation, actual[index]))) {
       issues.add("target-profile-scaffold", "profile-derived scaffold or lockfile importer does not match configured bytes");
     }
   } catch (error) {
@@ -289,7 +289,9 @@ function sameProfilePackageOperation(expected: PlanOperation, actual: PlanOperat
     return expected.path === actual.path && expected.generator === actual.generator && expected.contents === actual.contents;
   }
   if (expected.kind === "lockfile-importer" && actual.kind === "lockfile-importer") {
-    return expected.lockfile === actual.lockfile && expected.packageRoot === actual.packageRoot && expected.mode === actual.mode && expected.block === actual.block;
+    return (
+      expected.lockfile === actual.lockfile && expected.packageRoot === actual.packageRoot && expected.mode === actual.mode && expected.block === actual.block
+    );
   }
   return false;
 }

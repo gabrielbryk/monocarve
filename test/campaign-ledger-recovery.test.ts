@@ -1,11 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
 
 import { recoverStaleCampaignLedgerLock } from "../src/commands/campaign-ledger-file.ts";
-import { cleanupFixtures } from "./support/fixture-repo.ts";
 import { committedWorkspace } from "./support/cli.ts";
+import { cleanupFixtures } from "./support/fixture-repo.ts";
 
 afterEach(cleanupFixtures);
 

@@ -9,7 +9,8 @@ export function validateAssessment(manifest: ExtractionManifest, issues: Issues)
   const sortedUnique = (values: readonly string[]): boolean =>
     new Set(values).size === values.length && values.every((value, index) => index === 0 || value > values[index - 1]!);
   for (const reason of assessment.reasons) {
-    if (!reason.code || !reason.detail || !sortedUnique(reason.paths)) issues.add("assessment", "assessment reasons require non-empty identity and sorted unique paths");
+    if (!reason.code || !reason.detail || !sortedUnique(reason.paths))
+      issues.add("assessment", "assessment reasons require non-empty identity and sorted unique paths");
   }
   const shimPaths = assessment.compatibilityShims.map(({ path }) => path);
   if (!sortedUnique(shimPaths)) issues.add("assessment", "compatibility shims must be sorted and unique by path");

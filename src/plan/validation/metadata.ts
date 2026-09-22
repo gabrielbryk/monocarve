@@ -44,15 +44,18 @@ function validateDependencyDecisions(manifest: ExtractionManifest, issues: Issue
     decisionKeys.add(key);
     if (decision.reasons.length === 0) issues.add("dependency-evidence", `dependency decision ${key} has no reason`);
     for (const source of decision.sources) containedPath(source, "dependency-evidence");
-    if (decision.decision === "target-runtime" && manifest.dependencies.runtime[decision.name] === undefined) issues.add("dependency-evidence", `${key} is absent from runtime dependencies`);
-    if (decision.decision === "target-dev" && manifest.dependencies.dev[decision.name] === undefined) issues.add("dependency-evidence", `${key} is absent from dev dependencies`);
+    if (decision.decision === "target-runtime" && manifest.dependencies.runtime[decision.name] === undefined)
+      issues.add("dependency-evidence", `${key} is absent from runtime dependencies`);
+    if (decision.decision === "target-dev" && manifest.dependencies.dev[decision.name] === undefined)
+      issues.add("dependency-evidence", `${key} is absent from dev dependencies`);
   }
   if (manifest.dependencyDecisions !== undefined) {
     const expected = [
       ...Object.keys(manifest.dependencies.runtime).map((name) => `${name}:target-runtime`),
       ...Object.keys(manifest.dependencies.dev).map((name) => `${name}:target-dev`),
-      ...(manifest.donorDependencyPruning?.candidates ?? []).map(({ name }) =>
-        `${name}:${manifest.donorDependencyPruning?.mode === "apply" ? "donor-remove" : "donor-review"}`),
+      ...(manifest.donorDependencyPruning?.candidates ?? []).map(
+        ({ name }) => `${name}:${manifest.donorDependencyPruning?.mode === "apply" ? "donor-remove" : "donor-review"}`,
+      ),
     ];
     for (const key of expected) if (!decisionKeys.has(key)) issues.add("dependency-evidence", `missing dependency decision ${key}`);
     if (decisionKeys.size !== expected.length) issues.add("dependency-evidence", "dependency decisions contain an undeclared addition or removal");
@@ -64,8 +67,10 @@ function validateGeneratedFiles(manifest: ExtractionManifest, issues: Issues, co
     containedPath(generated.path, "generated-file");
     containedPath(generated.source, "generated-file");
     if (!generated.regenerate) issues.add("generated-file", `generated file ${generated.path} declares no regenerate command`);
-    if (generated.expectedHash !== undefined && !isSha256(generated.expectedHash)) issues.add("generated-file", `generated file ${generated.path} has an invalid expectedHash`);
-    if (generated.expectedHash === undefined && generated.exemptReason === undefined) issues.add("generated-file", `generated file ${generated.path} needs expectedHash or exemptReason`);
+    if (generated.expectedHash !== undefined && !isSha256(generated.expectedHash))
+      issues.add("generated-file", `generated file ${generated.path} has an invalid expectedHash`);
+    if (generated.expectedHash === undefined && generated.exemptReason === undefined)
+      issues.add("generated-file", `generated file ${generated.path} needs expectedHash or exemptReason`);
   }
 }
 
@@ -77,10 +82,12 @@ function validatePostJournalPreparers(manifest: ExtractionManifest, issues: Issu
     for (const output of preparer.outputs) containedPath(output, "post-journal-preparer");
     for (const mutation of preparer.mutations) {
       containedPath(mutation.path, "post-journal-preparer");
-      if (mutation.preconditionHash !== "missing" && !isSha256(mutation.preconditionHash)) issues.add("post-journal-preparer", `invalid precondition hash: ${mutation.path}`);
+      if (mutation.preconditionHash !== "missing" && !isSha256(mutation.preconditionHash))
+        issues.add("post-journal-preparer", `invalid precondition hash: ${mutation.path}`);
       if (!isSha256(mutation.resultHash)) issues.add("post-journal-preparer", `invalid result hash: ${mutation.path}`);
       if (!preparer.outputs.includes(mutation.path)) issues.add("post-journal-preparer", `declarative mutation is not an owned output: ${mutation.path}`);
-      if (mutation.preconditionMode !== "missing" && mutation.preconditionMode !== 0o644 && mutation.preconditionMode !== 0o755) issues.add("post-journal-preparer", `invalid precondition mode: ${mutation.path}`);
+      if (mutation.preconditionMode !== "missing" && mutation.preconditionMode !== 0o644 && mutation.preconditionMode !== 0o755)
+        issues.add("post-journal-preparer", `invalid precondition mode: ${mutation.path}`);
       if (mutation.resultMode !== 0o644 && mutation.resultMode !== 0o755) issues.add("post-journal-preparer", `invalid result mode: ${mutation.path}`);
     }
   }

@@ -116,13 +116,7 @@ function addDependencySubpaths(
   }
 }
 
-function dependencySubpathEntry(
-  require: NodeRequire,
-  dependency: string,
-  subpath: string,
-  packageRoot: string,
-  exported: unknown,
-): string | undefined {
+function dependencySubpathEntry(require: NodeRequire, dependency: string, subpath: string, packageRoot: string, exported: unknown): string | undefined {
   const declared = typesCondition(exported);
   const typed = declared === undefined ? undefined : resolve(packageRoot, declared);
   if (typed !== undefined && existsSync(typed)) return typed;
@@ -147,8 +141,7 @@ function definitelyTypedEntry(require: NodeRequire, dependency: string, subpath?
     return undefined;
   }
   const manifest = readManifest(join(root, "package.json"));
-  const candidates = subpath === undefined
-    ? [declaredTypings(manifest) ?? manifest?.main ?? "index.d.ts"]
-    : [`${subpath}.d.ts`, `${subpath}/index.d.ts`, subpath];
+  const candidates =
+    subpath === undefined ? [declaredTypings(manifest) ?? manifest?.main ?? "index.d.ts"] : [`${subpath}.d.ts`, `${subpath}/index.d.ts`, subpath];
   return candidates.map((entry) => resolve(root, entry)).find(existsSync);
 }

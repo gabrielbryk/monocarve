@@ -5,10 +5,10 @@ import type { CandidateRecommendation, RejectionReason } from "../portfolio/type
 import { assessEvacuationCandidate } from "./assessment.ts";
 import type { AssessedEvacuation } from "./assessment.ts";
 import { buildEvacuationCandidate } from "./candidate.ts";
-import type { EvacuationBoundaryCut } from "./cuts.ts";
-import { resolveEvacuationSelectors } from "./selectors.ts";
-import { authorizeProtectedRoots } from "./protected-authorization.ts";
 import { includeCompositionRoots } from "./composition-inclusion.ts";
+import type { EvacuationBoundaryCut } from "./cuts.ts";
+import { authorizeProtectedRoots } from "./protected-authorization.ts";
+import { resolveEvacuationSelectors } from "./selectors.ts";
 
 export interface EvacuationAnalysisOptions {
   readonly config: MonocarveConfig;
@@ -54,8 +54,20 @@ export function prepareEvacuation(options: EvacuationAnalysisOptions): AssessedE
     throw new PlanningError(`package name ${JSON.stringify(options.packageName)} does not match the configured pattern`);
   }
   const selected = resolveEvacuationSelectors(options.graph, options.application, options.sources);
-  const authorizedProtectedRoots = authorizeProtectedRoots(options.config, options.graph, options.application, selected, options.authorizedProtectedRoots ?? []);
-  const includedCompositionRoots = includeCompositionRoots(options.config, options.graph, options.application, selected, options.includedCompositionRoots ?? []);
+  const authorizedProtectedRoots = authorizeProtectedRoots(
+    options.config,
+    options.graph,
+    options.application,
+    selected,
+    options.authorizedProtectedRoots ?? [],
+  );
+  const includedCompositionRoots = includeCompositionRoots(
+    options.config,
+    options.graph,
+    options.application,
+    selected,
+    options.includedCompositionRoots ?? [],
+  );
   const evacuation = buildEvacuationCandidate({
     config: options.config,
     graph: options.graph,
@@ -101,12 +113,14 @@ export function evacuationReport(assessed: AssessedEvacuation, packageName: stri
 }
 
 export function formatEvacuationReport(report: EvacuationReport): string {
-  const cuts = report.boundaryCuts.length === 0
-    ? "none"
-    : report.boundaryCuts.map((cut) => `  ${cut.kind} ${cut.from} -> ${cut.target} (${cut.reason}, ${cut.remedy.kind})`).join("\n");
-  const blockers = report.candidate.rejectionReasons.length === 0
-    ? "none"
-    : report.candidate.rejectionReasons.map((reason) => `  ${reason.code}: ${reason.detail}`).join("\n");
+  const cuts =
+    report.boundaryCuts.length === 0
+      ? "none"
+      : report.boundaryCuts.map((cut) => `  ${cut.kind} ${cut.from} -> ${cut.target} (${cut.reason}, ${cut.remedy.kind})`).join("\n");
+  const blockers =
+    report.candidate.rejectionReasons.length === 0
+      ? "none"
+      : report.candidate.rejectionReasons.map((reason) => `  ${reason.code}: ${reason.detail}`).join("\n");
   return [
     `Evacuation ${report.id}`,
     `Application: ${report.application}`,
@@ -118,7 +132,9 @@ export function formatEvacuationReport(report: EvacuationReport): string {
     `Absorbed SCC peers: ${report.absorbedSccPeers.length}`,
     `Unselected dependencies: ${report.unselectedDependencies.length}`,
     `Eligible: ${report.candidate.eligible ? "yes" : "no"}`,
-    "Boundary cuts:", cuts,
-    "Blockers:", blockers,
+    "Boundary cuts:",
+    cuts,
+    "Blockers:",
+    blockers,
   ].join("\n");
 }

@@ -1,22 +1,13 @@
 /** Proof 1: moved, rewritten, and declared-write bytes match their evidence. */
 
+import { type ExtractionManifest, type MoveOperation, type MoveWithRewriteOperation, type WriteFileOperation } from "../plan/manifest.ts";
 import { MISSING } from "../util/hash.ts";
-import {
-  type ExtractionManifest,
-  type MoveOperation,
-  type MoveWithRewriteOperation,
-  type WriteFileOperation,
-} from "../plan/manifest.ts";
 import { showBaselineHash, stateAt } from "./audit-helpers.ts";
 import { proof, type ProofResult } from "./audit-types.ts";
 
 type AnyMove = MoveOperation | MoveWithRewriteOperation;
 
-function moveFailures(
-  manifest: ExtractionManifest,
-  rootDir: string,
-  moves: readonly AnyMove[],
-): string[] {
+function moveFailures(manifest: ExtractionManifest, rootDir: string, moves: readonly AnyMove[]): string[] {
   const failures: string[] = [];
   const compatibilitySource = manifest.modulePromotion?.retireSource === false ? manifest.modulePromotion.source : undefined;
   for (const move of moves) {
@@ -53,11 +44,7 @@ function rewriteFailures(manifest: ExtractionManifest, rootDir: string): string[
  * blobs, the declared writes, and the path-key migrations — every claim this
  * proof actually re-derives from the worktree.
  */
-export function byteFidelityProof(
-  manifest: ExtractionManifest,
-  rootDir: string,
-  moves: readonly AnyMove[],
-): ProofResult {
+export function byteFidelityProof(manifest: ExtractionManifest, rootDir: string, moves: readonly AnyMove[]): ProofResult {
   const byteFailures: string[] = [...moveFailures(manifest, rootDir, moves)];
   for (const [path, expected] of Object.entries(manifest.sourceBlobs)) {
     const baseline = showBaselineHash(rootDir, manifest.baselineCommit, path);
@@ -70,31 +57,21 @@ export function byteFidelityProof(
   // exists for — what these bytes should be is never unknowable at plan time.
   // A path is written at most once per journal (the validator rejects a second
   // operation mutating it), so `resultHash` is the plan's final word on it.
-  const writes = manifest.operations.filter(
-    (operation): operation is WriteFileOperation => operation.kind === "write-file",
-  );
+  const writes = manifest.operations.filter((operation): operation is WriteFileOperation => operation.kind === "write-file");
   for (const operation of writes) {
     const landed = stateAt(rootDir, operation.path);
     if (landed !== operation.resultHash) {
-      byteFailures.push(
-        `written file does not match its declared result: ${operation.path} (expected ${operation.resultHash}, got ${landed})`,
-      );
+      byteFailures.push(`written file does not match its declared result: ${operation.path} (expected ${operation.resultHash}, got ${landed})`);
     }
   }
-  const migrations = manifest.operations.filter(
-    (operation) => operation.kind === "migrate-path-keys",
-  );
+  const migrations = manifest.operations.filter((operation) => operation.kind === "migrate-path-keys");
   for (const operation of migrations) {
     const landed = stateAt(rootDir, operation.path);
     if (landed !== operation.resultHash) {
       byteFailures.push(
-        `path-keyed artifact does not match its declared migration result: ${operation.path} ` +
-          `(expected ${operation.resultHash}, got ${landed})`,
+        `path-keyed artifact does not match its declared migration result: ${operation.path} ` + `(expected ${operation.resultHash}, got ${landed})`,
       );
     }
   }
-  return proof(
-    byteFailures,
-    moves.length + Object.keys(manifest.sourceBlobs).length + writes.length + migrations.length,
-  );
+  return proof(byteFailures, moves.length + Object.keys(manifest.sourceBlobs).length + writes.length + migrations.length);
 }

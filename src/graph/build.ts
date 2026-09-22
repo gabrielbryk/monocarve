@@ -16,29 +16,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 
-import {
-  applicationFor,
-  domainFor,
-  firstPartyRoots,
-  isTestPath,
-  testKindOf,
-  isAssetPath,
-  ownerFor,
-  packageNameOf,
-  type MonocarveConfig,
-} from "../config.ts";
+import { inventoryModuleReferences } from "../codemod/imports.ts";
+import { applicationFor, domainFor, firstPartyRoots, isTestPath, testKindOf, isAssetPath, ownerFor, packageNameOf, type MonocarveConfig } from "../config.ts";
 import { isDeclarationPath, isSourceModulePath, lineCount } from "../util/files.ts";
 import { byCodeUnit } from "../util/hash.ts";
 import { normalizePath } from "../util/paths.ts";
-import { inventoryModuleReferences } from "../codemod/imports.ts";
+import type { DependencyGraph, ModuleEdge, ModuleNode, UnresolvedReference, WorkspaceEdge } from "./model.ts";
 import { fileFacts } from "./syntax.ts";
-import type {
-  DependencyGraph,
-  ModuleEdge,
-  ModuleNode,
-  UnresolvedReference,
-  WorkspaceEdge,
-} from "./model.ts";
 import { workspaceInventory, workspaceSubpathResolves, type WorkspaceInventory } from "./workspace.ts";
 
 /** One module as a scanner reports it. The only scanner-shaped type we accept. */
@@ -80,11 +64,7 @@ function isProductionSource(config: MonocarveConfig, path: string): boolean {
  * resolves to nothing, or a workspace subpath the owning package does not
  * export, is a real defect the plan must not paper over.
  */
-function unresolvableSpecifier(
-  rootDir: string,
-  specifier: string,
-  workspace: WorkspaceInventory,
-): boolean {
+function unresolvableSpecifier(rootDir: string, specifier: string, workspace: WorkspaceInventory): boolean {
   if (specifier.startsWith(".")) return true;
   const owner = workspace.packageNames.get(packageNameOf(specifier));
   if (owner === undefined) return false;
@@ -150,23 +130,11 @@ export function buildDependencyGraph(options: BuildGraphOptions): DependencyGrap
         const kind = facts.kinds.get(dependency.module);
         const dynamic = dependency.dynamic === true || kind?.dynamic === true;
         const typeOnly = kind?.typeOnly === true;
-        edges.push({
-          from: path,
-          to: resolvedPath,
-          kind: edgeKind(config, resolvedPath, dynamic, typeOnly),
-          specifier: dependency.module,
-          typeOnly,
-          dynamic,
-        });
+        edges.push({ from: path, to: resolvedPath, kind: edgeKind(config, resolvedPath, dynamic, typeOnly), specifier: dependency.module, typeOnly, dynamic });
         continue;
       }
       if (dependency.module.startsWith(".") || (resolvedPath && isFirstParty(roots, resolvedPath))) continue;
-      recordExternal(path, dependency.module, workspace, {
-        externalPackages,
-        externalBySource,
-        workspaceDependenciesBySource,
-        unresolvedWorkspaceEdges,
-      });
+      recordExternal(path, dependency.module, workspace, { externalPackages, externalBySource, workspaceDependenciesBySource, unresolvedWorkspaceEdges });
     }
   }
 
@@ -187,9 +155,7 @@ export function buildDependencyGraph(options: BuildGraphOptions): DependencyGrap
     // By code unit, not by locale: `graphDigest` hashes this array *in order*
     // into `manifest.graphDigest`, so a collated order would make the plan's
     // bytes depend on the machine's ICU data. See `byCodeUnit`.
-    unresolved: unresolved.sort(
-      (left, right) => byCodeUnit(left.source, right.source) || byCodeUnit(left.specifier, right.specifier),
-    ),
+    unresolved: unresolved.sort((left, right) => byCodeUnit(left.source, right.source) || byCodeUnit(left.specifier, right.specifier)),
     specifiers,
     externalPackages,
     externalBySource,
@@ -208,10 +174,7 @@ function edgeKind(config: MonocarveConfig, target: string, dynamic: boolean, typ
   return "static";
 }
 
-function adjacency(
-  edges: readonly ModuleEdge[],
-  pick: (edge: ModuleEdge) => [string, string],
-): Map<string, readonly string[]> {
+function adjacency(edges: readonly ModuleEdge[], pick: (edge: ModuleEdge) => [string, string]): Map<string, readonly string[]> {
   const map = new Map<string, Set<string>>();
   for (const edge of edges) {
     const [key, value] = pick(edge);
@@ -229,12 +192,7 @@ interface ExternalInventory {
   readonly unresolvedWorkspaceEdges: WorkspaceEdge[];
 }
 
-function recordExternal(
-  source: string,
-  specifier: string,
-  workspace: WorkspaceInventory,
-  inventory: ExternalInventory,
-): void {
+function recordExternal(source: string, specifier: string, workspace: WorkspaceInventory, inventory: ExternalInventory): void {
   const name = packageNameOf(specifier);
   const workspaceOwner = workspace.packageNames.get(name);
   const target = workspaceOwner ? inventory.workspaceDependenciesBySource : inventory.externalBySource;

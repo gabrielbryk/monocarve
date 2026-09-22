@@ -13,9 +13,7 @@ test("max-file-lines checks every configured code tree and reports exact excesse
   mkdirSync(join(root, "src"), { recursive: true });
   writeFileSync(join(root, "src", "small.ts"), "one\ntwo\n");
   writeFileSync(join(root, "src", "large.ts"), "one\ntwo\nthree\n");
-  expect(findLineViolations(root, ["src"], 2)).toEqual([
-    { path: "src/large.ts", lines: 3, limit: 2 },
-  ]);
+  expect(findLineViolations(root, ["src"], 2)).toEqual([{ path: "src/large.ts", lines: 3, limit: 2 }]);
 });
 
 test("complexity gate fails each regressed metric independently", () => {
@@ -41,17 +39,17 @@ test("complexity gate fails each regressed metric independently", () => {
 
 test("runtime branding literals remain confined to branding.ts", () => {
   const src = join(import.meta.dir, "../src");
-  const offenders = walk(src).filter((path) => !path.endsWith("/branding.ts")).filter((path) =>
-    /["'`]monocarve(?:@|["'`])/u.test(readFileSync(path, "utf8")),
-  );
+  const offenders = walk(src)
+    .filter((path) => !path.endsWith("/branding.ts"))
+    .filter((path) => /["'`]monocarve(?:@|["'`])/u.test(readFileSync(path, "utf8")));
   expect(offenders).toEqual([]);
 });
 
 test("source extension lists remain centralized in config policy", () => {
   const src = join(import.meta.dir, "../src");
-  const offenders = walk(src).filter((path) => !path.endsWith("/config/source-policy.ts")).filter((path) =>
-    /const\s+[A-Z_]*(?:EXTENSIONS|SUFFIXES)\s*=\s*\[/u.test(readFileSync(path, "utf8")),
-  );
+  const offenders = walk(src)
+    .filter((path) => !path.endsWith("/config/source-policy.ts"))
+    .filter((path) => /const\s+[A-Z_]*(?:EXTENSIONS|SUFFIXES)\s*=\s*\[/u.test(readFileSync(path, "utf8")));
   expect(offenders).toEqual([]);
 });
 

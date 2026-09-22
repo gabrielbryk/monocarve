@@ -17,25 +17,27 @@ const PACKAGE_MANIFEST = "libs/ports/package.json";
 
 function fixture(exports: unknown) {
   const root = fixtureRepo({
-    "apps/api/tsconfig.json": JSON.stringify({ compilerOptions: { strict: true, noEmit: true, module: "ESNext", moduleResolution: "Bundler" }, include: ["src/**/*.ts"] }),
+    "apps/api/tsconfig.json": JSON.stringify({
+      compilerOptions: { strict: true, noEmit: true, module: "ESNext", moduleResolution: "Bundler" },
+      include: ["src/**/*.ts"],
+    }),
     [RETAINED]: "export interface Widget { amount: number }\n",
     [CONSUMER]: 'import type { Widget } from "../widget.ts";\nexport type Input = Widget;\n',
     [PACKAGE_MANIFEST]: JSON.stringify({ name: "@acme/ports", exports }),
   });
   const config = fixtureConfig(root, {
-    portPromotions: [{
-      id: "widget-port",
-      retainedRoots: [RETAINED],
-      contractPackage: "@acme/ports/widget",
-      contractModule: "widget",
-      appConcreteType: `${RETAINED}#Widget`,
-      libraryPort: "Widget",
-      targetPackage: "@acme/ports",
-    }],
-    preparation: {
-      gates: { package: [], project: [], workspace: ["true"] },
-      commit: { subject: "refactor: prepare widget port boundary" },
-    },
+    portPromotions: [
+      {
+        id: "widget-port",
+        retainedRoots: [RETAINED],
+        contractPackage: "@acme/ports/widget",
+        contractModule: "widget",
+        appConcreteType: `${RETAINED}#Widget`,
+        libraryPort: "Widget",
+        targetPackage: "@acme/ports",
+      },
+    ],
+    preparation: { gates: { package: [], project: [], workspace: ["true"] }, commit: { subject: "refactor: prepare widget port boundary" } },
   });
   const baseline = resolveCommit(root, "HEAD");
   const modules: ScanReport["modules"][number][] = [
@@ -54,10 +56,7 @@ function fixture(exports: unknown) {
       boundaryId: "widget-port",
       graph,
       contractTargetPath: TARGET,
-      rendering: {
-        gates: { package: [], project: [], workspace: ["true"] },
-        commit: { subject: "refactor: prepare widget port boundary" },
-      },
+      rendering: { gates: { package: [], project: [], workspace: ["true"] }, commit: { subject: "refactor: prepare widget port boundary" } },
     },
   };
 }
@@ -70,17 +69,17 @@ describe("port package public subpath", () => {
     const consumerWrite = manifest.operations.find((operation) => operation.kind === "rewrite-module-specifier");
     if (packageWrite?.kind !== "write-file" || consumerWrite?.kind !== "rewrite-module-specifier") throw new Error("expected package and consumer writes");
 
-    expect(JSON.parse(packageWrite.contents)).toEqual({
-      name: "@acme/ports",
-      exports: { "./other": "./src/other.ts", "./widget": "./src/widget.ts" },
-    });
+    expect(JSON.parse(packageWrite.contents)).toEqual({ name: "@acme/ports", exports: { "./other": "./src/other.ts", "./widget": "./src/widget.ts" } });
     expect(consumerWrite.contents).toContain('from "@acme/ports/widget"');
     expect(() => assertPreparationManifestValid(manifest)).not.toThrow();
 
     const forgedContents = `${JSON.stringify({ name: "@acme/ports", exports: { "./other": "./src/other.ts" } }, null, 2)}\n`;
     const forgedWrite = { ...packageWrite, file: { ...packageWrite.file, resultHash: hashText(forgedContents) }, contents: forgedContents };
     const { planId: _planId, ...draft } = manifest;
-    const forged = createPreparationManifest({ ...draft, operations: manifest.operations.map((operation) => operation === packageWrite ? forgedWrite : operation) });
+    const forged = createPreparationManifest({
+      ...draft,
+      operations: manifest.operations.map((operation) => (operation === packageWrite ? forgedWrite : operation)),
+    });
     expect(() => assertPreparationManifestValid(forged)).toThrow(/port package export must bind exactly one promoted contract target/);
   });
 
@@ -99,8 +98,6 @@ describe("port package public subpath", () => {
 
   test("refuses an occupied contract subpath pointing elsewhere", () => {
     const { input } = fixture({ "./widget": "./src/not-widget.ts" });
-    expect(() => compileBoundaryPreparationManifest(input)).toThrow(
-      /export \.\/widget already targets "\.\/src\/not-widget\.ts", not "\.\/src\/widget\.ts"/,
-    );
+    expect(() => compileBoundaryPreparationManifest(input)).toThrow(/export \.\/widget already targets "\.\/src\/not-widget\.ts", not "\.\/src\/widget\.ts"/);
   });
 });

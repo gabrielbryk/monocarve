@@ -2,8 +2,8 @@ import { applicationFor, ownerFor, type MonocarveConfig } from "../config.ts";
 import { buildApplicationGraph, sccId } from "../graph/components.ts";
 import { isCompositionRoot } from "../graph/layers.ts";
 import type { DependencyGraph, Scc } from "../graph/model.ts";
-import { byCodeUnit, hashText } from "../util/hash.ts";
 import type { ConsumerRef } from "../portfolio/types.ts";
+import { byCodeUnit, hashText } from "../util/hash.ts";
 import { EvacuationSelectorError } from "./selectors.ts";
 
 /** One deterministic, provenance-preserving union of requested dependency closures. */
@@ -59,20 +59,24 @@ export function buildEvacuationCandidate(options: EvacuationCandidateOptions): E
   const seedIds = new Set(requested.map((path) => componentByNode.get(path)!));
 
   const includedComposition = new Set(options.includedCompositionRoots ?? []);
-  const retainedIds = new Set([...seedIds].filter((id) =>
-    (components[id] ?? []).some((path) => isCompositionRoot(config, path))
-    && !(components[id] ?? []).some((path) => includedComposition.has(path)),
-  ));
+  const retainedIds = new Set(
+    [...seedIds].filter(
+      (id) => (components[id] ?? []).some((path) => isCompositionRoot(config, path)) && !(components[id] ?? []).some((path) => includedComposition.has(path)),
+    ),
+  );
   const movedIds = new Set([...seedIds].filter((id) => !retainedIds.has(id)));
   const files = componentPaths(movedIds, components);
   const requestedSet = new Set(requested);
   const absorbedSccPeers = files.filter((path) => !requestedSet.has(path));
   const movedSet = new Set(files);
-  const unselectedDependencies = [...new Set(graph.edges
-    .filter((edge) => movedSet.has(edge.from) && !movedSet.has(edge.to))
-    .map((edge) => edge.to)
-    .filter((path) => graph.nodes.get(path)?.zone === "application"))]
-    .sort(byCodeUnit);
+  const unselectedDependencies = [
+    ...new Set(
+      graph.edges
+        .filter((edge) => movedSet.has(edge.from) && !movedSet.has(edge.to))
+        .map((edge) => edge.to)
+        .filter((path) => graph.nodes.get(path)?.zone === "application"),
+    ),
+  ].sort(byCodeUnit);
   const retainedComposition = componentSccs(retainedIds, components);
   const seedSccs = componentSccs(seedIds, components);
   const sccs = componentSccs(movedIds, components);
@@ -114,7 +118,16 @@ export function evacuationId(
   includedCompositionRoots: readonly string[] = [],
 ): string {
   const retainedMembers = [...new Set(retained.flatMap((scc) => scc.members))].sort(byCodeUnit);
-  const identity = [application, ...requested, "--files--", ...files, "--retained--", ...retainedMembers, "--authorized-protected--", ...authorizedProtectedRoots];
+  const identity = [
+    application,
+    ...requested,
+    "--files--",
+    ...files,
+    "--retained--",
+    ...retainedMembers,
+    "--authorized-protected--",
+    ...authorizedProtectedRoots,
+  ];
   if (includedCompositionRoots.length > 0) identity.push("--included-composition--", ...includedCompositionRoots);
   return `e-${hashText(identity.join("\n")).slice(0, 12)}`;
 }
@@ -131,12 +144,7 @@ function packageDependencies(graph: DependencyGraph, files: readonly string[]): 
   return [...new Set(owners.map((owner) => ownerToPackage.get(owner) ?? owner))].sort(byCodeUnit);
 }
 
-function consumerRefs(
-  config: MonocarveConfig,
-  graph: DependencyGraph,
-  application: string,
-  files: readonly string[],
-): ConsumerRef[] {
+function consumerRefs(config: MonocarveConfig, graph: DependencyGraph, application: string, files: readonly string[]): ConsumerRef[] {
   const moved = new Set(files);
   const byFile = new Map<string, Set<string>>();
   for (const edge of graph.edges) {

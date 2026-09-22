@@ -103,10 +103,7 @@ describe("retainedBlockers", () => {
   test("empty retainedRoots produces no blockers at all", () => {
     const alpha = `${APP}/orders/alpha.ts`;
     const shared = `${APP}/shared/base.ts`;
-    const root = workspace({
-      [alpha]: 'import { Base } from "../shared/base.ts";\nexport const alpha = Base;\n',
-      [shared]: "export const Base = 1;\n",
-    });
+    const root = workspace({ [alpha]: 'import { Base } from "../shared/base.ts";\nexport const alpha = Base;\n', [shared]: "export const Base = 1;\n" });
     const cfg = config({});
     const graph = graphFor(root, cfg, [module(alpha, [{ module: "../shared/base.ts", resolved: shared }]), module(shared)]);
     const context = new WorkspaceContext(cfg, root);

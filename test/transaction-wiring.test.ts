@@ -1,16 +1,29 @@
 /** Consumer wiring proof cases. */
 import { afterEach, describe, expect, test } from "bun:test";
-import { createTaskRunnerAdapter } from "../src/adapters/registry.ts";
 import { pnpmAdapter } from "../src/adapters/pnpm.ts";
+import { createTaskRunnerAdapter } from "../src/adapters/registry.ts";
 import { PlanningError, WorkspaceContext } from "../src/plan/context.ts";
+import type { ExtractionManifest } from "../src/plan/manifest.ts";
 import { consumerWiringOperations } from "../src/plan/scaffold.ts";
 import { assertPlanValid } from "../src/plan/validate.ts";
 import { applyPlan } from "../src/transaction/apply.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
 import { hashText } from "../src/util/hash.ts";
-import type { ExtractionManifest } from "../src/plan/manifest.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, read } from "./support/fixture-repo.ts";
-import { APP, CONSUMER, ENTRYPOINT, LOCKFILE, PACKAGE, PACKAGE_ROOT, ZETA, baseManifest, extractionFiles, importerBlock, landManifest, packageManifest } from "./support/transaction-fixture.ts";
+import {
+  APP,
+  CONSUMER,
+  ENTRYPOINT,
+  LOCKFILE,
+  PACKAGE,
+  PACKAGE_ROOT,
+  ZETA,
+  baseManifest,
+  extractionFiles,
+  importerBlock,
+  landManifest,
+  packageManifest,
+} from "./support/transaction-fixture.ts";
 
 describe("consumer wiring for a newly created package", () => {
   afterEach(cleanupFixtures);
@@ -50,22 +63,12 @@ describe("consumer wiring for a newly created package", () => {
     2,
   )}\n`;
   const WIRED_APP_MANIFEST = `${JSON.stringify(
-    {
-      name: "@acme/api",
-      version: "0.1.0",
-      private: true,
-      type: "module",
-      dependencies: { [PACKAGE]: "workspace:*", [ZETA]: "workspace:*" },
-    },
+    { name: "@acme/api", version: "0.1.0", private: true, type: "module", dependencies: { [PACKAGE]: "workspace:*", [ZETA]: "workspace:*" } },
     null,
     2,
   )}\n`;
   const APP_TSCONFIG = `${JSON.stringify({ include: ["src"], references: [{ path: "../../libs/zeta" }] }, null, 2)}\n`;
-  const WIRED_APP_TSCONFIG = `${JSON.stringify(
-    { include: ["src"], references: [{ path: "../../libs/analytics" }, { path: "../../libs/zeta" }] },
-    null,
-    2,
-  )}\n`;
+  const WIRED_APP_TSCONFIG = `${JSON.stringify({ include: ["src"], references: [{ path: "../../libs/analytics" }, { path: "../../libs/zeta" }] }, null, 2)}\n`;
 
   function wiringFiles(): Record<string, string> {
     return {
@@ -138,19 +141,14 @@ describe("consumer wiring for a newly created package", () => {
     expect(read(root, `${APP}/package.json`)).toBe(WIRED_APP_MANIFEST);
     // Sorted insertion, not an append: the new dependency precedes the old one.
     expect(Object.keys(JSON.parse(read(root, `${APP}/package.json`)).dependencies)).toEqual([PACKAGE, ZETA]);
-    expect(JSON.parse(read(root, `${APP}/tsconfig.json`)).references).toEqual([
-      { path: "../../libs/analytics" },
-      { path: "../../libs/zeta" },
-    ]);
+    expect(JSON.parse(read(root, `${APP}/tsconfig.json`)).references).toEqual([{ path: "../../libs/analytics" }, { path: "../../libs/zeta" }]);
 
     const lockfile = read(root, "pnpm-lock.yaml");
     expect(pnpmAdapter.importerBlock(lockfile, APP)).toBe(WIRED_APP_BLOCK);
     expect(pnpmAdapter.importerBlock(lockfile, PACKAGE_ROOT)).toBe(TARGET_BLOCK);
 
     const wiring = fixtureGit(root, "show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean).sort();
-    expect(wiring).toEqual(
-      [`${APP}/package.json`, `${APP}/tsconfig.json`, CONSUMER, ENTRYPOINT, "pnpm-lock.yaml"].sort(),
-    );
+    expect(wiring).toEqual([`${APP}/package.json`, `${APP}/tsconfig.json`, CONSUMER, ENTRYPOINT, "pnpm-lock.yaml"].sort());
     expect(auditPlanSync({ config, rootDir: root, manifest }).passed).toBe(true);
     expect(read(root, CONSUMER)).toContain(PACKAGE);
   }, 120_000);
@@ -185,8 +183,6 @@ describe("consumer wiring for a newly created package", () => {
     // `LOCKFILE` predates the application: it has `.` and `libs/zeta` only.
     expect(pnpmAdapter.importerBlock(LOCKFILE, APP)).toBeUndefined();
     expect(() => consumerWiringOperations(wiringInput(LOCKFILE))).toThrow(PlanningError);
-    expect(() => consumerWiringOperations(wiringInput(LOCKFILE))).toThrow(
-      `pnpm-lock.yaml has no importer entry for ${APP}`,
-    );
+    expect(() => consumerWiringOperations(wiringInput(LOCKFILE))).toThrow(`pnpm-lock.yaml has no importer entry for ${APP}`);
   });
 });

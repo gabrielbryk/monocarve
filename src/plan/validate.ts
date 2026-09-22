@@ -6,20 +6,27 @@
  * stay small enough to audit independently.
  */
 
-import { LEGACY_PLAN_SCHEMA_VERSION, PREVIOUS_PLAN_SCHEMA_VERSION, PLAN_SCHEMA_VERSION, isSupportedExtractionManifestVersion, operationPaths, type ExtractionManifest } from "./manifest.ts";
 import { PlanValidationError } from "../errors.ts";
 import { isSha256 } from "../util/hash.ts";
 import { relativeWorkspacePath } from "../util/paths.ts";
+import {
+  LEGACY_PLAN_SCHEMA_VERSION,
+  PREVIOUS_PLAN_SCHEMA_VERSION,
+  PLAN_SCHEMA_VERSION,
+  isSupportedExtractionManifestVersion,
+  operationPaths,
+  type ExtractionManifest,
+} from "./manifest.ts";
 import { validateAssessment } from "./validation/assessment.ts";
+import { validateConsumers } from "./validation/consumers.ts";
+import { validateDependencies } from "./validation/dependencies.ts";
+import { validateMetadata } from "./validation/metadata.ts";
 import { validateModulePromotion } from "./validation/module-promotion.ts";
+import { validateOperations } from "./validation/operations.ts";
 import { validateProvenance } from "./validation/provenance.ts";
+import { Issues, validationResult, type ValidatePlanOptions, type ValidationResult } from "./validation/shared.ts";
 import { validateSource } from "./validation/source.ts";
 import { validateTarget } from "./validation/target.ts";
-import { validateDependencies } from "./validation/dependencies.ts";
-import { validateConsumers } from "./validation/consumers.ts";
-import { validateMetadata } from "./validation/metadata.ts";
-import { validateOperations } from "./validation/operations.ts";
-import { Issues, validationResult, type ValidatePlanOptions, type ValidationResult } from "./validation/shared.ts";
 
 export type { ValidatePlanOptions, ValidationIssue, ValidationResult, ValidationSeverity } from "./validation/shared.ts";
 

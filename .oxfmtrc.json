@@ -16,15 +16,7 @@
     "sortSideEffects": false
   },
   "sortPackageJson": false,
-  "ignorePatterns": [
-    "**/.worktrees/**",
-    "**/dist/**",
-    "**/artifacts/**",
-    "**/node_modules/**",
-    "**/fixtures/**",
-    "**/test/fixtures/**",
-    "**/*.tsbuildinfo"
-  ],
+  "ignorePatterns": ["**/.worktrees/**", "**/dist/**", "**/artifacts/**", "**/node_modules/**", "**/fixtures/**", "**/test/fixtures/**", "**/*.tsbuildinfo"],
   "overrides": [
     {
       "files": ["**/*.json", "**/*.jsonc"],

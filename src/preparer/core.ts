@@ -1,23 +1,23 @@
 import { readFileSync } from "node:fs";
 
+import { createPackageManagerAdapter } from "../adapters/registry.ts";
 import { type MonocarveConfig, packageContainerRoots } from "../config.ts";
+import { isGuardedBranch } from "../config.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
 import { executePreparationJournal, finalizeCompletedPreparationJournal, rollbackCompletedPreparationJournal } from "../prepare/journal.ts";
-import { createPackageManagerAdapter } from "../adapters/registry.ts";
-import { createWorktree } from "../transaction/worktree.ts";
-import { currentBranch, git, headCommit, repositoryPrefix, resolveCommit, showBaseline, statusEntries } from "../util/git.ts";
-import { isGuardedBranch } from "../config.ts";
-import { byCodeUnit, hashText, stableStringify } from "../util/hash.ts";
-import { workspacePath } from "../util/paths.ts";
-import type { PreparerManifest } from "./manifest.ts";
-import { bindBootstrapConfig } from "./bootstrap-config.ts";
 import { runPreparationPostJournalPreparers } from "../prepare/post-journal.ts";
 import { restoreSnapshot, snapshotPaths } from "../transaction/journal.ts";
-import { PreparerError } from "./error.ts";
-import { runPreparerCommand } from "./run-command.ts";
+import { createWorktree } from "../transaction/worktree.ts";
+import { currentBranch, git, headCommit, repositoryPrefix, resolveCommit, showBaseline, statusEntries } from "../util/git.ts";
+import { byCodeUnit, hashText, stableStringify } from "../util/hash.ts";
+import { workspacePath } from "../util/paths.ts";
+import { bindBootstrapConfig } from "./bootstrap-config.ts";
 import { planPreparerCompilation, runPreparerCompilation } from "./core-compile.ts";
-import { assertPreparerManifestMatchesConfig, assertPreparerManifestShape } from "./core-validate.ts";
 import { assertCommittedMutationsMatch, assertMutationsMatchState, unique, validatedPath } from "./core-support.ts";
+import { assertPreparerManifestMatchesConfig, assertPreparerManifestShape } from "./core-validate.ts";
+import { PreparerError } from "./error.ts";
+import type { PreparerManifest } from "./manifest.ts";
+import { runPreparerCommand } from "./run-command.ts";
 
 export { PreparerError } from "./error.ts";
 
@@ -47,7 +47,8 @@ export async function compilePreparerManifest(input: CompilePreparerInput): Prom
   const worktree = await createWorktree({
     rootDir: input.rootDir,
     commit: plan.resolved.commit,
-    worktreeRoot: input.config.transaction.worktreeRoot, packageRoots: packageContainerRoots(input.config),
+    worktreeRoot: input.config.transaction.worktreeRoot,
+    packageRoots: packageContainerRoots(input.config),
     nodeModules: input.config.transaction.nodeModules,
     installCommand: adapter.installCommand(),
     label: `prepare-${plan.policy.id}`,
@@ -76,7 +77,9 @@ export async function compileStandalonePreparerManifest(input: CompileStandalone
     preparerId: input.preparerId,
     sourcePath: input.sourcePath,
   });
-  return input.bootstrapConfigPath === undefined ? manifest : bindBootstrapConfig(input.rootDir, manifest, validatedPath(input.rootDir, input.bootstrapConfigPath));
+  return input.bootstrapConfigPath === undefined
+    ? manifest
+    : bindBootstrapConfig(input.rootDir, manifest, validatedPath(input.rootDir, input.bootstrapConfigPath));
 }
 
 export function serializePreparerManifest(manifest: PreparerManifest): string {
@@ -97,8 +100,12 @@ export function assertApprovedPreparerManifest(rootDir: string, path: string, ma
   }
   const changed = git({ cwd: rootDir }, "diff", "--name-only", "--no-renames", `${baseline}..${head}`).split("\n").filter(Boolean);
   const repositoryPath = `${repositoryPrefix(rootDir)}${path}`;
-  const expectedPaths = [repositoryPath, ...(manifest.bootstrapConfig === undefined ? [] : [`${repositoryPrefix(rootDir)}${manifest.bootstrapConfig.path}`])].sort(byCodeUnit);
-  if (changed.length !== expectedPaths.length || changed.sort(byCodeUnit).some((item, index) => item !== expectedPaths[index])) throw new PreparerError("approved preparer commit must contain exactly the manifest and its declared bootstrap config");
+  const expectedPaths = [
+    repositoryPath,
+    ...(manifest.bootstrapConfig === undefined ? [] : [`${repositoryPrefix(rootDir)}${manifest.bootstrapConfig.path}`]),
+  ].sort(byCodeUnit);
+  if (changed.length !== expectedPaths.length || changed.sort(byCodeUnit).some((item, index) => item !== expectedPaths[index]))
+    throw new PreparerError("approved preparer commit must contain exactly the manifest and its declared bootstrap config");
   const expected = serializePreparerManifest(manifest);
   const loaded = readFileSync(workspacePath(rootDir, path), "utf8");
   if (loaded !== expected || showBaseline(rootDir, head, path) !== expected) {
@@ -107,7 +114,12 @@ export function assertApprovedPreparerManifest(rootDir: string, path: string, ma
   if (manifest.bootstrapConfig !== undefined) {
     const committed = showBaseline(rootDir, head, manifest.bootstrapConfig.path);
     const parent = showBaseline(rootDir, baseline, manifest.bootstrapConfig.path);
-    if (committed === null || parent === null || hashText(committed) !== manifest.bootstrapConfig.resultHash || hashText(parent) !== manifest.bootstrapConfig.preconditionHash) {
+    if (
+      committed === null ||
+      parent === null ||
+      hashText(committed) !== manifest.bootstrapConfig.resultHash ||
+      hashText(parent) !== manifest.bootstrapConfig.preconditionHash
+    ) {
       throw new PreparerError("approved bootstrap config does not match reviewed preimage and result");
     }
   }
@@ -152,12 +164,27 @@ export async function applyPreparerManifest(options: {
   }
 }
 
-export async function simulatePreparerManifest(options: { readonly rootDir: string; readonly config: MonocarveConfig; readonly manifest: PreparerManifest }): Promise<void> {
+export async function simulatePreparerManifest(options: {
+  readonly rootDir: string;
+  readonly config: MonocarveConfig;
+  readonly manifest: PreparerManifest;
+}): Promise<void> {
   assertPreparerManifest(options.config, options.manifest);
   const adapter = createPackageManagerAdapter(options.config);
-  const worktree = await createWorktree({ rootDir: options.rootDir, commit: options.manifest.baseline.commit, worktreeRoot: options.config.transaction.worktreeRoot, packageRoots: packageContainerRoots(options.config), nodeModules: options.config.transaction.nodeModules, installCommand: adapter.installCommand(), label: options.manifest.planId });
-  try { await applyPreparerManifest({ rootDir: worktree.workspacePath, config: options.config, manifest: options.manifest, verify: true }); }
-  finally { await worktree.dispose(); }
+  const worktree = await createWorktree({
+    rootDir: options.rootDir,
+    commit: options.manifest.baseline.commit,
+    worktreeRoot: options.config.transaction.worktreeRoot,
+    packageRoots: packageContainerRoots(options.config),
+    nodeModules: options.config.transaction.nodeModules,
+    installCommand: adapter.installCommand(),
+    label: options.manifest.planId,
+  });
+  try {
+    await applyPreparerManifest({ rootDir: worktree.workspacePath, config: options.config, manifest: options.manifest, verify: true });
+  } finally {
+    await worktree.dispose();
+  }
 }
 
 export function assertPreparerManifest(config: MonocarveConfig, value: unknown): asserts value is PreparerManifest {
@@ -183,7 +210,17 @@ export function commitPreparerOutputs(rootDir: string, config: MonocarveConfig, 
   git({ cwd: rootDir, quiet: true }, "add", "--", ...declared);
   const commit = manifest.preparer.commit;
   try {
-    git({ cwd: rootDir, quiet: true }, "-c", "core.hooksPath=/dev/null", "commit", "-m", commit.subject, ...(commit.body === undefined ? [] : ["-m", commit.body]), "--", ...declared);
+    git(
+      { cwd: rootDir, quiet: true },
+      "-c",
+      "core.hooksPath=/dev/null",
+      "commit",
+      "-m",
+      commit.subject,
+      ...(commit.body === undefined ? [] : ["-m", commit.body]),
+      "--",
+      ...declared,
+    );
   } catch (error) {
     git({ cwd: rootDir, quiet: true }, "reset", "--", ...declared);
     throw error;
@@ -191,7 +228,8 @@ export function commitPreparerOutputs(rootDir: string, config: MonocarveConfig, 
   const result = headCommit(rootDir);
   const committed = git({ cwd: rootDir }, "diff-tree", "--no-commit-id", "--name-only", "-r", result).split("\n").filter(Boolean).sort(byCodeUnit);
   const expected = declared.map((item) => `${repositoryPrefix(rootDir)}${item}`).sort(byCodeUnit);
-  if (committed.length !== expected.length || committed.some((item, index) => item !== expected[index])) throw new PreparerError("preparer output commit path verification failed");
+  if (committed.length !== expected.length || committed.some((item, index) => item !== expected[index]))
+    throw new PreparerError("preparer output commit path verification failed");
   assertCommittedMutationsMatch(rootDir, result, manifest.mutations);
   return result;
 }

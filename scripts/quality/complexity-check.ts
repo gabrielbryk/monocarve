@@ -1,16 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 
-import {
-  baselinePath,
-  judge,
-  readBaseline,
-  report,
-  reportBaselineUpdate,
-  summarizeBaselineUpdate,
-  writeBaseline,
-  type BaselinedFinding,
-} from "./baseline.ts";
+import { baselinePath, judge, readBaseline, report, reportBaselineUpdate, summarizeBaselineUpdate, writeBaseline, type BaselinedFinding } from "./baseline.ts";
 
 export interface ComplexityRecord {
   readonly path: string;
@@ -40,29 +31,16 @@ export interface ComplexityViolation {
   readonly reason: string;
 }
 
-export const DEFAULT_COMPLEXITY_LIMITS: ComplexityLimits = {
-  structuralScore: 100,
-  maxCognitive: 25,
-  maxNest: 8,
-  maxCyclo: 15,
-  maxMethodLoc: 80,
-};
+export const DEFAULT_COMPLEXITY_LIMITS: ComplexityLimits = { structuralScore: 100, maxCognitive: 25, maxNest: 8, maxCyclo: 15, maxMethodLoc: 80 };
 
-export function findComplexityViolations(
-  records: readonly ComplexityRecord[],
-  limits: ComplexityLimits = DEFAULT_COMPLEXITY_LIMITS,
-): ComplexityViolation[] {
+export function findComplexityViolations(records: readonly ComplexityRecord[], limits: ComplexityLimits = DEFAULT_COMPLEXITY_LIMITS): ComplexityViolation[] {
   const metrics = Object.keys(limits) as (keyof ComplexityLimits)[];
-  return records.flatMap((record) => metrics
-    .filter((metric) => record[metric] > limits[metric])
-    .map((metric) => ({
-      path: record.path,
-      metric,
-      actual: record[metric],
-      limit: limits[metric],
-      lever: record.lever,
-      reason: record.leverReason,
-    })))
+  return records
+    .flatMap((record) =>
+      metrics
+        .filter((metric) => record[metric] > limits[metric])
+        .map((metric) => ({ path: record.path, metric, actual: record[metric], limit: limits[metric], lever: record.lever, reason: record.leverReason })),
+    )
     .sort((left, right) => left.path.localeCompare(right.path) || left.metric.localeCompare(right.metric));
 }
 

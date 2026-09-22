@@ -18,20 +18,14 @@ export function authorizeProtectedRoots(
   const application = getApplication(config, applicationName);
   for (const root of roots) {
     if (!config.portfolio.protectedPaths.includes(root)) {
-      throw new EvacuationSelectorError(
-        `protected-path authorization must exactly name a configured portfolio.protectedPaths root: ${root}`,
-      );
+      throw new EvacuationSelectorError(`protected-path authorization must exactly name a configured portfolio.protectedPaths root: ${root}`);
     }
     if (root !== application.sourceRoot && !root.startsWith(`${application.sourceRoot}/`)) {
-      throw new EvacuationSelectorError(
-        `protected-path authorization crosses application ${JSON.stringify(applicationName)}: ${root}`,
-      );
+      throw new EvacuationSelectorError(`protected-path authorization crosses application ${JSON.stringify(applicationName)}: ${root}`);
     }
     const protectedProduction = graph.paths.filter((path) => path === root || path.startsWith(`${root}/`));
     if (protectedProduction.length === 0 || protectedProduction.some((path) => !requested.includes(path))) {
-      throw new EvacuationSelectorError(
-        `protected-path authorization is broader than or outside the selected evacuation: ${root}`,
-      );
+      throw new EvacuationSelectorError(`protected-path authorization is broader than or outside the selected evacuation: ${root}`);
     }
   }
   return roots;

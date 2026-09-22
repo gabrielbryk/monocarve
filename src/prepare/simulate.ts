@@ -7,21 +7,16 @@ import { MonocarveError } from "../errors.ts";
 import { scanDependencyGraph } from "../graph/cruiser.ts";
 import { graphDigest } from "../plan/build.ts";
 import { type GateResult, runGateTiers } from "../transaction/simulate.ts";
-import { git, headCommit } from "../util/git.ts";
+import { createWorktree } from "../transaction/worktree.ts";
 import { fileState } from "../util/files.ts";
+import { git, headCommit } from "../util/git.ts";
 import { byCodeUnit, hashJson, type FileState } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";
-import { auditPreparationSync, type PreparationAuditReport } from "./audit.ts";
 import type { PreparationFreshGraphEvidence } from "./audit-types.ts";
-import {
-  executePreparationJournal,
-  finalizeCompletedPreparationJournal,
-  verifyPreparationOperations,
-  type PreparationFilesystemOperation,
-} from "./journal.ts";
-import { assertPreparationManifestValid, preparationOperationPaths } from "./manifest.ts";
+import { auditPreparationSync, type PreparationAuditReport } from "./audit.ts";
+import { executePreparationJournal, finalizeCompletedPreparationJournal, verifyPreparationOperations, type PreparationFilesystemOperation } from "./journal.ts";
 import type { PreparationFileMutation, PreparationManifest } from "./manifest-types.ts";
-import { createWorktree } from "../transaction/worktree.ts";
+import { assertPreparationManifestValid, preparationOperationPaths } from "./manifest.ts";
 import { runPreparationPostJournalPreparers } from "./post-journal.ts";
 
 export class PreparationSimulationError extends MonocarveError {
@@ -64,14 +59,10 @@ export interface PreparationBaselineGraphScanInput {
   readonly baselineCommit: string;
 }
 
-export type PreparationBaselineGraphScanner = (
-  input: PreparationBaselineGraphScanInput,
-) => Promise<PreparationFreshGraphEvidence>;
+export type PreparationBaselineGraphScanner = (input: PreparationBaselineGraphScanInput) => Promise<PreparationFreshGraphEvidence>;
 
 /** Native scanner: no cached or caller-supplied graph can authorize an apply. */
-export async function scanPreparationBaselineGraph(
-  input: PreparationBaselineGraphScanInput,
-): Promise<PreparationFreshGraphEvidence> {
+export async function scanPreparationBaselineGraph(input: PreparationBaselineGraphScanInput): Promise<PreparationFreshGraphEvidence> {
   const before = headCommit(input.rootDir);
   if (before !== input.baselineCommit) {
     throw new PreparationSimulationError(`baseline graph scan expected ${input.baselineCommit}, found ${before}`);
@@ -98,7 +89,8 @@ export async function scanPreparationManifestBaseline(options: {
   const worktree = await createWorktree({
     rootDir: options.rootDir,
     commit: options.manifest.baseline.commit,
-    worktreeRoot: options.config.transaction.worktreeRoot, packageRoots: packageContainerRoots(options.config),
+    worktreeRoot: options.config.transaction.worktreeRoot,
+    packageRoots: packageContainerRoots(options.config),
     nodeModules: options.config.transaction.nodeModules,
     installCommand: packageManager.installCommand(),
     label: options.manifest.planId,
@@ -131,7 +123,14 @@ function preparationFilesystemOperationsFor(operation: PreparationManifest["oper
     // A deletion has no rendered bytes: the journal's tiny language only
     // needs the precondition to prove the shim it removes is exactly the one
     // this manifest was compiled against.
-    return [{ kind: "delete" as const, path: operation.file.path, preconditionHash: operation.file.preconditionHash, preconditionMode: operation.file.preconditionMode }];
+    return [
+      {
+        kind: "delete" as const,
+        path: operation.file.path,
+        preconditionHash: operation.file.preconditionHash,
+        preconditionMode: operation.file.preconditionMode,
+      },
+    ];
   }
   return [writeOperation(operation.donor, operation.donorContents), writeOperation(operation.target, operation.targetContents)];
 }
@@ -166,21 +165,14 @@ function policyAnchors(manifest: PreparationManifest): PreparationPolicyRenderIn
   if (manifest.policyAnchor !== undefined) return [manifest.policyAnchor];
   return manifest.operations.flatMap((operation): PreparationPolicyRenderInput[] => {
     if (operation.kind === "extract-type-declarations") {
-      return [{
-        sourcePath: operation.donor.path,
-        targetPath: operation.target.path,
-        targetModuleSpecifier: operation.moduleSpecifier,
-      }];
+      return [{ sourcePath: operation.donor.path, targetPath: operation.target.path, targetModuleSpecifier: operation.moduleSpecifier }];
     }
-    if (operation.kind === "adopt-generated-source") return [{ sourcePath: operation.file.path, targetPath: operation.file.path, targetModuleSpecifier: operation.policySpecifier }];
+    if (operation.kind === "adopt-generated-source")
+      return [{ sourcePath: operation.file.path, targetPath: operation.file.path, targetModuleSpecifier: operation.policySpecifier }];
     if (operation.kind !== "rewrite-module-specifier") return [];
     return [...new Set(operation.rewrites.map((rewrite) => rewrite.to))]
       .sort(byCodeUnit)
-      .map((specifier) => ({
-        sourcePath: operation.file.path,
-        targetPath: operation.file.path,
-        targetModuleSpecifier: specifier,
-      }));
+      .map((specifier) => ({ sourcePath: operation.file.path, targetPath: operation.file.path, targetModuleSpecifier: specifier }));
   });
 }
 
@@ -195,18 +187,28 @@ export function assertPreparationPolicy(config: MonocarveConfig, manifest: Prepa
   }
   const policies = anchors.map((anchor) => renderPreparationPolicy(config, anchor));
   const commit = policies[0]!.commit;
-  if (policies.some((policy) => hashJson(policy.commit) !== hashJson(commit))) throw new PreparationSimulationError("multi-file preparation members render different commit metadata");
+  if (policies.some((policy) => hashJson(policy.commit) !== hashJson(commit)))
+    throw new PreparationSimulationError("multi-file preparation members render different commit metadata");
   const union = (tier: "package" | "project" | "workspace") => [...new Set(policies.flatMap((policy) => policy.gates[tier]))].sort();
   const expected = { commit, gates: { package: union("package"), project: union("project"), workspace: union("workspace") } };
-  if (hashJson(expected) !== hashJson({ commit: manifest.commits.prepare, gates: manifest.gates })) throw new PreparationSimulationError("preparation manifest policy differs from the exact gates or commit metadata rendered by the resolved configuration");
+  if (hashJson(expected) !== hashJson({ commit: manifest.commits.prepare, gates: manifest.gates }))
+    throw new PreparationSimulationError("preparation manifest policy differs from the exact gates or commit metadata rendered by the resolved configuration");
 }
 
 function assertGeneratedSourceAdoptionPolicyAnchor(config: MonocarveConfig, manifest: PreparationManifest): void {
-  const specifiers = [...new Set(manifest.operations
-    .filter((operation): operation is Extract<PreparationManifest["operations"][number], { kind: "adopt-generated-source" }> => operation.kind === "adopt-generated-source")
-    .map((operation) => operation.policySpecifier))];
+  const specifiers = [
+    ...new Set(
+      manifest.operations
+        .filter(
+          (operation): operation is Extract<PreparationManifest["operations"][number], { kind: "adopt-generated-source" }> =>
+            operation.kind === "adopt-generated-source",
+        )
+        .map((operation) => operation.policySpecifier),
+    ),
+  ];
   if (specifiers.length === 0) return;
-  if (specifiers.length !== 1 || !specifiers[0]!.startsWith("adopt:")) throw new PreparationSimulationError("generated-source adoption operations must share one configured policy identity");
+  if (specifiers.length !== 1 || !specifiers[0]!.startsWith("adopt:"))
+    throw new PreparationSimulationError("generated-source adoption operations must share one configured policy identity");
   const id = specifiers[0]!.slice("adopt:".length);
   const adoption = config.generatedSourceAdoptions.find((item) => item.id === id);
   if (adoption === undefined) throw new PreparationSimulationError(`generated-source adoption policy refers to unknown configuration ${JSON.stringify(id)}`);
@@ -228,7 +230,8 @@ export async function simulatePreparation(options: SimulatePreparationOptions): 
   const worktree = await createWorktree({
     rootDir,
     commit: manifest.baseline.commit,
-    worktreeRoot: config.transaction.worktreeRoot, packageRoots: packageContainerRoots(config),
+    worktreeRoot: config.transaction.worktreeRoot,
+    packageRoots: packageContainerRoots(config),
     nodeModules: config.transaction.nodeModules,
     installCommand: packageManager.installCommand(),
     label: manifest.planId,
@@ -245,20 +248,43 @@ export async function simulatePreparation(options: SimulatePreparationOptions): 
     if (!preparation.ok) {
       finalizeCompletedPreparationJournal(journal.recovery);
       keep = !config.transaction.cleanup;
-      return failed(manifest, journal.applied.length, gates, baselineGraph, preparation.failure ?? "post-journal preparer failed", undefined, keep ? worktree.path : undefined);
+      return failed(
+        manifest,
+        journal.applied.length,
+        gates,
+        baselineGraph,
+        preparation.failure ?? "post-journal preparer failed",
+        undefined,
+        keep ? worktree.path : undefined,
+      );
     }
-    const audit = auditPreparationSync({ config, rootDir: worktree.workspacePath, manifest, freshGraph: baselineGraph, regeneratedArtifacts: preparation.hashes as Readonly<Record<string, import("../util/hash.ts").Sha256>> });
+    const audit = auditPreparationSync({
+      config,
+      rootDir: worktree.workspacePath,
+      manifest,
+      freshGraph: baselineGraph,
+      regeneratedArtifacts: preparation.hashes as Readonly<Record<string, import("../util/hash.ts").Sha256>>,
+    });
     if (!audit.passed) {
       finalizeCompletedPreparationJournal(journal.recovery);
       keep = !config.transaction.cleanup;
-      return failed(manifest, journal.applied.length, gates, baselineGraph, `audit failed in simulation: ${audit.failures.join("; ")}`, audit, keep ? worktree.path : undefined);
+      return failed(
+        manifest,
+        journal.applied.length,
+        gates,
+        baselineGraph,
+        `audit failed in simulation: ${audit.failures.join("; ")}`,
+        audit,
+        keep ? worktree.path : undefined,
+      );
     }
     if (!options.skipGates && (options.runGates ?? config.transaction.simulateGates)) {
       commitPreparationScope(worktree.workspacePath, manifest, true);
       const taskRunner = createTaskRunnerAdapter(config);
-      const wrapCommand = preparation.changed && taskRunner.id === "moon"
-        ? (command: string) => taskRunner.wrapGateCommand(`MOON_FORCE=true MOON_CONCURRENCY=1 ${command}`)
-        : taskRunner.wrapGateCommand;
+      const wrapCommand =
+        preparation.changed && taskRunner.id === "moon"
+          ? (command: string) => taskRunner.wrapGateCommand(`MOON_FORCE=true MOON_CONCURRENCY=1 ${command}`)
+          : taskRunner.wrapGateCommand;
       const gateRun = await runGateTiers({
         gates: manifest.gates,
         maxConcurrency: config.gates.maxConcurrency,
@@ -272,7 +298,16 @@ export async function simulatePreparation(options: SimulatePreparationOptions): 
       if (gateRun.failure) {
         finalizeCompletedPreparationJournal(journal.recovery);
         keep = !config.transaction.cleanup;
-        return failed(manifest, journal.applied.length, gates, baselineGraph, `gate failed (${gateRun.failure.tier}): ${gateRun.failure.command}`, audit, keep ? worktree.path : undefined, gateRun.failure);
+        return failed(
+          manifest,
+          journal.applied.length,
+          gates,
+          baselineGraph,
+          `gate failed (${gateRun.failure.tier}): ${gateRun.failure.command}`,
+          audit,
+          keep ? worktree.path : undefined,
+          gateRun.failure,
+        );
       }
     }
     finalizeCompletedPreparationJournal(journal.recovery);
@@ -308,15 +343,14 @@ async function scanFreshBaselineGraph(options: SimulatePreparationOptions, rootD
   return evidence;
 }
 
-function livePreparationEvidence(rootDir: string, manifest: PreparationManifest): {
-  readonly currentFiles: Readonly<Record<string, FileState>>;
-  readonly currentContents: Readonly<Record<string, string>>;
-} {
+function livePreparationEvidence(
+  rootDir: string,
+  manifest: PreparationManifest,
+): { readonly currentFiles: Readonly<Record<string, FileState>>; readonly currentContents: Readonly<Record<string, string>> } {
   return {
     currentFiles: Object.fromEntries(manifest.changedFiles.map((path) => [path, fileState(workspacePath(rootDir, path))])),
     currentContents: Object.fromEntries(
-      [...new Set(manifest.declarations.map((group) => group.sourcePath))]
-        .map((path) => [path, readFileSync(workspacePath(rootDir, path), "utf8")]),
+      [...new Set(manifest.declarations.map((group) => group.sourcePath))].map((path) => [path, readFileSync(workspacePath(rootDir, path), "utf8")]),
     ),
   };
 }
@@ -327,12 +361,7 @@ function livePreparationEvidence(rootDir: string, manifest: PreparationManifest)
  * A failure here means a staging bug or an outside write is present; it must
  * not become a plausible, broad source commit.
  */
-export function commitPreparationScope(
-  rootDir: string,
-  manifest: PreparationManifest,
-  inertHooks: boolean,
-  afterStage?: () => void,
-): void {
+export function commitPreparationScope(rootDir: string, manifest: PreparationManifest, inertHooks: boolean, afterStage?: () => void): void {
   git({ cwd: rootDir, quiet: true }, "add", "-A", "--", ...manifest.changedFiles);
   const staged = git({ cwd: rootDir }, "diff", "--cached", "--name-only", "--").split("\n").filter(Boolean);
   const allowed = new Set(manifest.changedFiles);
@@ -344,7 +373,15 @@ export function commitPreparationScope(
   }
   afterStage?.();
   const args = inertHooks ? ["-c", "core.hooksPath=/dev/null"] : [];
-  git({ cwd: rootDir, quiet: true }, ...args, "commit", "--no-verify", "-m", manifest.commits.prepare.subject, ...(manifest.commits.prepare.body ? ["-m", manifest.commits.prepare.body] : []));
+  git(
+    { cwd: rootDir, quiet: true },
+    ...args,
+    "commit",
+    "--no-verify",
+    "-m",
+    manifest.commits.prepare.subject,
+    ...(manifest.commits.prepare.body ? ["-m", manifest.commits.prepare.body] : []),
+  );
 }
 
 function failed(

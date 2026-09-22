@@ -189,9 +189,7 @@ function candidatesForToken(
   for (const move of moves) {
     const source = hasExtension ? move.source : stripExtension(move.source);
     const directSuffixLength = referenceBase !== undefined && normalized.absolute ? null : matchedSuffixLength(normalized.path, normalized.absolute, source);
-    const basedSource = referenceBase === undefined || normalized.absolute
-      ? null
-      : posix.normalize(posix.join(referenceBase, normalized.path));
+    const basedSource = referenceBase === undefined || normalized.absolute ? null : posix.normalize(posix.join(referenceBase, normalized.path));
     const based = basedSource === source && basedSource !== ".." && !basedSource.startsWith("../");
     const suffixLength = directSuffixLength ?? (based ? normalized.path.split("/").length : null);
     if (suffixLength === null) continue;
@@ -201,8 +199,19 @@ function candidatesForToken(
     // separators — survives untouched instead of being reconstructed.
     const suffixStart = span.start + suffixOffsetInRawToken(normalized.path, normalized.prefixLength, suffixLength);
     const matchedSpan = directSuffixLength === null && based ? span : { start: suffixStart, end: span.end };
-    const to = directSuffixLength === null && based ? basedReplacement(rawToken, referenceBase!, replacementTarget) : buildReplacementSuffix(rawToken, replacementTarget);
-    candidates.push({ span: matchedSpan, line, column, from: rawToken, to, donor: move.source, ...(directSuffixLength === null && based ? { referenceBase: referenceBase! } : {}) });
+    const to =
+      directSuffixLength === null && based
+        ? basedReplacement(rawToken, referenceBase!, replacementTarget)
+        : buildReplacementSuffix(rawToken, replacementTarget);
+    candidates.push({
+      span: matchedSpan,
+      line,
+      column,
+      from: rawToken,
+      to,
+      donor: move.source,
+      ...(directSuffixLength === null && based ? { referenceBase: referenceBase! } : {}),
+    });
   }
   return candidates;
 }
@@ -280,12 +289,7 @@ function resolveReplacementCollisions(
  * position resolving two ways — is reported in `skipped`; unless
  * `settings.onAmbiguousMatch === "skip"`, the first is also a {@link PlanningError}.
  */
-export function scanPathReferenceRewrites(
-  text: string,
-  file: string,
-  moves: readonly PathMove[],
-  settings: PathReferenceRewriteSettings,
-): PathReferenceScan {
+export function scanPathReferenceRewrites(text: string, file: string, moves: readonly PathMove[], settings: PathReferenceRewriteSettings): PathReferenceScan {
   const lineStarts = lineStartsOf(text);
   const ambiguities: PathReferenceAmbiguity[] = [];
   const resolved: PathReferenceRewriteMatch[] = [];
@@ -295,8 +299,10 @@ export function scanPathReferenceRewrites(
   const eligibleMoves = moves.filter((move) => segmentCount(move.source) >= settings.minSegments);
   for (const match of text.matchAll(PATH_TOKEN)) {
     const span = { start: match.index, end: match.index + match[0].length };
-    const candidates = candidatesForToken(match[0], span, lineStarts, eligibleMoves, settings.matchExtensionless, settings.referenceBase)
-      .filter((candidate) => candidate.referenceBase === undefined || settings.workspaceRoot === undefined || isRealWorkspacePath(settings.workspaceRoot, candidate.donor));
+    const candidates = candidatesForToken(match[0], span, lineStarts, eligibleMoves, settings.matchExtensionless, settings.referenceBase).filter(
+      (candidate) =>
+        candidate.referenceBase === undefined || settings.workspaceRoot === undefined || isRealWorkspacePath(settings.workspaceRoot, candidate.donor),
+    );
     if (candidates.length === 0) continue;
     const winner = resolveSpan(file, candidates, ambiguities);
     if (winner) resolved.push(winner);

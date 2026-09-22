@@ -1,8 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
 import { resolve } from "node:path";
 
-import { compilerBuildIdentity, sourceTreeIntegrity } from "../src/build-identity.ts";
 import { buildSourceRevision } from "../scripts/build-stamp.ts";
+import { compilerBuildIdentity, sourceTreeIntegrity } from "../src/build-identity.ts";
 import { cleanupFixtures, fixtureGit, fixtureRepo, scratchDirectory, write } from "./support/fixture-repo.ts";
 
 afterEach(cleanupFixtures);
