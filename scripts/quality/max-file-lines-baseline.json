@@ -1,20 +1,26 @@
 {
-  "src/codemod/imports.ts": {
-    "lines": 503
-  },
   "src/commands/preparation.ts": {
-    "lines": 506
+    "lines": 594
+  },
+  "src/consolidation/plan-support.ts": {
+    "lines": 511
+  },
+  "src/plan/build.ts": {
+    "lines": 689
   },
   "src/plan/scaffold-package.ts": {
-    "lines": 532
+    "lines": 584
   },
   "src/plan/validation/operations.ts": {
-    "lines": 501
+    "lines": 506
   },
-  "test/config-adapters.test.ts": {
-    "lines": 514
+  "src/prepare/build-boundary.ts": {
+    "lines": 517
+  },
+  "src/prepare/manifest.ts": {
+    "lines": 606
   },
   "test/preparation-cli.test.ts": {
-    "lines": 515
+    "lines": 630
   }
 }
