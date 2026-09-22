@@ -10,6 +10,8 @@ artifacts/
 .monocarve/
 tmp/
 *.log
+# ad hoc local backups; not tool-managed, but the same kind of scratch
+.cache/
 
 # editor / OS
 .DS_Store
