@@ -74,6 +74,8 @@
   "devDependencies": {
     "@types/bun": "^1.2.0",
     "oxc-parser": "^0.139.0",
-    "oxfmt": "0.67.0"
+    "oxfmt": "0.67.0",
+    "oxlint": "1.80.0",
+    "oxlint-tsgolint": "7.0.2001"
   }
 }
