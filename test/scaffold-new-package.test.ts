@@ -8,7 +8,7 @@ import { cleanupFixtures, fixtureConfig, fixtureRepo } from "./support/fixture-r
 
 afterAll(cleanupFixtures);
 
-function newPackage(root: string, taskRunner = noneTaskRunner, tests: readonly string[] | undefined = undefined, packageJson = '{"name":"{package}"}\n') {
+function newPackage(root: string, taskRunner = noneTaskRunner, tests?: readonly string[], packageJson = '{"name":"{package}"}\n') {
   const config = fixtureConfig(
     root,
     taskRunner === moonAdapter

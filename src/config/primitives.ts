@@ -26,7 +26,7 @@ export const regexSource = z.string().min(1).refine(isValidRegex, { message: "mu
 
 function isValidRegex(source: string): boolean {
   try {
-    new RegExp(source);
+    RegExp(source);
     return true;
   } catch {
     return false;

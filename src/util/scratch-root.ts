@@ -77,7 +77,7 @@ export function ensureScratchDir(prefix: string): string {
   } catch (error) {
     // Explicit override that failed: report it loudly.
     if (override && isAbsolute(override)) {
-      throw new Error(`Failed to create ${SCRATCH_ROOT_ENV} directory at ${root}: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(`Failed to create ${SCRATCH_ROOT_ENV} directory at ${root}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
     }
 
     // No explicit override: fall back to tmpdir.

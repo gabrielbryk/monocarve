@@ -54,9 +54,12 @@
     "build:bundle": "bun run ./scripts/build.ts --bundle-only",
     "test": "MONOCARVE_SCRATCH_ROOT=\"${MONOCARVE_SCRATCH_ROOT:-${TMPDIR:-/tmp}/monocarve-test-scratch}\" bun test --timeout 60000",
     "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "lint:type-aware": "oxlint --type-aware",
     "max-file-lines": "bun run scripts/quality/max-file-lines.ts",
     "complexity": "bun run scripts/quality/complexity-check.ts",
-    "quality": "bun run max-file-lines && bun run complexity",
+    "oxlint-ratchet": "bun run scripts/quality/oxlint-check.ts",
+    "quality": "bun run max-file-lines && bun run complexity && bun run oxlint-ratchet",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "check": "bun run typecheck && bun run test && bun run quality",
@@ -74,6 +77,8 @@
   "devDependencies": {
     "@types/bun": "^1.2.0",
     "oxc-parser": "^0.139.0",
-    "oxfmt": "0.67.0"
+    "oxfmt": "0.67.0",
+    "oxlint": "1.80.0",
+    "oxlint-tsgolint": "7.0.2001"
   }
 }

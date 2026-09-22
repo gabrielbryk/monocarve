@@ -16,8 +16,7 @@ async function visualize(args: ParsedArgs): Promise<void> {
   process.stdout.write(`Interactive dependency graph: ${server.url}\nPress Ctrl-C to stop.\n`);
   await new Promise<void>((resolve) => {
     const stop = (): void => {
-      server.server.stop();
-      resolve();
+      void server.server.stop().then(resolve);
     };
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);
