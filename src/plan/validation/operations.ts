@@ -101,13 +101,14 @@ function validateOperation(
     case "move-with-rewrite":
       validateMove(operation, index, options, issues, context, moved, mutated, workspacePackages);
       return;
-    case "rewrite-import":
+    case "rewrite-import": {
       const crossDonorMove = movePaths.has(operation.file) && operation.donors.some((donor) => donor !== operation.file && movePaths.has(donor));
       if (movePaths.has(operation.file) && !crossDonorMove) {
         issues.add("multiple-mutations", `multiple operations mutate ${operation.file}`, { operationIndex: index });
       }
       validateRewrite(operation, index, issues, context, mutated, crossDonorMove);
       return;
+    }
     case "rewrite-fs-reference":
       if (movePaths.has(operation.file)) {
         issues.add("multiple-mutations", `multiple operations mutate ${operation.file}`, { operationIndex: index });

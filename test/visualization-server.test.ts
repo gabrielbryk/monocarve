@@ -4,8 +4,8 @@ import { VISUALIZATION_SCHEMA, type VisualizationGraph } from "../src/visualizat
 import { startVisualizationServer, type VisualizationServer } from "../src/visualization/server.ts";
 
 let running: VisualizationServer | undefined;
-afterEach(() => {
-  running?.server.stop(true);
+afterEach(async () => {
+  await running?.server.stop(true);
   running = undefined;
 });
 

@@ -38,7 +38,7 @@ function entryName(entry: unknown): string {
   return typeof entry === "string" ? entry : String((entry as { name: string }).name);
 }
 
-mock.module("node:fs", () => ({
+await mock.module("node:fs", () => ({
   ...realFs,
   readdirSync: (...args: unknown[]) => {
     const entries = (realReaddir as (...a: unknown[]) => unknown[])(...args);
