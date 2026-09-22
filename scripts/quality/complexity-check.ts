@@ -1,7 +1,16 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 
-import { baselinePath, judge, readBaseline, report, writeBaseline, type BaselinedFinding } from "./baseline.ts";
+import {
+  baselinePath,
+  judge,
+  readBaseline,
+  report,
+  reportBaselineUpdate,
+  summarizeBaselineUpdate,
+  writeBaseline,
+  type BaselinedFinding,
+} from "./baseline.ts";
 
 export interface ComplexityRecord {
   readonly path: string;
@@ -80,6 +89,8 @@ if (import.meta.main) {
     }));
     const file = baselinePath(process.cwd(), "complexity");
     if (updating) {
+      const summary = summarizeBaselineUpdate(findings, readBaseline(file));
+      reportBaselineUpdate("complexity", summary, (text) => process.stderr.write(text));
       writeBaseline(file, findings);
       process.stderr.write(`complexity: baseline rewritten with ${findings.length} measurement(s)\n`);
     } else {

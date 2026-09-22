@@ -1,7 +1,16 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { baselinePath, judge, readBaseline, report, writeBaseline, type BaselinedFinding } from "./baseline.ts";
+import {
+  baselinePath,
+  judge,
+  readBaseline,
+  report,
+  reportBaselineUpdate,
+  summarizeBaselineUpdate,
+  writeBaseline,
+  type BaselinedFinding,
+} from "./baseline.ts";
 
 export interface LineViolation {
   readonly path: string;
@@ -43,6 +52,8 @@ if (import.meta.main) {
     .map((entry) => ({ path: entry.path, metric: "lines", actual: entry.lines, detail: `${entry.lines} lines (limit ${entry.limit})` }));
   const file = baselinePath(rootDir, "max-file-lines");
   if (updating) {
+    const summary = summarizeBaselineUpdate(findings, readBaseline(file));
+    reportBaselineUpdate("max-file-lines", summary, (text) => process.stderr.write(text));
     writeBaseline(file, findings);
     process.stderr.write(`max-file-lines: baseline rewritten with ${findings.length} measurement(s)\n`);
   } else {
