@@ -95,11 +95,15 @@ test("preparer bootstrap commits introducing config through hooks that require g
     commit: { subject: "docs: sync generated guide" },
   }];
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+  // `LC_ALL=C sort` is load-bearing, not decoration: glibc's en_US.UTF-8
+  // collation ignores the leading `.`, so an ambient-locale `sort` puts
+  // `monocarve.config.json` before `.monocarve/plans/…` and the comparison
+  // below — written in byte order — fails for a staged set that is correct.
   writeFileSync(join(root, ".git/hooks/pre-commit"), [
     "#!/bin/sh",
     "set -eu",
     "! git diff --cached --name-only | grep -qx generated-guide.md",
-    "test \"$(git diff --cached --name-only | sort)\" = \".monocarve/plans/bootstrap.preparer.json\nmonocarve.config.json\"",
+    "test \"$(git diff --cached --name-only | LC_ALL=C sort)\" = \".monocarve/plans/bootstrap.preparer.json\nmonocarve.config.json\"",
     "git diff --quiet",
     "grep -q 'current config output' generated-guide.md",
     "grep -q 'new output' generated-new.md",

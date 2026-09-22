@@ -167,9 +167,21 @@ describe("lockfile verification against real bun", () => {
       // Measured, and recorded because the adapter's command depends on it: a
       // reader could reasonably assume the two flags together are a check, and
       // build a verification on the exit code instead of on the bytes. They are
-      // not a check. Given a lockfile missing a workspace link, bun 1.3.14
-      // rewrites it and exits 0 — so comparing the bytes is the only thing that
-      // answers the question, which is what `verifyLockfile` does.
+      // not a check — the exit code is the same 0 for a lockfile missing a
+      // workspace link as for the lockfile bun itself would have written, so
+      // comparing the bytes is the only thing that answers the question, which
+      // is what `verifyLockfile` does.
+      //
+      // What bun does to the *file* under those two flags is version-dependent
+      // and deliberately not asserted here: 1.3.14 saved the regenerated
+      // lockfile over the divergent one, 1.4.2 leaves the divergent bytes in
+      // place. Either way the run reports success, which is the whole point.
+      const agreeing = Bun.spawnSync([BUN!, "install", "--lockfile-only", "--frozen-lockfile"], {
+        cwd: workspace(),
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
       const root = workspace();
       const baseline = readFileSync(join(root, LOCKFILE), "utf8");
       const divergent = baseline.replace('    "@acme/format": ["@acme/format@workspace:libs/format"],\n\n', "");
@@ -182,6 +194,18 @@ describe("lockfile verification against real bun", () => {
         stderr: "pipe",
       });
       expect(run.exitCode).toBe(0);
+      // Indistinguishable from the agreeing lockfile: no refusal, nothing a
+      // caller could branch on.
+      expect(run.exitCode).toBe(agreeing.exitCode);
+
+      // And the divergence was real, so the pass above is a false one rather
+      // than a lockfile that happened to agree. The adapter's own command — the
+      // same run without `--frozen-lockfile` — rewrites these bytes, which is
+      // exactly the divergence `verifyLockfile`'s byte comparison reports.
+      writeFileSync(join(root, LOCKFILE), divergent);
+      const [, ...regenerate] = bunAdapter.lockfileOnlyCommand();
+      const rewritten = Bun.spawnSync([BUN!, ...regenerate], { cwd: root, stdout: "pipe", stderr: "pipe" });
+      expect(rewritten.exitCode).toBe(0);
       expect(readFileSync(join(root, LOCKFILE), "utf8")).not.toBe(divergent);
     },
     120_000,

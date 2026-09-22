@@ -59,10 +59,12 @@ export const bunAdapter: PackageManagerAdapter = {
   /**
    * `--lockfile-only` resolves and rewrites `bun.lock` without touching
    * `node_modules`. It is the oracle the opt-in verification compares the
-   * splice against — and only that: measured against bun 1.3.14, adding
-   * `--frozen-lockfile` does *not* make it refuse a divergent lockfile, it
-   * saves the regenerated one anyway. The comparison is the check; the exit
-   * code is not.
+   * splice against — and only that: adding `--frozen-lockfile` does *not* make
+   * it refuse a divergent lockfile. It exits 0 either way, and what it does to
+   * the file is not even stable across bun releases — 1.3.14 saved the
+   * regenerated lockfile over the divergent one, 1.4.2 leaves the divergent
+   * bytes untouched. Both measured. The comparison is the check; the exit code
+   * is not.
    */
   lockfileOnlyCommand: () => ["bun", "install", "--lockfile-only"],
 };
