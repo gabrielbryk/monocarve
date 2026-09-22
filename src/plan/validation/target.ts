@@ -92,7 +92,6 @@ export function validatePublicModules(
       // An explicit planner surface override may intentionally select
       // subpaths for a new package whose repository default is a barrel.
       // Shape validation already enforces unique, package-relative mappings.
-      if (actual.length > 0) return;
       return;
     }
     // An existing package may be extended with an explicit, namespaced
