@@ -5,8 +5,25 @@ updates:
     schedule:
       interval: weekly
     groups:
+      # Majors are split out from the rest. Grouping every update into one PR
+      # means a single unlandable bump blocks the safe ones with it: PR #4
+      # bundled oxc-parser and dependency-cruiser, both fine, with a TypeScript
+      # major that cannot be taken, and the PR could not be partially merged.
       dependencies:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+      major-dependencies:
+        patterns: ["*"]
+        update-types: ["major"]
+    ignore:
+      # TypeScript 7 is the native port. Its entry point exports only `version`
+      # and `versionMajorMinor` - `createProgram`, `forEachChild` and `factory`
+      # are all undefined. 34 files under src/ are built on the classic
+      # Compiler API, which is not stable until 7.1. Verified against 7.0.2:
+      # `bun run typecheck` produced 1125 errors across every consumer.
+      # Revisit when 7.1 ships a stable API rather than typescript/unstable/*.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
@@ -15,3 +32,7 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+      major-actions:
+        patterns: ["*"]
+        update-types: ["major"]
