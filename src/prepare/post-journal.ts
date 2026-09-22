@@ -8,6 +8,7 @@ import { hashJson, MISSING, type FileState } from "../util/hash.ts";
 import type { PreparationManifest } from "./manifest-types.ts";
 import { preparationOperationPaths } from "./manifest.ts";
 import { applyFileCreates, applyTextReplacements } from "../preparer/declarative.ts";
+import { PreparationApplyError } from "./apply-error.ts";
 
 export interface PreparationPreparerReport {
   readonly ok: boolean;
@@ -154,14 +155,17 @@ function verifyPreparerRecord(record: PostJournalPreparerRecord, rootDir: string
 /**
  * Collect the post-run hash of every declared output. Throws (does not
  * return a failure) when an output is missing, matching the original
- * inline `forEach` behavior exactly.
+ * inline `forEach` behavior exactly. The thrown `PreparationApplyError`
+ * is the same apply-stage class `apply.ts` raises for the rest of this
+ * pipeline; it lives in `./apply-error.ts` so this module can use it
+ * without importing `apply.ts`, which already imports this module.
  */
 function collectPreparerOutputs(record: PostJournalPreparerRecord, before: readonly FileState[], rootDir: string): { hashes: Record<string, FileState>; changed: boolean } {
   const hashes: Record<string, FileState> = {};
   let changed = false;
   record.outputs.forEach((path, index) => {
     const after = fileState(`${rootDir}/${path}`);
-    if (after === MISSING) throw new Error(`preparation post-journal preparer ${record.id} produced no declared output: ${path}`);
+    if (after === MISSING) throw new PreparationApplyError(`preparation post-journal preparer ${record.id} produced no declared output: ${path}`);
     if (after !== before[index]) changed = true;
     hashes[path] = after;
   });

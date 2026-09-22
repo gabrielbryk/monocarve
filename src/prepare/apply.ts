@@ -24,13 +24,9 @@ import { assertPreparationManifestValid, serializePreparationManifest } from "./
 import type { PreparationManifest } from "./manifest-types.ts";
 import { assertPreparationPolicy, commitPreparationScope, preparationFilesystemOperations, simulatePreparation } from "./simulate.ts";
 import { runPreparationPostJournalPreparers } from "./post-journal.ts";
+import { PreparationApplyError } from "./apply-error.ts";
 
-export class PreparationApplyError extends Error {
-  override readonly name = "PreparationApplyError";
-  constructor(message: string, readonly residue: readonly string[] = []) {
-    super(message);
-  }
-}
+export { PreparationApplyError };
 
 export interface ApplyPreparationOptions {
   readonly config: MonocarveConfig;
