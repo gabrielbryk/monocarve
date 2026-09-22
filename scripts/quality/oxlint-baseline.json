@@ -1,0 +1,1599 @@
+{
+  "scripts/build.ts": {
+    "eslint(no-shadow)": 1
+  },
+  "scripts/quality/baseline.ts": {
+    "typescript(no-unnecessary-condition)": 3,
+    "typescript(no-unsafe-type-assertion)": 3,
+    "unicorn(no-array-sort)": 1
+  },
+  "scripts/quality/complexity-ast.ts": {
+    "typescript(no-explicit-any)": 4,
+    "typescript(no-unsafe-argument)": 2,
+    "typescript(no-unsafe-assignment)": 4,
+    "typescript(no-unsafe-member-access)": 51,
+    "typescript(no-unsafe-return)": 5,
+    "unicorn(consistent-function-scoping)": 1
+  },
+  "scripts/quality/complexity-check.ts": {
+    "typescript(no-unsafe-type-assertion)": 2,
+    "unicorn(no-array-sort)": 1
+  },
+  "scripts/quality/complexity.ts": {
+    "typescript(no-explicit-any)": 9,
+    "typescript(no-non-null-assertion)": 4,
+    "typescript(no-unnecessary-condition)": 1,
+    "typescript(no-unnecessary-type-assertion)": 4,
+    "typescript(no-unsafe-argument)": 12,
+    "typescript(no-unsafe-assignment)": 13,
+    "typescript(no-unsafe-member-access)": 58,
+    "typescript(no-unsafe-type-assertion)": 3,
+    "typescript(restrict-plus-operands)": 2,
+    "unicorn(consistent-function-scoping)": 1,
+    "unicorn(no-array-sort)": 4
+  },
+  "scripts/quality/max-file-lines.ts": {
+    "oxc(no-map-spread)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "scripts/quality/oxlint-check.ts": {
+    "typescript(no-unnecessary-condition)": 1,
+    "typescript(no-unsafe-type-assertion)": 3,
+    "unicorn(no-array-sort)": 1
+  },
+  "scripts/verify-package.ts": {
+    "typescript(no-unnecessary-condition)": 1,
+    "typescript(no-unsafe-type-assertion)": 2
+  },
+  "src/adapters/bun-block.ts": {
+    "typescript(no-non-null-assertion)": 5,
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "src/adapters/bun-importers.ts": {
+    "typescript(no-non-null-assertion)": 5,
+    "typescript(no-unsafe-type-assertion)": 3,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/adapters/bun-lock.ts": {
+    "typescript(no-non-null-assertion)": 5,
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "src/adapters/bun-render.ts": {
+    "typescript(no-non-null-assertion)": 3,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/adapters/bun-workspace.ts": {
+    "typescript(no-non-null-assertion)": 12,
+    "typescript(no-unsafe-type-assertion)": 3,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/adapters/moon.ts": {
+    "typescript(no-unsafe-type-assertion)": 2
+  },
+  "src/adapters/package-manager-version.ts": {
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "src/adapters/pnpm-importers.ts": {
+    "typescript(no-non-null-assertion)": 2,
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "src/adapters/pnpm-render.ts": {
+    "typescript(no-non-null-assertion)": 8,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/adapters/pnpm-resolutions.ts": {
+    "typescript(no-non-null-assertion)": 4
+  },
+  "src/adapters/pnpm.ts": {
+    "typescript(unbound-method)": 2
+  },
+  "src/adapters/registry.ts": {
+    "typescript(consistent-return)": 2
+  },
+  "src/adapters/workspace-globs.ts": {
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/approval/manifest.ts": {
+    "typescript(no-non-null-assertion)": 4,
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "src/build-identity.ts": {
+    "eslint(no-underscore-dangle)": 2,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/campaign/conflict-accesses.ts": {
+    "typescript(consistent-return)": 1,
+    "typescript(switch-exhaustiveness-check)": 2,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/campaign/conflict-resolution.ts": {
+    "unicorn(no-array-sort)": 1
+  },
+  "src/campaign/conflict-waves.ts": {
+    "typescript(no-non-null-assertion)": 4
+  },
+  "src/campaign/conflicts.ts": {
+    "typescript(no-non-null-assertion)": 6,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/campaign/ledger-validation.ts": {
+    "typescript(no-unnecessary-boolean-literal-compare)": 1,
+    "typescript(no-unnecessary-condition)": 5,
+    "typescript(no-unsafe-argument)": 6,
+    "typescript(no-unsafe-assignment)": 2,
+    "typescript(no-unsafe-member-access)": 9,
+    "typescript(restrict-template-expressions)": 1
+  },
+  "src/campaign/ledger.ts": {
+    "typescript(no-unnecessary-type-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 2
+  },
+  "src/campaign/record.ts": {
+    "typescript(no-unnecessary-condition)": 2
+  },
+  "src/checks/import-extensions.ts": {
+    "unicorn(no-array-sort)": 1
+  },
+  "src/cli.ts": {
+    "typescript(no-base-to-string)": 1
+  },
+  "src/cli/args.ts": {
+    "typescript(no-unnecessary-condition)": 1
+  },
+  "src/codemod/imports.ts": {
+    "typescript(no-deprecated)": 1,
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 2,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/codemod/side-effects.ts": {
+    "typescript(no-deprecated)": 1,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/commands/campaign-ledger-file.ts": {
+    "typescript(no-unsafe-type-assertion)": 5
+  },
+  "src/commands/campaign-optimize.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/commands/config-doctor.ts": {
+    "typescript(no-unnecessary-condition)": 1
+  },
+  "src/commands/discovery.ts": {
+    "eslint(no-shadow)": 1,
+    "typescript(no-unnecessary-condition)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/commands/evacuation.ts": {
+    "unicorn(no-array-sort)": 1
+  },
+  "src/commands/lifecycle.ts": {
+    "typescript(no-unsafe-type-assertion)": 2
+  },
+  "src/commands/planning.ts": {
+    "typescript(no-non-null-assertion)": 4,
+    "typescript(no-unnecessary-template-expression)": 1,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/commands/preparation-boundary.ts": {
+    "import(no-cycle)": 1
+  },
+  "src/commands/preparation-io.ts": {
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "src/commands/preparation.ts": {
+    "import(no-cycle)": 1,
+    "typescript(no-non-null-assertion)": 3,
+    "typescript(no-unnecessary-condition)": 2,
+    "typescript(no-unsafe-argument)": 6,
+    "typescript(no-unsafe-assignment)": 9,
+    "typescript(no-unsafe-member-access)": 19,
+    "typescript(no-unsafe-type-assertion)": 4,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/commands/preparers.ts": {
+    "typescript(no-non-null-assertion)": 1
+  },
+  "src/commands/reconciliation.ts": {
+    "typescript(no-unnecessary-condition)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/commands/shared.ts": {
+    "typescript(no-unnecessary-condition)": 2,
+    "typescript(no-unsafe-type-assertion)": 3
+  },
+  "src/commands/transactions.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "src/config/helpers.ts": {
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 3
+  },
+  "src/config/loading.ts": {
+    "typescript(no-unsafe-type-assertion)": 2
+  },
+  "src/config/preparation.ts": {
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/config/profiles.ts": {
+    "typescript(consistent-type-imports)": 1,
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/config/validation.ts": {
+    "typescript(consistent-type-imports)": 1
+  },
+  "src/consolidation/candidate.ts": {
+    "unicorn(no-array-sort)": 10
+  },
+  "src/consolidation/plan-manifest.ts": {
+    "typescript(consistent-type-imports)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/consolidation/plan-support.ts": {
+    "typescript(consistent-return)": 1,
+    "typescript(no-non-null-assertion)": 3,
+    "typescript(no-unnecessary-type-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/consolidation/selectors.ts": {
+    "unicorn(no-array-sort)": 3
+  },
+  "src/doctor/config-doctor.ts": {
+    "typescript(no-unnecessary-condition)": 1,
+    "typescript(no-unnecessary-type-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 4,
+    "unicorn(no-array-sort)": 6
+  },
+  "src/evacuation/assessment.ts": {
+    "typescript(no-base-to-string)": 1,
+    "typescript(no-non-null-assertion)": 1,
+    "unicorn(no-array-sort)": 10
+  },
+  "src/evacuation/candidate.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "unicorn(no-array-sort)": 9
+  },
+  "src/evacuation/composition-inclusion.ts": {
+    "unicorn(no-array-sort)": 1
+  },
+  "src/evacuation/cuts.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/evacuation/protected-authorization.ts": {
+    "unicorn(no-array-sort)": 1
+  },
+  "src/evacuation/selectors.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/graph/build.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "unicorn(no-array-sort)": 4
+  },
+  "src/graph/components.ts": {
+    "typescript(no-non-null-assertion)": 9,
+    "unicorn(no-array-sort)": 3
+  },
+  "src/graph/cruiser.ts": {
+    "eslint(no-await-in-loop)": 1,
+    "eslint(no-shadow)": 1,
+    "typescript(no-unnecessary-type-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 2
+  },
+  "src/graph/layers.ts": {
+    "typescript(no-non-null-assertion)": 6,
+    "unicorn(no-array-sort)": 19
+  },
+  "src/graph/syntax.ts": {
+    "typescript(no-deprecated)": 1,
+    "typescript(no-unsafe-assignment)": 1,
+    "typescript(no-unsafe-return)": 1
+  },
+  "src/graph/workspace.ts": {
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 3
+  },
+  "src/impact/preparation.ts": {
+    "typescript(no-non-null-assertion)": 2,
+    "typescript(no-unsafe-type-assertion)": 2,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/path-migrations/json-key-map.ts": {
+    "typescript(no-unsafe-type-assertion)": 4
+  },
+  "src/plan/boundary-baseline.ts": {
+    "unicorn(no-array-sort)": 1
+  },
+  "src/plan/build-phases.ts": {
+    "oxc(no-map-spread)": 1,
+    "typescript(consistent-type-imports)": 1,
+    "typescript(no-non-null-assertion)": 11,
+    "typescript(no-unnecessary-type-assertion)": 2,
+    "unicorn(no-array-sort)": 7
+  },
+  "src/plan/build-support.ts": {
+    "oxc(no-map-spread)": 1,
+    "typescript(consistent-type-imports)": 1,
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 10
+  },
+  "src/plan/build.ts": {
+    "oxc(no-map-spread)": 1,
+    "typescript(consistent-return)": 1,
+    "typescript(no-non-null-assertion)": 5,
+    "typescript(no-unsafe-type-assertion)": 2,
+    "unicorn(no-array-sort)": 12
+  },
+  "src/plan/consumers.ts": {
+    "typescript(no-non-null-assertion)": 3,
+    "typescript(no-unnecessary-condition)": 2,
+    "unicorn(no-array-sort)": 3
+  },
+  "src/plan/context.ts": {
+    "oxc(no-map-spread)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/plan/dependency-evidence.ts": {
+    "typescript(no-unnecessary-condition)": 1,
+    "typescript(no-unsafe-argument)": 1,
+    "typescript(no-unsafe-assignment)": 1,
+    "typescript(no-unsafe-member-access)": 2,
+    "typescript(unbound-method)": 1
+  },
+  "src/plan/dependency-resolution.ts": {
+    "typescript(no-non-null-assertion)": 2,
+    "unicorn(no-array-sort)": 3
+  },
+  "src/plan/dependency-usage.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unnecessary-condition)": 1,
+    "unicorn(no-array-sort)": 3
+  },
+  "src/plan/donor-pruning.ts": {
+    "typescript(no-unnecessary-type-assertion)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/plan/emitted-module-specifiers.ts": {
+    "typescript(no-non-null-assertion)": 3,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/plan/evaluation-closure.ts": {
+    "unicorn(no-array-sort)": 2
+  },
+  "src/plan/evaluation-traversal.ts": {
+    "typescript(consistent-return)": 1,
+    "typescript(no-non-null-assertion)": 1,
+    "unicorn(no-array-sort)": 4
+  },
+  "src/plan/explain.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/plan/format-generated.ts": {
+    "typescript(no-unnecessary-condition)": 2,
+    "typescript(no-unnecessary-template-expression)": 1
+  },
+  "src/plan/integration-test-closure.ts": {
+    "unicorn(no-array-sort)": 3
+  },
+  "src/plan/integration-tests.ts": {
+    "typescript(no-non-null-assertion)": 2,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/plan/manifest-paths.ts": {
+    "typescript(consistent-return)": 1,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/plan/module-promotion.ts": {
+    "typescript(no-non-null-assertion)": 4,
+    "unicorn(no-array-sort)": 6
+  },
+  "src/plan/path-reference-rewrites.ts": {
+    "typescript(no-non-null-assertion)": 8,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/plan/path-references.ts": {
+    "typescript(no-non-null-assertion)": 4,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/plan/projected-workspace.ts": {
+    "typescript(consistent-return)": 1,
+    "typescript(no-unsafe-type-assertion)": 3,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/plan/public-surface-analysis.ts": {
+    "unicorn(no-array-sort)": 1
+  },
+  "src/plan/refresh.ts": {
+    "unicorn(no-array-sort)": 1
+  },
+  "src/plan/review.ts": {
+    "typescript(no-non-null-assertion)": 3,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 8
+  },
+  "src/plan/runtime-module-registries.ts": {
+    "typescript(no-non-null-assertion)": 3,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/plan/scaffold-consumers.ts": {
+    "unicorn(no-array-sort)": 1
+  },
+  "src/plan/scaffold-package.ts": {
+    "eslint(no-shadow)": 1,
+    "import(no-cycle)": 1,
+    "typescript(no-non-null-assertion)": 4,
+    "typescript(no-unsafe-assignment)": 3,
+    "typescript(no-unsafe-member-access)": 2,
+    "typescript(no-unsafe-type-assertion)": 8,
+    "typescript(unbound-method)": 2,
+    "unicorn(no-array-sort)": 3,
+    "unicorn(no-useless-fallback-in-spread)": 1
+  },
+  "src/plan/scaffold-shared.ts": {
+    "typescript(no-unsafe-type-assertion)": 2
+  },
+  "src/plan/scaffold.ts": {
+    "import(no-cycle)": 1,
+    "typescript(consistent-return)": 1
+  },
+  "src/plan/static-fs-references.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unnecessary-condition)": 4,
+    "typescript(no-unnecessary-template-expression)": 1
+  },
+  "src/plan/test-relocation.ts": {
+    "unicorn(no-array-sort)": 6
+  },
+  "src/plan/validate.ts": {
+    "typescript(no-unnecessary-condition)": 3,
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "src/plan/validation/assessment.ts": {
+    "typescript(consistent-type-imports)": 1,
+    "typescript(no-non-null-assertion)": 1,
+    "unicorn(consistent-function-scoping)": 1
+  },
+  "src/plan/validation/consumers.ts": {
+    "typescript(consistent-type-imports)": 1,
+    "typescript(no-unnecessary-condition)": 2
+  },
+  "src/plan/validation/dependencies.ts": {
+    "typescript(consistent-type-imports)": 1,
+    "typescript(no-unnecessary-condition)": 4
+  },
+  "src/plan/validation/integration.ts": {
+    "typescript(consistent-type-imports)": 1,
+    "typescript(no-non-null-assertion)": 1,
+    "unicorn(no-array-sort)": 3
+  },
+  "src/plan/validation/metadata.ts": {
+    "typescript(consistent-type-imports)": 1,
+    "typescript(no-unnecessary-condition)": 7
+  },
+  "src/plan/validation/module-promotion.ts": {
+    "typescript(consistent-type-imports)": 1,
+    "typescript(no-non-null-assertion)": 1
+  },
+  "src/plan/validation/operations.ts": {
+    "typescript(consistent-type-imports)": 1,
+    "typescript(no-unnecessary-condition)": 2,
+    "typescript(no-unsafe-type-assertion)": 2,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/plan/validation/path-migration-operation.ts": {
+    "typescript(consistent-type-imports)": 1,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/plan/validation/path-reference.ts": {
+    "typescript(consistent-type-imports)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/plan/validation/provenance.ts": {
+    "typescript(consistent-type-imports)": 1,
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unnecessary-condition)": 20,
+    "unicorn(consistent-function-scoping)": 1
+  },
+  "src/plan/validation/source.ts": {
+    "typescript(consistent-type-imports)": 1,
+    "typescript(no-unnecessary-condition)": 8
+  },
+  "src/plan/validation/target.ts": {
+    "typescript(consistent-type-imports)": 1,
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unnecessary-condition)": 16,
+    "typescript(no-unsafe-member-access)": 2,
+    "typescript(no-unsafe-type-assertion)": 3,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/portfolio/communities.ts": {
+    "typescript(no-non-null-assertion)": 5,
+    "unicorn(no-array-sort)": 8
+  },
+  "src/portfolio/containment.ts": {
+    "unicorn(no-array-sort)": 3
+  },
+  "src/portfolio/groups.ts": {
+    "oxc(no-accumulating-spread)": 1,
+    "typescript(no-non-null-assertion)": 3,
+    "unicorn(no-array-sort)": 3
+  },
+  "src/portfolio/hotspots.ts": {
+    "unicorn(no-array-sort)": 2
+  },
+  "src/portfolio/lazy-registry.ts": {
+    "unicorn(no-array-sort)": 3
+  },
+  "src/portfolio/query.ts": {
+    "typescript(no-non-null-assertion)": 4,
+    "unicorn(consistent-function-scoping)": 1,
+    "unicorn(no-array-sort)": 10
+  },
+  "src/portfolio/rank-assessment.ts": {
+    "typescript(consistent-type-imports)": 1,
+    "typescript(no-non-null-assertion)": 6,
+    "typescript(no-unnecessary-template-expression)": 2,
+    "unicorn(consistent-function-scoping)": 1,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/portfolio/rank.ts": {
+    "typescript(consistent-type-imports)": 1,
+    "typescript(no-base-to-string)": 1,
+    "typescript(no-non-null-assertion)": 2,
+    "unicorn(no-array-sort)": 12
+  },
+  "src/portfolio/recipe.ts": {
+    "unicorn(no-array-sort)": 2
+  },
+  "src/portfolio/recommendation.ts": {
+    "unicorn(no-array-sort)": 2
+  },
+  "src/portfolio/retained.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/portfolio/shims.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "unicorn(no-array-sort)": 5
+  },
+  "src/portfolio/types.ts": {
+    "oxc(no-map-spread)": 1,
+    "unicorn(no-array-sort)": 4
+  },
+  "src/prepare/apply.ts": {
+    "typescript(consistent-type-imports)": 1,
+    "typescript(no-unnecessary-type-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 2,
+    "unicorn(no-array-sort)": 3
+  },
+  "src/prepare/audit-modes.ts": {
+    "typescript(no-unnecessary-type-conversion)": 1,
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "src/prepare/audit-replay.ts": {
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/prepare/audit-scope.ts": {
+    "unicorn(no-array-sort)": 2
+  },
+  "src/prepare/audit-surface.ts": {
+    "typescript(no-non-null-assertion)": 2,
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "src/prepare/audit.ts": {
+    "typescript(no-deprecated)": 1,
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unnecessary-condition)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/prepare/boundary-imports.ts": {
+    "unicorn(no-array-sort)": 3
+  },
+  "src/prepare/boundary-port.ts": {
+    "typescript(no-deprecated)": 4,
+    "typescript(no-unnecessary-condition)": 1,
+    "unicorn(no-array-sort)": 6
+  },
+  "src/prepare/boundary-proofs.ts": {
+    "typescript(no-deprecated)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/prepare/boundary-resolve.ts": {
+    "typescript(no-non-null-assertion)": 3,
+    "unicorn(no-array-sort)": 5
+  },
+  "src/prepare/build-boundary.ts": {
+    "import(no-cycle)": 1,
+    "oxc(no-map-spread)": 2,
+    "typescript(no-unsafe-assignment)": 2,
+    "typescript(no-unsafe-type-assertion)": 3,
+    "unicorn(consistent-function-scoping)": 2,
+    "unicorn(no-array-sort)": 13
+  },
+  "src/prepare/build.ts": {
+    "import(no-cycle)": 1,
+    "oxc(no-map-spread)": 1,
+    "typescript(no-non-null-assertion)": 2,
+    "typescript(no-unnecessary-boolean-literal-compare)": 1,
+    "unicorn(no-array-sort)": 14
+  },
+  "src/prepare/compiler-policy.ts": {
+    "typescript(unbound-method)": 1
+  },
+  "src/prepare/generated-source-adoption.ts": {
+    "oxc(no-map-spread)": 1,
+    "typescript(no-non-null-assertion)": 6,
+    "unicorn(no-array-sort)": 9
+  },
+  "src/prepare/journal.ts": {
+    "typescript(no-non-null-assertion)": 3,
+    "typescript(no-unsafe-type-assertion)": 3,
+    "unicorn(no-array-reverse)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/prepare/manifest-recipe.ts": {
+    "typescript(no-base-to-string)": 1,
+    "typescript(no-non-null-assertion)": 10,
+    "typescript(no-unnecessary-condition)": 2,
+    "typescript(no-unsafe-type-assertion)": 3,
+    "unicorn(consistent-function-scoping)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/prepare/manifest-types.ts": {
+    "typescript(no-redundant-type-constituents)": 4
+  },
+  "src/prepare/manifest.ts": {
+    "typescript(no-non-null-assertion)": 10,
+    "typescript(no-unnecessary-boolean-literal-compare)": 2,
+    "typescript(no-unnecessary-condition)": 21,
+    "typescript(restrict-template-expressions)": 1,
+    "unicorn(no-array-sort)": 5
+  },
+  "src/prepare/multi-build.ts": {
+    "typescript(no-non-null-assertion)": 2,
+    "unicorn(consistent-function-scoping)": 2,
+    "unicorn(no-array-sort)": 7
+  },
+  "src/prepare/post-journal.ts": {
+    "oxc(no-map-spread)": 2,
+    "typescript(no-unnecessary-condition)": 2,
+    "typescript(no-unsafe-type-assertion)": 2,
+    "unicorn(no-array-sort)": 8
+  },
+  "src/prepare/replay.ts": {
+    "typescript(no-redundant-type-constituents)": 2,
+    "typescript(no-unnecessary-condition)": 3,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 7
+  },
+  "src/prepare/selectors.ts": {
+    "typescript(no-deprecated)": 1,
+    "typescript(no-redundant-type-constituents)": 2,
+    "unicorn(no-array-sort)": 9
+  },
+  "src/prepare/simulate.ts": {
+    "typescript(consistent-type-imports)": 1,
+    "typescript(no-non-null-assertion)": 5,
+    "typescript(no-unnecessary-type-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "typescript(unbound-method)": 1,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/prepare/value-split.ts": {
+    "typescript(no-non-null-assertion)": 3,
+    "typescript(no-redundant-type-constituents)": 1,
+    "unicorn(no-array-sort)": 10
+  },
+  "src/preparer/bootstrap-config.ts": {
+    "import(no-cycle)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/preparer/bootstrap.ts": {
+    "eslint(no-unsafe-finally)": 1,
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 3
+  },
+  "src/preparer/core-compile.ts": {
+    "typescript(no-non-null-assertion)": 2,
+    "unicorn(no-array-sort)": 3
+  },
+  "src/preparer/core-support.ts": {
+    "oxc(no-map-spread)": 1,
+    "typescript(no-non-null-assertion)": 1,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/preparer/core-validate.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unnecessary-condition)": 7,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/preparer/core.ts": {
+    "import(no-cycle)": 1,
+    "oxc(no-map-spread)": 1,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 6
+  },
+  "src/preparer/declarative.ts": {
+    "typescript(no-non-null-assertion)": 1
+  },
+  "src/preparer/run-command.ts": {
+    "eslint(no-await-in-loop)": 1,
+    "typescript(no-unnecessary-condition)": 2
+  },
+  "src/reconciliation/compile.ts": {
+    "unicorn(no-array-sort)": 1
+  },
+  "src/reconciliation/evidence.ts": {
+    "typescript(unbound-method)": 2,
+    "unicorn(prefer-array-find)": 1
+  },
+  "src/reconciliation/overlay.ts": {
+    "typescript(no-non-null-assertion)": 2
+  },
+  "src/reconciliation/parsing.ts": {
+    "typescript(no-unsafe-type-assertion)": 2
+  },
+  "src/reconciliation/validate.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unnecessary-condition)": 3
+  },
+  "src/seams/multi.ts": {
+    "oxc(no-map-spread)": 1,
+    "typescript(no-non-null-assertion)": 5,
+    "typescript(no-unnecessary-condition)": 3,
+    "typescript(no-unsafe-type-assertion)": 3,
+    "typescript(unbound-method)": 1,
+    "unicorn(no-array-sort)": 14
+  },
+  "src/seams/plan.ts": {
+    "oxc(no-map-spread)": 1,
+    "unicorn(no-array-sort)": 10
+  },
+  "src/seams/safety.ts": {
+    "unicorn(no-array-sort)": 3
+  },
+  "src/symbols/analyze.ts": {
+    "typescript(no-unnecessary-condition)": 1,
+    "unicorn(no-array-sort)": 3
+  },
+  "src/symbols/capabilities.ts": {
+    "typescript(no-non-null-assertion)": 2,
+    "typescript(no-unnecessary-condition)": 2,
+    "unicorn(no-array-sort)": 5
+  },
+  "src/symbols/declarations.ts": {
+    "typescript(no-unnecessary-condition)": 2,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/symbols/relations.ts": {
+    "typescript(no-unnecessary-condition)": 1,
+    "unicorn(no-array-sort)": 4
+  },
+  "src/symbols/workspace.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unnecessary-condition)": 1,
+    "typescript(unbound-method)": 1,
+    "unicorn(no-array-sort)": 5
+  },
+  "src/transaction/apply-commit.ts": {
+    "unicorn(no-array-sort)": 4
+  },
+  "src/transaction/apply-state.ts": {
+    "typescript(no-unnecessary-condition)": 1,
+    "typescript(no-unsafe-type-assertion)": 3
+  },
+  "src/transaction/apply.ts": {
+    "typescript(no-unnecessary-condition)": 1,
+    "typescript(no-unsafe-type-assertion)": 4,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/transaction/asset-emission.ts": {
+    "typescript(no-base-to-string)": 1,
+    "typescript(no-unnecessary-condition)": 2,
+    "typescript(restrict-template-expressions)": 1,
+    "unicorn(no-array-sort)": 3
+  },
+  "src/transaction/audit-closure.ts": {
+    "unicorn(no-array-sort)": 1
+  },
+  "src/transaction/audit-conservation.ts": {
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "src/transaction/audit-consumers.ts": {
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/transaction/audit-graph.ts": {
+    "typescript(no-deprecated)": 1,
+    "unicorn(consistent-function-scoping)": 1,
+    "unicorn(no-array-sort)": 3
+  },
+  "src/transaction/audit-helpers.ts": {
+    "eslint(no-shadow)": 1,
+    "oxc(no-map-spread)": 1,
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unnecessary-type-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 11,
+    "unicorn(consistent-function-scoping)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/transaction/audit-report.ts": {
+    "unicorn(no-array-sort)": 1
+  },
+  "src/transaction/audit-target-surface.ts": {
+    "typescript(no-unsafe-type-assertion)": 4
+  },
+  "src/transaction/commit-evidence.ts": {
+    "typescript(consistent-return)": 1,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/transaction/external-consumer.ts": {
+    "typescript(no-deprecated)": 1,
+    "typescript(no-unsafe-assignment)": 1,
+    "typescript(no-unsafe-member-access)": 1,
+    "typescript(unbound-method)": 1
+  },
+  "src/transaction/external-consumer/dependency-paths.ts": {
+    "typescript(no-deprecated)": 5
+  },
+  "src/transaction/external-consumer/package-exports.ts": {
+    "typescript(no-unsafe-type-assertion)": 4
+  },
+  "src/transaction/gate-inspection.ts": {
+    "eslint(no-await-in-loop)": 1,
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(unbound-method)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/transaction/generator-evolution.ts": {
+    "eslint(no-shadow)": 1,
+    "oxc(no-map-spread)": 1,
+    "typescript(no-non-null-assertion)": 3,
+    "typescript(no-unnecessary-type-assertion)": 1,
+    "unicorn(no-array-sort)": 6
+  },
+  "src/transaction/journal-operation.ts": {
+    "typescript(no-non-null-assertion)": 4,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-useless-length-check)": 1
+  },
+  "src/transaction/journal-snapshot.ts": {
+    "typescript(no-non-null-assertion)": 3,
+    "typescript(no-unnecessary-type-conversion)": 1,
+    "typescript(no-unsafe-type-assertion)": 2,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/transaction/journal.ts": {
+    "typescript(only-throw-error)": 1,
+    "unicorn(no-array-reverse)": 1
+  },
+  "src/transaction/lockfile-verify.ts": {
+    "typescript(no-unnecessary-condition)": 1
+  },
+  "src/transaction/path-migrations.ts": {
+    "typescript(no-unnecessary-condition)": 1
+  },
+  "src/transaction/postconditions.ts": {
+    "typescript(no-unsafe-type-assertion)": 2,
+    "unicorn(no-array-sort)": 4
+  },
+  "src/transaction/projected-importers.ts": {
+    "typescript(no-unnecessary-condition)": 1,
+    "typescript(no-unsafe-type-assertion)": 2,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/transaction/regenerate-command.ts": {
+    "typescript(no-unnecessary-condition)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/transaction/regenerate-preparers.ts": {
+    "typescript(no-unsafe-type-assertion)": 2,
+    "unicorn(no-array-sort)": 3
+  },
+  "src/transaction/regenerate.ts": {
+    "typescript(no-unnecessary-condition)": 4,
+    "typescript(no-unnecessary-template-expression)": 1
+  },
+  "src/transaction/rollback.ts": {
+    "typescript(no-unsafe-type-assertion)": 3
+  },
+  "src/transaction/simulate-gates.ts": {
+    "eslint(no-await-in-loop)": 3,
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unsafe-assignment)": 1,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-new-array)": 1
+  },
+  "src/transaction/simulate.ts": {
+    "typescript(no-unnecessary-condition)": 2,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "typescript(unbound-method)": 1
+  },
+  "src/transaction/verify.ts": {
+    "typescript(no-non-null-assertion)": 1
+  },
+  "src/transaction/worktree.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unnecessary-condition)": 1,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 2
+  },
+  "src/util/dirty-tree.ts": {
+    "unicorn(no-array-sort)": 1
+  },
+  "src/util/files.ts": {
+    "unicorn(no-array-sort)": 1
+  },
+  "src/util/git.ts": {
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "src/util/hash.ts": {
+    "typescript(no-redundant-type-constituents)": 1,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "src/util/template.ts": {
+    "unicorn(no-array-sort)": 2
+  },
+  "src/visualization/model.ts": {
+    "typescript(no-non-null-assertion)": 5,
+    "unicorn(no-array-sort)": 4
+  },
+  "src/visualization/server.ts": {
+    "typescript(no-unsafe-argument)": 3,
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "test/apply-state.test.ts": {
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "test/asset-consumers.test.ts": {
+    "typescript(no-unsafe-argument)": 3
+  },
+  "test/audit-evidence.test.ts": {
+    "eslint(no-shadow)": 2,
+    "oxc(no-map-spread)": 2,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/boundary-baseline.test.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(consistent-function-scoping)": 1,
+    "unicorn(no-array-reverse)": 1
+  },
+  "test/boundary-compile.test.ts": {
+    "unicorn(no-array-reverse)": 1,
+    "unicorn(no-array-sort)": 5,
+    "unicorn(no-useless-fallback-in-spread)": 1
+  },
+  "test/boundary-port.test.ts": {
+    "typescript(no-non-null-assertion)": 1
+  },
+  "test/boundary-simulation.test.ts": {
+    "eslint(no-await-in-loop)": 1,
+    "typescript(no-non-null-assertion)": 2,
+    "typescript(no-unnecessary-condition)": 1,
+    "typescript(no-unnecessary-type-assertion)": 1,
+    "typescript(no-unsafe-argument)": 1,
+    "typescript(no-unsafe-type-assertion)": 2
+  },
+  "test/bun-root-importer-name.test.ts": {
+    "typescript(no-non-null-assertion)": 4,
+    "typescript(no-unnecessary-condition)": 1,
+    "unicorn(consistent-function-scoping)": 4
+  },
+  "test/campaign-advance.test.ts": {
+    "typescript(await-thenable)": 8
+  },
+  "test/campaign-conflicts.test.ts": {
+    "typescript(no-unnecessary-condition)": 1,
+    "unicorn(consistent-function-scoping)": 2
+  },
+  "test/campaign-ledger.test.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unsafe-argument)": 1,
+    "typescript(no-unsafe-type-assertion)": 3
+  },
+  "test/campaign-record.test.ts": {
+    "typescript(no-unsafe-type-assertion)": 2
+  },
+  "test/campaign-targets-cli.test.ts": {
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "test/candidate-cli.test.ts": {
+    "typescript(no-unsafe-type-assertion)": 2,
+    "unicorn(no-array-sort)": 2
+  },
+  "test/cli-documentation.test.ts": {
+    "typescript(no-non-null-assertion)": 2
+  },
+  "test/cli-errors.test.ts": {
+    "eslint(no-await-in-loop)": 2,
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 7
+  },
+  "test/cli.test.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unsafe-argument)": 1,
+    "typescript(no-unsafe-assignment)": 3,
+    "typescript(no-unsafe-type-assertion)": 3
+  },
+  "test/codemod-cache.test.ts": {
+    "unicorn(no-array-sort)": 1
+  },
+  "test/codemod-properties.test.ts": {
+    "eslint(no-template-curly-in-string)": 2,
+    "typescript(no-non-null-assertion)": 3,
+    "unicorn(no-array-reverse)": 1
+  },
+  "test/codemod-regressions.test.ts": {
+    "eslint(no-template-curly-in-string)": 1
+  },
+  "test/codemod.test.ts": {
+    "eslint(no-template-curly-in-string)": 2,
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unsafe-argument)": 1
+  },
+  "test/communities.test.ts": {
+    "unicorn(no-array-reverse)": 5
+  },
+  "test/compiler-hardening.test.ts": {
+    "typescript(no-non-null-assertion)": 2,
+    "typescript(no-unsafe-member-access)": 1,
+    "typescript(no-unsafe-type-assertion)": 2
+  },
+  "test/config-adapters-bun.test.ts": {
+    "typescript(await-thenable)": 4,
+    "typescript(no-non-null-assertion)": 9
+  },
+  "test/config-adapters.test.ts": {
+    "typescript(await-thenable)": 4,
+    "typescript(no-non-null-assertion)": 3,
+    "typescript(no-unsafe-assignment)": 1,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(consistent-function-scoping)": 2
+  },
+  "test/config-profiles.test.ts": {
+    "typescript(no-non-null-assertion)": 10
+  },
+  "test/config-utilities.test.ts": {
+    "typescript(no-non-null-assertion)": 1
+  },
+  "test/config.test.ts": {
+    "typescript(no-non-null-assertion)": 3
+  },
+  "test/consolidation.test.ts": {
+    "typescript(no-non-null-assertion)": 7,
+    "unicorn(no-array-sort)": 2
+  },
+  "test/decomposition-cli.test.ts": {
+    "typescript(no-unsafe-argument)": 3,
+    "typescript(no-unsafe-type-assertion)": 4
+  },
+  "test/donor-pruning.test.ts": {
+    "eslint(no-shadow)": 1,
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 5
+  },
+  "test/dynamic-extraction.test.ts": {
+    "eslint(no-template-curly-in-string)": 3,
+    "typescript(no-non-null-assertion)": 12,
+    "typescript(no-unsafe-argument)": 4,
+    "typescript(no-unsafe-assignment)": 1,
+    "typescript(no-unsafe-type-assertion)": 3,
+    "unicorn(no-array-sort)": 1,
+    "unicorn(no-useless-spread)": 1
+  },
+  "test/e2e-bun.test.ts": {
+    "typescript(no-non-null-assertion)": 3,
+    "typescript(no-unsafe-return)": 1,
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "test/e2e.test.ts": {
+    "typescript(no-non-null-assertion)": 8,
+    "typescript(no-unsafe-argument)": 1,
+    "typescript(no-unsafe-member-access)": 1,
+    "typescript(no-unsafe-type-assertion)": 7,
+    "unicorn(no-array-sort)": 3
+  },
+  "test/engine-ordering.test.ts": {
+    "eslint(no-template-curly-in-string)": 1,
+    "typescript(no-non-null-assertion)": 6,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 5
+  },
+  "test/evacuation-assessment.test.ts": {
+    "eslint(no-template-curly-in-string)": 1,
+    "unicorn(consistent-function-scoping)": 1,
+    "unicorn(no-useless-spread)": 3
+  },
+  "test/evacuation-candidate.test.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "unicorn(no-array-sort)": 2
+  },
+  "test/evacuation-cli.test.ts": {
+    "typescript(no-unsafe-argument)": 1,
+    "typescript(no-unsafe-type-assertion)": 2
+  },
+  "test/evacuation-composition-inclusion.test.ts": {
+    "unicorn(no-array-sort)": 1
+  },
+  "test/evacuation-plan-cli.test.ts": {
+    "typescript(no-non-null-assertion)": 4,
+    "typescript(no-unsafe-argument)": 8,
+    "typescript(no-unsafe-assignment)": 2,
+    "typescript(no-unsafe-type-assertion)": 10
+  },
+  "test/evacuation-selectors.test.ts": {
+    "unicorn(no-array-sort)": 1
+  },
+  "test/evaluation-closure.test.ts": {
+    "eslint(no-template-curly-in-string)": 1,
+    "typescript(no-non-null-assertion)": 6,
+    "typescript(unbound-method)": 7,
+    "unicorn(no-array-reverse)": 1,
+    "unicorn(no-array-sort)": 2,
+    "unicorn(no-useless-spread)": 1
+  },
+  "test/external-consumer.test.ts": {
+    "eslint(no-template-curly-in-string)": 3
+  },
+  "test/first-party-package-consumer.test.ts": {
+    "typescript(no-non-null-assertion)": 5,
+    "typescript(no-unsafe-type-assertion)": 3
+  },
+  "test/gate-concurrency.test.ts": {
+    "promise(always-return)": 1,
+    "typescript(no-non-null-assertion)": 13
+  },
+  "test/gate-inspection.test.ts": {
+    "typescript(no-non-null-assertion)": 3
+  },
+  "test/generated-source-adoption.test.ts": {
+    "typescript(no-unnecessary-type-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 2
+  },
+  "test/graph.test.ts": {
+    "typescript(require-array-sort-compare)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/hotspots.test.ts": {
+    "typescript(no-non-null-assertion)": 2,
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "test/integration-test-relocation.test.ts": {
+    "oxc(no-map-spread)": 1,
+    "typescript(no-non-null-assertion)": 12,
+    "typescript(no-unsafe-argument)": 1,
+    "typescript(no-unsafe-assignment)": 4
+  },
+  "test/journal-donor-rewrites.test.ts": {
+    "typescript(await-thenable)": 7,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/lazy-registry.test.ts": {
+    "typescript(no-unsafe-type-assertion)": 3
+  },
+  "test/lifecycle-status.test.ts": {
+    "typescript(no-non-null-assertion)": 2,
+    "typescript(no-unsafe-assignment)": 2,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/lockfile-verify-bun.test.ts": {
+    "typescript(no-non-null-assertion)": 5,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "typescript(require-array-sort-compare)": 1,
+    "typescript(unbound-method)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/lockfile-verify-pnpm.test.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(unbound-method)": 1,
+    "unicorn(consistent-function-scoping)": 1
+  },
+  "test/lockfile-verify.test.ts": {
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(consistent-function-scoping)": 1
+  },
+  "test/manifest-approval.test.ts": {
+    "eslint(no-useless-escape)": 2,
+    "typescript(await-thenable)": 1,
+    "typescript(no-non-null-assertion)": 3,
+    "typescript(no-unsafe-assignment)": 1,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(consistent-function-scoping)": 1
+  },
+  "test/module-promotion.test.ts": {
+    "oxc(no-map-spread)": 1,
+    "typescript(no-non-null-assertion)": 13,
+    "typescript(no-unsafe-member-access)": 1
+  },
+  "test/multi-file-seam.test.ts": {
+    "typescript(no-non-null-assertion)": 3,
+    "typescript(no-unsafe-argument)": 2,
+    "unicorn(no-array-sort)": 2
+  },
+  "test/path-migrations.test.ts": {
+    "typescript(await-thenable)": 2,
+    "typescript(no-non-null-assertion)": 17,
+    "unicorn(no-array-reverse)": 1,
+    "unicorn(no-array-sort)": 3
+  },
+  "test/path-reference-rewrites.test.ts": {
+    "typescript(no-non-null-assertion)": 5,
+    "unicorn(no-array-reverse)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/path-references.test.ts": {
+    "eslint(no-shadow)": 1,
+    "eslint(no-template-curly-in-string)": 2,
+    "typescript(no-non-null-assertion)": 4,
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "test/plan-explain.test.ts": {
+    "typescript(no-non-null-assertion)": 2,
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "test/plan-ordering.test.ts": {
+    "typescript(no-non-null-assertion)": 2,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 6
+  },
+  "test/plan-path-reference-rewrite.test.ts": {
+    "typescript(no-non-null-assertion)": 11,
+    "typescript(no-unsafe-argument)": 2,
+    "unicorn(no-array-sort)": 2
+  },
+  "test/plan-refresh-cli.test.ts": {
+    "typescript(no-non-null-assertion)": 3,
+    "typescript(no-unsafe-type-assertion)": 3
+  },
+  "test/plan-refresh.test.ts": {
+    "typescript(no-non-null-assertion)": 1
+  },
+  "test/plan-review-cli.test.ts": {
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "test/plan-review.test.ts": {
+    "typescript(no-unsafe-argument)": 1
+  },
+  "test/plan-serialization.test.ts": {
+    "typescript(no-unsafe-type-assertion)": 3,
+    "unicorn(no-array-reverse)": 1,
+    "unicorn(no-array-sort)": 2
+  },
+  "test/plan-validation.test.ts": {
+    "oxc(no-map-spread)": 1,
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unsafe-argument)": 1,
+    "unicorn(no-array-sort)": 4
+  },
+  "test/planning-source-selection.test.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "test/port-promotion-proofs.test.ts": {
+    "typescript(no-non-null-assertion)": 1
+  },
+  "test/portfolio-policy.test.ts": {
+    "typescript(no-unsafe-assignment)": 1
+  },
+  "test/portfolio-recipe.test.ts": {
+    "typescript(no-non-null-assertion)": 9,
+    "unicorn(consistent-function-scoping)": 1
+  },
+  "test/portfolio-recommendation.test.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(consistent-function-scoping)": 1
+  },
+  "test/portfolio-selection.test.ts": {
+    "eslint(no-template-curly-in-string)": 2,
+    "typescript(no-non-null-assertion)": 5,
+    "unicorn(consistent-function-scoping)": 1
+  },
+  "test/post-journal-replacements.test.ts": {
+    "eslint(no-useless-escape)": 2,
+    "typescript(no-non-null-assertion)": 1,
+    "unicorn(no-array-sort)": 3
+  },
+  "test/preparation-apply.test.ts": {
+    "typescript(await-thenable)": 7,
+    "typescript(no-unnecessary-type-conversion)": 4,
+    "typescript(no-unsafe-assignment)": 2,
+    "typescript(no-unsafe-type-assertion)": 2,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/preparation-audit-imports.test.ts": {
+    "typescript(no-unsafe-type-assertion)": 2
+  },
+  "test/preparation-audit.test.ts": {
+    "oxc(no-map-spread)": 3,
+    "typescript(no-non-null-assertion)": 4,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/preparation-build.test.ts": {
+    "typescript(no-unsafe-type-assertion)": 1,
+    "typescript(unbound-method)": 1
+  },
+  "test/preparation-cli.test.ts": {
+    "eslint(no-underscore-dangle)": 1,
+    "typescript(no-unsafe-argument)": 1,
+    "typescript(no-unsafe-type-assertion)": 3
+  },
+  "test/preparation-e2e.test.ts": {
+    "typescript(await-thenable)": 1
+  },
+  "test/preparation-impact.test.ts": {
+    "typescript(no-unsafe-type-assertion)": 3
+  },
+  "test/preparation-journal.test.ts": {
+    "typescript(no-non-null-assertion)": 7,
+    "typescript(no-unnecessary-type-conversion)": 4,
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "test/preparation-manifest.test.ts": {
+    "eslint(no-shadow)": 2,
+    "typescript(no-non-null-assertion)": 38,
+    "typescript(no-unnecessary-type-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 4,
+    "unicorn(no-array-reverse)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/preparation-replay.test.ts": {
+    "unicorn(no-array-sort)": 1
+  },
+  "test/preparation-selectors.test.ts": {
+    "unicorn(no-array-sort)": 1
+  },
+  "test/preparer-cli.test.ts": {
+    "typescript(no-unsafe-argument)": 1,
+    "typescript(no-unsafe-type-assertion)": 7,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/preparer-core.test.ts": {
+    "typescript(await-thenable)": 11,
+    "typescript(no-non-null-assertion)": 3,
+    "typescript(no-unsafe-type-assertion)": 3
+  },
+  "test/preparer-diagnostics-cli.test.ts": {
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "test/preparer-generation.test.ts": {
+    "eslint(no-useless-escape)": 4,
+    "typescript(no-unsafe-argument)": 3,
+    "typescript(no-unsafe-type-assertion)": 4,
+    "unicorn(consistent-function-scoping)": 1,
+    "unicorn(no-array-sort)": 3
+  },
+  "test/preparer-path-reference-trigger.test.ts": {
+    "typescript(no-non-null-assertion)": 2,
+    "typescript(no-unsafe-argument)": 4,
+    "typescript(no-unsafe-type-assertion)": 2
+  },
+  "test/projected-importers.test.ts": {
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "test/projected-workspace-matrix.test.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 3
+  },
+  "test/quality-gates.test.ts": {
+    "typescript(no-unsafe-argument)": 1
+  },
+  "test/reconciliation-cli.test.ts": {
+    "typescript(await-thenable)": 8,
+    "typescript(no-non-null-assertion)": 3,
+    "typescript(no-unnecessary-type-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 4,
+    "typescript(unbound-method)": 1
+  },
+  "test/regeneration.test.ts": {
+    "typescript(await-thenable)": 1,
+    "typescript(no-non-null-assertion)": 3,
+    "unicorn(no-array-sort)": 3
+  },
+  "test/rollback-commits.test.ts": {
+    "typescript(no-non-null-assertion)": 3,
+    "unicorn(consistent-function-scoping)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/rollback-journal.test.ts": {
+    "typescript(no-non-null-assertion)": 4,
+    "typescript(no-unnecessary-type-assertion)": 1,
+    "unicorn(consistent-function-scoping)": 1
+  },
+  "test/rollback-residue.test.ts": {
+    "typescript(consistent-type-imports)": 1,
+    "typescript(no-non-null-assertion)": 16,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/rollback-resume.test.ts": {
+    "typescript(no-non-null-assertion)": 2,
+    "unicorn(consistent-function-scoping)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/runtime-module-registries.test.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unsafe-member-access)": 2
+  },
+  "test/scaffold-compiler-profile.test.ts": {
+    "typescript(no-non-null-assertion)": 1
+  },
+  "test/scaffold-consumer-wiring.test.ts": {
+    "typescript(no-non-null-assertion)": 8,
+    "typescript(no-unsafe-argument)": 1,
+    "typescript(no-unsafe-assignment)": 4,
+    "typescript(no-unsafe-type-assertion)": 2,
+    "unicorn(consistent-function-scoping)": 1
+  },
+  "test/scaffold-existing-importer.test.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "test/scaffold-new-package.test.ts": {
+    "typescript(no-non-null-assertion)": 15,
+    "typescript(no-unsafe-assignment)": 6,
+    "typescript(no-unsafe-member-access)": 6,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/scaffold.test.ts": {
+    "typescript(no-non-null-assertion)": 10,
+    "typescript(no-unsafe-argument)": 1,
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "test/seam-plan.test.ts": {
+    "unicorn(no-array-sort)": 2
+  },
+  "test/seam-safety.test.ts": {
+    "typescript(no-unsafe-argument)": 1
+  },
+  "test/side-effects.test.ts": {
+    "eslint(no-template-curly-in-string)": 1
+  },
+  "test/source-order.test.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unnecessary-type-conversion)": 1,
+    "typescript(no-unsafe-type-assertion)": 2,
+    "unicorn(no-array-reverse)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/static-fs-reference-consumer.test.ts": {
+    "typescript(no-non-null-assertion)": 3
+  },
+  "test/static-fs-references.test.ts": {
+    "eslint(no-template-curly-in-string)": 1
+  },
+  "test/subpath-validation.test.ts": {
+    "oxc(no-map-spread)": 3,
+    "typescript(no-non-null-assertion)": 10,
+    "typescript(no-unsafe-argument)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/support/cli-tail.ts": {
+    "typescript(no-non-null-assertion)": 8,
+    "typescript(no-unsafe-type-assertion)": 10
+  },
+  "test/support/cli.ts": {
+    "typescript(no-unsafe-type-assertion)": 2
+  },
+  "test/support/codemod-property-harness.ts": {
+    "unicorn(no-array-sort)": 2
+  },
+  "test/support/fixture-repo.ts": {
+    "typescript(no-non-null-assertion)": 1
+  },
+  "test/support/lockfile-shape-harness.ts": {
+    "typescript(no-non-null-assertion)": 2,
+    "typescript(no-unnecessary-condition)": 2,
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "test/support/lockfile-shape-negatives.ts": {
+    "typescript(no-non-null-assertion)": 2
+  },
+  "test/support/lockfile-verify-fixture.ts": {
+    "typescript(no-non-null-assertion)": 2,
+    "typescript(no-unnecessary-condition)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/support/rollback-fixture.ts": {
+    "typescript(no-non-null-assertion)": 2,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 2
+  },
+  "test/support/transaction-fixture.ts": {
+    "typescript(no-non-null-assertion)": 6,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/symbol-graph.test.ts": {
+    "typescript(no-unsafe-argument)": 1,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/target-subpath.test.ts": {
+    "typescript(no-unnecessary-type-assertion)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/test-relocation.test.ts": {
+    "oxc(no-map-spread)": 1,
+    "typescript(await-thenable)": 1,
+    "typescript(no-non-null-assertion)": 12,
+    "typescript(no-unsafe-argument)": 3,
+    "typescript(no-unsafe-assignment)": 5
+  },
+  "test/transaction-audit.test.ts": {
+    "oxc(no-map-spread)": 1,
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unnecessary-type-assertion)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/transaction-path-reference-rewrite.test.ts": {
+    "oxc(no-map-spread)": 1,
+    "typescript(await-thenable)": 4,
+    "typescript(no-non-null-assertion)": 2,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-sort)": 1
+  },
+  "test/transaction-scope.test.ts": {
+    "unicorn(consistent-function-scoping)": 2
+  },
+  "test/transaction-wiring.test.ts": {
+    "typescript(no-non-null-assertion)": 1,
+    "typescript(no-unsafe-argument)": 1,
+    "typescript(no-unsafe-member-access)": 2,
+    "unicorn(no-array-sort)": 3
+  },
+  "test/transaction.test.ts": {
+    "oxc(no-map-spread)": 1,
+    "typescript(await-thenable)": 9,
+    "typescript(no-non-null-assertion)": 7,
+    "typescript(no-unnecessary-type-assertion)": 2,
+    "typescript(no-unsafe-argument)": 1,
+    "unicorn(no-array-sort)": 8
+  },
+  "test/verify-transaction.test.ts": {
+    "typescript(no-non-null-assertion)": 4,
+    "unicorn(no-array-sort)": 2
+  },
+  "test/visualization-model.test.ts": {
+    "eslint(no-shadow)": 4,
+    "typescript(no-non-null-assertion)": 2,
+    "typescript(no-unsafe-type-assertion)": 1,
+    "unicorn(no-array-reverse)": 2,
+    "unicorn(no-array-sort)": 3
+  },
+  "test/visualization-server.test.ts": {
+    "typescript(no-unsafe-type-assertion)": 1
+  },
+  "test/workspace-symbols.test.ts": {
+    "typescript(no-unsafe-argument)": 1
+  },
+  "test/worktree-nesting.test.ts": {
+    "typescript(await-thenable)": 1
+  },
+  "test/worktree.test.ts": {
+    "typescript(await-thenable)": 1,
+    "typescript(no-unsafe-member-access)": 1,
+    "typescript(no-unsafe-type-assertion)": 4,
+    "unicorn(no-array-sort)": 3
+  }
+}
