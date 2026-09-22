@@ -1,5 +1,8 @@
-import { describe, expect, test } from "bun:test";
-import { judge } from "../scripts/quality/baseline.ts";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, test } from "bun:test";
+import { judge, readBaseline, validateBaseline } from "../scripts/quality/baseline.ts";
 import type { BaselinedFinding, QualityBaseline } from "../scripts/quality/baseline.ts";
 
 describe("judge", () => {
@@ -114,5 +117,70 @@ describe("judge", () => {
     expect(verdict.failures[0]?.finding.metric).toBe("maxCyclo");
     expect(verdict.accepted).toHaveLength(0);
     expect(verdict.stale).toHaveLength(0);
+  });
+});
+
+describe("readBaseline", () => {
+  const dirs: string[] = [];
+
+  afterEach(() => {
+    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  function baselineFile(contents: string): string {
+    const dir = mkdtempSync(join(tmpdir(), "quality-baseline-test-"));
+    dirs.push(dir);
+    const file = join(dir, "baseline.json");
+    writeFileSync(file, contents);
+    return file;
+  }
+
+  test("absent baseline file yields the fail-closed empty baseline", () => {
+    const dir = mkdtempSync(join(tmpdir(), "quality-baseline-test-"));
+    dirs.push(dir);
+    const file = join(dir, "does-not-exist.json");
+
+    expect(readBaseline(file)).toEqual({});
+  });
+
+  test("unparseable baseline file yields the fail-closed empty baseline", () => {
+    const file = baselineFile("{ this is not valid json");
+
+    expect(readBaseline(file)).toEqual({});
+  });
+
+  test("non-numeric string value is rejected with path, metric, and value in the message", () => {
+    const file = baselineFile(JSON.stringify({ "src/index.ts": { maxLines: "invalid" } }));
+
+    expect(() => readBaseline(file)).toThrow(/src\/index\.ts.*maxLines.*"invalid"/);
+  });
+
+  test("NaN value is rejected", () => {
+    // JSON has no literal for NaN, so a real baseline file can never contain
+    // one — this exercises the shared validation directly, the same path
+    // `readBaseline` calls after a successful parse.
+    const baseline = { "src/app.ts": { maxCyclo: Number.NaN } };
+
+    expect(() => validateBaseline(baseline, "src/app.ts")).toThrow(/src\/app\.ts.*maxCyclo/);
+  });
+
+  test("Infinity value is rejected", () => {
+    // `1e400` is valid JSON syntax that overflows to Infinity once parsed,
+    // so this exercises the real file -> readBaseline path.
+    const file = baselineFile('{ "src/app.ts": { "maxCyclo": 1e400 } }');
+
+    expect(() => readBaseline(file)).toThrow(/src\/app\.ts.*maxCyclo/);
+  });
+
+  test("non-object metric container is rejected", () => {
+    const file = baselineFile(JSON.stringify({ "src/index.ts": 250 }));
+
+    expect(() => readBaseline(file)).toThrow(/src\/index\.ts/);
+  });
+
+  test("non-object top-level value is rejected", () => {
+    const file = baselineFile(JSON.stringify([1, 2, 3]));
+
+    expect(() => readBaseline(file)).toThrow(/top-level object/);
   });
 });

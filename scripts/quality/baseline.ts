@@ -56,13 +56,47 @@ export function baselinePath(rootDir: string, name: string): string {
 }
 
 export function readBaseline(file: string): QualityBaseline {
+  let text: string;
   try {
-    return JSON.parse(readFileSync(file, "utf8")) as QualityBaseline;
+    text = readFileSync(file, "utf8");
   } catch {
     // An absent baseline is an empty one: every violation is new, which is the
     // correct behaviour for a repository that has not adopted one.
     return {};
   }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    // Unparseable is treated the same as absent — fails closed, not open.
+    return {};
+  }
+  // A baseline that parses but is malformed is not "no baseline" — it is a
+  // corrupt one, and trusting it (as empty, or as-is) would let `judge` fall
+  // through to `accepted` on a comparison against a non-number, silently
+  // voiding the ratchet's whole guarantee. Fail loudly instead.
+  return validateBaseline(parsed, file);
+}
+
+export function validateBaseline(value: unknown, file: string): QualityBaseline {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`corrupt baseline ${file}: expected a top-level object, got ${describeValue(value)}`);
+  }
+  for (const [path, metrics] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof metrics !== "object" || metrics === null || Array.isArray(metrics)) {
+      throw new Error(`corrupt baseline ${file}: ${path} must be an object of metrics, got ${describeValue(metrics)}`);
+    }
+    for (const [metric, recorded] of Object.entries(metrics as Record<string, unknown>)) {
+      if (typeof recorded !== "number" || !Number.isFinite(recorded)) {
+        throw new Error(`corrupt baseline ${file}: ${path}.${metric} must be a finite number, got ${describeValue(recorded)}`);
+      }
+    }
+  }
+  return value as QualityBaseline;
+}
+
+function describeValue(value: unknown): string {
+  return JSON.stringify(value) ?? String(value);
 }
 
 export function writeBaseline(file: string, findings: readonly BaselinedFinding[]): void {
