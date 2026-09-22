@@ -114,7 +114,7 @@
   "src/plan/validation/operations.ts": {
     "maxCognitive": 32,
     "maxCyclo": 24,
-    "structuralScore": 117.3
+    "structuralScore": 117.4
   },
   "src/plan/validation/path-reference.ts": {
     "maxCognitive": 44,

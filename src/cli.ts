@@ -49,7 +49,9 @@ async function runWithCompleteStdout(run: () => Promise<void>): Promise<void> {
   process.stdout.on("error", capture);
   try {
     await run();
-    await new Promise<void>((resolve) => { process.stdout.write("", () => resolve()); });
+    await new Promise<void>((resolve) => {
+      process.stdout.write("", () => resolve());
+    });
     if (failure !== undefined) throw new IoError(`could not write stdout: ${failure.message}`);
   } finally {
     process.stdout.off("error", capture);

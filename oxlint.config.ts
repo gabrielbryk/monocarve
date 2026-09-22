@@ -17,15 +17,7 @@ import { defineConfig } from "oxlint";
  */
 export default defineConfig({
   plugins: ["typescript", "unicorn", "oxc", "import", "promise", "node"],
-  categories: {
-    correctness: "error",
-    suspicious: "error",
-    perf: "error",
-    pedantic: "off",
-    style: "off",
-    restriction: "off",
-    nursery: "off",
-  },
+  categories: { correctness: "error", suspicious: "error", perf: "error", pedantic: "off", style: "off", restriction: "off", nursery: "off" },
   env: { builtin: true, es2024: true },
   ignorePatterns: [
     "**/dist/**",
@@ -66,10 +58,7 @@ export default defineConfig({
     // Explicit safety policy, independent of category defaults.
     "typescript/no-unsafe-argument": "error",
     "typescript/no-unsafe-member-access": "error",
-    "typescript/switch-exhaustiveness-check": [
-      "error",
-      { considerDefaultExhaustiveForUnions: false },
-    ],
+    "typescript/switch-exhaustiveness-check": ["error", { considerDefaultExhaustiveForUnions: false }],
     "typescript/return-await": ["error", "error-handling-correctness-only"],
     "typescript/unbound-method": "error",
     "typescript/no-unsafe-type-assertion": "error",
@@ -78,20 +67,11 @@ export default defineConfig({
     "typescript/no-non-null-assertion": "error",
     "typescript/restrict-plus-operands": [
       "error",
-      {
-        allowAny: false,
-        allowBoolean: false,
-        allowNullish: false,
-        allowNumberAndString: false,
-        allowRegExp: false,
-      },
+      { allowAny: false, allowBoolean: false, allowNullish: false, allowNumberAndString: false, allowRegExp: false },
     ],
     eqeqeq: ["error", "always", { null: "ignore" }],
     "import/no-cycle": "error",
-    "typescript/only-throw-error": [
-      "error",
-      { allowThrowingAny: false, allowThrowingUnknown: false, allowRethrowing: true },
-    ],
+    "typescript/only-throw-error": ["error", { allowThrowingAny: false, allowThrowingUnknown: false, allowRethrowing: true }],
     "typescript/prefer-promise-reject-errors": "error",
     "no-var": "error",
     "prefer-const": "error",

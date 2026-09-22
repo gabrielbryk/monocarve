@@ -25,16 +25,7 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 
-import {
-  baselinePath,
-  judge,
-  readBaseline,
-  report,
-  reportBaselineUpdate,
-  summarizeBaselineUpdate,
-  writeBaseline,
-  type BaselinedFinding,
-} from "./baseline.ts";
+import { baselinePath, judge, readBaseline, report, reportBaselineUpdate, summarizeBaselineUpdate, writeBaseline, type BaselinedFinding } from "./baseline.ts";
 
 export interface OxlintDiagnostic {
   readonly code: string;

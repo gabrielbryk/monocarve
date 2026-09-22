@@ -544,6 +544,7 @@
     "unicorn(no-array-sort)": 10
   },
   "src/portfolio/rank-assessment.ts": {
+    "eslint(no-useless-concat)": 1,
     "typescript(consistent-type-imports)": 1,
     "typescript(no-non-null-assertion)": 6,
     "typescript(no-unnecessary-template-expression)": 2,
@@ -605,6 +606,7 @@
     "unicorn(no-array-sort)": 3
   },
   "src/prepare/boundary-port.ts": {
+    "eslint(no-useless-concat)": 1,
     "typescript(no-deprecated)": 4,
     "typescript(no-unnecessary-condition)": 1,
     "unicorn(no-array-sort)": 6
@@ -811,6 +813,9 @@
     "typescript(restrict-template-expressions)": 1,
     "unicorn(no-array-sort)": 3
   },
+  "src/transaction/audit-byte-fidelity.ts": {
+    "eslint(no-useless-concat)": 1
+  },
   "src/transaction/audit-closure.ts": {
     "unicorn(no-array-sort)": 1
   },
@@ -909,6 +914,7 @@
     "unicorn(no-array-sort)": 3
   },
   "src/transaction/regenerate.ts": {
+    "eslint(no-useless-concat)": 1,
     "typescript(no-unnecessary-condition)": 4,
     "typescript(no-unnecessary-template-expression)": 1
   },
