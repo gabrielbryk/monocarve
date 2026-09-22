@@ -63,3 +63,11 @@ describe("scratch root", () => {
     expect(scratchPath("worktrees")).toBe("/mnt/second/worktrees");
   });
 });
+
+describe("ensureScratchDir", () => {
+  // The fallback behavior (when root is unwritable) cannot be reliably tested without
+  // root privileges or platform-specific tricks: genuinely making a directory unwritable
+  // is destructive to the test environment (leaves permissions in a bad state) or requires
+  // mocking mkdirSync, which proves nothing about real behavior. A vacuous test is worse
+  // than none — this test is skipped rather than faked.
+});
