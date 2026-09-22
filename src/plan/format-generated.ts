@@ -1,8 +1,9 @@
 /** Format generated repository text with the repository's optional Prettier. */
 
 import { spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { createRequire } from "node:module";
-import { basename, extname, resolve } from "node:path";
+import { basename, extname, isAbsolute, relative, resolve, sep } from "node:path";
 
 import { PlanningError } from "./context.ts";
 
@@ -29,7 +30,26 @@ export function formatGeneratedText(rootDir: string, path: string, contents: str
     const detail = `${result.stderr ?? ""}`.trim();
     throw new PlanningError(`Prettier could not format ${path}${detail === "" ? "" : `: ${detail}`}`);
   }
-  return result.stdout;
+  const formatted = result.stdout ?? "";
+
+  // A successful exit is not a guarantee that the formatter produced a
+  // document. A formatter whose stdin never arrived formats an empty input,
+  // prints nothing, and exits 0 — bun 1.3.14 does exactly this to a Prettier
+  // it launches through `spawnSync`'s `input`. The empty string is then hashed
+  // into the plan and written over a real repository file.
+  //
+  // This raises rather than falling back to `contents`. Both avoid writing the
+  // empty file, but a fallback is silent: the operator gets plans whose bytes
+  // depend on whether the formatter happened to work, and a broken formatter
+  // survives indefinitely because nothing ever reports it. Naming the
+  // formatter and the path is the failure an operator can act on, and refusing
+  // to emit a plan is the safe answer for a tool whose contract is that a plan
+  // it produced is the plan it will apply. Whitespace-only output is covered
+  // too: no formatter legitimately reduces a non-blank document to blanks.
+  if (contents.trim() !== "" && formatted.trim() === "") {
+    throw new PlanningError(`Prettier at ${executable} produced empty output for ${path}; refusing to write an empty generated file`);
+  }
+  return formatted;
 }
 
 /**
@@ -50,11 +70,48 @@ function prettierExecutable(rootDir: string): string | undefined {
   const require = createRequire(resolve(rootDir, "package.json"));
   for (const specifier of ["prettier/bin/prettier.cjs", "prettier/bin-prettier.js"]) {
     try {
-      return require.resolve(specifier);
+      const resolved = require.resolve(specifier);
+      if (ownedByWorkspace(rootDir, resolved)) return resolved;
     } catch {
       // Prettier is deliberately optional; the deterministic renderer remains
       // the fallback for workspaces that do not install a formatter.
     }
   }
   return undefined;
+}
+
+/**
+ * Only a formatter the planned workspace installed may shape its files. The
+ * resolver is rooted at the workspace's own `package.json`, but resolution
+ * does not stop there: Node walks `node_modules` upward out of the workspace,
+ * and Bun, finding no `node_modules` at all, auto-installs the specifier into
+ * its global cache and resolves that. Either way MonoCarve would format a
+ * repository with a formatter and a version that repository never chose — and
+ * an uninstalled workspace, the case most likely to have no `node_modules`,
+ * is exactly where the surprise lands.
+ */
+function ownedByWorkspace(rootDir: string, executable: string): boolean {
+  return inside(rootDir, executable) || inside(canonical(rootDir), canonical(executable));
+}
+
+/**
+ * Both the literal and the real path are consulted. A pnpm or Bun workspace
+ * reaches its packages through symlinks whose targets are still inside the
+ * checkout, while a symlinked workspace root only matches once resolved.
+ */
+function inside(rootDir: string, executable: string): boolean {
+  const step = relative(resolve(rootDir), resolve(executable));
+  // `relative` answers "" for the root itself and an absolute path when no
+  // relative route exists (a different Windows volume). A leading `..`
+  // *segment* is the escape; a sibling literally named `..foo` is not.
+  return step !== "" && step !== ".." && !step.startsWith(`..${sep}`) && !isAbsolute(step);
+}
+
+/** Resolve a real path, falling back to the literal one when it is unreadable. */
+function canonical(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return resolve(path);
+  }
 }
