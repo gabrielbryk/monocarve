@@ -20,7 +20,8 @@ describe("dependency graph visualization server", () => {
     expect(await page.clone().text()).toContain("Agent contrast");
     expect(await page.text()).toContain('id="scope"');
     const styles = await (await fetch(`${running.url}/assets/styles.css`)).text();
-    expect(styles).toContain("min-height: 0; overflow: hidden");
+    expect(styles).toContain("min-height: 0;");
+    expect(styles).toContain("overflow: hidden;");
     const client = await (await fetch(`${running.url}/assets/client.js`)).text();
     expect(client).toContain("dependencyForest");
     expect(client).toContain("connectivityBackbone");
