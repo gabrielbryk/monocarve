@@ -123,7 +123,8 @@ function assertPreparerCommandsMatch(
   manifest: PreparerManifest,
 ): { renderedOutputs: string[]; expectedCreates: ReturnType<typeof expandCreatesPolicy> } {
   const expectedCommand = policy.command === undefined ? undefined : renderTemplate(policy.command, vars);
-  const expectedReplacements = expandReplacementsPolicy(policy.replacements, vars, (path) => path);
+  // Validate replacement paths the same way the compile path does, so a hand-edited manifest cannot carry a path the compiler would have rejected.
+  const expectedReplacements = expandReplacementsPolicy(policy.replacements, vars, (path) => validatedPath(".", path));
   const expectedCreates = expandCreatesPolicy(".", policy.creates, vars);
   const renderedOutputs = expandDeclaredOutputs(policy, vars, (path) => validatedPath(".", path));
   assertNoDuplicatePaths(renderedOutputs, "duplicate declared preparer output path");
