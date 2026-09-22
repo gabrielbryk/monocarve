@@ -102,8 +102,14 @@ export function buildConsolidationPublicModules(input: {
   const { context, candidate, resolver, packageRoot, packageName } = input;
   const publicModules: PublicModule[] = candidate.files.map((file) => {
     const target = `${packageRoot}/${resolver.relativePath(file)}`;
-    const donorRelative = file.slice((resolver.donorFor(file)?.root.length ?? 0) + 1);
-    const exported = `${resolver.donorFor(file)!.slug}/${donorRelative.replace(/^src\//u, "").replace(/\.[cm]?[jt]sx?$/u, "")}`;
+    // Resolved once and guarded, rather than called twice with `?.` and then
+    // `!`. The non-null assertion bypassed the check `relativePath` makes for
+    // the same lookup, so a source outside every donor produced a raw
+    // TypeError on `.slug` instead of this PlanningError.
+    const donor = resolver.donorFor(file);
+    if (!donor) throw new PlanningError(`consolidation source is outside every donor: ${file}`);
+    const donorRelative = file.slice(donor.root.length + 1);
+    const exported = `${donor.slug}/${donorRelative.replace(/^src\//u, "").replace(/\.[cm]?[jt]sx?$/u, "")}`;
     return {
       source: file,
       target,

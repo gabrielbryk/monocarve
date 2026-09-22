@@ -1,6 +1,6 @@
 /** Compile a deterministic, replayable type-only preparation manifest. */
 import { GENERATOR } from "../branding.ts";
-import { assertPreparationPolicyMatches, type MonocarveConfig } from "../config.ts";
+import { configDigest, assertPreparationPolicyMatches, type MonocarveConfig } from "../config.ts";
 import { PlanningError } from "../plan/context.ts";
 import type { SeamPlan } from "../seams/types.ts";
 import { git, repositoryPrefix, resolveCommit, showBaseline } from "../util/git.ts";
@@ -222,7 +222,7 @@ export function compilePreparationManifest(input: CompilePreparationManifestInpu
     schemaVersion: 1,
     createdAt: baseline.committedAt,
     generator: { ...GENERATOR },
-    baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: hashJson(input.config) },
+    baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: configDigest(input.config) },
     graphDigest: input.graphDigest,
     declarations: groups,
     operations: [{

@@ -1,12 +1,11 @@
 /** Apply a reviewed preparation plan as one exact-scope source commit. */
 import { readFileSync } from "node:fs";
 
-import { isGuardedBranch, type MonocarveConfig } from "../config.ts";
+import { configDigest, isGuardedBranch, type MonocarveConfig } from "../config.ts";
 import { PreflightError } from "../errors.ts";
 import { disallowedDirtyPaths } from "../util/dirty-tree.ts";
 import { fileState } from "../util/files.ts";
 import { currentBranch, git, headCommit, showBaseline, tryGit } from "../util/git.ts";
-import { hashJson } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";
 import { rollback } from "../transaction/rollback.ts";
 import { snapshotPaths } from "../transaction/journal.ts";
@@ -113,7 +112,7 @@ function assertCommittedPreparationPreconditions(options: ApplyPreparationOption
 }
 
 function assertLivePreparationEvidence(options: ApplyPreparationOptions): void {
-  if (options.manifest.baseline.configDigest !== hashJson(options.config)) {
+  if (options.manifest.baseline.configDigest !== configDigest(options.config)) {
     throw new PreflightError("preparation manifest was compiled with a different resolved configuration");
   }
   const currentFiles = Object.fromEntries(

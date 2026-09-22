@@ -9,7 +9,7 @@ import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, write } from "
 import { baseManifest, extractionFiles } from "./support/transaction-fixture.ts";
 import { runIn } from "./support/cli.ts";
 import { serializePreparerManifest, type PreparerManifest } from "../src/preparer/index.ts";
-import { hashJson } from "../src/util/hash.ts";
+import { configDigest } from "../src/config/digest.ts";
 
 describe("guided manifest approval", () => {
   afterEach(cleanupFixtures);
@@ -111,7 +111,7 @@ describe("guided manifest approval", () => {
       schemaVersion: 1,
       planId: "preparer-plan",
       createdAt: "2026-08-07T00:00:00.000Z",
-      baseline: { commit: fixture.manifest.baselineCommit, configDigest: hashJson(fixture.config) },
+      baseline: { commit: fixture.manifest.baselineCommit, configDigest: configDigest(fixture.config) },
       extractionPlanId: `standalone-${fixture.manifest.baselineCommit}`,
       preparer: { id: "rewrite-boundary", phase: "pre-extraction", command: "true", commit: { subject: "fix: rewrite boundary" } },
       binding: { application: "standalone", packageName: "standalone", packageRoot: ".", sourcePath: "apps/api/src/index.ts", targetPath: "apps/api/src/index.ts" },
@@ -139,7 +139,7 @@ describe("guided manifest approval", () => {
       baseline: {
         commit: fixture.manifest.baselineCommit,
         committerDate: new Date(Number(fixtureGit(fixture.rootDir, "show", "-s", "--format=%ct")) * 1000).toISOString(),
-        configDigest: hashJson(fixture.config),
+        configDigest: configDigest(fixture.config),
       },
       graphDigest: "a".repeat(64),
       declarations: [],

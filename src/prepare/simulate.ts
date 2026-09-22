@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 
 import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapters/registry.ts";
-import { renderPreparationPolicy, type MonocarveConfig, type PreparationPolicyRenderInput, packageContainerRoots } from "../config.ts";
+import { configDigest, renderPreparationPolicy, type MonocarveConfig, type PreparationPolicyRenderInput, packageContainerRoots } from "../config.ts";
 import { MonocarveError } from "../errors.ts";
 import { scanDependencyGraph } from "../graph/cruiser.ts";
 import { graphDigest } from "../plan/build.ts";
@@ -221,7 +221,7 @@ export async function simulatePreparation(options: SimulatePreparationOptions): 
   const { config, manifest, rootDir } = options;
   assertPreparationManifestValid(manifest);
   assertPreparationPolicy(config, manifest);
-  if (manifest.baseline.configDigest !== hashJson(config)) {
+  if (manifest.baseline.configDigest !== configDigest(config)) {
     throw new PreparationSimulationError("preparation manifest was compiled with a different resolved configuration");
   }
   const packageManager = createPackageManagerAdapter(config);

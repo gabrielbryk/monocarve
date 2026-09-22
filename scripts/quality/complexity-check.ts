@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 
+import { baselinePath, judge, readBaseline, report, writeBaseline, type BaselinedFinding } from "./baseline.ts";
+
 export interface ComplexityRecord {
   readonly path: string;
   readonly structuralScore: number;
@@ -56,9 +58,11 @@ export function findComplexityViolations(
 }
 
 if (import.meta.main) {
+  const argv = process.argv.slice(2);
+  const updating = argv.includes("--update-baseline");
+  const targets = argv.filter((arg) => !arg.startsWith("--"));
   const analyzer = resolve(import.meta.dir, "complexity.ts");
-  const targets = process.argv.slice(2).length > 0 ? process.argv.slice(2) : ["src"];
-  const result = spawnSync(process.execPath, [analyzer, ...targets, "--json"], {
+  const result = spawnSync(process.execPath, [analyzer, ...(targets.length > 0 ? targets : ["src"]), "--json"], {
     cwd: process.cwd(),
     encoding: "utf8",
     env: { ...process.env, PLAT: process.cwd() },
@@ -68,14 +72,18 @@ if (import.meta.main) {
     process.exitCode = result.status ?? 1;
   } else {
     const records = JSON.parse(result.stdout) as ComplexityRecord[];
-    const violations = findComplexityViolations(records);
-    for (const entry of violations) {
-      const path = entry.path.replace(`${process.cwd()}/`, "");
-      process.stderr.write(`${path}: ${entry.metric} ${entry.actual} > ${entry.limit} (${entry.lever}: ${entry.reason})\n`);
-    }
-    if (violations.length > 0) {
-      process.stderr.write(`complexity: ${violations.length} metric violation(s) across ${new Set(violations.map((entry) => entry.path)).size} file(s)\n`);
-      process.exitCode = 1;
+    const findings: BaselinedFinding[] = findComplexityViolations(records).map((entry) => ({
+      path: entry.path.replace(`${process.cwd()}/`, ""),
+      metric: entry.metric,
+      actual: entry.actual,
+      detail: `${entry.metric} ${entry.actual} > ${entry.limit} (${entry.lever}: ${entry.reason})`,
+    }));
+    const file = baselinePath(process.cwd(), "complexity");
+    if (updating) {
+      writeBaseline(file, findings);
+      process.stderr.write(`complexity: baseline rewritten with ${findings.length} measurement(s)\n`);
+    } else {
+      process.exitCode = report("complexity", judge(findings, readBaseline(file)), (text) => process.stderr.write(text));
     }
   }
 }

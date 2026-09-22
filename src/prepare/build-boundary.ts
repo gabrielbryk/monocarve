@@ -13,12 +13,12 @@ import { extname, posix, relative, resolve } from "node:path";
 import ts from "typescript";
 
 import { GENERATOR } from "../branding.ts";
-import { triggeredArtifacts, type MonocarveConfig } from "../config.ts";
+import { configDigest, triggeredArtifacts, type MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import { PlanningError } from "../plan/context.ts";
 import { rewritePathReferenceText, scanPathReferenceRewrites } from "../plan/path-reference-rewrites.ts";
 import { resolveCommit, showBaseline } from "../util/git.ts";
-import { byCodeUnit, hashJson, hashText, type FileState, type Sha256 } from "../util/hash.ts";
+import { byCodeUnit, hashText, type FileState, type Sha256 } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";
 import type { TemplateVars } from "../util/template.ts";
 import { planExistingPackageBoundary, type RetainedImporterInput } from "./boundary-imports.ts";
@@ -122,7 +122,7 @@ export function compileBoundaryPreparationManifest(input: CompileBoundaryPrepara
     schemaVersion: 1,
     createdAt: baseline.committedAt,
     generator: { ...GENERATOR },
-    baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: hashJson(input.config) },
+    baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: configDigest(input.config) },
     graphDigest: input.graphDigest,
     // Neither boundary strategy selects a physical type declaration group:
     // "existing-package" only rewrites specifiers, and "port" copies a

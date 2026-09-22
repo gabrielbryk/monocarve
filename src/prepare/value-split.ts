@@ -9,12 +9,13 @@ import { PlanningError } from "../plan/context.ts";
 import { evaluationEffects } from "../codemod/side-effects.ts";
 import { analyzeTypeScriptSource } from "../symbols/analyze.ts";
 import { resolveCommit, showBaseline } from "../util/git.ts";
-import { byCodeUnit, hashJson, hashText, MISSING, type Sha256 } from "../util/hash.ts";
+import { byCodeUnit, hashText, MISSING, type Sha256 } from "../util/hash.ts";
 import { baselineFileMode, type PreparationManifestRendering } from "./build.ts";
 import { assertPreparationManifestValid, createPreparationManifest, preparationOperationPaths } from "./manifest.ts";
 import type { PreparationManifest, PreparationReplayOperation, PreparationWriteFileOperation } from "./manifest-types.ts";
 import { preparationPostJournalRecords } from "./post-journal.ts";
 import { preparationCompilerOptions } from "./compiler-policy.ts";
+import { configDigest } from "../config.ts";
 
 export interface CompileValueSplitInput {
   readonly rootDir: string;
@@ -103,7 +104,7 @@ export function compileValueSplit(input: CompileValueSplitInput): PreparationMan
     schemaVersion: 1,
     createdAt: baseline.committedAt,
     generator: { ...GENERATOR },
-    baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: hashJson(input.config) },
+    baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: configDigest(input.config) },
     graphDigest: input.graphDigest,
     policyAnchor,
     declarations: [],
