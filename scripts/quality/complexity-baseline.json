@@ -114,10 +114,10 @@
     "structuralScore": 174
   },
   "src/plan/validation/target.ts": {
-    "maxCognitive": 34,
-    "maxCyclo": 25,
-    "maxMethodLoc": 88,
-    "structuralScore": 126.9
+    "maxCognitive": 32,
+    "maxCyclo": 24,
+    "maxMethodLoc": 87,
+    "structuralScore": 122.3
   },
   "src/portfolio/communities.ts": {
     "maxNest": 9
