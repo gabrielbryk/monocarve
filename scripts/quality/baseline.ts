@@ -131,6 +131,58 @@ export function judge(findings: readonly BaselinedFinding[], baseline: QualityBa
   return verdict;
 }
 
+/**
+ * What `--update-baseline` is about to accept, broken into the buckets a
+ * reviewer actually needs to look at (new, worsened) versus the ones a count
+ * is enough for (improved, stale). Built on `judge` rather than duplicating
+ * its comparison — a worsened entry is just a `judge` failure that already
+ * had a recorded value, so the old value comes straight from the baseline
+ * that was judged against, not from re-parsing `reason`.
+ */
+export interface BaselineUpdateSummary {
+  /** Violations with no prior baseline entry — the dangerous ones. */
+  readonly newEntries: readonly BaselinedFinding[];
+  /** Recorded measurements about to be blessed at a worse value. */
+  readonly worsened: readonly { readonly finding: BaselinedFinding; readonly recorded: number }[];
+  readonly improvedCount: number;
+  readonly staleCount: number;
+}
+
+export function summarizeBaselineUpdate(
+  findings: readonly BaselinedFinding[],
+  baseline: QualityBaseline,
+): BaselineUpdateSummary {
+  const verdict = judge(findings, baseline);
+  const newEntries: BaselinedFinding[] = [];
+  const worsened: { finding: BaselinedFinding; recorded: number }[] = [];
+  for (const { finding } of verdict.failures) {
+    const recorded = baseline[finding.path]?.[finding.metric];
+    if (recorded === undefined) newEntries.push(finding);
+    else worsened.push({ finding, recorded });
+  }
+  return { newEntries, worsened, improvedCount: verdict.improved.length, staleCount: verdict.stale.length };
+}
+
+/** Prints a `summarizeBaselineUpdate` result in `report`'s voice, before the file is written. */
+export function reportBaselineUpdate(label: string, summary: BaselineUpdateSummary, write: (text: string) => void): void {
+  if (summary.newEntries.length > 0) {
+    write(`${label}: ${summary.newEntries.length} new violation(s) being accepted\n`);
+    for (const finding of summary.newEntries) write(`  ${finding.path}: ${finding.detail}\n`);
+  }
+  if (summary.worsened.length > 0) {
+    write(`${label}: ${summary.worsened.length} baselined measurement(s) getting worse\n`);
+    for (const { finding, recorded } of summary.worsened) {
+      write(`  ${finding.path} ${finding.metric}: ${recorded} -> ${finding.actual}\n`);
+    }
+  }
+  if (summary.improvedCount > 0) {
+    write(`${label}: ${summary.improvedCount} baselined measurement(s) improving\n`);
+  }
+  if (summary.staleCount > 0) {
+    write(`${label}: ${summary.staleCount} stale baseline entr(y/ies) being dropped\n`);
+  }
+}
+
 /** Shared reporting, so both gates speak with one voice. Returns the exit code. */
 export function report(label: string, verdict: BaselineVerdict, write: (text: string) => void): number {
   for (const { finding, reason } of verdict.failures) write(`${finding.path}: ${finding.detail} — ${reason}\n`);
