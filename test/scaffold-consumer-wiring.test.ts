@@ -1,15 +1,16 @@
 import { afterAll, expect, test } from "bun:test";
 import { chmodSync } from "node:fs";
-import { resolve } from "node:path";
+import { createRequire } from "node:module";
+import { join, resolve } from "node:path";
 
 import { hashText } from "../src/util/hash.ts";
 import { moonAdapter, noneTaskRunner } from "../src/adapters/moon.ts";
 import { pnpmAdapter } from "../src/adapters/pnpm.ts";
-import { WorkspaceContext } from "../src/plan/context.ts";
+import { PlanningError, WorkspaceContext } from "../src/plan/context.ts";
 import { formatGeneratedText } from "../src/plan/format-generated.ts";
 import { ProjectedWorkspace } from "../src/plan/projected-workspace.ts";
 import { consumerWiringOperations, packageOperations } from "../src/plan/scaffold.ts";
-import { cleanupFixtures, fixtureConfig, fixtureRepo, write } from "./support/fixture-repo.ts";
+import { cleanupFixtures, fixtureConfig, fixtureRepo, scratchDirectory, write } from "./support/fixture-repo.ts";
 
 afterAll(cleanupFixtures);
 
@@ -236,4 +237,48 @@ test("recognises an existing project reference written with a different but equi
   const operation = inserted.find((entry) => entry.kind === "write-file" && entry.path === "tsconfig.json");
   const references = JSON.parse(operation?.kind === "write-file" ? operation.contents : "{}") as { references: { path: string }[] };
   expect(references.references.map((entry) => entry.path)).toEqual(["./libs/other-package/tsconfig.json", "libs/new-package/tsconfig.json"]);
+});
+
+/** A formatter stub with a chosen stdout, so the guard can be aimed exactly. */
+function installStubFormatter(root: string, body: string): void {
+  write(root, "node_modules/prettier/package.json", '{"name":"prettier","version":"fixture"}\n');
+  write(root, "node_modules/prettier/bin/prettier.cjs", `${body}\n`);
+}
+
+test("refuses a formatter that exits 0 without producing a document", () => {
+  const root = fixtureRepo({ "pnpm-lock.yaml": "lockfileVersion: '9.0'\n" });
+  write(root, "package.json", '{"name":"fixture-workspace"}\n');
+  // Exactly the bun 1.3.14 shape: Prettier never receives stdin, formats an
+  // empty document, prints nothing, and exits 0.
+  installStubFormatter(root, 'require("node:fs").readFileSync(0, "utf8");');
+
+  const input = '{\n  "name": "fixture"\n}\n';
+  expect(() => formatGeneratedText(root, "libs/new-package/package.json", input)).toThrow(PlanningError);
+  expect(() => formatGeneratedText(root, "libs/new-package/package.json", input)).toThrow(/libs\/new-package\/package\.json/u);
+
+  // Whitespace is not a document either: JSON.parse rejects it identically.
+  installStubFormatter(root, 'require("node:fs").readFileSync(0, "utf8");\nprocess.stdout.write("\\n \\n");');
+  expect(() => formatGeneratedText(root, "libs/new-package/package.json", input)).toThrow(PlanningError);
+
+  // A blank input has no content to lose, so it is still allowed through.
+  installStubFormatter(root, 'require("node:fs").readFileSync(0, "utf8");');
+  expect(formatGeneratedText(root, "libs/new-package/package.json", "")).toBe("");
+});
+
+test("ignores a formatter the planned workspace does not own", () => {
+  // Resolution is rooted at the workspace's `package.json`, but Node keeps
+  // walking `node_modules` upward, and Bun auto-installs into a global cache
+  // when it finds none. Neither is a formatter the workspace chose.
+  const container = scratchDirectory();
+  installStubFormatter(container, 'require("node:fs").readFileSync(0, "utf8");\nprocess.stdout.write("OUTSIDE\\n");');
+  const workspace = join(container, "workspace");
+  write(workspace, "package.json", '{"name":"planned-workspace"}\n');
+
+  // Ground truth: the outside formatter really is resolvable from here, so a
+  // pass below means it was rejected rather than never found.
+  expect(createRequire(join(workspace, "package.json")).resolve("prettier/bin/prettier.cjs"))
+    .toBe(join(container, "node_modules/prettier/bin/prettier.cjs"));
+
+  const input = '{\n  "name": "fixture"\n}\n';
+  expect(formatGeneratedText(workspace, "package.json", input)).toBe(input);
 });
