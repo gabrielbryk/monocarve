@@ -16,9 +16,10 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
-import { CONFIG_BASENAME, SCRATCH_ROOT_ENV } from "../../src/branding.ts";
+import { CONFIG_BASENAME, SCRATCH_ROOT_ENV, TOOL_NAME } from "../../src/branding.ts";
 import { parseConfig, type MonocarveConfig, type MonocarveUserConfig } from "../../src/config.ts";
 import { scrubbedGitEnv } from "../../src/util/git.ts";
+import { checkoutSuffix } from "../../src/util/scratch-root.ts";
 
 export function fixtureGit(root: string, ...args: string[]): string {
   // `cwd` is still set for commands and hooks that need the fixture's files,
@@ -244,9 +245,18 @@ export function cleanupFixtures(): void {
  * config partway through a process: a plan compiled before the mutation and
  * validated after it — or validated by a spawned CLI that inherited a different
  * value — disagree on the digest, and the plan is rejected as forged. The
- * variable is set once for the whole run by the `test` script in package.json,
- * where the test process and every CLI it spawns observe the same value from
- * the start.
+ * `test` script in package.json does not set the variable at all (the product's
+ * own default is exercised, which is the point), so absent an operator setting
+ * it explicitly, every test process and any CLI it spawns simply agree by not
+ * having one.
+ *
+ * The no-override fallback is still checkout-suffixed, via {@link
+ * checkoutSuffix}, for the same reason the product's own default is: bare
+ * `os.tmpdir()` is shared by every checkout on the host, and two suites
+ * running concurrently from different checkouts would otherwise land fixture
+ * repositories in the same directory — this is exactly the failure mode that
+ * motivated this change (a symlink-escape error from a fixture path another
+ * checkout owned).
  */
 function testScratchRoot(): string {
   const override = process.env[SCRATCH_ROOT_ENV]?.trim();
@@ -254,7 +264,9 @@ function testScratchRoot(): string {
     mkdirSync(override, { recursive: true });
     return override;
   }
-  return tmpdir();
+  const fallback = join(tmpdir(), TOOL_NAME, checkoutSuffix());
+  mkdirSync(fallback, { recursive: true });
+  return fallback;
 }
 
 export function scratchDirectory(): string {
