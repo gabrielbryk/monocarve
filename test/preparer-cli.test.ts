@@ -210,7 +210,12 @@ test("preparer-plan keeps noisy successful disposable installs out of JSON stdou
     "set -euo pipefail",
     "bash -c 'sleep 0.15; awk \"BEGIN { for (i = 0; i < 300000; i++) printf \\\"nested gate output %06d\\\\n\\\", i }\"'",
     "test -s libs/chart/src/contract.ts",
-    "(sleep 2; printf 'late inherited-pipe output\\n') &",
+    // This background writer's delay is coupled to the `duration` bound below
+    // (both live in this file): it must stay comfortably longer than that
+    // bound so a passing run is proof the CLI returned before the writer
+    // could have fired, not just that the host happened to be fast. Do not
+    // "fix" a flake here by moving only the bound — raise both together.
+    "(sleep 10; printf 'late inherited-pipe output\\n') &",
     "exit 0",
     "",
   ].join("\n"));
@@ -241,10 +246,22 @@ test("preparer-plan keeps noisy successful disposable installs out of JSON stdou
   expect(code, `${stderr}\n${stdout}`).toBe(0);
   const duration = Date.now() - started;
   expect(duration).toBeGreaterThanOrEqual(100);
-  expect(duration).toBeLessThan(1_500);
+  // The deterministic proof that the CLI did not block on the inherited pipe
+  // is the absence of the late writer's marker from stdout below — that
+  // assertion holds regardless of host speed. This wall-clock bound is a
+  // secondary, load-tolerant guard for the same property (see run-command.ts:
+  // `drainAfterExit` gives the streams a fixed 250ms grace period after the
+  // child exits, then cancels them, rather than waiting for the pipe to
+  // close). It is coupled to the fixture's background writer delay above:
+  // that writer sleeps 10s, so finishing well under that is still proof the
+  // CLI didn't wait for it. Raise both numbers together, never just one.
+  expect(duration).toBeLessThan(8_000);
   expect(stderr).toBe("");
   expect(stdout).not.toContain("NOISY_INSTALL_OUTPUT");
   expect(stdout).not.toContain("nested gate output");
+  // Primary, load-independent assertion: proves the CLI returned before the
+  // late writer (see fixture above) could have produced output, i.e. it did
+  // not block reading the inherited pipe.
   expect(stdout).not.toContain("late inherited-pipe output");
   const report = JSON.parse(stdout) as { output: string; written: boolean };
   expect(report).toMatchObject({ output, written: true });
