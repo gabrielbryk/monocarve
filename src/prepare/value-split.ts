@@ -15,7 +15,7 @@ import { assertPreparationManifestValid, createPreparationManifest, preparationO
 import type { PreparationManifest, PreparationReplayOperation, PreparationWriteFileOperation } from "./manifest-types.ts";
 import { preparationPostJournalRecords } from "./post-journal.ts";
 import { preparationCompilerOptions } from "./compiler-policy.ts";
-import { configDigest } from "../config/digest.ts";
+import { configDigest } from "../config.ts";
 
 export interface CompileValueSplitInput {
   readonly rootDir: string;

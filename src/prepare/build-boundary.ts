@@ -13,7 +13,7 @@ import { extname, posix, relative, resolve } from "node:path";
 import ts from "typescript";
 
 import { GENERATOR } from "../branding.ts";
-import { triggeredArtifacts, type MonocarveConfig } from "../config.ts";
+import { configDigest, triggeredArtifacts, type MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import { PlanningError } from "../plan/context.ts";
 import { rewritePathReferenceText, scanPathReferenceRewrites } from "../plan/path-reference-rewrites.ts";
@@ -29,7 +29,6 @@ import type { PreparationManifest, PreparationReplayOperation } from "./manifest
 import { preparationPostJournalRecords } from "./post-journal.ts";
 import { preparationCompilerOptions } from "./compiler-policy.ts";
 import { baselineFileMode, type PreparationManifestRendering } from "./build.ts";
-import { configDigest } from "../config/digest.ts";
 
 export interface CompileBoundaryPreparationManifestInput {
   readonly rootDir: string;

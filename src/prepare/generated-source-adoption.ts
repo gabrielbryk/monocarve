@@ -1,5 +1,5 @@
 import { GENERATOR } from "../branding.ts";
-import { ownerFor, triggeredArtifacts, type MonocarveConfig } from "../config.ts";
+import { configDigest, ownerFor, triggeredArtifacts, type MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import { PlanningError } from "../plan/context.ts";
 import { git, resolveCommit, showBaseline } from "../util/git.ts";
@@ -8,7 +8,6 @@ import { baselineFileMode, type PreparationManifestRendering } from "./build.ts"
 import { createPreparationManifest, assertPreparationManifestValid, preparationOperationPaths } from "./manifest.ts";
 import type { PreparationManifest, PreparationReplayOperation } from "./manifest-types.ts";
 import { preparationPostJournalRecords } from "./post-journal.ts";
-import { configDigest } from "../config/digest.ts";
 
 export interface CompileGeneratedSourceAdoptionInput {
   readonly rootDir: string; readonly config: MonocarveConfig; readonly graph: DependencyGraph;

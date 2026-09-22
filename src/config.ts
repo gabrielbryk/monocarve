@@ -79,3 +79,4 @@ export type {
 } from "./config/schema-policy.ts";
 export { defineConfig, monocarveConfigSchema } from "./config/schema.ts";
 export type { MonocarveConfig, MonocarveUserConfig } from "./config/schema.ts";
+export { configDigest } from "./config/digest.ts";

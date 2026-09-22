@@ -3,7 +3,7 @@ import { compilerBuildIdentity } from "../build-identity.ts";
 import type { MonocarveConfig, ResolvedExtractionProfile, ScaffoldTemplatesConfig } from "../config.ts";
 import { hashJson, type Sha256 } from "../util/hash.ts";
 import type { PlanProvenance } from "./manifest.ts";
-import { configDigest } from "../config/digest.ts";
+import { configDigest } from "../config.ts";
 
 export interface PlanProvenanceInput {
   readonly config: MonocarveConfig;

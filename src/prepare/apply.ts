@@ -1,7 +1,7 @@
 /** Apply a reviewed preparation plan as one exact-scope source commit. */
 import { readFileSync } from "node:fs";
 
-import { isGuardedBranch, type MonocarveConfig } from "../config.ts";
+import { configDigest, isGuardedBranch, type MonocarveConfig } from "../config.ts";
 import { PreflightError } from "../errors.ts";
 import { disallowedDirtyPaths } from "../util/dirty-tree.ts";
 import { fileState } from "../util/files.ts";
@@ -23,7 +23,6 @@ import { assertPreparationManifestValid, serializePreparationManifest } from "./
 import type { PreparationManifest } from "./manifest-types.ts";
 import { assertPreparationPolicy, commitPreparationScope, preparationFilesystemOperations, simulatePreparation } from "./simulate.ts";
 import { runPreparationPostJournalPreparers } from "./post-journal.ts";
-import { configDigest } from "../config/digest.ts";
 
 export class PreparationApplyError extends Error {
   override readonly name = "PreparationApplyError";

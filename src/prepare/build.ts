@@ -1,6 +1,6 @@
 /** Compile a deterministic, replayable type-only preparation manifest. */
 import { GENERATOR } from "../branding.ts";
-import { assertPreparationPolicyMatches, type MonocarveConfig } from "../config.ts";
+import { configDigest, assertPreparationPolicyMatches, type MonocarveConfig } from "../config.ts";
 import { PlanningError } from "../plan/context.ts";
 import type { SeamPlan } from "../seams/types.ts";
 import { git, repositoryPrefix, resolveCommit, showBaseline } from "../util/git.ts";
@@ -19,7 +19,6 @@ import type {
 import { renderTypeOnlyExtraction } from "./replay.ts";
 import { selectTypeOnlyDeclarations } from "./selectors.ts";
 import { preparationCompilerOptions } from "./compiler-policy.ts";
-import { configDigest } from "../config/digest.ts";
 
 export interface PreparationManifestRendering {
   /** Fully rendered repository gates. The compiler never invents commands. */

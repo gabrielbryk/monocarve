@@ -1,0 +1,20 @@
+{
+  "src/codemod/imports.ts": {
+    "lines": 503
+  },
+  "src/commands/preparation.ts": {
+    "lines": 506
+  },
+  "src/plan/scaffold-package.ts": {
+    "lines": 532
+  },
+  "src/plan/validation/operations.ts": {
+    "lines": 501
+  },
+  "test/config-adapters.test.ts": {
+    "lines": 514
+  },
+  "test/preparation-cli.test.ts": {
+    "lines": 515
+  }
+}

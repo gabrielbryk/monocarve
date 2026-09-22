@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 
 import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapters/registry.ts";
-import { renderPreparationPolicy, type MonocarveConfig, type PreparationPolicyRenderInput, packageContainerRoots } from "../config.ts";
+import { configDigest, renderPreparationPolicy, type MonocarveConfig, type PreparationPolicyRenderInput, packageContainerRoots } from "../config.ts";
 import { MonocarveError } from "../errors.ts";
 import { scanDependencyGraph } from "../graph/cruiser.ts";
 import { graphDigest } from "../plan/build.ts";
@@ -23,7 +23,6 @@ import { assertPreparationManifestValid, preparationOperationPaths } from "./man
 import type { PreparationFileMutation, PreparationManifest } from "./manifest-types.ts";
 import { createWorktree } from "../transaction/worktree.ts";
 import { runPreparationPostJournalPreparers } from "./post-journal.ts";
-import { configDigest } from "../config/digest.ts";
 
 export class PreparationSimulationError extends MonocarveError {
   override readonly name = "PreparationSimulationError";
