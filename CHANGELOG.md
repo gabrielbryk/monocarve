@@ -32,6 +32,17 @@ audit proofs.
 
 ### Changed
 
+- **Breaking:** `configDigest` no longer covers `transaction.worktreeRoot`.
+  That field is a machine-local scratch path, and including it made a plan's
+  identity depend on the filesystem of the machine that compiled it: two hosts
+  with different `TMPDIR` computed different digests for the same plan, and a
+  plan compiled before a scratch root changed was rejected as forged
+  afterwards. Manifests recorded before this change no longer validate and must
+  be recompiled. Every other configuration field, including the rest of the
+  transaction block, still participates.
+- Simulation worktrees and the other disposable directories default to a cache
+  root rather than `os.tmpdir()` (see `MONOCARVE_SCRATCH_ROOT` under Added).
+
 - Disposable state — simulation worktrees, the external-consumer proof fixture,
   the preparer bootstrap index and path-migration command directories — now
   defaults to `$XDG_CACHE_HOME/monocarve` or `~/.cache/monocarve` instead of
