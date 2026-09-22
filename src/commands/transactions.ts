@@ -212,7 +212,7 @@ export const transactionCommands: Record<string, CommandSpec> = {
     summary: "reclaim simulation worktrees left by interrupted runs",
     usage: "prune-worktrees [--worktree-root <path>] [--older-than <n>[m|h|d]] [--all]",
     details:
-      "A run disposes its own worktree, including on failure; nothing survives SIGKILL or a closed terminal, and those leftovers accumulate in transaction.worktreeRoot. Defaults to --older-than 1h because that root is shared with any simulation running concurrently; --all removes every one regardless of age. --worktree-root <path> sweeps that directory instead and does not require a config.",
+      "A run disposes its own worktree, including on failure; nothing survives SIGKILL or a closed terminal, and those leftovers accumulate in transaction.worktreeRoot. The default worktreeRoot is checkout-derived, so two checkouts no longer share one root, but concurrent simulations FROM THIS CHECKOUT still do (and an explicit MONOCARVE_SCRATCH_ROOT or worktreeRoot override is shared with whatever else points at it). Defaults to --older-than 1h for that reason; --all removes every one regardless of age. --worktree-root <path> sweeps that directory instead and does not require a config.",
     run: pruneWorktreesCommand,
   },
   check: { summary: "run repository policy checks", usage: "check import-extensions", details: "Currently supported check: import-extensions.", run: check },

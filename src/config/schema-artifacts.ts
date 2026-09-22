@@ -287,7 +287,10 @@ export const transaction = z.strictObject({
    * to run against a dirty tree. Defaults outside the repository for that
    * reason: a cache directory under `MONOCARVE_SCRATCH_ROOT`, `XDG_CACHE_HOME`
    * or `~/.cache`. The default is resolved per parse, so the environment a run
-   * actually has is the environment it honours.
+   * actually has is the environment it honours, and (absent an explicit
+   * `MONOCARVE_SCRATCH_ROOT`) carries a checkout-derived suffix — see
+   * {@link scratchPath} — so two checkouts of this repository running
+   * concurrently no longer resolve to the same root.
    */
   worktreeRoot: z
     .string()
