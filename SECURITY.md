@@ -2,9 +2,8 @@
 
 ## Supported versions
 
-Until the first public release, only the latest commit on the default branch is
-supported. After releases begin, this file will identify the supported release
-line explicitly.
+Only the latest `0.x` release receives fixes. While the major version is 0, a
+fix ships as a new minor or patch release rather than a backport.
 
 ## Reporting a vulnerability
 

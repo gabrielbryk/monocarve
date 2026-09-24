@@ -3,12 +3,16 @@
 All notable changes to monocarve will be documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 0.1.0 — unreleased
 
-The first public release is being prepared. Its final notes will summarize the
-supported Bun runtime, pnpm and bun package-manager adapters, moon and `none`
-task-runner adapters, deterministic plan format, transactional application, and
-audit proofs.
+First public release. monocarve compiles a deterministic, hash-verified plan for
+decomposing a TypeScript monorepo application into workspace packages. It
+simulates the plan in a disposable worktree, applies it transactionally, and
+audits the result.
+
+It runs on Bun and supports the pnpm and bun package managers and the moon and
+`none` task runners. Linux is the supported platform. The npm, yarn, nx, and
+turbo adapter seams refuse with a `not yet ported` error.
 
 ### Added
 

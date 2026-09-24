@@ -17,7 +17,7 @@ export const SCRATCH_ROOT_ENV = "MONOCARVE_SCRATCH_ROOT" as const;
 export const TOOL_DISPLAY_NAME = TOOL_NAME;
 
 /** Kept in sync with `package.json#version` by hand until a release script exists. */
-export const TOOL_VERSION = "1.0.0" as const;
+export const TOOL_VERSION = "0.1.0" as const;
 
 /** Basename (without extension) of the project config file. */
 export const CONFIG_BASENAME = `${TOOL_NAME}.config` as const;

@@ -251,6 +251,12 @@ tree it produced.
 Monocarve runs on Bun. Node is not a supported runtime for the CLI or its
 TypeScript configuration loader.
 
+**Platform support.** Linux is the supported and CI-tested platform. macOS and
+Windows are untested. `assess`, assessment replay, and declaration batch run
+executable TypeScript/ESM config inside a filesystem sandbox that requires
+`bwrap`, `strace`, and unprivileged user namespaces. Without them, those
+commands refuse executable config (JSON config still works).
+
 ```bash
 bun add --dev monocarve
 bunx monocarve --help

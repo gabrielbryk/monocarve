@@ -1,6 +1,6 @@
 {
   "name": "monocarve",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": false,
   "license": "CC0-1.0",
   "description": "Deterministic extraction compiler: decompose large TypeScript monorepo applications into workspace packages via compiled, replayable, hash-verified plans.",
