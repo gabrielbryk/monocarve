@@ -6,7 +6,9 @@ failure cases are easiest to review.
 ## Before changing code
 
 Read [AGENTS.md](AGENTS.md). Its config-first rule and transaction invariants
-are part of the product contract, not implementation suggestions.
+are part of the product contract, not implementation suggestions. For a map
+of the `src/` modules and their dependency direction, the quality ratchet,
+and test conventions, see [docs/architecture.md](docs/architecture.md).
 
 In particular:
 
@@ -69,6 +71,27 @@ concurrently can cross legitimately.
   tool). Suites that create real simulation worktrees probe for this once and
   fail with an actionable message rather than a confusing deep failure; if you
   hit it, set `ALLOW_GIT_WORKTREE_ADD=1` for the test run.
+
+## Agent skills and OpenSpec
+
+`.agents/skills/` holds committed agent skills for working in this
+repository (for example `extraction-efficiency`, and the `openspec-*` skills
+covering proposing, updating, applying, and archiving a change). `.claude/skills/`
+and `.codex/skills/` are directories of symlinks back into `.agents/skills/`,
+one per skill, so the same skill definitions are addressable by both Claude
+Code and Codex without duplication. Add a new skill under `.agents/skills/`
+and symlink it from both, rather than authoring it directly under either
+tool-specific directory.
+
+This repository uses [OpenSpec](openspec/README.md) for spec-driven change
+proposals. A non-trivial behavior change should go through a proposal under
+`openspec/changes/<change-id>/` (`proposal.md`, `design.md` for decisions
+worth recording, `tasks.md`) before or alongside implementation; the
+`openspec-propose`, `openspec-update-change`, `openspec-apply-change`,
+`openspec-sync-specs`, and `openspec-archive-change` skills cover that
+lifecycle end to end. A shipped change is archived under
+`openspec/changes/archive/` with `openspec archive <change-id>`, which also
+folds its deltas into `openspec/specs/`.
 
 ## Pull requests
 

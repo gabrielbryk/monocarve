@@ -1,16 +1,28 @@
 # Monocarve operator guide
 
-This guide is the safe, normal loop for one extraction. It uses invented names
-and paths. Replace them with values declared by the target workspace's own
-`monocarve.config.ts`; none of the examples are implicit defaults.
+This guide is the safe, normal loop for one extraction in a real workspace,
+plus the preparation, boundary, and recovery procedures around it. It uses
+invented names and paths. Replace them with values declared by the target
+workspace's own `monocarve.config.ts`; none of the examples are implicit
+defaults.
+
+For a first walkthrough on a small example, read
+[Getting started](getting-started.md). For the model behind plans, journals,
+simulation, recovery, and audit proofs, read [Concepts](concepts.md). For
+specific refusals, read [Troubleshooting](troubleshooting.md).
 
 ## Scope and prerequisites
 
-Monocarve v1.0.0 is a Bun-only CLI. Run it with Bun from a committed checkout.
-Its currently implemented workspace integrations are the pnpm and bun
-package-manager adapters and the moon or `none` task-runner adapters. A
-configuration that selects another adapter fails at its explicit `not yet
-ported` seam; it does not fall back to a plausible command.
+Monocarve is a Bun-only CLI for Linux. Run it with Bun from a committed
+checkout. Its implemented workspace integrations are the pnpm and bun
+package-manager adapters and the moon or `none` task-runner adapters. Config
+validation rejects any other adapter (`npm is not supported yet; supported package managers: pnpm, bun`); Monocarve never falls back to a plausible
+command.
+
+To take a reproducible, read-only snapshot of an application's architecture
+before planning (layers, hotspots, portfolio, backlog), use
+`assess --app <name> --evidence-dir <path>`; see
+[Architecture assessment](assessment.md).
 
 The bun adapter declares workspace membership in the root `package.json`
 `workspaces` array and edits `bun.lock`. A package occupies two places in that
@@ -61,16 +73,20 @@ rendered subject. Then run `prepare-apply --plan <path> --commit` and
 `prepare-audit --plan <path>`. Preparation is one exact-scope content commit;
 it never claims to be the extraction's pure-rename commit.
 
-Campaigns sequence reviewed child plans in strict pairs: preparation, immediate
-audit and fresh graph record, then a newly compiled extraction for the same
-pair ID. `campaign advance` always rescans and queues one child for review; it
-never applies it. `campaign record` records the applied child's real audit and
-post-apply graph. Every later child is planned from the new HEAD. Keep the
-mutable campaign ledger beneath the configured `campaignDir`; it is operational
-state, not a versioned source change, and the CLI refuses another location.
+New multi-extraction campaigns use stable source targets:
+`campaign optimize --app <name> --out <targets> --write` ranks them, and
+`campaign resolve --targets <targets>` rescans HEAD and compiles at most one
+plan for review (see [Concepts](concepts.md#campaigns)).
 
-Initialize a campaign with an explicit objective and protective bound, then use
-the read-only status command before each operator step:
+Legacy schema-v1 pair campaigns remain supported only to finish existing
+ledgers. They sequence reviewed child plans in strict pairs: preparation,
+immediate audit and fresh graph record, then a newly compiled extraction for
+the same pair ID. `campaign advance` always rescans and queues one child for
+review; it never applies it. `campaign record` records the applied child's real
+audit and post-apply graph. Every later child is planned from the new HEAD.
+Keep the mutable campaign ledger beneath the configured `campaignDir`; it is
+operational state, not a versioned source change, and the CLI refuses another
+location. The ledger commands look like this:
 
 ```sh
 bunx monocarve campaign init \
@@ -577,19 +593,12 @@ an executable, hash-bound review artifact, not a suggestion.
 
 ### Provenance and commit metadata
 
-The committed manifest is the provenance record for an extraction. It carries
-the `planId`, baseline, declared operations and hashes, and rendered commit
-metadata; the post-apply audit checks the landed tree against it. Keep that
-manifest with the history and retain the audit result with the change review.
-
-Commit subjects and optional bodies are entirely workspace-owned
-`commitTemplates` policy. `apply` uses the rendered move and wiring subjects and
-appends a configured body verbatim when one exists. The plan commit is made by
-the operator; its subject must match the rendered `commits.plan` subject for
-preflight, while its body is not used as extraction evidence. Monocarve does
-not add, require, or verify an `Extraction-Proof` trailer. If the workspace
-wants a trailer, co-author, or other commit body, configure it explicitly; it
-does not replace the manifest or its audit.
+The committed manifest is the provenance record for an extraction; keep it in
+history and retain the audit result with the change review. Commit subjects and
+bodies are workspace-owned `commitTemplates` policy. The approval commit's
+subject must match the rendered `commits.plan` subject; its body is not
+evidence, and Monocarve neither adds nor checks an `Extraction-Proof` trailer.
+See [Concepts](concepts.md#provenance-lives-in-the-manifest-not-in-commit-trailers).
 
 Commit exactly the manifest as the configured plan commit. Then verify it
 without changing the tree:
@@ -636,7 +645,18 @@ evidence because safe reuse would need to bind the exact plan, approval,
 baseline, configuration, compiler, dependencies, generated outputs, gates, and
 execution environment.
 
-After simulation, the committed apply creates up to two commits:
+After simulation, the committed apply creates up to two commits: the move
+commit contains only declared R100 renames; the wiring commit contains
+scaffolding, import rewrites, lockfile changes, move-with-rewrite changes, and
+regenerated artifacts. Audit the result immediately, before another extraction
+changes paths that this plan owns. Audit checks declared byte fidelity,
+consumer/boundary and compile evidence, codemod replay, entrypoint closure,
+lockfile importer integrity, generated artifacts, and the recorded dynamic
+import property. It is not a general proof that application behavior is
+unchanged; see [Concepts](concepts.md#audit-proofs) for what each proof does
+and does not claim. `status --plan <path>` then reports the lifecycle state and
+one safe next command, and `receipt --plan <path> --write` records the passing
+audit immutably.
 
 Some repositories attach their full staged Definition of Done to every commit.
 For an extraction campaign, if the operator has explicit authorization to defer
@@ -645,14 +665,6 @@ commits only. Keep all structural, lint, hygiene, secret, and commit-message
 hooks active, record the focused gates, and run the full Definition of Done once
 before opening the pull request. Do not use broad `--no-verify` as a performance
 shortcut.
-the move commit contains only declared R100 renames; the wiring commit contains
-scaffolding, import rewrites, lockfile changes, move-with-rewrite changes, and
-regenerated artifacts. Audit the result immediately, before another extraction
-changes paths that this plan owns. Audit checks declared byte fidelity,
-consumer/boundary and compile evidence, codemod replay, entrypoint closure,
-lockfile importer integrity, generated artifacts, and the recorded dynamic
-import property. It is not a general proof that application behavior is
-unchanged.
 
 Simulation and committed application also run repository-wide structured
 postconditions after the planned tree exists. They verify all registered
@@ -691,30 +703,30 @@ run concurrently within a tier up to `gates.maxConcurrency`; tiers do not
 overlap, and reported results keep declared command order. Gate failures stop
 the transaction before the real checkout is changed.
 
-`--skip-gates` is only for a non-committing, fast journal-and-audit simulation.
-It is rejected with `--commit`, so a real apply cannot skip repository gates.
+`--skip-gates` is only for a non-committing, fast journal-and-audit
+simulation. The CLI does not currently refuse it together with `--commit`, so
+this is an operator rule: never land a plan with `--skip-gates`, because the
+repository's gates are the only evidence that the extraction builds and tests.
 `transaction.simulateGates: false` is likewise a workspace policy choice; do
 not use it as a substitute for validating a production extraction.
 
 ### Lockfile verification
 
-The plan's lockfile operation is a deterministic splice. `--verify-lockfile`
-adds a stronger, opt-in check: in the simulation worktree, Monocarve runs the
-configured package manager's lockfile-only command and compares the resulting
-lockfile with the plan's splice. Use it for a plan that changes a lockfile when
-the package-manager run is available. A missing or failing package manager, or
-any difference, fails the simulation; it is never treated as a skipped check.
-If there is no lockfile-importer operation, there is nothing to compare and the
-option has no lockfile verification result.
+Use `--verify-lockfile` for any plan with a lockfile-importer operation when the
+package manager is available: it compares the plan's deterministic splice with
+what the real package manager writes, and a missing or failing package manager
+or any difference fails the simulation. See
+[Concepts](concepts.md#audit-proofs) and
+[Troubleshooting](troubleshooting.md#lockfile-verification).
 
 ## Failure, rollback, and resume
 
 Simulation failures leave the real checkout untouched. The JSON result includes
 the failure plus structured `failedGate` evidence: tier, command, exit code,
 bounded head and tail excerpts, and a full log path. Full logs live beside the
-the retained failed simulation worktree under `transaction.worktreeRoot`, so
-they do not dirty the gated checkout. They are not secret-redacted;
-gate commands must not print credentials. A failed log write is reported as
+retained failed simulation worktree under `transaction.worktreeRoot`, so they
+do not dirty the gated checkout. They are not secret-redacted; gate commands
+must not print credentials. A failed log write is reported as
 `logWriteFailure` while the original gate result remains authoritative. The
 result includes `worktreePath` and `gateRetry` with the exact cwd and configured
 command; inspect that disposable worktree, fix the
@@ -737,22 +749,20 @@ preserved during recovery, but it still rejects an arbitrary `HEAD` and rejects
 a plan whose wiring commit already landed. Do not use `--resume` to force a
 changed plan or to ignore preflight failures.
 
-A committing apply also holds a Git-common-dir ownership lock and records its
-durable phase. After an interrupted client or shell timeout, run `apply-status`.
-If the owner is stopped, run `apply-recover --plan <path>`. An owner stopped
-mid-journal (phase `applying`, e.g. after `SIGKILL`) is first rolled back from
-the durable checkpoint written before the first mutation: HEAD, the index, and
-every journal path are restored and verified, and nothing is released if that
-verification fails. Otherwise recovery changes no Git state. Either way it
-prints the exact normal apply argv, adding `--resume` only at the recorded
-move-commit boundary. An owner is "stopped" only when its PID is gone or now
-belongs to a process with a different start time; an owner whose liveness cannot
-be determined is treated as running. `SIGINT`/`SIGTERM` during a committing
-apply roll back in-process, release the lock, and exit 130/143. If the lock
-itself is unparseable, `apply-status` and `apply-recover` say so; after
-confirming no apply is running, `apply-recover --plan <path> --force-corrupt-lock`
-moves the unreadable files aside and restores this plan's checkpoint if one
-exists. Never reset the branch while the owner is alive.
+A committing apply also holds a Git-common-dir ownership lock, records its
+durable phase, and writes a rollback checkpoint before its first mutation.
+`SIGINT`/`SIGTERM` roll back in-process, release the lock, and exit 130/143.
+After `SIGKILL`, a lost terminal, or a shell timeout, run `apply-status`; once
+the owner is provably stopped, run `apply-recover --plan <path>`. For an owner
+stopped mid-journal (phase `applying`) it restores HEAD, the index, and every
+journal path from the checkpoint and verifies them, releasing nothing if that
+verification fails; otherwise it changes no Git state. Either way it prints the
+exact apply argv to run next, adding `--resume` only at the move-commit
+boundary. An unparseable lock needs `--force-corrupt-lock`, and only after you
+have confirmed no apply is running. Never reset the branch while the owner is
+alive. The full state machine is in
+[Concepts](concepts.md#apply-checkpoint-and-recovery), and every recovery
+refusal is listed in [Troubleshooting](troubleshooting.md#interrupted-apply).
 
 When in doubt, stop after a refusal or failed simulation, inspect `git status`
 and the reported plan/worktree, correct the cause, and repeat the safe loop from
@@ -762,27 +772,19 @@ journal as a recovery shortcut.
 ## Where disposable state lives
 
 Simulation worktrees, the external-consumer proof fixture, the preparer
-bootstrap index and path-migration command directories all have to live outside
-the repository: `apply` refuses to run against a dirty tree, so scratch state
-inside the checkout would block the very command it exists to support.
-
-The parent directory is resolved per run, first hit wins:
-
-1. `MONOCARVE_SCRATCH_ROOT`, when set to an absolute path.
-2. `$XDG_CACHE_HOME/monocarve`.
-3. `~/.cache/monocarve`.
-4. `$TMPDIR/monocarve`, only when the home directory cannot be determined.
-
-`transaction.worktreeRoot` still overrides all of this for worktrees
-specifically, and remains the right knob when simulations need a particular
-filesystem — a larger disk, or one with different `noexec`/quota behaviour.
-
-A cache directory rather than `/tmp` is deliberate. On most Linux hosts `/tmp`
-is tmpfs: RAM-backed, cleared on reboot, and budgeted in inodes as much as in
-bytes. A simulation worktree is a full checkout plus a mirrored `node_modules`,
-which is thousands of inodes apiece — enough that a host can exhaust `/tmp`
-while `df` still reports it half empty, and enough that an interrupted run's
-evidence would vanish at the next reboot.
+bootstrap index, the config sandbox, and path-migration command directories
+live outside the repository, because `apply` refuses a dirty tree. By default
+they go under `~/.cache/monocarve/<checkout>-<hash12>/` (or
+`$XDG_CACHE_HOME/monocarve/<checkout>-<hash12>/`), where the suffix is the
+checkout's basename plus a hash of its realpath, so separate checkouts and
+linked worktrees never share a root. `MONOCARVE_SCRATCH_ROOT`, when set to an
+absolute path, is used verbatim with no suffix — every checkout using it
+shares that root. `transaction.worktreeRoot` overrides the location of
+simulation worktrees specifically; use it when simulations need a particular
+filesystem (more space, different `noexec` or quota behaviour). The resolution
+order and the reasons for avoiding `/tmp` are in
+[Concepts](concepts.md#scratch-root).
 
 Interrupted runs leave worktrees behind, since no `finally` survives `SIGKILL`.
-Reclaim them with `monocarve prune-worktrees`.
+Reclaim them with `monocarve prune-worktrees` (default `--older-than 1h`;
+`--all` removes every one).

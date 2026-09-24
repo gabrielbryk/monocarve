@@ -13,7 +13,11 @@ export const FAIL_OPERATION_ENV = "MONOCARVE_FAIL_OPERATION" as const;
 /** Overrides where disposable worktrees and scratch directories are created. */
 export const SCRATCH_ROOT_ENV = "MONOCARVE_SCRATCH_ROOT" as const;
 
-/** Kept in sync with `package.json#version` by hand until a release script exists. */
+/**
+ * Kept in sync with `package.json#version` by hand; the release workflow
+ * (`.github/workflows/release.yml`) refuses to publish a tag where this and
+ * `package.json#version` disagree with each other or with the tag itself.
+ */
 export const TOOL_VERSION = "0.1.0" as const;
 
 /** Basename (without extension) of the project config file. */
