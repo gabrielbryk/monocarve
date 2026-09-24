@@ -85,7 +85,7 @@ export function parseCampaignLedger(text: string, source = "<inline>"): Campaign
   try {
     parsed = JSON.parse(text);
   } catch (error) {
-    throw new CampaignLedgerValidationError(`could not parse campaign ledger ${source}: ${(error as Error).message}`);
+    throw new CampaignLedgerValidationError(`could not parse campaign ledger ${source}: ${(error as Error).message}`, { cause: error });
   }
   if (parsed === null || typeof parsed !== "object") throw new CampaignLedgerValidationError(`campaign ledger ${source} must be an object`);
   const ledger = parsed as CampaignLedger;

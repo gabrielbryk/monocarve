@@ -1,6 +1,8 @@
 import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapters/registry.ts";
+import { TOOL_NAME } from "../branding.ts";
 import type { MonocarveConfig } from "../config.ts";
 import { packageContainerRoots } from "../config.ts";
+import { MonocarveError } from "../errors.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
 import { statusEntries } from "../util/git.ts";
 import { byCodeUnit } from "../util/hash.ts";
@@ -9,6 +11,13 @@ import { executeJournal, preflightJournal } from "./journal.ts";
 import { regenerateArtifacts } from "./regenerate.ts";
 import { commitSimulatedExtraction, runGateTiers, type GateResult } from "./simulate.ts";
 import { createWorktree, installWorkspaceDependencies, linkPlannedPackage } from "./worktree.ts";
+
+/** The landed plan could not be reproduced in the inspection worktree, so no gate ran. */
+class GateInspectionError extends MonocarveError {
+  override readonly name = "GateInspectionError";
+}
+
+const SETUP_HINT = `run ${TOOL_NAME} simulate --plan <path> to see the full failure; inspect-gates needs a plan that simulates cleanly`;
 
 interface GateEffect {
   readonly tier: GateResult["tier"];
@@ -62,7 +71,7 @@ async function inspectOne(
     if (config.transaction.nodeModules === "install") installWorkspaceDependencies(worktree.workspacePath, packageManager.installCommand());
     else if (config.transaction.nodeModules === "symlink") linkPlannedPackage(worktree.workspacePath, manifest);
     const regeneration = regenerateArtifacts({ config, treeRoot: worktree.workspacePath, manifest });
-    if (!regeneration.ok) throw new Error(regeneration.failure ?? "artifact regeneration failed");
+    if (!regeneration.ok) throw new GateInspectionError(regeneration.failure ?? "artifact regeneration failed", { hint: SETUP_HINT });
     const audit = auditPlanSync({
       config,
       rootDir: worktree.workspacePath,
@@ -70,7 +79,7 @@ async function inspectOne(
       installedRoot: config.transaction.nodeModules === "install" ? worktree.workspacePath : rootDir,
       regeneratedArtifacts: Object.fromEntries(regeneration.artifacts.map((item) => [item.path, item.hash])),
     });
-    if (!audit.passed) throw new Error(`inspection setup audit failed: ${audit.failures.join("; ")}`);
+    if (!audit.passed) throw new GateInspectionError(`inspection setup audit failed: ${audit.failures.join("; ")}`, { hint: SETUP_HINT });
     commitSimulatedExtraction(worktree.workspacePath, manifest);
     const declared = new Set(manifest.generatedFiles.map((item) => item.path));
     const run = await runGateTiers({

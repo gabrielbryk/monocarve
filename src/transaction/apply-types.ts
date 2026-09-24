@@ -1,5 +1,5 @@
 import type { MonocarveConfig } from "../config.ts";
-import { MonocarveError } from "../errors.ts";
+import { MonocarveError, type MonocarveErrorOptions } from "../errors.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
 import type { RepositoryPostconditionReport } from "./postconditions.ts";
 import type { GateResult } from "./simulate.ts";
@@ -9,8 +9,9 @@ export class ApplyError extends MonocarveError {
   constructor(
     message: string,
     readonly residue: readonly string[] = [],
+    options?: MonocarveErrorOptions,
   ) {
-    super(message);
+    super(message, options);
   }
 }
 

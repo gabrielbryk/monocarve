@@ -40,28 +40,36 @@ export function inspectCommitChain(options: CommitEvidenceOptions): CommitChainE
   let move: string | undefined;
   if (pureRenames(manifest).length > 0) {
     move = commits[at];
-    if (move === undefined) return result("approved", failures, { approvalCommit: approval });
-    if (!proveMove(rootDir, manifest, approval, move, failures)) return result("approved", failures, { approvalCommit: approval });
+    if (move === undefined || !proveMove(rootDir, manifest, approval, move, failures)) return partialChain(failures, approval, undefined);
     at += 1;
   }
 
   let wiring: string | undefined;
   if (wiringPaths(manifest).length > 0) {
     wiring = commits[at];
-    if (wiring === undefined)
-      return result(move === undefined ? "approved" : "post-move", failures, { approvalCommit: approval, ...(move ? { moveCommit: move } : {}) });
-    if (!proveWiring(rootDir, manifest, move ?? approval, wiring, failures)) {
-      return result(move === undefined ? "approved" : "post-move", failures, { approvalCommit: approval, ...(move ? { moveCommit: move } : {}) });
-    }
+    if (wiring === undefined || !proveWiring(rootDir, manifest, move ?? approval, wiring, failures)) return partialChain(failures, approval, move);
     at += 1;
   }
-  const applied = wiring ?? move ?? approval;
+  return appliedChain(failures, { approval, move, wiring }, commits.length - at);
+}
+
+/** A chain that stopped after its approval (and move, when one was proven). */
+function partialChain(failures: readonly string[], approval: string, move: string | undefined): CommitChainEvidence {
+  return result(move === undefined ? "approved" : "post-move", failures, { approvalCommit: approval, ...(move ? { moveCommit: move } : {}) });
+}
+
+function appliedChain(
+  failures: readonly string[],
+  chain: { readonly approval: string; readonly move: string | undefined; readonly wiring: string | undefined },
+  laterCommitCount: number,
+): CommitChainEvidence {
+  const { approval, move, wiring } = chain;
   return result("applied", failures, {
     approvalCommit: approval,
     ...(move ? { moveCommit: move } : {}),
     ...(wiring ? { wiringCommit: wiring } : {}),
-    appliedCommit: applied,
-    laterCommitCount: commits.length - at,
+    appliedCommit: wiring ?? move ?? approval,
+    laterCommitCount,
   });
 }
 
@@ -123,13 +131,7 @@ function proveWiring(root: string, manifest: ExtractionManifest, parent: string,
     .filter((path) => !generated.has(path))
     .map((path) => repoPath(root, path));
   if (!sameRequiredScope(actualPaths, requiredPaths, optionalGenerated)) failures.push("wiring paths do not match the manifest");
-  const finalHashes = new Map<string, string>();
-  for (const operation of manifest.operations) {
-    if (operation.kind === "move") continue;
-    const path = operationTarget(operation);
-    finalHashes.set(path, operation.resultHash);
-  }
-  for (const [path, resultHash] of finalHashes) {
+  for (const [path, resultHash] of finalOperationHashes(manifest)) {
     const bytes = showBaselineBytes(root, commit, path);
     if (bytes === null || hashBytes(bytes) !== resultHash) failures.push(`wiring bytes do not match the manifest: ${path}`);
   }
@@ -138,6 +140,17 @@ function proveWiring(root: string, manifest: ExtractionManifest, parent: string,
     if (bytes === null || hashBytes(bytes) !== artifact.expectedHash) failures.push(`generated artifact bytes do not match the manifest: ${artifact.path}`);
   }
   return failures.length === 0;
+}
+
+/** The last planned hash of every path a non-move operation writes. */
+function finalOperationHashes(manifest: ExtractionManifest): Map<string, string> {
+  const finalHashes = new Map<string, string>();
+  for (const operation of manifest.operations) {
+    if (operation.kind === "move") continue;
+    const path = operationTarget(operation);
+    finalHashes.set(path, operation.resultHash);
+  }
+  return finalHashes;
 }
 
 function operationTarget(operation: Exclude<ExtractionManifest["operations"][number], { readonly kind: "move" }>): string {

@@ -160,7 +160,7 @@ async function applyCommittedPlan(options: ApplyOptions, state: ApplyState, comm
     };
   } catch (error) {
     const recovery = await rollback(rootDir, recoveryPoint);
-    throw new ApplyError(`apply failed: ${(error as Error).message} [${recovery.message}]`, recovery.residue);
+    throw new ApplyError(`apply failed: ${(error as Error).message} [${recovery.message}]`, recovery.residue, { cause: error });
   } finally {
     committing?.interrupts.disarm();
   }

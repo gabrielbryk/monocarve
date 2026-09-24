@@ -253,7 +253,7 @@ function ownedCheckpoint(path: string, ownerToken: string): PersistedCheckpoint 
   try {
     checkpoint = readCheckpoint(path);
   } catch (error) {
-    throw new PreflightError(`the apply checkpoint at ${path} is unreadable (${errorText(error)}); inspect it before recovering`);
+    throw new PreflightError(`the apply checkpoint at ${path} is unreadable (${errorText(error)}); inspect it before recovering`, { cause: error });
   }
   return checkpoint?.ownerToken === ownerToken ? checkpoint : undefined;
 }

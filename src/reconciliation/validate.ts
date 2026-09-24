@@ -29,25 +29,35 @@ export function assertReconciliationRecordValid(record: ReconciliationRecord): v
   assertCommon(payload);
   nonEmpty(payload.reason, "reconciliation reason");
   nonEmpty(payload.approval.subject, "reconciliation approval subject");
-  if (payload.discrepancies.length === 0) fail("reconciliation must contain at least one discrepancy");
-  let previous: string | undefined;
-  for (const discrepancy of payload.discrepancies) {
-    nonEmpty(discrepancy.path, "discrepancy path");
-    if (previous !== undefined && byCodeUnit(previous, discrepancy.path) >= 0) fail("reconciliation discrepancies must have unique code-unit-sorted paths");
-    previous = discrepancy.path;
-    if (!isFileState(discrepancy.expected) || !isFileState(discrepancy.actual)) fail(`invalid file state for ${discrepancy.path}`);
-    if (discrepancy.expected === discrepancy.actual) fail(`discrepancy ${discrepancy.path} does not differ`);
-    if (discrepancy.ownership !== "operation" && discrepancy.ownership !== "generated-artifact") fail(`invalid ownership for ${discrepancy.path}`);
-    if (!strictlyIncreasing(discrepancy.operationIndexes)) fail(`operation indexes for ${discrepancy.path} must be unique and sorted`);
-    if (discrepancy.ownership === "operation" && discrepancy.operationIndexes.length === 0)
-      fail(`operation-owned discrepancy ${discrepancy.path} names no operation`);
-  }
+  assertDiscrepancies(payload.discrepancies);
   if (hashJson(payload.observed.audit) !== payload.observed.auditDigest) fail("observed audit digest does not match its report");
   sha(payload.observed.auditDigest, "observed audit digest");
   commit(payload.observed.headCommit, "observed head commit");
   assertAuditIdentity(payload.observed.audit, payload.plan.planId, payload.plan.baselineCommit);
   if (payload.observed.audit.auditedRoot !== ".") fail("persisted audit root must be workspace-relative");
   assertReconcilableAudit(payload.observed.audit);
+}
+
+type Discrepancy = ReconciliationRecordPayload["discrepancies"][number];
+
+function assertDiscrepancies(discrepancies: readonly Discrepancy[]): void {
+  if (discrepancies.length === 0) fail("reconciliation must contain at least one discrepancy");
+  let previous: string | undefined;
+  for (const discrepancy of discrepancies) {
+    nonEmpty(discrepancy.path, "discrepancy path");
+    if (previous !== undefined && byCodeUnit(previous, discrepancy.path) >= 0) fail("reconciliation discrepancies must have unique code-unit-sorted paths");
+    previous = discrepancy.path;
+    assertDiscrepancy(discrepancy);
+  }
+}
+
+function assertDiscrepancy(discrepancy: Discrepancy): void {
+  if (!isFileState(discrepancy.expected) || !isFileState(discrepancy.actual)) fail(`invalid file state for ${discrepancy.path}`);
+  if (discrepancy.expected === discrepancy.actual) fail(`discrepancy ${discrepancy.path} does not differ`);
+  if (discrepancy.ownership !== "operation" && discrepancy.ownership !== "generated-artifact") fail(`invalid ownership for ${discrepancy.path}`);
+  if (!strictlyIncreasing(discrepancy.operationIndexes)) fail(`operation indexes for ${discrepancy.path} must be unique and sorted`);
+  if (discrepancy.ownership === "operation" && discrepancy.operationIndexes.length === 0)
+    fail(`operation-owned discrepancy ${discrepancy.path} names no operation`);
 }
 
 export function assertReconcilableAudit(report: AuditReport): void {
@@ -81,12 +91,14 @@ export function assertAppliedPlanReceiptValid(receipt: AppliedPlanReceipt): void
   if (payload.audit.observedCommit !== payload.application.resultingCommit && payload.reconciliation === undefined) {
     fail("unreconciled receipt audit must observe the exact application result");
   }
-  if (payload.reconciliation !== undefined) {
-    nonEmpty(payload.reconciliation.path, "reconciliation path");
-    sha(payload.reconciliation.digest, "reconciliation digest");
-    sha(payload.reconciliation.recordId, "reconciliation record id");
-    commit(payload.reconciliation.approvalCommit, "reconciliation approval commit");
-  }
+  if (payload.reconciliation !== undefined) assertReconciliationReference(payload.reconciliation);
+}
+
+function assertReconciliationReference(reference: NonNullable<AppliedPlanReceiptPayload["reconciliation"]>): void {
+  nonEmpty(reference.path, "reconciliation path");
+  sha(reference.digest, "reconciliation digest");
+  sha(reference.recordId, "reconciliation record id");
+  commit(reference.approvalCommit, "reconciliation approval commit");
 }
 
 function assertCommon(payload: ReconciliationRecordPayload | AppliedPlanReceiptPayload): void {
@@ -98,11 +110,15 @@ function assertCommon(payload: ReconciliationRecordPayload | AppliedPlanReceiptP
   sha(payload.plan.digest, "plan digest");
   commit(payload.plan.baselineCommit, "baseline commit");
   commit(payload.plan.approvalCommit, "plan approval commit");
-  if (payload.application.moveCommit !== undefined) commit(payload.application.moveCommit, "move commit");
-  if (payload.application.wiringCommit !== undefined) commit(payload.application.wiringCommit, "wiring commit");
-  if (payload.application.moveCommit === undefined && payload.application.wiringCommit === undefined) fail("application must contain a move or wiring commit");
-  commit(payload.application.resultingCommit, "resulting commit");
-  if (payload.application.resultingCommit !== (payload.application.wiringCommit ?? payload.application.moveCommit)) {
+  assertApplicationCommits(payload.application);
+}
+
+function assertApplicationCommits(application: ReconciliationRecordPayload["application"]): void {
+  if (application.moveCommit !== undefined) commit(application.moveCommit, "move commit");
+  if (application.wiringCommit !== undefined) commit(application.wiringCommit, "wiring commit");
+  if (application.moveCommit === undefined && application.wiringCommit === undefined) fail("application must contain a move or wiring commit");
+  commit(application.resultingCommit, "resulting commit");
+  if (application.resultingCommit !== (application.wiringCommit ?? application.moveCommit)) {
     fail("application result must be its wiring commit, or move commit when wiring is absent");
   }
 }
