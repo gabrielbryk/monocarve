@@ -28,17 +28,55 @@ export interface LockOwnership {
   readonly ownerFd: number;
 }
 
-export function acquireLock(paths: PublicationPaths): LockOwnership {
+/**
+ * Seam over the process table. Liveness is decided from `/proc/<pid>/stat`
+ * start identity (Linux procfs), so a platform without it cannot prove an
+ * owner is dead — and must never guess that it is.
+ */
+export interface LockProcessProbe {
+  /** Kernel start identity of `pid`, or null when it cannot be read. */
+  startIdentity(pid: number): string | null;
+  /** `missing` only for ESRCH; EPERM means the process exists. */
+  signal(pid: number): "exists" | "missing" | "unknown";
+}
+
+export const procfsLockProbe: LockProcessProbe = {
+  startIdentity: processStart,
+  signal(pid) {
+    try {
+      process.kill(pid, 0);
+      return "exists";
+    } catch (error) {
+      const code = error instanceof Error && "code" in error ? error.code : undefined;
+      return code === "ESRCH" ? "missing" : code === "EPERM" ? "exists" : "unknown";
+    }
+  },
+};
+
+export function acquireLock(paths: PublicationPaths, probe: LockProcessProbe = procfsLockProbe): LockOwnership {
+  // Without our own start identity no later publisher could tell this lock from
+  // a stale one, so refuse before creating it rather than write an owner that
+  // can never be verified.
+  const ownStart = probe.startIdentity(process.pid);
+  if (ownStart === null)
+    throw new EvidenceError(
+      "EVIDENCE_DESTINATION_UNSAFE",
+      `cannot read this process's start identity from /proc/${process.pid}/stat; evidence publication requires Linux procfs to prove lock ownership`,
+    );
   try {
     mkdirSync(paths.lock);
   } catch {
-    const owner = ownerState(paths.lock);
-    if (owner === "live" || owner === "uncertain")
-      throw new EvidenceError("EVIDENCE_DESTINATION_BUSY", `publication ownership is already held at ${paths.lock}`);
+    const owner = ownerState(paths.lock, probe);
+    if (owner === "live") throw new EvidenceError("EVIDENCE_DESTINATION_BUSY", `publication ownership is already held at ${paths.lock}`);
+    if (owner === "uncertain")
+      throw new EvidenceError(
+        "EVIDENCE_DESTINATION_BUSY",
+        `publication ownership at ${paths.lock} cannot be proven stale (owner record unreadable or its process start identity unavailable); refusing to treat it as dead`,
+      );
     throw recoveryError(paths);
   }
   const identity = fileIdentity(paths.lock);
-  const owner: LockOwner = { schemaVersion: 1, pid: process.pid, processStart: processStart(process.pid) };
+  const owner: LockOwner = { schemaVersion: 1, pid: process.pid, processStart: ownStart };
   const ownerBytes = new TextEncoder().encode(`${stableStringify(owner, 2)}\n`);
   let ownerFd: number | undefined;
   try {
@@ -85,12 +123,20 @@ export function releaseLock(lock: string, identity: FileIdentity, ownerIdentity:
   syncDirectory(dirname(lock));
 }
 
-function ownerState(lock: string): "live" | "dead" | "uncertain" {
+/**
+ * `dead` requires proof: the PID is gone (ESRCH), or it now belongs to a
+ * process with a different recorded start identity. An unreadable start
+ * identity (no procfs, EPERM on /proc) or an owner recorded without one is
+ * `uncertain`, which callers treat as held.
+ */
+export function ownerState(lock: string, probe: LockProcessProbe = procfsLockProbe): "live" | "dead" | "uncertain" {
   try {
     const owner = JSON.parse(readFileSync(resolve(lock, "owner.json"), "utf8")) as Partial<LockOwner>;
-    if (owner.schemaVersion !== 1 || !Number.isSafeInteger(owner.pid) || typeof owner.pid !== "number" || !("processStart" in owner)) return "uncertain";
-    const current = processStart(owner.pid);
-    if (current === null) return "dead";
+    if (owner.schemaVersion !== 1 || !Number.isSafeInteger(owner.pid) || typeof owner.pid !== "number" || owner.pid <= 0 || !("processStart" in owner))
+      return "uncertain";
+    const current = probe.startIdentity(owner.pid);
+    if (current === null) return probe.signal(owner.pid) === "missing" ? "dead" : "uncertain";
+    if (typeof owner.processStart !== "string") return "uncertain";
     return current === owner.processStart ? "live" : "dead";
   } catch {
     return "uncertain";

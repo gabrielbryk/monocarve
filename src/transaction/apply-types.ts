@@ -39,7 +39,11 @@ export interface ApplyOptions {
   readonly skipSimulation?: boolean;
   readonly verifyLockfile?: boolean;
   /** Deterministic fault seams used only by transaction regression tests. */
-  readonly testHooks?: { readonly beforeRepositoryPostconditions?: () => void };
+  readonly testHooks?: {
+    readonly beforeRepositoryPostconditions?: () => void;
+    /** Awaited after each committed-apply journal operation, before the next one starts. */
+    readonly afterJournalOperation?: (index: number) => void | Promise<void>;
+  };
 }
 
 export type ApplyState = "pre-apply" | "post-move";

@@ -9,7 +9,8 @@ import { assertPlanValid } from "../plan/validate.ts";
 import { disallowedDirtyPaths } from "../util/dirty-tree.ts";
 import { currentBranch, git, headCommit, tryGit } from "../util/git.ts";
 import { commitAppliedPlan } from "./apply-commit.ts";
-import { beginApplyTransaction } from "./apply-state.ts";
+import { guardInterrupts, type InterruptGuard } from "./apply-interrupt.ts";
+import { beginApplyTransaction, type ApplyTransactionHandle } from "./apply-state.ts";
 import { ApplyError, type ApplyOptions, type ApplyResult, type ApplyState } from "./apply-types.ts";
 import { inspectCommitChain } from "./commit-evidence.ts";
 import { executeJournal, preflightJournal, snapshotPaths } from "./journal.ts";
@@ -26,26 +27,37 @@ export async function applyPlan(options: ApplyOptions): Promise<ApplyResult> {
   if (!options.commit) return applyWithoutTransaction(options);
   if (!options.manifestPath) throw new PreflightError("applying a plan requires the path of its committed manifest");
   const transaction = beginApplyTransaction(options.rootDir, options.manifest, options.manifestPath);
+  const interrupts = guardInterrupts(options.rootDir, transaction);
   try {
-    const result = await applyWithoutTransaction(options, transaction);
+    const result = await applyWithoutTransaction(options, { handle: transaction, interrupts });
     transaction.complete();
     return result;
   } catch (error) {
     if (!(error instanceof ApplyError) || error.residue.length === 0) transaction.complete();
+    // Rollback left residue: keep the state and durable checkpoint, marked as an
+    // interrupted journal, so apply-recover can retry the verified restore.
+    else transaction.update("applying");
     throw error;
   } finally {
+    interrupts.dispose();
     transaction.release();
   }
 }
 
-async function applyWithoutTransaction(options: ApplyOptions, transaction?: ReturnType<typeof beginApplyTransaction>): Promise<ApplyResult> {
+interface CommittingTransaction {
+  readonly handle: ApplyTransactionHandle;
+  readonly interrupts: InterruptGuard;
+}
+
+async function applyWithoutTransaction(options: ApplyOptions, committing?: CommittingTransaction): Promise<ApplyResult> {
+  const transaction = committing?.handle;
   assertPlanValid(options.manifest, { config: options.config, rootDir: options.rootDir });
   const state = verifyApplyStart(options);
   const simulated = await simulateBeforeApply(options);
   if (simulated !== undefined) return simulated;
   if (!options.commit) return { ok: true, planId: options.manifest.planId, rolledBack: false };
   transaction?.update("applying");
-  return applyCommittedPlan(options, state, transaction);
+  return applyCommittedPlan(options, state, committing);
 }
 
 function verifyApplyStart(options: ApplyOptions): ApplyState {
@@ -93,8 +105,9 @@ async function simulateBeforeApply(options: ApplyOptions): Promise<ApplyResult |
       };
 }
 
-async function applyCommittedPlan(options: ApplyOptions, state: ApplyState, transaction?: ReturnType<typeof beginApplyTransaction>): Promise<ApplyResult> {
+async function applyCommittedPlan(options: ApplyOptions, state: ApplyState, committing?: CommittingTransaction): Promise<ApplyResult> {
   const { config, rootDir, manifest } = options;
+  const transaction = committing?.handle;
   const packageManager = createPackageManagerAdapter(config);
   resetCodemodCaches();
   const indexTree = tryGit({ cwd: rootDir }, "write-tree");
@@ -109,8 +122,18 @@ async function applyCommittedPlan(options: ApplyOptions, state: ApplyState, tran
     staged: true,
     ...(indexTree === null ? {} : { indexTree }),
   };
+  // Durable before the first mutation: a killed process leaves apply-recover
+  // everything the in-memory rollback below would have used.
+  transaction?.checkpoint(recoveryPoint);
+  committing?.interrupts.arm(recoveryPoint);
   try {
-    await executeJournal({ config, treeRoot: rootDir, manifest, useGitMv: true });
+    await executeJournal({
+      config,
+      treeRoot: rootDir,
+      manifest,
+      useGitMv: true,
+      ...(committing === undefined ? {} : { afterOperation: (index: number) => journalBoundary(options, index) }),
+    });
     const dependencyRefresh = refreshCommittedDependencies(config, rootDir);
     if (config.transaction.nodeModules === "symlink") linkPlannedPackage(rootDir, manifest);
     const regeneration = regenerateArtifacts({ config, treeRoot: rootDir, manifest });
@@ -138,7 +161,17 @@ async function applyCommittedPlan(options: ApplyOptions, state: ApplyState, tran
   } catch (error) {
     const recovery = await rollback(rootDir, recoveryPoint);
     throw new ApplyError(`apply failed: ${(error as Error).message} [${recovery.message}]`, recovery.residue);
+  } finally {
+    committing?.interrupts.disarm();
   }
+}
+
+/** Yield so a pending SIGINT/SIGTERM is handled between journal operations. */
+async function journalBoundary(options: ApplyOptions, index: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setImmediate(resolve);
+  });
+  await options.testHooks?.afterJournalOperation?.(index);
 }
 
 /** Refresh ignored install state only when the configured simulation policy installs it. */
