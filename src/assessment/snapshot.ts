@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { TOOL_NAME } from "../branding.ts";
 import { executableBuildIdentity, type ExecutableBuildIdentity } from "../build-identity.ts";
 import type { LoadedConfig } from "../config.ts";
+import { configFacadeDigest } from "../config/config-facade.ts";
 import { MonocarveError, toError } from "../errors.ts";
 import { resetGraphCaches, ScanError, scanDependencyReports } from "../graph/cruiser.ts";
 import { buildDependencyGraph, type DependencyGraph, type ScanReport } from "../graph/index.ts";
@@ -83,6 +84,8 @@ export interface AssessmentRuntimeIdentity {
   readonly bun: string;
   readonly node: string;
   readonly dependencies: Readonly<Record<string, string>>;
+  /** Digest of the config facade module served to sandboxed executable config. */
+  readonly configFacade: Sha256;
 }
 
 declare const __MONOCARVE_DEPENDENCY_VERSIONS__: Readonly<Record<string, string>> | undefined;
@@ -352,7 +355,13 @@ export function runtimeIdentity(): AssessmentRuntimeIdentity {
     typeof __MONOCARVE_DEPENDENCY_VERSIONS__ === "object"
       ? __MONOCARVE_DEPENDENCY_VERSIONS__
       : { "dependency-cruiser": installedVersion("dependency-cruiser"), typescript: installedVersion("typescript") };
-  return { schemaVersion: 1, bun: typeof Bun === "undefined" ? "unavailable" : Bun.version, node: process.version, dependencies };
+  return {
+    schemaVersion: 1,
+    bun: typeof Bun === "undefined" ? "unavailable" : Bun.version,
+    node: process.version,
+    dependencies,
+    configFacade: configFacadeDigest(),
+  };
 }
 
 function installedVersion(name: string): string {

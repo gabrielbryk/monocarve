@@ -1,7 +1,9 @@
 /**
  * The local module closure of an executable config file: every file it
  * imports, transitively, resolved the way Bun would resolve it. Builtins are
- * not files and are skipped; a non-literal or unresolvable import is refused.
+ * not files and are skipped, as are type-only imports (erased before execution)
+ * and the tool's own config facade (trusted runtime identity, see
+ * `config-facade.ts`); a non-literal or unresolvable import is refused.
  */
 import { readFileSync } from "node:fs";
 import { isBuiltin } from "node:module";
@@ -10,6 +12,7 @@ import { dirname, resolve } from "node:path";
 import ts from "typescript";
 
 import { InputInventoryError } from "../errors.ts";
+import { isConfigFacadeSpecifier, isErasedModuleDeclaration } from "./config-facade.ts";
 
 export function collectLocalConfigDependencies(path: string, add: (path: string) => void, seen = new Set<string>()): void {
   const absolute = resolve(path);
@@ -31,11 +34,13 @@ export function collectLocalConfigDependencies(path: string, add: (path: string)
 }
 
 function visitConfigDependencyNode(node: ts.Node, source: ts.SourceFile, absolute: string, add: (path: string) => void, seen: Set<string>): void {
+  if (isErasedModuleDeclaration(node)) return;
   const reference = moduleReferenceOf(node, source);
   if (reference === undefined) return;
   if (!ts.isStringLiteral(reference)) throw new InputInventoryError("ASSESSMENT_INPUT_UNBOUND", `config import cannot be inventoried: ${absolute}`, [absolute]);
   // `fs` and `node:fs` are the same builtin; neither is a file to capture.
   if (reference.text.startsWith("node:") || reference.text.startsWith("bun:") || isBuiltin(reference.text)) return;
+  if (isConfigFacadeSpecifier(reference.text)) return;
   const target = resolveConfigImport(reference.text, absolute);
   collectLocalConfigDependencies(target, add, seen);
 }
