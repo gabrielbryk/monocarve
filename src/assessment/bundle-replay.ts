@@ -91,7 +91,7 @@ function replayInventory(bundle: string): AssessmentInputInventory {
 function replayReports(bundle: string, manifest: AssessmentManifest): Record<string, ScanReport> {
   const reports: Record<string, ScanReport> = Object.create(null) as Record<string, ScanReport>;
   try {
-    for (const [name, path] of Object.entries(manifest.rawReports).sort(([left], [right]) => byCodeUnit(left, right))) {
+    for (const [name, path] of Object.entries(manifest.rawReports).toSorted(([left], [right]) => byCodeUnit(left, right))) {
       const report = parseJson<ScanReport>(bundle, path);
       if (containsAbsoluteReportPath(report)) throw new Error(`${path} contains an absolute path`);
       reports[name] = report;
@@ -280,15 +280,15 @@ function requiredAssessmentEvidenceIssue(value: AssessmentManifest): string | un
 
 function rawReportMappingIssue(value: AssessmentManifest): string | undefined {
   if (typeof value.rawReports !== "object" || value.rawReports === null || Array.isArray(value.rawReports)) return "raw report mapping is missing or malformed";
-  const names = Object.keys(value.rawReports).sort(byCodeUnit);
+  const names = Object.keys(value.rawReports).toSorted(byCodeUnit);
   if (names.some((name) => name.length === 0)) return "raw report mapping contains an empty application name";
   const expected = rawReportPaths(names);
   if (stableStringify(value.rawReports) !== stableStringify(expected)) return "raw report mapping is not canonical or collision-free";
   const rawPaths = value.artifacts
     .filter((entry) => entry.path.startsWith("raw/") && entry.path.endsWith(".json"))
     .map((entry) => entry.path)
-    .sort(byCodeUnit);
-  if (stableStringify(rawPaths) !== stableStringify(Object.values(expected).sort(byCodeUnit))) return "raw report mapping does not bind exactly its artifacts";
+    .toSorted(byCodeUnit);
+  if (stableStringify(rawPaths) !== stableStringify(Object.values(expected).toSorted(byCodeUnit))) return "raw report mapping does not bind exactly its artifacts";
   return undefined;
 }
 

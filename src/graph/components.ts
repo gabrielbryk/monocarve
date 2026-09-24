@@ -58,7 +58,7 @@ export function stronglyConnectedComponents(nodes: readonly string[], outgoing: 
     components.push(component.sort());
   };
 
-  for (const node of [...nodes].sort()) if (!indices.has(node)) visit(node);
+  for (const node of [...nodes].toSorted()) if (!indices.has(node)) visit(node);
   return components;
 }
 
@@ -138,7 +138,7 @@ export function buildApplicationGraph(graph: DependencyGraph, application?: stri
 
 /** Stable, content-derived component id: same members, same id, across runs. */
 export function sccId(members: readonly string[]): string {
-  return `scc-${hashText([...members].sort().join("\n")).slice(0, 12)}`;
+  return `scc-${hashText([...members].toSorted().join("\n")).slice(0, 12)}`;
 }
 
 export function toSccs(condensed: CondensedGraph): Scc[] {

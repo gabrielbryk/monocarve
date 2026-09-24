@@ -48,8 +48,8 @@ describe("extraction transaction against a scratch repository", () => {
     expect(fixtureGit(root, "show", "--name-status", "--find-renames=100%", "--format=", "HEAD~1")).toContain("R100");
     expect(fixtureGit(root, "log", "-1", "--format=%s")).toBe(manifest.commits.wiring.subject);
 
-    const wiring = fixtureGit(root, "show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean).sort();
-    expect(wiring).toEqual([CONSUMER, ENTRYPOINT, "pnpm-lock.yaml"].sort());
+    const wiring = fixtureGit(root, "show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean).toSorted();
+    expect(wiring).toEqual([CONSUMER, ENTRYPOINT, "pnpm-lock.yaml"].toSorted());
 
     // The block lands at its sorted position and re-extracts byte-identically.
     const applied = read(root, "pnpm-lock.yaml");
@@ -141,7 +141,7 @@ describe("extraction transaction against a scratch repository", () => {
           verify: `grep -q '${TARGET}' quality-baseline.txt`,
         },
       ],
-      changedFiles: [...base.changedFiles, "quality-baseline.txt"].sort(),
+      changedFiles: [...base.changedFiles, "quality-baseline.txt"].toSorted(),
     };
     const result = await simulatePlan({ config, rootDir: root, manifest, skipGates: true });
     expect(result.failure).toBeUndefined();
@@ -255,7 +255,7 @@ describe("extraction transaction against a scratch repository", () => {
       ...base,
       source: { files: [DONOR, twinA, twinB], tests: [], sccs: { "scc-fixture": [DONOR], "scc-zulu": [twinA], "scc-alfa": [twinB] } },
       sourceBlobs: { ...base.sourceBlobs, [twinA]: twinHash, [twinB]: twinHash },
-      changedFiles: [...base.changedFiles, twinA, twinB, twinATarget, twinBTarget].sort(),
+      changedFiles: [...base.changedFiles, twinA, twinB, twinATarget, twinBTarget].toSorted(),
       metrics: { ...base.metrics, movedFiles: 3, movedLines: 3 },
       operations: [
         ...base.operations,
@@ -312,7 +312,7 @@ describe("extraction transaction against a scratch repository", () => {
         sccs: { "scc-fixture": [DONOR], ...Object.fromEntries(bulk.map((entry, index) => [`scc-bulk-${index}`, [entry.source]])) },
       },
       sourceBlobs: { ...base.sourceBlobs, ...Object.fromEntries(bulk.map((entry) => [entry.source, hashText(entry.contents)])) },
-      changedFiles: [...base.changedFiles, ...bulk.flatMap((entry) => [entry.source, entry.target])].sort(),
+      changedFiles: [...base.changedFiles, ...bulk.flatMap((entry) => [entry.source, entry.target])].toSorted(),
       metrics: { ...base.metrics, movedFiles: 1 + bulk.length, movedLines: 1 + bulk.length },
       operations: [
         ...base.operations,
@@ -362,7 +362,7 @@ describe("extraction transaction against a scratch repository", () => {
           { name: "widgetValue", typeOnly: false },
         ],
       },
-      changedFiles: [...base.changedFiles, rewriteDonor, rewriteTarget].sort(),
+      changedFiles: [...base.changedFiles, rewriteDonor, rewriteTarget].toSorted(),
       operations: [
         ...base.operations.map((operation) =>
           operation.kind === "write-file" && operation.path === ENTRYPOINT ? { ...operation, contents: barrel, resultHash: hashText(barrel) } : operation,
@@ -380,8 +380,8 @@ describe("extraction transaction against a scratch repository", () => {
     expect(moved[0]).toContain("R100");
     expect(moved[0]).toContain(TARGET);
 
-    const wiring = fixtureGit(root, "show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean).sort();
-    expect(wiring).toEqual([CONSUMER, rewriteDonor, ENTRYPOINT, rewriteTarget, "pnpm-lock.yaml"].sort());
+    const wiring = fixtureGit(root, "show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean).toSorted();
+    expect(wiring).toEqual([CONSUMER, rewriteDonor, ENTRYPOINT, rewriteTarget, "pnpm-lock.yaml"].toSorted());
     expect(read(root, rewriteTarget)).toBe(rewritten);
 
     const report = auditPlanSync({ config, rootDir: root, manifest });

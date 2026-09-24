@@ -51,7 +51,7 @@ function normalizedPreparerPolicy(preparer: PostJournalPreparerConfig) {
   return {
     id: preparer.id,
     ...(preparer.command === undefined ? {} : { command: preparer.command }),
-    outputs: [...new Set([...preparer.outputs, ...(preparer.creates?.map((item) => item.path) ?? [])])].sort(),
+    outputs: [...new Set([...preparer.outputs, ...(preparer.creates?.map((item) => item.path) ?? [])])].toSorted(),
     ...(preparer.replacements === undefined ? {} : { replacements: preparer.replacements.map((item) => ({ ...item })) }),
     ...(preparer.creates === undefined ? {} : { creates: preparer.creates.map((item) => ({ ...item, mode: item.mode ?? 0o644 })) }),
     emittedModuleSpecifiers: preparer.emittedModuleSpecifiers.map((item) => ({ ...item })),
@@ -187,8 +187,8 @@ export function runConfiguredPreparer(
   const declared = records
     .filter((item) => item.preparerId === preparerId)
     .map((item) => item.path)
-    .sort();
-  if (declared.join("\n") !== [...preparer.outputs].sort().join("\n")) {
+    .toSorted();
+  if (declared.join("\n") !== [...preparer.outputs].toSorted().join("\n")) {
     return `post-journal preparer ${preparerId} output set differs from current configuration`;
   }
   const before = new Map(declared.map((path) => [path, fileState(resolve(treeRoot, path))]));

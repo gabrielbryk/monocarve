@@ -72,14 +72,14 @@ export function compileGeneratedSourceAdoption(input: CompileGeneratedSourceAdop
           : adoption.retireGenerator!.slice(owner.length + 1);
       }),
     ]);
-    const tracked = git({ cwd: input.rootDir }, "ls-tree", "-r", "--name-only", baseline.commit, "--").split("\n").filter(Boolean).sort(byCodeUnit);
+    const tracked = git({ cwd: input.rootDir }, "ls-tree", "-r", "--name-only", baseline.commit, "--").split("\n").filter(Boolean).toSorted(byCodeUnit);
     const surviving = tracked
       .filter((path) => {
         const text = showBaseline(input.rootDir, baseline.commit, path);
         const command = text === null ? null : provenanceOf(input.config, text).regenerate;
         return command !== null && [...generatorNames].some((name) => command.includes(name));
       })
-      .sort(byCodeUnit);
+      .toSorted(byCodeUnit);
     if (surviving.length === 0 || surviving.some((path) => !declared.has(path)) || declared.size !== surviving.length)
       throw new PlanningError(`generator retirement proof is not exhaustive; provenance names ${surviving.join(", ") || "no outputs"}`);
     operations.push({
@@ -97,7 +97,7 @@ export function compileGeneratedSourceAdoption(input: CompileGeneratedSourceAdop
   const ordered = operations.sort(
     (left, right) => byCodeUnit(preparationOperationPaths(left)[0]!, preparationOperationPaths(right)[0]!) || byCodeUnit(left.kind, right.kind),
   );
-  const operationPaths = [...new Set(ordered.flatMap(preparationOperationPaths))].sort(byCodeUnit);
+  const operationPaths = [...new Set(ordered.flatMap(preparationOperationPaths))].toSorted(byCodeUnit);
   const generatedArtifacts = triggeredArtifacts(input.config, operationPaths)
     .map((artifact) => ({
       path: artifact.path,
@@ -106,11 +106,11 @@ export function compileGeneratedSourceAdoption(input: CompileGeneratedSourceAdop
       regenerateOnApply: true as const,
       ...(artifact.exemptReason === undefined ? {} : { exemptReason: artifact.exemptReason }),
     }))
-    .sort((left, right) => byCodeUnit(left.path, right.path));
+    .toSorted((left, right) => byCodeUnit(left.path, right.path));
   const postJournalPreparers = preparationPostJournalRecords(input.config, operationPaths);
   const changedFiles = [
     ...new Set([...operationPaths, ...generatedArtifacts.map((item) => item.path), ...postJournalPreparers.flatMap((item) => item.outputs)]),
-  ].sort(byCodeUnit);
+  ].toSorted(byCodeUnit);
   const manifest = createPreparationManifest({
     schemaVersion: 1,
     createdAt: baseline.committedAt,
@@ -126,9 +126,9 @@ export function compileGeneratedSourceAdoption(input: CompileGeneratedSourceAdop
     changedFiles,
     commits: { prepare: input.rendering.commit },
     gates: {
-      package: [...input.rendering.gates.package].sort(byCodeUnit),
-      project: [...input.rendering.gates.project].sort(byCodeUnit),
-      workspace: [...input.rendering.gates.workspace].sort(byCodeUnit),
+      package: [...input.rendering.gates.package].toSorted(byCodeUnit),
+      project: [...input.rendering.gates.project].toSorted(byCodeUnit),
+      workspace: [...input.rendering.gates.workspace].toSorted(byCodeUnit),
     },
   });
   assertPreparationManifestValid(manifest);

@@ -65,7 +65,7 @@ export function assembleReport(inputs: ReportInputs): AuditReport {
   const deltaMatches = observed.added.join("\n") === [...expected.added].join("\n") && observed.removed.join("\n") === [...expected.removed].join("\n");
   const graphEvidence: GraphEvidence = {
     dynamicImportDelta: observed,
-    movedPathEdges: [...new Set(movedPathEdges)].sort(),
+    movedPathEdges: [...new Set(movedPathEdges)].toSorted(),
     passed: deltaMatches && movedPathEdges.length === 0,
   };
   const failures = [

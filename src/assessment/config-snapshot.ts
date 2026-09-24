@@ -231,7 +231,7 @@ function configInputPaths(configPath: string): string[] {
       current = parent;
     }
   }
-  return [...paths].sort(byCodeUnit);
+  return [...paths].toSorted(byCodeUnit);
 }
 
 function authorizedInput(workspace: string, path: string): boolean {
@@ -273,7 +273,7 @@ function runtimeLibraries(binary: string): Array<{ readonly source: string; read
     if (match?.[1]) libraries.set(match[1], realpathSync(match[1]));
   }
   if (libraries.size === 0) throw new ConfigError("ASSESSMENT_CONFIG_UNBOUND: Bun runtime libraries were not identified");
-  return [...libraries].map(([target, source]) => ({ source, target })).sort((a, b) => byCodeUnit(a.target, b.target));
+  return [...libraries].map(([target, source]) => ({ source, target })).toSorted((a, b) => byCodeUnit(a.target, b.target));
 }
 
 function runtimeBinary(): string {

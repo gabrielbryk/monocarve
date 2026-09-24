@@ -14,7 +14,7 @@ export function authorizeProtectedRoots(
   requested: readonly string[],
   authorizations: readonly string[],
 ): string[] {
-  const roots = [...new Set(authorizations.map(normalizeAuthorization))].sort(byCodeUnit);
+  const roots = [...new Set(authorizations.map(normalizeAuthorization))].toSorted(byCodeUnit);
   const application = getApplication(config, applicationName);
   for (const root of roots) {
     if (!config.portfolio.protectedPaths.includes(root)) {

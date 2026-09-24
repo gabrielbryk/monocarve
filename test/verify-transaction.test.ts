@@ -45,7 +45,7 @@ describe("transaction verification", () => {
           preparerId: "incomplete-generator",
         },
       ],
-      changedFiles: [...base.changedFiles, "quality-baseline.txt"].sort(),
+      changedFiles: [...base.changedFiles, "quality-baseline.txt"].toSorted(),
     };
 
     const result = await simulatePlan({ config, rootDir: root, manifest, skipGates: true });
@@ -82,7 +82,7 @@ describe("transaction verification", () => {
       generatedFiles: [
         { path: "generated-guide.md", source: TARGET, regenerate: oldCommand, regenerateOnApply: true, exemptReason: "fixture guide", preparerId: "guides" },
       ],
-      changedFiles: [...base.changedFiles, "generated-guide.md"].sort(),
+      changedFiles: [...base.changedFiles, "generated-guide.md"].toSorted(),
     };
     const extractionPath = landManifest(root, extraction);
     expect(await applyPlan({ config: initial, rootDir: root, manifest: extraction, manifestPath: extractionPath, commit: true })).toMatchObject({ ok: true });

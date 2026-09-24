@@ -18,7 +18,7 @@ export function modulePromotionImporterEvidence(input: {
 }): string[] {
   const graphImporters = [...(input.graph.incoming.get(input.source) ?? []), ...(input.graph.testImporters.get(input.source) ?? [])];
   const compilerImporters = input.context.consumerIndex().get(input.context.absolute(input.source)) ?? [];
-  return [...new Set([...graphImporters, ...compilerImporters])].sort();
+  return [...new Set([...graphImporters, ...compilerImporters])].toSorted();
 }
 
 /** Compile a reviewed singleton selection through the ordinary extraction engine. */
@@ -44,16 +44,16 @@ export function compileModulePromotion(input: CompileModulePromotionInput): Extr
     .filter((edge) => edge.from === promotion.source || edge.to === promotion.source)
     .filter((edge) => component.includes(edge.from) && component.includes(edge.to))
     .map(({ from, to }) => ({ from, to }))
-    .sort((left, right) => left.from.localeCompare(right.from) || left.to.localeCompare(right.to));
+    .toSorted((left, right) => left.from.localeCompare(right.from) || left.to.localeCompare(right.to));
   const cutsScc = component.length >= 2 && removedEdges.length > 0 && Math.max(0, ...after.map((part) => part.length)) < component.length;
   const architecturalEdges = input.graph.edges.filter((edge) => isArchitecturalContainmentEdge(input.graph, edge.from, edge.to));
   const containmentRemoved = architecturalEdges
     .filter((edge) => edge.from === promotion.source || edge.to === promotion.source)
     .map(({ from, to }) => ({ from, to }))
-    .sort((left, right) => left.from.localeCompare(right.from) || left.to.localeCompare(right.to));
+    .toSorted((left, right) => left.from.localeCompare(right.from) || left.to.localeCompare(right.to));
   const introducedApplicationDependencies = [
     ...new Set((input.graph.outgoing.get(promotion.source) ?? []).filter((path) => input.graph.nodes.get(path)?.zone === "application")),
-  ].sort();
+  ].toSorted();
   if (!cutsScc && containmentRemoved.length === 0)
     throw new PlanningError(`module promotion ${promotion.id} cuts neither a multi-module SCC nor an architectural containment edge at the baseline`);
   if (!cutsScc && introducedApplicationDependencies.length > 0)
@@ -114,7 +114,7 @@ export function compileModulePromotion(input: CompileModulePromotionInput): Extr
         }),
   };
   const manifest = buildPlanSync({ ...input, context, candidate, packageName: promotion.targetPackage, modulePromotion: proof });
-  const compiledImporters = [...new Set([...manifest.consumers.map((item) => item.file), ...manifest.source.tests])].sort();
+  const compiledImporters = [...new Set([...manifest.consumers.map((item) => item.file), ...manifest.source.tests])].toSorted();
   if (hashJson(compiledImporters) !== hashJson(importers)) {
     throw new PlanningError(`module promotion importer proof differs from the compiler-derived consumer set`);
   }

@@ -37,7 +37,7 @@ describe("preparation application", () => {
 
     expect(result.ok).toBe(true);
     expect(result.audit?.passed).toBe(true);
-    expect(fixtureGit(root, "show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean).sort()).toEqual([DONOR, TARGET]);
+    expect(fixtureGit(root, "show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean).toSorted()).toEqual([DONOR, TARGET]);
     expect(read(root, DONOR)).toBe(DONOR_RESULT);
     expect(read(root, TARGET)).toBe(SOURCE);
     expect(Number(lstatSync(join(root, TARGET)).mode) & 0o777).toBe(0o644);

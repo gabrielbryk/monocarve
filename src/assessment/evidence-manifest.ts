@@ -55,7 +55,7 @@ export function writeArtifacts(
   artifacts: Readonly<Record<string, string | Uint8Array>>,
   required: ReadonlySet<string>,
 ): EvidenceArtifactRecord[] {
-  const paths = Object.keys(artifacts).sort(byCodeUnit);
+  const paths = Object.keys(artifacts).toSorted(byCodeUnit);
   validateArtifactNames(paths, required);
   return paths.map((path) => {
     const value = artifacts[path]!;
@@ -82,14 +82,14 @@ export function validateArtifactNames(paths: readonly string[], required: Readon
     seen.add(path);
   }
   const available = new Set(paths);
-  const missing = [...required].filter((path) => !available.has(path)).sort(byCodeUnit);
+  const missing = [...required].filter((path) => !available.has(path)).toSorted(byCodeUnit);
   if (missing.length > 0) throw new EvidenceError("EVIDENCE_REPLACEMENT_REFUSED", `required artifacts were not generated: ${missing.join(", ")}`);
 }
 
 function validateArtifactRecords(records: readonly EvidenceArtifactRecord[]): void {
   const paths = records.map((record) => record.path);
   validateArtifactNames(paths, new Set());
-  const sorted = [...paths].sort(byCodeUnit);
+  const sorted = [...paths].toSorted(byCodeUnit);
   if (new Set(paths).size !== paths.length) throw new EvidenceError("EVIDENCE_REPLACEMENT_REFUSED", "prior manifest lists duplicate artifact paths");
   if (paths.some((path, index) => path !== sorted[index]))
     throw new EvidenceError("EVIDENCE_REPLACEMENT_REFUSED", "prior manifest artifact inventory is not in canonical order");
@@ -109,13 +109,13 @@ export function validateMaxBytes(max: number | undefined): void {
 export function enforceBudget(max: number | undefined, total: number, records: readonly EvidenceArtifactRecord[], manifestBytes: number): void {
   if (max === undefined || total <= max) return;
   const largest = [...records.map(({ path, bytes, required }) => ({ path, bytes, required })), { path: "manifest.json", bytes: manifestBytes, required: true }]
-    .sort((left, right) => right.bytes - left.bytes || byCodeUnit(left.path, right.path))
+    .toSorted((left, right) => right.bytes - left.bytes || byCodeUnit(left.path, right.path))
     .slice(0, 5);
   const required = records.filter((entry) => entry.required).reduce((sum, entry) => sum + entry.bytes, manifestBytes);
   const optional = records
     .filter((entry) => !entry.required)
     .map((entry) => entry.path)
-    .sort(byCodeUnit);
+    .toSorted(byCodeUnit);
   const advice =
     required > max || optional.length === 0
       ? "required evidence alone exceeds the budget; no optional omission can satisfy it"

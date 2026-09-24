@@ -143,7 +143,7 @@ function observedDiscrepancies(
       const actual = fileState(workspacePath(rootDir, path));
       return actual === expectedState ? [] : [{ path, actual }];
     })
-    .sort((left, right) => byCodeUnit(left.path, right.path));
+    .toSorted((left, right) => byCodeUnit(left.path, right.path));
 }
 
 function assertCurrentDiscrepancies(

@@ -131,7 +131,7 @@ describe("target subpath — compiled plans", () => {
   test("two selected files whose basenames collide are refused, not silently merged", () => {
     const second = "apps/api/src/probe/detect.ts";
     const { root, config, graph, candidate } = workspace({ [second]: "export const other = 2;\n" });
-    const both = { ...candidate, files: [DONOR, second].sort() };
+    const both = { ...candidate, files: [DONOR, second].toSorted() };
 
     expect(() => buildPlanSync({ config, rootDir: root, graph, candidate: both, baselineCommit: "HEAD", packageName: PACKAGE, targetSubpath: "src" })).toThrow(
       "would land on the same target path",

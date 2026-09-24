@@ -324,5 +324,5 @@ function textFiles(directory: string, extensions: readonly string[]): string[] {
       if (entry.isDirectory()) return textFiles(path, extensions);
       return extensions.includes(extname(entry.name)) ? [path] : [];
     })
-    .sort();
+    .toSorted();
 }

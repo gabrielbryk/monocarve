@@ -61,7 +61,7 @@ test("preparer lifecycle regenerates an RM-shaped source ledger exactly once and
     generatedArtifacts: { regenerateOnApply: boolean }[];
     postJournalPreparers: { emittedModuleSpecifiers: unknown[] }[];
   }>(root, "preparer-plan", "--preparer", "prepare-route-options", "--source", source, "--write");
-  expect(plan.changedFiles).toEqual([source, ledger].sort());
+  expect(plan.changedFiles).toEqual([source, ledger].toSorted());
   expect(plan.generatedArtifacts).toEqual([expect.objectContaining({ regenerateOnApply: true })]);
   expect(plan.postJournalPreparers).toEqual([expect.objectContaining({ emittedModuleSpecifiers: [] })]);
   expect(await runJsonIn(root, "preparer-simulate", "--plan", plan.output)).toMatchObject({ ok: true });
@@ -74,7 +74,7 @@ test("preparer lifecycle regenerates an RM-shaped source ledger exactly once and
   // post-journal declaration executed one command, not two.
   const committed = await runJsonIn<{ commit: string }>(root, "preparer-commit", "--plan", plan.output);
   expect(committed.commit).toHaveLength(40);
-  expect(fixtureGit(root, "show", "--format=", "--name-only", "HEAD").split("\n").sort()).toEqual([source, ledger].sort());
+  expect(fixtureGit(root, "show", "--format=", "--name-only", "HEAD").split("\n").toSorted()).toEqual([source, ledger].toSorted());
   expect(hashText(readFileSync(join(root, ledger), "utf8"))).toHaveLength(64);
 }, 30_000);
 

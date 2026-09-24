@@ -126,7 +126,7 @@ describe("dependency model", () => {
       { testPathPatterns: [], testKinds: { unit: [], integration: ["\\.integration\\.ts$"], e2e: ["\\.e2e\\.ts$"] } },
     );
     expect(buildApplicationGraph(graph).nodes).toEqual(["apps/api/src/orders/models.ts"]);
-    expect([...graph.testKinds.entries()].sort()).toEqual([
+    expect([...graph.testKinds.entries()].toSorted()).toEqual([
       ["apps/api/src/orders/models.e2e.ts", "e2e"],
       ["apps/api/src/orders/models.integration.ts", "integration"],
     ]);

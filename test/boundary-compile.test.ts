@@ -201,8 +201,8 @@ describe("compileBoundaryPreparationManifest — existing-package strategy", () 
     expect(deletion.file.path).toBe(RETAINED);
     // RETIREMENT SAFETY: importerProof must equal the graph's own importer
     // set for the retained module exactly — not a caller-supplied guess.
-    expect(deletion.importerProof).toEqual([...(graph.incoming.get(RETAINED) ?? [])].sort(byCodeUnit));
-    expect(manifest.changedFiles).toEqual([IMPORTER, RETAINED].sort(byCodeUnit));
+    expect(deletion.importerProof).toEqual([...(graph.incoming.get(RETAINED) ?? [])].toSorted(byCodeUnit));
+    expect(manifest.changedFiles).toEqual([IMPORTER, RETAINED].toSorted(byCodeUnit));
   });
 
   test("compiles the same config and baseline byte-identically twice (deterministic plan id)", () => {
@@ -225,10 +225,10 @@ describe("compileBoundaryPreparationManifest — existing-package strategy", () 
     const rewrites = manifest.operations
       .filter((operation) => operation.kind === "rewrite-module-specifier")
       .map((operation) => operation.file.path)
-      .sort(byCodeUnit);
+      .toSorted(byCodeUnit);
     const deletion = manifest.operations.find((operation) => operation.kind === "delete-module");
     expect(graph.testImporters.get(RETAINED)).toContain(TEST_IMPORTER);
-    expect(rewrites).toEqual([IMPORTER, TEST_IMPORTER].sort(byCodeUnit));
+    expect(rewrites).toEqual([IMPORTER, TEST_IMPORTER].toSorted(byCodeUnit));
     expect(deletion?.kind === "delete-module" ? deletion.importerProof : []).toEqual(rewrites);
   });
 
@@ -453,7 +453,7 @@ describe("compileBoundaryPreparationManifest — port strategy", () => {
     expect(adapter.contents).toBe(ADAPTER_TEMPLATE_TEXT);
     expect(rewrite.file.path).toBe(PORT_CONSUMER);
     expect(rewrite.contents).toBe('import type { Widget } from "@acme/ports/widget";\nexport function run(input: Widget): void { void input; }\n');
-    expect(manifest.changedFiles).toEqual([ADAPTER_PATH, CONTRACT_TARGET, PORT_CONSUMER].sort(byCodeUnit));
+    expect(manifest.changedFiles).toEqual([ADAPTER_PATH, CONTRACT_TARGET, PORT_CONSUMER].toSorted(byCodeUnit));
   });
 
   test("compiles the same config and baseline byte-identically twice (deterministic plan id)", () => {

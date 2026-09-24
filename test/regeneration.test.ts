@@ -168,7 +168,7 @@ function manifestFor(root: string, options: { artifact: boolean; regenerate?: st
           },
         ]
       : [],
-    changedFiles: [DONOR, TARGET, CONSUMER, ENTRYPOINT, ...(options.artifact ? [LEDGER] : [])].sort(),
+    changedFiles: [DONOR, TARGET, CONSUMER, ENTRYPOINT, ...(options.artifact ? [LEDGER] : [])].toSorted(),
     expectedDynamicImportDelta: { added: [], removed: [] },
     evaluationEffects: [],
     metrics: { movedFiles: 1, movedLines: 1, applicationLinesBefore: 4, applicationLinesAfter: 3, consumers: 1 },
@@ -303,8 +303,8 @@ describe("generated artifacts are regenerated, not merely declared", () => {
     expect(result.failure).toBeUndefined();
     expect(result.ok).toBe(true);
 
-    const wiring = fixtureGit(root, "show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean).sort();
-    expect(wiring).toEqual([CONSUMER, ENTRYPOINT, LEDGER].sort());
+    const wiring = fixtureGit(root, "show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean).toSorted();
+    expect(wiring).toEqual([CONSUMER, ENTRYPOINT, LEDGER].toSorted());
     expect(read(root, LEDGER)).toBe(EXTRACTED_LEDGER);
     expect(fixtureGit(root, "show", `HEAD:${LEDGER}`)).toContain('"sources": 1');
     // The move commit stays a pure rename: the ledger is content, not a rename.

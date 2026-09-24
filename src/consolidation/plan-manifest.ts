@@ -117,7 +117,7 @@ export function buildConsolidationManifest(input: {
       dependencySection: consumerSections.get(consumer.package) ?? consumer.dependencySection,
     })),
     generatedFiles: [],
-    changedFiles: [...new Set(operations.flatMap((op) => operationPathsOf(op)))].sort(),
+    changedFiles: [...new Set(operations.flatMap((op) => operationPathsOf(op)))].toSorted(),
     expectedDynamicImportDelta: { added: [], removed: [] },
     evaluationEffects: [],
     metrics: {

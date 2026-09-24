@@ -56,7 +56,7 @@ function landExtraction(root: string): string {
     { flag: "w" },
   );
   const web = JSON.parse(readFileSync(join(root, "apps/web/package.json"), "utf8")) as { dependencies: Record<string, string> };
-  web.dependencies = Object.fromEntries(Object.entries({ ...web.dependencies, "@acme/chart": "workspace:*" }).sort());
+  web.dependencies = Object.fromEntries(Object.entries({ ...web.dependencies, "@acme/chart": "workspace:*" }).toSorted());
   writeFileSync(join(root, "apps/web/package.json"), `${JSON.stringify(web, null, 2)}\n`);
 
   const baseline = readFileSync(join(root, LOCKFILE), "utf8");

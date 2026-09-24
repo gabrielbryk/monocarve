@@ -30,5 +30,5 @@ export function bindBootstrapConfig(rootDir: string, manifest: PreparerManifest,
 }
 
 function unique(items: readonly string[]): string[] {
-  return [...new Set(items)].sort(byCodeUnit);
+  return [...new Set(items)].toSorted(byCodeUnit);
 }

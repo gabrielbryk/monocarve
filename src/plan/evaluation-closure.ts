@@ -137,8 +137,8 @@ export interface EvaluationClosureOptions {
 export function evaluationClosure(options: EvaluationClosureOptions): EvaluationClosure {
   const traversal = traverseEvaluationClosure(options);
   const packages = [...traversal.packageOwners]
-    .map(([name, owners]): ReachedPackage => ({ name, sideEffects: declarationOf(options.context.installedManifest(name, [...owners].sort(byCodeUnit))) }))
-    .sort((left, right) => byCodeUnit(left.name, right.name));
+    .map(([name, owners]): ReachedPackage => ({ name, sideEffects: declarationOf(options.context.installedManifest(name, [...owners].toSorted(byCodeUnit))) }))
+    .toSorted((left, right) => byCodeUnit(left.name, right.name));
 
   return { seeds: traversal.seeds, reached: traversal.reached, modules: traversal.modules, packages, opaqueSpecifiers: traversal.opaqueSpecifiers };
 }

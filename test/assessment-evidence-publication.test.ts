@@ -469,7 +469,7 @@ async function blockedPublisher(root: string, phase: string): Promise<ReturnType
 function operationalPaths(root: string): string[] {
   return readdirSync(root)
     .filter((name) => /^evidence\.(?:backup|lock|recovery\.json|staging)$/u.test(name))
-    .sort(byCodeUnit);
+    .toSorted(byCodeUnit);
 }
 
 function treeState(root: string, subtree = ""): Record<string, string> {

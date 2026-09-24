@@ -90,8 +90,8 @@ const ZONE_SPECIFIER = "../../../libs/format/src/Money.ts";
  * guards.)
  */
 function collationDisagrees(values: readonly string[]): boolean {
-  const collated = [...values].sort((left, right) => left.localeCompare(right));
-  const codeUnits = [...values].sort(byCodeUnit);
+  const collated = [...values].toSorted((left, right) => left.localeCompare(right));
+  const codeUnits = [...values].toSorted(byCodeUnit);
   return collated.some((value, index) => value !== codeUnits[index]);
 }
 
@@ -169,7 +169,7 @@ function compile(): Promise<Compiled> {
     // smallest eligible candidate containing the moved module.
     const candidate = portfolio.candidates
       .filter((entry) => entry.eligible && entry.files.includes(CHART))
-      .sort((left, right) => left.files.length - right.files.length)[0];
+      .toSorted((left, right) => left.files.length - right.files.length)[0];
     expect(candidate).toBeDefined();
 
     const manifest = buildPlanSync({ config, rootDir: root, graph, candidate: candidate!, baselineCommit: graph.commit!, packageName: "@acme/chart" });
@@ -191,8 +191,8 @@ describe("graph.unresolved order", () => {
     const { graph, manifest } = await compile();
     expect(graph.unresolved.map(tuple)).toEqual(UNRESOLVED.map(([source, specifier]) => [source, specifier]));
 
-    const collated = [...graph.unresolved].sort((left, right) => left.source.localeCompare(right.source) || left.specifier.localeCompare(right.specifier));
-    const codeUnits = [...graph.unresolved].sort((left, right) => byCodeUnit(left.source, right.source) || byCodeUnit(left.specifier, right.specifier));
+    const collated = [...graph.unresolved].toSorted((left, right) => left.source.localeCompare(right.source) || left.specifier.localeCompare(right.specifier));
+    const codeUnits = [...graph.unresolved].toSorted((left, right) => byCodeUnit(left.source, right.source) || byCodeUnit(left.specifier, right.specifier));
 
     // The claim that makes the rest worth asserting: this array's order is not a
     // presentation detail, it is hashed, so the two orders are two different

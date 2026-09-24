@@ -71,17 +71,17 @@ export function queryCandidates(portfolio: Portfolio, config: MonocarveConfig, q
     .filter((candidate) => matchesEligibility(candidate, eligibility))
     .filter((candidate) => path === undefined || intersects(candidate, path))
     .map((candidate) => candidateDetail(candidate, config))
-    .sort(compareDetails);
+    .toSorted(compareDetails);
 }
 
 export function serializeCandidateDetails(details: readonly CandidateDetail[]): string {
-  return `${stableStringify([...details].sort(compareDetails), 2)}\n`;
+  return `${stableStringify([...details].toSorted(compareDetails), 2)}\n`;
 }
 
 /** Deterministic compact text intended for terminals and orchestration logs. */
 export function formatCandidateTable(details: readonly CandidateDetail[]): string {
   const rows = [...details]
-    .sort(compareDetails)
+    .toSorted(compareDetails)
     .map((candidate) => [
       candidate.id,
       candidate.eligible ? "eligible" : "blocked",
@@ -105,7 +105,7 @@ export function formatCandidateTable(details: readonly CandidateDetail[]): strin
 }
 
 function candidateDetail(candidate: PortfolioCandidate, config: MonocarveConfig): CandidateDetail {
-  const sorted = (values: readonly string[]): string[] => [...new Set(values)].sort(byCodeUnit);
+  const sorted = (values: readonly string[]): string[] => [...new Set(values)].toSorted(byCodeUnit);
   return {
     id: candidate.id,
     application: candidate.application,
@@ -113,26 +113,26 @@ function candidateDetail(candidate: PortfolioCandidate, config: MonocarveConfig)
     score: candidate.score,
     lineCount: candidate.lineCount,
     seed: canonicalScc(candidate.seed),
-    sccs: candidate.sccs.map(canonicalScc).sort((left, right) => byCodeUnit(left.id, right.id)),
+    sccs: candidate.sccs.map(canonicalScc).toSorted((left, right) => byCodeUnit(left.id, right.id)),
     closure: sorted([...candidate.files, ...candidate.tests, ...candidate.assets]),
     files: sorted(candidate.files),
     tests: sorted(candidate.tests),
     assets: sorted(candidate.assets),
     blockers: candidate.rejectionReasons
       .map((reason) => ({ code: reason.code, detail: reason.detail, edges: sorted(reason.edges) }))
-      .sort((left, right) => byCodeUnit(left.code, right.code) || byCodeUnit(left.detail, right.detail)),
+      .toSorted((left, right) => byCodeUnit(left.code, right.code) || byCodeUnit(left.detail, right.detail)),
     warnings: sorted(candidate.warnings),
     targetSuggestion: targetSuggestion(candidate.suggestedPackageName, config),
     ...(candidate.classification === undefined ? {} : { classification: candidate.classification }),
-    retainedBlockers: [...(candidate.retainedBlockers ?? [])].sort((left, right) => byCodeUnit(left.target, right.target)),
-    recipe: [...(candidate.recipe ?? [])].sort((left, right) => byCodeUnit(left.blocker.target, right.blocker.target)),
-    compatibilityShims: [...(candidate.compatibilityShims ?? [])].sort((left, right) => byCodeUnit(left.path, right.path)),
+    retainedBlockers: [...(candidate.retainedBlockers ?? [])].toSorted((left, right) => byCodeUnit(left.target, right.target)),
+    recipe: [...(candidate.recipe ?? [])].toSorted((left, right) => byCodeUnit(left.blocker.target, right.blocker.target)),
+    compatibilityShims: [...(candidate.compatibilityShims ?? [])].toSorted((left, right) => byCodeUnit(left.path, right.path)),
     ...(candidate.recommendation === undefined ? {} : { recommendation: candidate.recommendation }),
   };
 }
 
 function canonicalScc(scc: Scc): Scc {
-  return { id: scc.id, members: [...new Set(scc.members)].sort(byCodeUnit) };
+  return { id: scc.id, members: [...new Set(scc.members)].toSorted(byCodeUnit) };
 }
 
 function targetSuggestion(packageName: string, config: MonocarveConfig): CandidateTargetSuggestion {

@@ -59,7 +59,7 @@ export function projectVisualizationGraph(graph: DependencyGraph): Visualization
         cyclic: members.length > 1,
       } satisfies VisualizationNode;
     })
-    .sort((left, right) => byCodeUnit(left.id, right.id));
+    .toSorted((left, right) => byCodeUnit(left.id, right.id));
 
   const aggregates = new Map<string, { from: string; to: string; kinds: Set<EdgeKind>; count: number }>();
   for (const edge of workspaceEdges) {
@@ -75,8 +75,8 @@ export function projectVisualizationGraph(graph: DependencyGraph): Visualization
     aggregates.set(key, aggregate);
   }
   const edges = [...aggregates.values()]
-    .map((edge) => ({ id: `${edge.from}->${edge.to}`, from: edge.from, to: edge.to, kinds: [...edge.kinds].sort(), count: edge.count }))
-    .sort((left, right) => byCodeUnit(left.id, right.id));
+    .map((edge) => ({ id: `${edge.from}->${edge.to}`, from: edge.from, to: edge.to, kinds: [...edge.kinds].toSorted(), count: edge.count }))
+    .toSorted((left, right) => byCodeUnit(left.id, right.id));
 
   const identity = { commit: graph.commit ?? null, nodes, edges };
   return {
@@ -90,7 +90,7 @@ export function projectVisualizationGraph(graph: DependencyGraph): Visualization
 }
 
 function unique<T extends string>(values: readonly T[]): T[] {
-  return [...new Set(values)].sort();
+  return [...new Set(values)].toSorted();
 }
 
 function labelFor(members: readonly string[]): string {

@@ -216,7 +216,7 @@ export function specifierSpans(source: string, path: string, donorSpecifiers: Re
 
 export function spliceAll(source: string, spans: readonly Span[], text: string): string {
   return [...spans]
-    .sort((left, right) => right.start - left.start)
+    .toSorted((left, right) => right.start - left.start)
     .reduce((result, span) => result.slice(0, span.start) + text + result.slice(span.end), source);
 }
 

@@ -68,12 +68,12 @@ function graph(
       values.add(to);
       result.set(from, values);
     }
-    return new Map([...result].map(([key, values]) => [key, [...values].sort()]));
+    return new Map([...result].map(([key, values]) => [key, [...values].toSorted()]));
   };
   return {
     rootDir: "/workspace",
     nodes,
-    paths: [...paths].sort(),
+    paths: [...paths].toSorted(),
     edges,
     outgoing: adjacency(false),
     incoming: adjacency(true),

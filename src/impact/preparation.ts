@@ -107,8 +107,8 @@ export function comparePortfolios(
     before,
     after,
     delta: Object.fromEntries(keys.map((key) => [key, after[key] - before[key]])) as Record<keyof PortfolioImpactSnapshot, number>,
-    newlyRecommended: [...afterRecommended].filter((id) => !beforeRecommended.has(id)).sort(),
-    noLongerRecommended: [...beforeRecommended].filter((id) => !afterRecommended.has(id)).sort(),
+    newlyRecommended: [...afterRecommended].filter((id) => !beforeRecommended.has(id)).toSorted(),
+    noLongerRecommended: [...beforeRecommended].filter((id) => !afterRecommended.has(id)).toSorted(),
   };
 }
 

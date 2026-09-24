@@ -22,7 +22,7 @@ export function resolveEvacuationSelectors(graph: DependencyGraph, application: 
     throw new EvacuationSelectorError("evacuation requires at least one selector");
   }
 
-  const normalized = [...new Set(selectors.map(normalizeSelector))].sort(byCodeUnit);
+  const normalized = [...new Set(selectors.map(normalizeSelector))].toSorted(byCodeUnit);
   const selected = new Set<string>();
 
   for (const selector of normalized) {
@@ -44,7 +44,7 @@ export function resolveEvacuationSelectors(graph: DependencyGraph, application: 
     for (const path of matches) selected.add(path);
   }
 
-  return [...selected].sort(byCodeUnit);
+  return [...selected].toSorted(byCodeUnit);
 }
 
 function normalizeSelector(selector: string): string {

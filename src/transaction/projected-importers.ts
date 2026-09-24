@@ -27,7 +27,7 @@ export async function verifyProjectedImporters(input: {
       ...(input.manifest.target?.packageRoot ? [input.manifest.target.packageRoot] : []),
       ...input.manifest.operations.flatMap((operation) => (operation.kind === "lockfile-importer" ? [operation.packageRoot] : [])),
     ]),
-  ].sort();
+  ].toSorted();
   return verifyPackageImporters(input.workspacePath, input.adapter, roots);
 }
 

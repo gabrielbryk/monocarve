@@ -37,7 +37,7 @@ export function compileReconciliationRecord(input: CompileReconciliationInput): 
       if (ownership.expected === actual) throw new ReconciliationValidationError(`observed discrepancy ${path} matches its declared state`);
       return { path, actual, ...ownership };
     })
-    .sort((left, right) => byCodeUnit(left.path, right.path));
+    .toSorted((left, right) => byCodeUnit(left.path, right.path));
   const payload: ReconciliationRecordPayload = {
     schemaVersion: 1,
     createdAt: new Date(input.observedCommitDate).toISOString(),

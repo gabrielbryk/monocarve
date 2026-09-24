@@ -201,7 +201,7 @@ export function baseManifest(root: string): ExtractionManifest {
       },
     ],
     generatedFiles: [],
-    changedFiles: [DONOR, TARGET, CONSUMER, ENTRYPOINT, TOKENS, "pnpm-lock.yaml"].sort(),
+    changedFiles: [DONOR, TARGET, CONSUMER, ENTRYPOINT, TOKENS, "pnpm-lock.yaml"].toSorted(),
     lockfileImporter: { packageRoot: PACKAGE_ROOT, hash: hashText(IMPORTER_BLOCK) },
     expectedDynamicImportDelta: { added: [], removed: [] },
     evaluationEffects: [],

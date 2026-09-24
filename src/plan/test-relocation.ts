@@ -11,7 +11,7 @@ export function partitionTests(
   tests: readonly string[],
   assets: readonly string[],
 ): TestRelocationPartition {
-  const classified = [...tests].sort(byCodeUnit);
+  const classified = [...tests].toSorted(byCodeUnit);
   const fixedRetained = classified.filter((test) => context.testKind(test) !== "unit");
   const unitTests = classified.filter((test) => context.testKind(test) === "unit");
   fixedRetained.forEach((test) => validateFixedRetainedTest(context, test, assets));
@@ -37,7 +37,7 @@ function retainTestsWithRetainedImporters(
   let changed = true;
   while (changed) {
     changed = false;
-    for (const test of [...travelling].sort(byCodeUnit)) {
+    for (const test of [...travelling].toSorted(byCodeUnit)) {
       const importers = context.consumerIndex().get(context.absolute(test)) ?? [];
       if (importers.some((importer) => !movedProduction.has(importer) && !travelling.has(importer))) {
         travelling.delete(test);
@@ -46,8 +46,8 @@ function retainTestsWithRetainedImporters(
     }
   }
   return {
-    travelling: [...travelling].sort(byCodeUnit),
-    retained: [...new Set([...partition.retained, ...partition.travelling.filter((test) => !travelling.has(test))])].sort(byCodeUnit),
+    travelling: [...travelling].toSorted(byCodeUnit),
+    retained: [...new Set([...partition.retained, ...partition.travelling.filter((test) => !travelling.has(test))])].toSorted(byCodeUnit),
   };
 }
 
@@ -80,7 +80,7 @@ function partitionUnitTests(
     if (result === "travelling") travelling.push(test);
     else retained.push(test);
   }
-  return { travelling, retained: [...fixedRetained, ...retained].sort(byCodeUnit) };
+  return { travelling, retained: [...fixedRetained, ...retained].toSorted(byCodeUnit) };
 }
 
 function classifyUnitTest(
@@ -98,7 +98,7 @@ function classifyUnitTest(
     .moduleReferences(test)
     .every((reference) => testReferenceTravels(context, test, reference.specifier, reference.resolved, moved, assets, movedAssets));
   if (!selfContained && movedAssets.size > 0) {
-    throw new PlanningError(`retained test ${test} imports moved asset ${[...movedAssets].sort(byCodeUnit).join(", ")}`);
+    throw new PlanningError(`retained test ${test} imports moved asset ${[...movedAssets].toSorted(byCodeUnit).join(", ")}`);
   }
   return context.isMovable(test) && selfContained ? "travelling" : "retained";
 }

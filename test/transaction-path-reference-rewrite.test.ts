@@ -82,7 +82,7 @@ function manifest(root: string, operations: readonly PlanOperation[]): Extractio
     operations,
     consumers: [],
     generatedFiles: [],
-    changedFiles: [...new Set(operations.flatMap(operationPaths))].sort(),
+    changedFiles: [...new Set(operations.flatMap(operationPaths))].toSorted(),
     expectedDynamicImportDelta: { added: [], removed: [] },
     evaluationEffects: [],
     metrics: { movedFiles: 1, movedLines: 1, applicationLinesBefore: 1, applicationLinesAfter: 0, consumers: 0 },

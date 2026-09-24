@@ -119,7 +119,7 @@ export function projectedArtifactEvidence(operations: readonly PlanOperation[]):
       artifacts.set(operation.file, { path: operation.file, kind, resultHash: operation.resultHash });
     }
   }
-  return [...artifacts.values()].sort((left, right) => byCodeUnit(left.path, right.path));
+  return [...artifacts.values()].toSorted((left, right) => byCodeUnit(left.path, right.path));
 }
 
 function operationKey(operation: PlanOperation): string {

@@ -387,7 +387,7 @@ export function unsupportedModuleReferences(source: string, importerPath: string
 
 export function applyReplacements(source: string, replacements: readonly Replacement[]): string {
   return [...replacements]
-    .sort((left, right) => right.start - left.start)
+    .toSorted((left, right) => right.start - left.start)
     .reduce((result, replacement) => result.slice(0, replacement.start) + replacement.text + result.slice(replacement.end), source);
 }
 

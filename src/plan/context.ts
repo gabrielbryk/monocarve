@@ -314,7 +314,7 @@ export class WorkspaceContext {
     ]
       .flatMap((directory) => sourceFiles(resolve(this.rootDir, directory), undefined, [...this.config.sourceExtensions, ...this.config.assetExtensions]))
       .map((file) => this.relative(file))
-      .sort();
+      .toSorted();
     return this.sourceListCache;
   }
 

@@ -32,7 +32,7 @@ export function resolveConsolidationPackages(
 
   const donorNamesSet = new Set(donors.map((d) => d.name));
   if (donorNamesSet.size !== donorNames.length) {
-    throw new ConsolidationSelectorError(`donor package names must be unique: ${[...donorNames].sort().join(", ")}`);
+    throw new ConsolidationSelectorError(`donor package names must be unique: ${[...donorNames].toSorted().join(", ")}`);
   }
 
   if (donors.some((d) => d.name === target.name)) {
@@ -44,7 +44,7 @@ export function resolveConsolidationPackages(
     throw new ConsolidationSelectorError(`donor package roots must be unique`);
   }
 
-  return { target, donors: [...donors].sort((a, b) => byCodeUnit(a.name, b.name)) };
+  return { target, donors: [...donors].toSorted((a, b) => byCodeUnit(a.name, b.name)) };
 }
 
 function resolveWorkspacePackage(graph: DependencyGraph, name: string, role: "target" | "donor"): { readonly name: string; readonly root: string } {

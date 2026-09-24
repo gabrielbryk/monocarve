@@ -19,8 +19,8 @@ export function validateIntegrationTestSuite(manifest: ExtractionManifest, optio
   if (configured.sourceRoot !== record.sourceRoot || configured.application !== record.donorApplication) {
     issues.add("integration-test-suite", "integration test suite source root or donor application does not match configuration");
   }
-  const actualDonors = JSON.stringify([...record.donorImports].sort((left, right) => left.source.localeCompare(right.source)));
-  const expectedDonors = JSON.stringify([...configured.donorImports].sort((left, right) => left.source.localeCompare(right.source)));
+  const actualDonors = JSON.stringify([...record.donorImports].toSorted((left, right) => left.source.localeCompare(right.source)));
+  const expectedDonors = JSON.stringify([...configured.donorImports].toSorted((left, right) => left.source.localeCompare(right.source)));
   if (actualDonors !== expectedDonors) issues.add("integration-test-suite", "integration test suite donor import surfaces do not match configuration");
   if (manifest.source.files.length !== 0) {
     issues.add("integration-test-suite", "integration test suite plans may not move production modules");
@@ -91,7 +91,7 @@ function integrationClosure(
   const rootTests = sourceFiles(context.absolute(sourceRoot), undefined, context.config.sourceExtensions)
     .map((path) => context.relative(path))
     .filter((path) => patterns.some((pattern) => new RegExp(pattern).test(path)))
-    .sort();
+    .toSorted();
   const sources = new Set(rootTests);
   const assets = new Set<string>();
   const queue = [...rootTests];

@@ -118,7 +118,7 @@ async function runAssessment(args: ParsedArgs, invocation: AssessmentInvocation)
           ...baseArguments,
           splitSelection:
             selection.mode === "files"
-              ? { mode: "files" as const, paths: [...new Set(invocation.files)].sort(byCodeUnit) }
+              ? { mode: "files" as const, paths: [...new Set(invocation.files)].toSorted(byCodeUnit) }
               : { mode: "hotspots" as const, count: selection.count },
         };
   const reports = reportsForSnapshot(snapshot, analyticalArguments, batch);

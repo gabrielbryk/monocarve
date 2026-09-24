@@ -50,8 +50,8 @@ export function selectExtractionSources(args: {
     args.context,
     args.candidate.files.filter((path) => args.context.isProductionSource(path)),
   );
-  const assets = [...args.candidate.assets].sort();
-  const partition = partitionTests(args.context, production, [...args.candidate.tests].sort(), assets);
+  const assets = [...args.candidate.assets].toSorted();
+  const partition = partitionTests(args.context, production, [...args.candidate.tests].toSorted(), assets);
   const tests = [...partition.travelling];
   const sources = [...production, ...tests];
   const moduleOf = (source: string): string => packageModulePath(args.context, source, args.targetSubpath);
@@ -127,13 +127,13 @@ function withAmbientAugmentations(context: WorkspaceContext, selected: readonly 
         .map((specifier) => context.packageNameOf(specifier)),
     ),
   );
-  if (packages.size === 0) return [...selected].sort();
+  if (packages.size === 0) return [...selected].toSorted();
   const augmentations = context.repositorySources().filter((path) => {
     if (selected.includes(path) || !context.isProductionSource(path)) return false;
     const text = context.text(path);
     return [...text.matchAll(/declare\s+module\s+["']([^"']+)["']/gu)].some((match) => packages.has(match[1]!));
   });
-  return [...new Set([...selected, ...augmentations])].sort();
+  return [...new Set([...selected, ...augmentations])].toSorted();
 }
 
 export function escapeRewritesFor(candidate: PortfolioCandidate): Map<string, EscapeRewrite[]> {
@@ -311,15 +311,15 @@ function evaluationInventory(
   const modules = entries
     .flatMap((entry): EvaluationModuleRecord[] =>
       entry.subject === "module" && entry.kinds.length > 0
-        ? [{ subject: "module", reach: entry.reach, path: entry.path, kinds: [...new Set(entry.kinds)].sort(byCodeUnit) }]
+        ? [{ subject: "module", reach: entry.reach, path: entry.path, kinds: [...new Set(entry.kinds)].toSorted(byCodeUnit) }]
         : [],
     )
-    .sort((left, right) => byCodeUnit(left.path, right.path));
+    .toSorted((left, right) => byCodeUnit(left.path, right.path));
   const packages = entries
     .flatMap((entry): EvaluationPackageRecord[] =>
       entry.subject === "package" ? [{ subject: "package", name: entry.name, sideEffects: entry.sideEffects }] : [],
     )
-    .sort((left, right) => byCodeUnit(left.name, right.name));
+    .toSorted((left, right) => byCodeUnit(left.name, right.name));
   return [...modules, ...packages];
 }
 

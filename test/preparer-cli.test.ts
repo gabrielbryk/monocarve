@@ -149,7 +149,7 @@ test("preparer bootstrap commits introducing config through hooks that require g
   expect(committed.commit).toHaveLength(40);
   expect(readFileSync(join(root, "generated-guide.md"), "utf8")).toBe("stale output\n");
   expect(existsSync(join(root, "generated-new.md"))).toBe(false);
-  expect(fixtureGit(root, "show", "--format=", "--name-only", "HEAD").split("\n").sort()).toEqual([
+  expect(fixtureGit(root, "show", "--format=", "--name-only", "HEAD").split("\n").toSorted()).toEqual([
     ".monocarve/plans/bootstrap.preparer.json",
     "monocarve.config.json",
   ]);

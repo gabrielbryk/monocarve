@@ -41,5 +41,5 @@ export function dirtyPaths(rootDir: string): ReadonlySet<string> {
 }
 
 export function newlyDirtyPaths(rootDir: string, before: ReadonlySet<string>): string[] {
-  return [...dirtyPaths(rootDir)].filter((path) => !before.has(path)).sort();
+  return [...dirtyPaths(rootDir)].filter((path) => !before.has(path)).toSorted();
 }

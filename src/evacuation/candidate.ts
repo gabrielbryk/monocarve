@@ -43,7 +43,7 @@ export interface EvacuationCandidateOptions {
 /** Build the bounded union of selected SCCs, absorbing peers but not outbound dependencies. */
 export function buildEvacuationCandidate(options: EvacuationCandidateOptions): EvacuationCandidate {
   const { config, graph, application } = options;
-  const requested = [...new Set(options.selected)].sort(byCodeUnit);
+  const requested = [...new Set(options.selected)].toSorted(byCodeUnit);
   if (requested.length === 0) throw new EvacuationSelectorError("evacuation requires selected production paths");
 
   const applicationGraph = buildApplicationGraph(graph, application);
@@ -76,7 +76,7 @@ export function buildEvacuationCandidate(options: EvacuationCandidateOptions): E
         .map((edge) => edge.to)
         .filter((path) => graph.nodes.get(path)?.zone === "application"),
     ),
-  ].sort(byCodeUnit);
+  ].toSorted(byCodeUnit);
   const retainedComposition = componentSccs(retainedIds, components);
   const seedSccs = componentSccs(seedIds, components);
   const sccs = componentSccs(movedIds, components);
@@ -98,15 +98,15 @@ export function buildEvacuationCandidate(options: EvacuationCandidateOptions): E
 }
 
 function componentPaths(ids: ReadonlySet<number>, components: readonly (readonly string[])[]): string[] {
-  return [...ids].flatMap((id) => components[id] ?? []).sort(byCodeUnit);
+  return [...ids].flatMap((id) => components[id] ?? []).toSorted(byCodeUnit);
 }
 
 function componentSccs(ids: ReadonlySet<number>, components: readonly (readonly string[])[]): Scc[] {
   return [...ids]
     .map((id) => components[id] ?? [])
     .filter((members) => members.length > 0)
-    .map((members) => ({ id: sccId(members), members: [...members].sort(byCodeUnit) }))
-    .sort((left, right) => byCodeUnit(left.id, right.id));
+    .map((members) => ({ id: sccId(members), members: [...members].toSorted(byCodeUnit) }))
+    .toSorted((left, right) => byCodeUnit(left.id, right.id));
 }
 
 export function evacuationId(
@@ -117,7 +117,7 @@ export function evacuationId(
   authorizedProtectedRoots: readonly string[] = [],
   includedCompositionRoots: readonly string[] = [],
 ): string {
-  const retainedMembers = [...new Set(retained.flatMap((scc) => scc.members))].sort(byCodeUnit);
+  const retainedMembers = [...new Set(retained.flatMap((scc) => scc.members))].toSorted(byCodeUnit);
   const identity = [
     application,
     ...requested,
@@ -141,7 +141,7 @@ function packageDependencies(graph: DependencyGraph, files: readonly string[]): 
     const target = graph.nodes.get(edge.to);
     if (target?.zone === "package") owners.push(target.owner);
   }
-  return [...new Set(owners.map((owner) => ownerToPackage.get(owner) ?? owner))].sort(byCodeUnit);
+  return [...new Set(owners.map((owner) => ownerToPackage.get(owner) ?? owner))].toSorted(byCodeUnit);
 }
 
 function consumerRefs(config: MonocarveConfig, graph: DependencyGraph, application: string, files: readonly string[]): ConsumerRef[] {
@@ -160,8 +160,8 @@ function consumerRefs(config: MonocarveConfig, graph: DependencyGraph, applicati
     .map(([file, specifiers]) => ({
       file,
       owner: graph.nodes.get(file)?.owner ?? ownerFor(config, file),
-      specifiers: [...specifiers].sort(byCodeUnit),
+      specifiers: [...specifiers].toSorted(byCodeUnit),
       external: applicationFor(config, file)?.name !== application,
     }))
-    .sort((left, right) => byCodeUnit(left.file, right.file));
+    .toSorted((left, right) => byCodeUnit(left.file, right.file));
 }

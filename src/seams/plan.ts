@@ -22,10 +22,10 @@ export function planSeam(input: PlanSeamInput): SeamPlan {
   const candidate = candidateFor(input.analysis, input.candidateId);
   const targetPath = input.targetPath === undefined ? undefined : normalizedTargetPath(input.targetPath);
   const groupById = new Map(input.analysis.source.groups.map((group) => [group.id, group]));
-  const movedIds = [...candidate.groupIds].sort(byCodeUnit);
+  const movedIds = [...candidate.groupIds].toSorted(byCodeUnit);
   const movedSet = new Set(movedIds);
   const movedGroups = groupsFor(movedIds, groupById);
-  const retainedGroups = [...input.analysis.source.groups].filter((group) => !movedSet.has(group.id)).sort(compareGroups);
+  const retainedGroups = [...input.analysis.source.groups].filter((group) => !movedSet.has(group.id)).toSorted(compareGroups);
   const cyclesRetained = cyclicComponents(input.analysis, movedSet);
   const requiredImports = boundaryImports(input.analysis, movedSet, groupById);
   const affectedConsumers = consumersFor(candidate, input.analysis);
@@ -38,7 +38,7 @@ export function planSeam(input: PlanSeamInput): SeamPlan {
         selectedDeclarationIds: group.declarationIds,
       }),
     )
-    .sort((left, right) => byCodeUnit(left.groupId, right.groupId));
+    .toSorted((left, right) => byCodeUnit(left.groupId, right.groupId));
   const eligibleForTypeOnlyPreparation =
     typeOnlyPreparationSafety.every((result) => result.eligible) && requiredImports.every((requirement) => requirement.space === "type");
   const remainingBlockers = blockersFor(input.analysis, targetPath, candidate, cyclesRetained, requiredImports, typeOnlyPreparationSafety);
@@ -102,7 +102,7 @@ function boundaryImports(
   return analysis.source.edges
     .filter((edge) => moved.has(edge.source) !== moved.has(edge.target))
     .map((edge) => importFor(edge, moved, groupById))
-    .sort(
+    .toSorted(
       (left, right) =>
         byCodeUnit(left.importer, right.importer) ||
         byCodeUnit(left.importerGroupId, right.importerGroupId) ||
@@ -133,7 +133,7 @@ function consumersFor(candidate: SymbolSplitCandidate, analysis: WorkspaceSymbol
   return analysis.consumers
     .filter((consumer) => moved.has(consumer.groupId))
     .map((consumer) => ({ ...consumer, partition: "moved" as const, confidence: "exact" as const }))
-    .sort(
+    .toSorted(
       (left, right) =>
         byCodeUnit(left.groupName, right.groupName) ||
         byCodeUnit(left.affinity, right.affinity) ||
@@ -145,8 +145,8 @@ function consumersFor(candidate: SymbolSplitCandidate, analysis: WorkspaceSymbol
 function cyclicComponents(analysis: WorkspaceSymbolAnalysis, moved: ReadonlySet<Sha256>): RetainedSeamCycle[] {
   return analysis.source.components
     .filter((component) => component.cyclic && component.groupIds.every((id) => moved.has(id)))
-    .map((component) => ({ componentId: component.id, groupIds: [...component.groupIds].sort(byCodeUnit), confidence: "exact" as const }))
-    .sort((left, right) => byCodeUnit(left.componentId, right.componentId));
+    .map((component) => ({ componentId: component.id, groupIds: [...component.groupIds].toSorted(byCodeUnit), confidence: "exact" as const }))
+    .toSorted((left, right) => byCodeUnit(left.componentId, right.componentId));
 }
 
 function blockersFor(
@@ -211,8 +211,8 @@ function compareBlockers(left: SeamBlocker, right: SeamBlocker): number {
 }
 
 function sameIds(left: readonly Sha256[], right: readonly Sha256[]): boolean {
-  const a = [...left].sort(byCodeUnit);
-  const b = [...right].sort(byCodeUnit);
+  const a = [...left].toSorted(byCodeUnit);
+  const b = [...right].toSorted(byCodeUnit);
   return a.length === b.length && a.every((id, index) => id === b[index]);
 }
 

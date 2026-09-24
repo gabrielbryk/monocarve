@@ -32,7 +32,7 @@ export function validatePathMigrationOperation(
   }
   const expectedMoves = moves
     .map((move) => ({ source: move.source, target: move.target }))
-    .sort((left, right) =>
+    .toSorted((left, right) =>
       left.source < right.source ? -1 : left.source > right.source ? 1 : left.target < right.target ? -1 : left.target > right.target ? 1 : 0,
     );
   if (JSON.stringify(operation.moves) !== JSON.stringify(expectedMoves)) {

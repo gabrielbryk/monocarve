@@ -92,7 +92,7 @@ export function buildDependencyGraph(options: BuildGraphOptions): DependencyGrap
     }
   }
 
-  const paths = [...production.keys()].sort();
+  const paths = [...production.keys()].toSorted();
   const nodeSet = new Set(paths);
 
   const edges: ModuleEdge[] = [];
@@ -144,7 +144,7 @@ export function buildDependencyGraph(options: BuildGraphOptions): DependencyGrap
 
   const testImporters = collectTestImporters(config, rootDir, everyFirstParty, nodeSet);
   const testKinds = new Map<string, "unit" | "integration" | "e2e">();
-  for (const path of [...everyFirstParty.keys()].sort(byCodeUnit)) {
+  for (const path of [...everyFirstParty.keys()].toSorted(byCodeUnit)) {
     const kind = testKindOf(config, path);
     if (kind) testKinds.set(path, kind);
   }
@@ -186,7 +186,7 @@ function adjacency(edges: readonly ModuleEdge[], pick: (edge: ModuleEdge) => [st
     bucket.add(value);
     map.set(key, bucket);
   }
-  return new Map([...map].map(([key, values]) => [key, [...values].sort()]));
+  return new Map([...map].map(([key, values]) => [key, [...values].toSorted()]));
 }
 
 interface ExternalInventory {

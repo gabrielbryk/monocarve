@@ -88,7 +88,7 @@ describe("consumer wiring for a newly created package", () => {
     return {
       ...base,
       lockfileImporter: { packageRoot: PACKAGE_ROOT, hash: hashText(TARGET_BLOCK) },
-      changedFiles: [...base.changedFiles, `${APP}/package.json`, `${APP}/tsconfig.json`].sort(),
+      changedFiles: [...base.changedFiles, `${APP}/package.json`, `${APP}/tsconfig.json`].toSorted(),
       operations: [
         ...base.operations.filter((operation) => operation.kind !== "lockfile-importer"),
         {
@@ -147,8 +147,8 @@ describe("consumer wiring for a newly created package", () => {
     expect(pnpmAdapter.importerBlock(lockfile, APP)).toBe(WIRED_APP_BLOCK);
     expect(pnpmAdapter.importerBlock(lockfile, PACKAGE_ROOT)).toBe(TARGET_BLOCK);
 
-    const wiring = fixtureGit(root, "show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean).sort();
-    expect(wiring).toEqual([`${APP}/package.json`, `${APP}/tsconfig.json`, CONSUMER, ENTRYPOINT, "pnpm-lock.yaml"].sort());
+    const wiring = fixtureGit(root, "show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean).toSorted();
+    expect(wiring).toEqual([`${APP}/package.json`, `${APP}/tsconfig.json`, CONSUMER, ENTRYPOINT, "pnpm-lock.yaml"].toSorted());
     expect(auditPlanSync({ config, rootDir: root, manifest }).passed).toBe(true);
     expect(read(root, CONSUMER)).toContain(PACKAGE);
   }, 120_000);

@@ -95,7 +95,7 @@ export function analyzeDeclarationBatch(
       reports: {},
     };
   const workspace = createBatchProgram(snapshot, paths, selectionRecord);
-  const diagnostics = [...workspace.diagnostics, ...unsupportedProgramRelationships(workspace)].sort(
+  const diagnostics = [...workspace.diagnostics, ...unsupportedProgramRelationships(workspace)].toSorted(
     (left, right) =>
       byCodeUnit(left.path ?? "", right.path ?? "") ||
       (left.start ?? -1) - (right.start ?? -1) ||
@@ -149,7 +149,7 @@ function resolveSelection(
 ): { readonly paths: string[]; readonly record: BatchSelectionRecord } {
   const raw =
     selection.mode === "files" ? selection.paths.map((path) => relativeWorkspacePath(snapshot.rootDir, path)) : selectHotspotTargets(snapshot, selection.count);
-  const paths = [...new Set(raw)].sort(byCodeUnit);
+  const paths = [...new Set(raw)].toSorted(byCodeUnit);
   return {
     paths,
     record: {
@@ -217,7 +217,7 @@ function analyzeTarget(
       sourceHash: report.source.sourceHash,
       declarationCount: report.source.declarations.length,
       splitCandidateCount: report.splitCandidates.length,
-      dominantAffinities: [...new Set(report.splitCandidates.flatMap((entry) => entry.dominantAffinity ?? []))].sort(byCodeUnit),
+      dominantAffinities: [...new Set(report.splitCandidates.flatMap((entry) => entry.dominantAffinity ?? []))].toSorted(byCodeUnit),
       unclassifiedCount: report.splitCandidates.filter((entry) => entry.dominantAffinity === undefined).length,
       cycleCount: report.source.components.filter((entry) => entry.cyclic).length,
       status: "complete",

@@ -466,7 +466,7 @@ function verifyFullSpanRemoval(operation: ExtractTypeDeclarationsOperation, base
   const source = new TextDecoder().decode(baseline);
   const selectors = operation.declarations
     .flatMap((group) => group.declarations)
-    .sort((left, right) => left.extractionStart - right.extractionStart || left.extractionEnd - right.extractionEnd);
+    .toSorted((left, right) => left.extractionStart - right.extractionStart || left.extractionEnd - right.extractionEnd);
   let cursor = 0;
   let retained = "";
   for (const selector of selectors) {

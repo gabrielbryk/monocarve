@@ -124,7 +124,7 @@ function restorePath(root: string, path: string, snapshot: Snapshot, restored: s
 function pruneCreatedDirectories(root: string, snapshots: ReadonlyMap<string, Snapshot>): void {
   const created = new Set<string>();
   for (const snapshot of snapshots.values()) for (const directory of snapshot.absentAncestors) created.add(directory);
-  const deepestFirst = [...created].sort((a, b) => b.split("/").length - a.split("/").length || (a < b ? 1 : -1));
+  const deepestFirst = [...created].toSorted((a, b) => b.split("/").length - a.split("/").length || (a < b ? 1 : -1));
   for (const directory of deepestFirst) {
     try {
       rmdirSync(pathAt(root, directory));

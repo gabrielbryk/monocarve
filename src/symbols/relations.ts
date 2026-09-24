@@ -25,7 +25,7 @@ export function collectEdges(
     if (!sourceGroup) continue;
     collectDeclarationEdges(checker, sourceText, declarationId, physical.node, sourceGroup, groupBySymbol, mutable);
   }
-  return [...mutable.values()].map(finalizeEdge).sort(compareEdges);
+  return [...mutable.values()].map(finalizeEdge).toSorted(compareEdges);
 }
 
 export function referenceSpace(identifier: ts.Identifier): "type" | "value" {
@@ -51,7 +51,7 @@ export function stronglyConnectedComponents(groups: readonly DeclarationGroup[],
   for (const edge of edges) adjacency.get(edge.source)?.push(edge.target);
   for (const targets of adjacency.values()) targets.sort(byCodeUnit);
   const state = createTraversalState();
-  for (const group of [...groups].sort((left, right) => byCodeUnit(left.id, right.id))) {
+  for (const group of [...groups].toSorted((left, right) => byCodeUnit(left.id, right.id))) {
     if (!state.indices.has(group.id)) visitComponent(group.id, adjacency, state);
   }
   const selfEdges = new Set(edges.filter((edge) => edge.source === edge.target).map((edge) => edge.source));
@@ -61,7 +61,7 @@ export function stronglyConnectedComponents(groups: readonly DeclarationGroup[],
       groupIds,
       cyclic: groupIds.length > 1 || (groupIds[0] !== undefined && selfEdges.has(groupIds[0])),
     }))
-    .sort((left, right) => byCodeUnit(left.groupIds[0] ?? "", right.groupIds[0] ?? ""));
+    .toSorted((left, right) => byCodeUnit(left.groupIds[0] ?? "", right.groupIds[0] ?? ""));
 }
 
 function collectDeclarationEdges(

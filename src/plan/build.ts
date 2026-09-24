@@ -264,7 +264,7 @@ function dependenciesFor(state: BuildState, sources: readonly string[], rewrites
       const owner = state.graph.workspace.packageNames.get(packageName);
       if (!owner) throw new PlanningError(`rewrite target is not a workspace package: ${rewrite.packageSpecifier}`);
       if (!dependencies.dev[packageName]) dependencies.runtime[packageName] = "workspace:*";
-      if (!dependencies.packageReferences.includes(owner)) dependencies.packageReferences = [...dependencies.packageReferences, owner].sort();
+      if (!dependencies.packageReferences.includes(owner)) dependencies.packageReferences = [...dependencies.packageReferences, owner].toSorted();
     }
   return dependencies;
 }
@@ -421,7 +421,7 @@ function buildManifest(
     operations,
     ...(state.pathMigrationNoops.length === 0
       ? {}
-      : { pathMigrationNoops: [...state.pathMigrationNoops].sort((left, right) => byCodeUnit(left.path, right.path)) }),
+      : { pathMigrationNoops: [...state.pathMigrationNoops].toSorted((left, right) => byCodeUnit(left.path, right.path)) }),
     consumers: consumers.map((consumer) => ({
       file: consumer.file,
       owner: consumer.package,
@@ -438,7 +438,7 @@ function buildManifest(
         ...generatedFiles.filter((generated) => generated.regenerateOnApply).map((generated) => generated.path),
         ...postJournalPreparers.flatMap((preparer) => preparer.outputs),
       ]),
-    ].sort(),
+    ].toSorted(),
     ...(lockOperation
       ? { lockfileImporter: { packageRoot: state.packageRoot, hash: hashText(lockOperation.block) } }
       : currentLockHash
@@ -541,8 +541,8 @@ function postJournalRecordsFor(
         const mode = statSync(context.absolute(path)).mode & 0o111 ? 0o755 : 0o644;
         return { path, preconditionHash: hashText(before), preconditionMode: mode, resultHash: hashText(after), resultMode: mode };
       })
-      .sort((left, right) => byCodeUnit(left.path, right.path));
-    const outputs = [...new Set([...preparer.outputs, ...(creates?.map((item) => item.path) ?? [])])].sort(byCodeUnit);
+      .toSorted((left, right) => byCodeUnit(left.path, right.path));
+    const outputs = [...new Set([...preparer.outputs, ...(creates?.map((item) => item.path) ?? [])])].toSorted(byCodeUnit);
     return {
       id: preparer.id,
       ...(preparer.command === undefined ? {} : { command: preparer.command }),
@@ -602,7 +602,7 @@ function dependencyDecisionsFor(
     ...Object.keys(dependencies.runtime).map((name) => ({ name, decision: "target-runtime" as const })),
     ...Object.keys(dependencies.dev).map((name) => ({ name, decision: "target-dev" as const })),
   ].map(({ name, decision }) => {
-    const demand = [...(evidence.sources.get(name) ?? [])].sort(byCodeUnit);
+    const demand = [...(evidence.sources.get(name) ?? [])].toSorted(byCodeUnit);
     const reasons = [
       ...new Set(
         demand.map((source) =>
@@ -613,7 +613,7 @@ function dependencyDecisionsFor(
               : ("production-import" as const),
         ),
       ),
-    ].sort(byCodeUnit);
+    ].toSorted(byCodeUnit);
     if (reasons.length === 0) reasons.push(decision === "target-dev" ? "type-only-import" : "production-import");
     return { name, decision, sources: demand, reasons };
   });
@@ -621,7 +621,7 @@ function dependencyDecisionsFor(
   return [
     ...target,
     ...pruning.map(({ name }) => ({ name, decision: donorDecision, sources: [] as string[], reasons: ["no-retained-consumer" as const] })),
-  ].sort((left, right) => byCodeUnit(left.name, right.name) || byCodeUnit(left.decision, right.decision));
+  ].toSorted((left, right) => byCodeUnit(left.name, right.name) || byCodeUnit(left.decision, right.decision));
 }
 function sourceBlobsFor(context: WorkspaceContext, paths: readonly string[]): Record<string, Sha256> {
   const blobs: Record<string, Sha256> = {};
@@ -664,7 +664,7 @@ function dedupeExports(entries: readonly ExportSurface[]): ExportSurface[] {
       seen.add(entry.name);
       return true;
     })
-    .sort((left, right) => byCodeUnit(left.name, right.name));
+    .toSorted((left, right) => byCodeUnit(left.name, right.name));
 }
 function trailer(config: MonocarveConfig, vars: Record<string, string>): { body?: string } {
   return config.commitTemplates.trailer ? { body: renderTemplate(config.commitTemplates.trailer, vars) } : {};

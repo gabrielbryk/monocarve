@@ -25,9 +25,9 @@ export function analyzeLazyRegistry(graph: DependencyGraph, portfolio: Portfolio
         resolvedPath: edge.to,
         domain: target?.domain ?? "unknown",
         lineCount: target?.lineCount ?? 0,
-        candidateIds: candidates.map((candidate) => candidate.id).sort(),
-        suggestedPackageNames: [...new Set(candidates.map((candidate) => candidate.suggestedPackageName))].sort(),
+        candidateIds: candidates.map((candidate) => candidate.id).toSorted(),
+        suggestedPackageNames: [...new Set(candidates.map((candidate) => candidate.suggestedPackageName))].toSorted(),
       };
     })
-    .sort((left, right) => left.resolvedPath.localeCompare(right.resolvedPath));
+    .toSorted((left, right) => left.resolvedPath.localeCompare(right.resolvedPath));
 }

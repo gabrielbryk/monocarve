@@ -82,7 +82,7 @@ function manifestFor(root: string): ExtractionManifest {
     ],
     consumers: [],
     generatedFiles: [],
-    changedFiles: [DONOR, TARGET, ENTRYPOINT].sort(),
+    changedFiles: [DONOR, TARGET, ENTRYPOINT].toSorted(),
     expectedDynamicImportDelta: { added: [], removed: [] },
     evaluationEffects: [],
     metrics: { movedFiles: 1, movedLines: 1, applicationLinesBefore: 1, applicationLinesAfter: 0, consumers: 0 },

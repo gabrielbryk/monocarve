@@ -454,7 +454,7 @@ function simulationManifest(root: string): ExtractionManifest {
       },
     ],
     generatedFiles: [],
-    changedFiles: [DONOR, TARGET, CONSUMER, ENTRYPOINT].sort(),
+    changedFiles: [DONOR, TARGET, CONSUMER, ENTRYPOINT].toSorted(),
     expectedDynamicImportDelta: { added: [], removed: [] },
     evaluationEffects: [],
     metrics: { movedFiles: 1, movedLines: 1, applicationLinesBefore: 4, applicationLinesAfter: 3, consumers: 1 },

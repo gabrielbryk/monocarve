@@ -65,7 +65,7 @@ function manifest(): ExtractionManifest {
     operations,
     consumers: [],
     generatedFiles: [],
-    changedFiles: [DONOR, TARGET, ASSET, ASSET_TARGET, ENTRYPOINT].sort(),
+    changedFiles: [DONOR, TARGET, ASSET, ASSET_TARGET, ENTRYPOINT].toSorted(),
     expectedDynamicImportDelta: { added: [], removed: [] },
     evaluationEffects: [],
     metrics: { movedFiles: 2, movedLines: 1, applicationLinesBefore: 1, applicationLinesAfter: 0, consumers: 0 },
@@ -231,7 +231,7 @@ describe("plan validation", () => {
       ...base,
       source: { files: [DONOR], tests: [], sccs: { "scc-a": [DONOR] } },
       sourceBlobs: { [DONOR]: donorHash },
-      changedFiles: [DONOR, ENTRYPOINT].sort(),
+      changedFiles: [DONOR, ENTRYPOINT].toSorted(),
       operations: [
         { kind: "move", source: DONOR, target: ENTRYPOINT, preconditionHash: donorHash, resultHash: donorHash },
         { kind: "write-file", path: ENTRYPOINT, contents: barrel, preconditionHash: "missing", resultHash: hashText(barrel) },
@@ -289,7 +289,7 @@ describe("plan validation", () => {
     const drifted: ExtractionManifest = {
       ...base,
       lockfileImporter: { packageRoot: PACKAGE_ROOT, hash: hashText("wrong") },
-      changedFiles: [...base.changedFiles, "pnpm-lock.yaml"].sort(),
+      changedFiles: [...base.changedFiles, "pnpm-lock.yaml"].toSorted(),
       operations: [
         ...base.operations,
         {
@@ -312,7 +312,7 @@ describe("plan validation", () => {
     const block = "  apps/api:\n    dependencies: {}\n\n";
     const insertingAnApp: ExtractionManifest = {
       ...base,
-      changedFiles: [...base.changedFiles, "pnpm-lock.yaml"].sort(),
+      changedFiles: [...base.changedFiles, "pnpm-lock.yaml"].toSorted(),
       operations: [
         ...base.operations,
         {

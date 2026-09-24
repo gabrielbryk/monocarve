@@ -34,5 +34,5 @@ export function disallowedDirtyPaths(rootDir: string, allowDirtyPaths: readonly 
       (path) => !allowDirtyPaths.some((allowed) => pathOverlaps(path, allowed)) || sensitivePaths.some((sensitive) => pathOverlaps(path, sensitive)),
     ),
   );
-  return [...new Set(disallowed)].sort();
+  return [...new Set(disallowed)].toSorted();
 }

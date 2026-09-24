@@ -44,7 +44,7 @@ export function entrypointClosureProof(manifest: ExtractionManifest, rootDir: st
   // be star-re-exported; a barrel that drops a module is caught by proof 3 or
   // proof 4 when something needed it, and by the simulation's own gates
   // otherwise.
-  for (const key of [...landed].sort()) {
+  for (const key of [...landed].toSorted()) {
     if (declared.has(key) || inherited.has(key)) continue;
     closureFailures.push(`package entrypoint evaluates a module the plan never declared: ${key}`);
   }

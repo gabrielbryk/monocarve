@@ -442,7 +442,7 @@ function matchesSnapshot(rootDir: string, path: string, snapshot: Snapshot): boo
 }
 
 function pruneCreatedDirectories(rootDir: string, directories: ReadonlySet<string>, failures: PreparationRestoreFailure[]): void {
-  for (const directory of [...directories].sort((left, right) => right.split("/").length - left.split("/").length || (left < right ? 1 : -1))) {
+  for (const directory of [...directories].toSorted((left, right) => right.split("/").length - left.split("/").length || (left < right ? 1 : -1))) {
     try {
       rmdirSync(workspacePath(rootDir, directory));
     } catch (error) {

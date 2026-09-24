@@ -39,7 +39,7 @@ function graph(): DependencyGraph {
   return {
     rootDir: "/workspace",
     nodes,
-    paths: [...nodes.keys()].sort(),
+    paths: [...nodes.keys()].toSorted(),
     edges: [],
     outgoing: new Map(),
     incoming: new Map(),

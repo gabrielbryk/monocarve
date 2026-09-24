@@ -17,7 +17,7 @@ import { PreparerError } from "./error.ts";
 import type { PreparerMutation } from "./manifest.ts";
 
 export function unique(items: readonly string[]): string[] {
-  return [...new Set(items)].sort(byCodeUnit);
+  return [...new Set(items)].toSorted(byCodeUnit);
 }
 export function validatedPath(root: string, path: string): string {
   workspacePath(root, path);
@@ -115,7 +115,7 @@ export function expandGeneratedArtifacts(config: MonocarveConfig, triggerPaths: 
       regenerateOnApply: true as const,
       ...(artifact.exemptReason === undefined ? {} : { exemptReason: artifact.exemptReason }),
     }))
-    .sort((left, right) => byCodeUnit(left.path, right.path));
+    .toSorted((left, right) => byCodeUnit(left.path, right.path));
 }
 
 export function canonicalMode(mode: number): 0o644 | 0o755 {

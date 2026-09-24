@@ -39,7 +39,7 @@ export function analyzeCapabilityPartitions(input: {
   );
   if (!declaration) throw new SymbolAnalysisError(`interface ${input.interfaceName} was not found in ${sourcePath}`, []);
   const checker = program.getTypeChecker();
-  const properties = declaration.members.flatMap((member) => (member.name && ts.isIdentifier(member.name) ? [member.name.text] : [])).sort(byCodeUnit);
+  const properties = declaration.members.flatMap((member) => (member.name && ts.isIdentifier(member.name) ? [member.name.text] : [])).toSorted(byCodeUnit);
   const propertyDeclarations = new Set<ts.Node>(declaration.members);
   const uses = new Map<string, { declarations: Set<string>; affinities: Set<string> }>();
   for (const property of properties) uses.set(property, { declarations: new Set(), affinities: new Set() });
@@ -66,7 +66,7 @@ export function analyzeCapabilityPartitions(input: {
   const grouped = new Map<string, { affinities: string[]; properties: string[]; declarations: Set<string> }>();
   for (const [property, use] of uses) {
     if (use.affinities.size === 0) continue;
-    const affinities = [...use.affinities].sort(byCodeUnit);
+    const affinities = [...use.affinities].toSorted(byCodeUnit);
     const key = affinities.join("\0");
     const group = grouped.get(key) ?? { affinities, properties: [], declarations: new Set() };
     group.properties.push(property);
@@ -74,8 +74,8 @@ export function analyzeCapabilityPartitions(input: {
     grouped.set(key, group);
   }
   const partitions = [...grouped.values()]
-    .map((group) => ({ affinities: group.affinities, properties: group.properties.sort(byCodeUnit), declarations: [...group.declarations].sort(byCodeUnit) }))
-    .sort(
+    .map((group) => ({ affinities: group.affinities, properties: group.properties.sort(byCodeUnit), declarations: [...group.declarations].toSorted(byCodeUnit) }))
+    .toSorted(
       (left, right) => byCodeUnit(left.affinities.join("/"), right.affinities.join("/")) || byCodeUnit(left.properties.join("/"), right.properties.join("/")),
     );
   return {

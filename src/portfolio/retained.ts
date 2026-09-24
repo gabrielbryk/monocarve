@@ -63,8 +63,8 @@ export function retainedBlockers(
 
   return [...byTarget.entries()]
     .map(([target, reaching]): RetainedBlocker => {
-      const representative = [...reaching].sort((left, right) => byCodeUnit(left.file, right.file))[0]!;
+      const representative = [...reaching].toSorted((left, right) => byCodeUnit(left.file, right.file))[0]!;
       return { file: representative.file, specifier: representative.specifier, target, kind: representative.kind };
     })
-    .sort((left, right) => byCodeUnit(left.target, right.target));
+    .toSorted((left, right) => byCodeUnit(left.target, right.target));
 }

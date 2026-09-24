@@ -235,7 +235,7 @@ test("writes a new solution tsconfig even when its rendered bytes are already ca
   });
   const configs = operations
     .flatMap((operation) => (operation.kind === "write-file" && operation.path.startsWith("libs/new-package/tsconfig") ? [operation.path] : []))
-    .sort();
+    .toSorted();
 
   expect(configs).toEqual(["libs/new-package/tsconfig.json", "libs/new-package/tsconfig.lib.json", "libs/new-package/tsconfig.spec.json"]);
   const rootConfig = operations.find((operation) => operation.kind === "write-file" && operation.path === "libs/new-package/tsconfig.json");

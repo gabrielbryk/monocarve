@@ -74,7 +74,7 @@ export function deleteImporter(lockfileText: string, packageRoot: string): strin
   const linked = name === undefined ? undefined : packageEntry(parsed, name);
   let lines = [...parsed.lines];
   // Highest line first, so the second splice is not reading shifted indices.
-  const ranges = [{ start: workspace.start, end: workspace.end }, ...(linked ? [{ start: linked.start, end: linked.end }] : [])].sort(
+  const ranges = [{ start: workspace.start, end: workspace.end }, ...(linked ? [{ start: linked.start, end: linked.end }] : [])].toSorted(
     (left, right) => right.start - left.start,
   );
   for (const range of ranges) lines = removeEntry(lines, range.start, range.end);

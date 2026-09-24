@@ -78,7 +78,7 @@ function renderGates(
       validateTemplates(template, `preparation.gates.${tier}`);
       return renderTemplate(template, vars);
     })
-    .sort(byCodeUnit);
+    .toSorted(byCodeUnit);
   if (new Set(rendered).size !== rendered.length) {
     throw new ConfigError(`preparation.gates.${tier} renders duplicate commands; each repository gate must be distinct`);
   }

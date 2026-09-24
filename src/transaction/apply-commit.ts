@@ -90,8 +90,8 @@ export function assertExactMoveDiff(diff: string, moves: readonly MoveOperation[
 }
 
 function sameMultiset(left: readonly string[], right: readonly string[]): boolean {
-  const first = [...left].sort();
-  const second = [...right].sort();
+  const first = [...left].toSorted();
+  const second = [...right].toSorted();
   return first.length === second.length && first.every((value, index) => value === second[index]);
 }
 
@@ -99,8 +99,8 @@ export function assertExactScope(actual: readonly string[], expected: readonly s
   const staged = new Set(actual);
   const declared = new Set(expected);
   const skippable = new Set(optional);
-  const extra = [...staged].filter((path) => !declared.has(path)).sort();
+  const extra = [...staged].filter((path) => !declared.has(path)).toSorted();
   if (extra.length > 0) throw new ApplyError(`commit contains files outside the declared operation scope: ${extra.join(", ")}`);
-  const absent = [...declared].filter((path) => !staged.has(path) && !skippable.has(path)).sort();
+  const absent = [...declared].filter((path) => !staged.has(path) && !skippable.has(path)).toSorted();
   if (absent.length > 0) throw new ApplyError(`commit is missing declared operation paths: ${absent.join(", ")}`);
 }

@@ -144,10 +144,10 @@ export async function inspectConfig(input: ConfigDoctorInput): Promise<ConfigDoc
     generatedArtifacts: input.config.generatedArtifacts,
     pathMigrations: input.config.pathMigrations,
     pathReferenceRewrites: input.config.pathReferenceRewrites,
-    moduleSpecifierCalls: [...input.config.moduleSpecifierCalls].sort(),
-    protectedPaths: [...input.config.portfolio.protectedPaths].sort(),
-    dirtyPaths: [...new Set(statusEntries(input.rootDir).flatMap((entry) => entry.paths))].sort(),
-    allowedDirtyPaths: [...input.config.transaction.allowDirtyPaths].sort(),
+    moduleSpecifierCalls: [...input.config.moduleSpecifierCalls].toSorted(),
+    protectedPaths: [...input.config.portfolio.protectedPaths].toSorted(),
+    dirtyPaths: [...new Set(statusEntries(input.rootDir).flatMap((entry) => entry.paths))].toSorted(),
+    allowedDirtyPaths: [...input.config.transaction.allowDirtyPaths].toSorted(),
     semanticIssues: [...scaffoldSemanticIssues(input.config, input.rootDir), ...boundaryIssues(input.config, boundaries)],
     preparation: {
       preparers: [{ kind: "type-only", declarations: ["interface", "type-alias"] }],
@@ -170,7 +170,7 @@ async function inspectWorkspaceQualification(
   const qualified = packageManager.status === "available" ? await qualifyWorkspace({ config: input.config, rootDir: input.rootDir }) : undefined;
   if (qualified !== undefined)
     return {
-      packages: qualified.packages.slice().sort((a, b) => a.dir.localeCompare(b.dir) || a.name.localeCompare(b.name)),
+      packages: qualified.packages.slice().toSorted((a, b) => a.dir.localeCompare(b.dir) || a.name.localeCompare(b.name)),
       // Preserve the pre-assessment config-doctor contract. Unmatched workspace
       // patterns are a qualification warning, not a change to legacy status.
       resolution: { status: qualified.workspaceResolution === "unavailable" ? "unavailable" : "resolved" },
@@ -289,7 +289,7 @@ function scaffoldSemanticIssues(config: MonocarveConfig, rootDir: string): Confi
   const issues: { severity: "error"; context: string; detail: string }[] = [];
   for (const application of config.applications) {
     inspectScaffold(scaffoldFor(config, application), `application ${application.name}`, rootDir, issues);
-    for (const name of Object.keys(config.extractionProfiles.profiles).sort()) {
+    for (const name of Object.keys(config.extractionProfiles.profiles).toSorted()) {
       inspectScaffold(
         resolveExtractionProfile(config, application, name).scaffoldTemplates,
         `application ${application.name}, profile ${name}`,

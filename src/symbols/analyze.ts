@@ -33,7 +33,7 @@ export function analyzeProgramSource(input: {
   const diagnostics = [
     ...input.syntacticDiagnostics.map((entry) => toDiagnostic(entry, "syntactic")),
     ...input.semanticDiagnostics.map((entry) => toDiagnostic(entry, "semantic")),
-  ].sort(compareDiagnostics);
+  ].toSorted(compareDiagnostics);
   return buildSymbolGraph(sourcePath, input.sourceText, input.sourceFile, input.checker, diagnostics);
 }
 
@@ -55,7 +55,7 @@ function buildSymbolGraph(
   const exportedSymbols = collectExportedSymbols(sourceFile, checker);
   const declarations = physical
     .map(({ record, symbol }) => ({ ...record, exported: record.exported || (symbol !== undefined && exportedSymbols.has(symbol)) }))
-    .sort(compareDeclarations);
+    .toSorted(compareDeclarations);
   const recordById = new Map(declarations.map((record) => [record.id, record]));
   const physicalById = new Map(physical.map((item) => [item.record.id, item]));
   const groups = buildGroups(sourcePath, declarations);
@@ -105,7 +105,7 @@ function createIsolatedProgram(sourcePath: string, sourceText: string): Isolated
   const diagnostics = [
     ...program.getSyntacticDiagnostics(programSource).map((diagnostic) => toDiagnostic(diagnostic, "syntactic")),
     ...program.getSemanticDiagnostics(programSource).map((diagnostic) => toDiagnostic(diagnostic, "semantic")),
-  ].sort(compareDiagnostics);
+  ].toSorted(compareDiagnostics);
   return { sourceFile: programSource, checker: program.getTypeChecker(), diagnostics };
 }
 

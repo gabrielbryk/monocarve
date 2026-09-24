@@ -37,7 +37,7 @@ export function operationPaths(operation: PlanOperation): string[] {
   return [...operationSources(operation), ...operationTargets(operation)];
 }
 export function manifestPaths(manifest: ExtractionManifest): string[] {
-  return [...new Set(manifest.operations.flatMap(operationPaths))].sort();
+  return [...new Set(manifest.operations.flatMap(operationPaths))].toSorted();
 }
 export function pureRenames(manifest: ExtractionManifest): MoveOperation[] {
   return manifest.operations.filter(isMove);
@@ -51,7 +51,7 @@ export function regeneratedArtifactPaths(manifest: ExtractionManifest): string[]
       ...regeneratedArtifacts(manifest).map((generated) => generated.path),
       ...(manifest.postJournalPreparers ?? []).flatMap((preparer) => preparer.outputs),
     ]),
-  ].sort();
+  ].toSorted();
 }
 export function planSensitivePaths(manifest: ExtractionManifest): readonly string[] {
   return [

@@ -15,7 +15,7 @@ export function includeCompositionRoots(
   requested: readonly string[],
   inclusions: readonly string[],
 ): string[] {
-  const roots = [...new Set(inclusions.map(normalizeInclusion))].sort(byCodeUnit);
+  const roots = [...new Set(inclusions.map(normalizeInclusion))].toSorted(byCodeUnit);
   const application = getApplication(config, applicationName);
   for (const root of roots) {
     if (root !== application.sourceRoot && !root.startsWith(`${application.sourceRoot}/`)) {

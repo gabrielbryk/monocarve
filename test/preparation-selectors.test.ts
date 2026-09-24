@@ -39,7 +39,7 @@ describe("type-only preparation selectors", () => {
     expect(publicDeclaration.leadingTriviaHash).toBe(hashText(sourceText.slice(triviaStart, publicStart)));
     expect(localDeclaration.extraction.hash).toBe(hashText(sourceText.slice(localDeclaration.extraction.start, localDeclaration.extraction.end)));
     expect(result.requestedGroupIds).toEqual([publicDeclaration.groupId]);
-    expect(result.closureGroupIds).toEqual([localDeclaration.groupId, publicDeclaration.groupId].sort());
+    expect(result.closureGroupIds).toEqual([localDeclaration.groupId, publicDeclaration.groupId].toSorted());
     expect(result.imports).toEqual([
       { localName: "Imported", importedName: "External", moduleSpecifier: "./external.ts", kind: "named", originallyTypeOnly: true, requiredAs: "type" },
     ]);

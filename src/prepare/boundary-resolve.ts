@@ -76,7 +76,7 @@ export interface ResolveBoundariesInput {
 
 /** Normalize both config surfaces into one deterministically ordered list. */
 export function resolveBoundaries(config: ResolveBoundariesInput): readonly ResolvedBoundary[] {
-  const resolved = [...config.compositionBoundaries.map(resolveCompositionBoundary), ...config.portPromotions.map(resolvePortPromotion)].sort((left, right) =>
+  const resolved = [...config.compositionBoundaries.map(resolveCompositionBoundary), ...config.portPromotions.map(resolvePortPromotion)].toSorted((left, right) =>
     byCodeUnit(left.id, right.id),
   );
   const seen = new Set<string>();
@@ -97,7 +97,7 @@ function resolveCompositionBoundary(boundary: CompositionBoundariesConfig[number
       strategy: "existing-package",
       retained: boundary.retained,
       replacementSpecifier: boundary.replacement.specifier,
-      replacementSymbols: [...boundary.replacement.symbols].sort(byCodeUnit),
+      replacementSymbols: [...boundary.replacement.symbols].toSorted(byCodeUnit),
       retire: boundary.retire,
       selective: boundary.selective,
     };
@@ -124,7 +124,7 @@ function resolveCompositionBoundary(boundary: CompositionBoundariesConfig[number
     targetPackage: boundary.packageImport,
     contractModule: boundary.contractModule,
     packageImport: boundary.packageImport,
-    symbols: [...boundary.symbols].sort(byCodeUnit),
+    symbols: [...boundary.symbols].toSorted(byCodeUnit),
     appAdapter: boundary.appAdapter,
     template: boundary.template,
     retainedRoots: [boundary.retained],
@@ -156,7 +156,7 @@ function resolvePortPromotion(promotion: PortPromotionsConfig[number]): Resolved
   }
   const duplicate = declarationNames.find((name, index) => declarationNames.indexOf(name) !== index);
   if (duplicate) throw new BoundaryConfigError(`boundary ${promotion.id}: duplicate concrete declaration ${duplicate}`);
-  const symbols = [...declarationNames].sort(byCodeUnit);
+  const symbols = [...declarationNames].toSorted(byCodeUnit);
   return {
     id: promotion.id,
     source: "portPromotions",
@@ -175,7 +175,7 @@ function resolvePortPromotion(promotion: PortPromotionsConfig[number]): Resolved
     // promoted port structurally.
     appAdapter: undefined,
     template: undefined,
-    retainedRoots: [...promotion.retainedRoots].sort(byCodeUnit),
+    retainedRoots: [...promotion.retainedRoots].toSorted(byCodeUnit),
     retire: false,
   };
 }

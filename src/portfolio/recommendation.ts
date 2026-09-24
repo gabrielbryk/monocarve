@@ -79,9 +79,9 @@ export function targetRecommendations(
         ? ["suggested package already exists; extending it requires compatibility review"]
         : [`derived from ${dirname(candidate.files[0] ?? candidate.application)}`],
     },
-  ].sort((left, right) => left.packageName.localeCompare(right.packageName));
+  ].toSorted((left, right) => left.packageName.localeCompare(right.packageName));
 }
 
 function reason(code: RecommendationReason["code"], detail: string, paths: readonly string[]): RecommendationReason {
-  return { code, detail, paths: [...paths].sort() };
+  return { code, detail, paths: [...paths].toSorted() };
 }

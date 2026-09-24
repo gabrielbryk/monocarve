@@ -73,7 +73,7 @@ const FATAL_CODES = new Set<AssessmentDiagnosticCode>([
 ]);
 
 export function qualifyAssessment(input: { readonly diagnostics?: readonly AssessmentDiagnostic[]; readonly allowedEmpty?: boolean }): AssessmentQualification {
-  const diagnostics = [...(input.diagnostics ?? [])].sort(compareDiagnostics);
+  const diagnostics = [...(input.diagnostics ?? [])].toSorted(compareDiagnostics);
   const fatal = diagnostics.some((entry) => entry.severity === "error" || FATAL_CODES.has(entry.code));
   const degraded = diagnostics.some((entry) => entry.code === "WORKSPACE_PATTERN_UNMATCHED");
   const overrides: readonly "allow-empty"[] = input.allowedEmpty ? ["allow-empty"] : [];
@@ -84,7 +84,7 @@ export function qualifyAssessment(input: { readonly diagnostics?: readonly Asses
 }
 
 export function unavailable<T = never>(diagnostics: readonly AssessmentDiagnostic[]): Availability<T> {
-  return { status: "unavailable", diagnostics: [...diagnostics].sort(compareDiagnostics) };
+  return { status: "unavailable", diagnostics: [...diagnostics].toSorted(compareDiagnostics) };
 }
 
 export type Availability<T> =

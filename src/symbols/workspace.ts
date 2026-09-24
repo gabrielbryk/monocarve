@@ -93,7 +93,7 @@ export function analyzeWorkspaceSymbolsWithProgram(
       space: mergeSpaces([...entry.spaces]),
       referenceCount: entry.referenceCount,
     }))
-    .sort(
+    .toSorted(
       (left, right) =>
         byCodeUnit(left.groupName, right.groupName) ||
         byCodeUnit(left.affinity, right.affinity) ||
@@ -184,7 +184,7 @@ export function createWorkspaceSymbolProgram(
     throw new WorkspaceProgramError(`cannot build TypeScript program from ${tsconfigPath}`, configDiagnostics);
   }
   const additionalFiles = additionalRoots.flatMap((root) => sourceFiles(resolve(rootDir, root)));
-  const rootNames = [...new Set([...parsed.fileNames, ...additionalFiles])].sort(byCodeUnit);
+  const rootNames = [...new Set([...parsed.fileNames, ...additionalFiles])].toSorted(byCodeUnit);
   const host = ts.createCompilerHost(parsed.options);
   host.readFile = readInput;
   host.getSourceFile = (fileName, languageVersion, onError) => {
@@ -208,7 +208,7 @@ export function createWorkspaceSymbolProgram(
     ...program.getGlobalDiagnostics().map((entry) => completenessDiagnostic(rootDir, entry, "global")),
     ...program.getSyntacticDiagnostics().map((entry) => completenessDiagnostic(rootDir, entry, "syntactic")),
     ...program.getSemanticDiagnostics().map((entry) => completenessDiagnostic(rootDir, entry, "semantic")),
-  ].sort((left, right) => byCodeUnit(left.path ?? "", right.path ?? "") || (left.start ?? -1) - (right.start ?? -1) || left.code - right.code);
+  ].toSorted((left, right) => byCodeUnit(left.path ?? "", right.path ?? "") || (left.start ?? -1) - (right.start ?? -1) || left.code - right.code);
   return { rootDir, tsconfigPath, program, diagnostics };
 }
 
@@ -235,13 +235,13 @@ function splitCandidates(graph: SymbolGraph, consumers: readonly ExternalSymbolC
       const relevant = consumers.filter((consumer) => groupSet.has(consumer.groupId));
       const affinityCounts: Record<string, number> = {};
       for (const consumer of relevant) affinityCounts[consumer.affinity] = (affinityCounts[consumer.affinity] ?? 0) + consumer.referenceCount;
-      const sortedAffinities = Object.entries(affinityCounts).sort(([leftName, left], [rightName, right]) => right - left || byCodeUnit(leftName, rightName));
+      const sortedAffinities = Object.entries(affinityCounts).toSorted(([leftName, left], [rightName, right]) => right - left || byCodeUnit(leftName, rightName));
       const total = sortedAffinities.reduce((sum, [, count]) => sum + count, 0);
       const dominantAffinity = sortedAffinities[0]?.[0];
       const concentration = total === 0 ? 0 : (sortedAffinities[0]?.[1] ?? 0) / total;
       const incoming = graph.edges.filter((edge) => !groupSet.has(edge.source) && groupSet.has(edge.target)).length;
       const outgoing = graph.edges.filter((edge) => groupSet.has(edge.source) && !groupSet.has(edge.target)).length;
-      const names = groups.map((group) => group.name).sort(byCodeUnit);
+      const names = groups.map((group) => group.name).toSorted(byCodeUnit);
       return {
         id: hashJson({ sourceHash: graph.sourceHash, component: component.id, consumers: relevant }),
         groupIds: [...component.groupIds],
@@ -257,7 +257,7 @@ function splitCandidates(graph: SymbolGraph, consumers: readonly ExternalSymbolC
         score: Math.round(concentration * 1000) + relevant.length * 10 - (incoming + outgoing),
       };
     })
-    .sort((left, right) => right.score - left.score || byCodeUnit(left.id, right.id));
+    .toSorted((left, right) => right.score - left.score || byCodeUnit(left.id, right.id));
 }
 
 function declarationName(node: ts.Declaration): string | undefined {

@@ -117,7 +117,7 @@ function collectProgramInputs(rootDir: string, tsconfigPath: string, additionalR
   if (read.error) return;
   const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, dirname(configPath), undefined, configPath);
   const additionalFiles = additionalRoots.flatMap((root) => sourceFiles(resolve(rootDir, root)));
-  const rootNames = [...new Set([...parsed.fileNames, ...additionalFiles])].sort(byCodeUnit);
+  const rootNames = [...new Set([...parsed.fileNames, ...additionalFiles])].toSorted(byCodeUnit);
   const program = ts.createProgram({
     rootNames,
     options: parsed.options,

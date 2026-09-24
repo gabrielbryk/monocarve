@@ -19,7 +19,7 @@ export async function campaignOptimize(args: ParsedArgs): Promise<void> {
         candidate.recommendation?.status === "recommended" &&
         candidate.classification !== "preparation",
     )
-    .sort(
+    .toSorted(
       (left, right) =>
         (right.effort?.locPerReviewUnit ?? 0) - (left.effort?.locPerReviewUnit ?? 0) || right.lineCount - left.lineCount || left.id.localeCompare(right.id),
     );

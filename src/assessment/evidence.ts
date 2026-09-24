@@ -88,7 +88,7 @@ export function assertEvidenceDestination(rootDir: string, destination: string, 
 /** Publish an authoritative bundle under one canonical-destination ownership record. */
 export function publishEvidence<T extends EvidenceManifestBase>(options: PublishEvidenceOptions<T>): PublishEvidenceResult<T> {
   validateMaxBytes(options.maxBytes);
-  validateArtifactNames(Object.keys(options.artifacts).sort(byCodeUnit), options.requiredArtifacts);
+  validateArtifactNames(Object.keys(options.artifacts).toSorted(byCodeUnit), options.requiredArtifacts);
   const paths = publicationPaths(options.rootDir, options.destination, options.analyticalRoots);
   if (!entryExists(paths.lock)) assertNoRecovery(paths);
   const progress: PublicationProgress = {
@@ -203,7 +203,7 @@ function removeOwnedEvidenceBundle<T extends EvidenceManifestBase>(path: string,
   try {
     manifest = readEvidenceManifest(path);
   } catch {
-    const artifactPaths = Object.keys(options.artifacts).sort(byCodeUnit);
+    const artifactPaths = Object.keys(options.artifacts).toSorted(byCodeUnit);
     try {
       validateArtifactNames(artifactPaths, new Set());
     } catch {

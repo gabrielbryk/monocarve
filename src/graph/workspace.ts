@@ -31,8 +31,8 @@ export function workspaceInventory(config: MonocarveConfig, rootDir: string): Wo
     .flatMap((root) => sourceFiles(resolve(rootDir, root), undefined, config.sourceExtensions))
     .map((file) => relativePosix(rootDir, file))
     .filter((path) => isSourceModulePath(path, config.sourceExtensions))
-    .sort();
-  const owners = [...new Set(files.map((file) => ownerFor(config, file)))].sort();
+    .toSorted();
+  const owners = [...new Set(files.map((file) => ownerFor(config, file)))].toSorted();
   const packageNames = new Map<string, string>();
   for (const owner of ownersOnDisk(config, rootDir, owners)) {
     const manifest = readManifest(join(rootDir, owner, "package.json"));
@@ -65,7 +65,7 @@ function ownersOnDisk(config: MonocarveConfig, rootDir: string, fromFiles: reado
   for (const pkg of config.firstPartyPackages) {
     if (existsSync(resolve(rootDir, pkg.root, "package.json"))) owners.add(pkg.root);
   }
-  return [...owners].sort();
+  return [...owners].toSorted();
 }
 
 type ExportsField = string | { [key: string]: ExportsField } | ExportsField[] | null;

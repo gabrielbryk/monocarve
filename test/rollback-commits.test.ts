@@ -44,7 +44,7 @@ describe("rollback restores the checkout from every commit boundary", () => {
         generatedFiles: [
           { path: artifact, source: PACKAGE_ROOT, regenerate: "exit 7", regenerateOnApply: true, exemptReason: "the fixture's generator never produces bytes" },
         ],
-        changedFiles: [...base.changedFiles, artifact].sort(),
+        changedFiles: [...base.changedFiles, artifact].toSorted(),
       }),
       { generatedArtifacts: { artifacts: [{ path: artifact, source: PACKAGE_ROOT, regenerate: "exit 7" }] } },
     );

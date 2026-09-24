@@ -37,7 +37,7 @@ function renderSection(
   input: RenderImporterInput,
   linkVersion: (from: string, to: string) => string,
 ): string | undefined {
-  const names = Object.keys(values).sort();
+  const names = Object.keys(values).toSorted();
   if (names.length === 0) return undefined;
   const lines = [`    ${section}:`];
   for (const name of names) lines.push(...renderDependency(name, values[name]!, input, linkVersion));
@@ -117,7 +117,7 @@ export function addBlockDependencies(block: string, input: RenderImporterInput, 
     ["dev", input.devDependencies],
   ];
   for (const [section, dependencies] of sections) {
-    for (const name of Object.keys(dependencies).sort()) {
+    for (const name of Object.keys(dependencies).toSorted()) {
       const specifier = dependencies[name]!;
       if (blockHasSpecifier(next, name, specifier, section)) continue;
       const version = specifier.startsWith("workspace:")

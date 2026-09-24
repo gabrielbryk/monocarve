@@ -54,12 +54,12 @@ export function analyzeCommunities(graph: DependencyGraph, options: CommunityAna
   const nodes = [...graph.nodes.values()]
     .filter((node) => node.zone === "application" && (options.application === undefined || node.application === options.application))
     .map((node) => node.path)
-    .sort(byCodeUnit);
+    .toSorted(byCodeUnit);
   const nodeSet = new Set(nodes);
   const suppressedHubs = nodes
     .map((path) => ({ path, incoming: (graph.incoming.get(path) ?? []).filter((source) => nodeSet.has(source)).length }))
     .filter((entry) => entry.incoming >= hubInboundThreshold)
-    .sort((left, right) => byCodeUnit(left.path, right.path));
+    .toSorted((left, right) => byCodeUnit(left.path, right.path));
   const suppressed = new Set(suppressedHubs.map((entry) => entry.path));
   // Suppression changes the clustering input only.  The report keeps the full
   // graph's coupling counts and names every withheld edge, so a hub cannot
@@ -89,7 +89,7 @@ function diagnosticDigest(nodes: readonly string[], graph: DependencyGraph): Sha
   const edges = graph.edges
     .filter((edge) => nodeSet.has(edge.from) && nodeSet.has(edge.to))
     .map((edge) => [edge.from, edge.to, edge.specifier, edge.kind] as const)
-    .sort(tupleCompare);
+    .toSorted(tupleCompare);
   return hashJson({ nodes, edges });
 }
 
@@ -100,7 +100,7 @@ function uniqueUndirectedEdges(graph: DependencyGraph, nodes: ReadonlySet<string
     const [left, right] = byCodeUnit(edge.from, edge.to) <= 0 ? [edge.from, edge.to] : [edge.to, edge.from];
     if (left !== right) pairs.set(`${left}\u0000${right}`, [left, right]);
   }
-  return [...pairs.values()].sort((left, right) => byCodeUnit(left[0], right[0]) || byCodeUnit(left[1], right[1]));
+  return [...pairs.values()].toSorted((left, right) => byCodeUnit(left[0], right[0]) || byCodeUnit(left[1], right[1]));
 }
 
 function adjacencyFor(nodes: readonly string[], edges: readonly (readonly [string, string])[]): ReadonlyMap<string, readonly string[]> {
@@ -109,7 +109,7 @@ function adjacencyFor(nodes: readonly string[], edges: readonly (readonly [strin
     mutable.get(left)?.add(right);
     mutable.get(right)?.add(left);
   }
-  return new Map(nodes.map((node) => [node, [...(mutable.get(node) ?? [])].sort(byCodeUnit)]));
+  return new Map(nodes.map((node) => [node, [...(mutable.get(node) ?? [])].toSorted(byCodeUnit)]));
 }
 
 function louvainLocalMove(nodes: readonly string[], adjacency: ReadonlyMap<string, readonly string[]>, maximumPasses: number): ReadonlyMap<string, string> {
@@ -131,7 +131,7 @@ function louvainLocalMove(nodes: readonly string[], adjacency: ReadonlyMap<strin
       }
       let best = old;
       let bestGain = 0;
-      for (const group of [...counts.keys()].sort(byCodeUnit)) {
+      for (const group of [...counts.keys()].toSorted(byCodeUnit)) {
         const gain = (counts.get(group) ?? 0) / edgeCount - ((totals.get(group) ?? 0) * degree) / (2 * edgeCount * edgeCount);
         if (gain > bestGain || (gain === bestGain && gain > 0 && byCodeUnit(group, best) < 0)) {
           best = group;
@@ -180,7 +180,7 @@ function renderCommunities(
         externalEdges,
       };
     })
-    .sort((left, right) => right.members.length - left.members.length || right.internalEdges - left.internalEdges || byCodeUnit(left.id, right.id));
+    .toSorted((left, right) => right.members.length - left.members.length || right.internalEdges - left.internalEdges || byCodeUnit(left.id, right.id));
 }
 
 function tupleCompare(left: readonly string[], right: readonly string[]): number {

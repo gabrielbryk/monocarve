@@ -61,8 +61,8 @@ const ADDED_EXPORTS = ["Alpha", "_internal", "alpha", "ab", "a_b"];
  * on a machine where the two orders coincide while the defect was still there.
  */
 function collationDisagrees(values: readonly string[]): boolean {
-  const collated = [...values].sort((left, right) => left.localeCompare(right));
-  const codeUnits = [...values].sort(byCodeUnit);
+  const collated = [...values].toSorted((left, right) => left.localeCompare(right));
+  const codeUnits = [...values].toSorted(byCodeUnit);
   return collated.some((value, index) => value !== codeUnits[index]);
 }
 
@@ -110,7 +110,7 @@ describe("code-unit ordering", () => {
   test("byCodeUnit orders by UTF-16 code unit, which is not the collated order", () => {
     const names = ["_internal", "Alpha", "alpha", "a_b", "ab", "Chart", "chart"];
 
-    expect([...names].sort(byCodeUnit)).toEqual(["Alpha", "Chart", "_internal", "a_b", "ab", "alpha", "chart"]);
+    expect([...names].toSorted(byCodeUnit)).toEqual(["Alpha", "Chart", "_internal", "a_b", "ab", "alpha", "chart"]);
     // The control: `localeCompare` genuinely produces something else here, so
     // the assertion above is a claim about the comparator and not about a list
     // that would come out the same either way.
@@ -119,7 +119,7 @@ describe("code-unit ordering", () => {
 
   test("byCodeUnit agrees with the default Array#sort, which is the same ordering", () => {
     const names = ["_internal", "Alpha", "alpha", "a_b", "ab"];
-    expect([...names].sort(byCodeUnit)).toEqual([...names].sort());
+    expect([...names].toSorted(byCodeUnit)).toEqual([...names].toSorted());
   });
 });
 
@@ -142,7 +142,7 @@ describe("manifest array order", () => {
     // it: the smallest eligible candidate containing the moved module.
     const candidate = portfolio.candidates
       .filter((entry) => entry.eligible && entry.files.includes(CHART))
-      .sort((left, right) => left.files.length - right.files.length)[0];
+      .toSorted((left, right) => left.files.length - right.files.length)[0];
     expect(candidate).toBeDefined();
 
     const manifest = buildPlanSync({ config, rootDir: root, graph, candidate: candidate!, baselineCommit: graph.commit!, packageName: "@acme/chart" });

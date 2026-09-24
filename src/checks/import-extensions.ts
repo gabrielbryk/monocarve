@@ -87,7 +87,7 @@ export function checkImportExtensions(config: MonocarveConfig, rootDir: string):
         return [{ file: relativePosix(rootDir, path), line: lineAt(source, specifierOffset(source, reference.start, reference.end, specifier)), specifier }];
       });
     })
-    .sort((left, right) => byCodeUnit(left.file, right.file) || left.line - right.line);
+    .toSorted((left, right) => byCodeUnit(left.file, right.file) || left.line - right.line);
 
   return { filesChecked: files.length, violations };
 }

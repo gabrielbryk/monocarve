@@ -222,8 +222,8 @@ function changedPaths(rootDir: string, range: string): string[] {
 }
 
 function sameSet(left: readonly string[], right: readonly string[]): boolean {
-  const first = [...new Set(left)].sort();
-  const second = [...new Set(right)].sort();
+  const first = [...new Set(left)].toSorted();
+  const second = [...new Set(right)].toSorted();
   return first.length === second.length && first.every((value, index) => value === second[index]);
 }
 

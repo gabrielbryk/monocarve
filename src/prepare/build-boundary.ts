@@ -97,7 +97,7 @@ export function compileBoundaryPreparationManifest(input: CompileBoundaryPrepara
   }
   const importerPaths = [
     ...new Set([...(input.graph.incoming.get(boundary.retained) ?? []), ...(input.graph.testImporters.get(boundary.retained) ?? [])]),
-  ].sort(byCodeUnit);
+  ].toSorted(byCodeUnit);
   const bindings = importerPaths.map((path) =>
     resolveBoundaryImporter(
       input.rootDir,
@@ -115,8 +115,8 @@ export function compileBoundaryPreparationManifest(input: CompileBoundaryPrepara
   const referenceOperations =
     boundary.strategy === "existing-package" && boundary.retire ? planRetiredBoundaryPathReferences(input, boundary, baseline.commit, compilerOptions) : [];
   const operations = [...boundaryOperations, ...referenceOperations];
-  const ordered = [...operations].sort(boundaryOperationOrder);
-  const operationPaths = [...new Set(ordered.flatMap(preparationOperationPaths))].sort(byCodeUnit);
+  const ordered = [...operations].toSorted(boundaryOperationOrder);
+  const operationPaths = [...new Set(ordered.flatMap(preparationOperationPaths))].toSorted(byCodeUnit);
   const generatedArtifacts = triggeredArtifacts(input.config, operationPaths)
     .map((artifact) => ({
       path: artifact.path,
@@ -125,11 +125,11 @@ export function compileBoundaryPreparationManifest(input: CompileBoundaryPrepara
       regenerateOnApply: true as const,
       ...(artifact.exemptReason === undefined ? {} : { exemptReason: artifact.exemptReason }),
     }))
-    .sort((left, right) => byCodeUnit(left.path, right.path));
+    .toSorted((left, right) => byCodeUnit(left.path, right.path));
   const postJournalPreparers = preparationPostJournalRecords(input.config, operationPaths);
   const changedFiles = [
     ...new Set([...operationPaths, ...generatedArtifacts.map((item) => item.path), ...postJournalPreparers.flatMap((item) => item.outputs)]),
-  ].sort(byCodeUnit);
+  ].toSorted(byCodeUnit);
   const manifest = createPreparationManifest({
     schemaVersion: 1,
     createdAt: baseline.committedAt,
@@ -149,9 +149,9 @@ export function compileBoundaryPreparationManifest(input: CompileBoundaryPrepara
     changedFiles,
     commits: { prepare: input.rendering.commit },
     gates: {
-      package: [...input.rendering.gates.package].sort(byCodeUnit),
-      project: [...input.rendering.gates.project].sort(byCodeUnit),
-      workspace: [...input.rendering.gates.workspace].sort(byCodeUnit),
+      package: [...input.rendering.gates.package].toSorted(byCodeUnit),
+      project: [...input.rendering.gates.project].toSorted(byCodeUnit),
+      workspace: [...input.rendering.gates.workspace].toSorted(byCodeUnit),
     },
   });
   assertPreparationManifestValid(manifest);
@@ -385,7 +385,7 @@ function planPortPackageExport(
     throw new PlanningError(`${target.manifestPath} export ${exportKey} already targets ${JSON.stringify(existing)}, not ${JSON.stringify(exportTarget)}`);
   }
   if (existing !== undefined) return undefined;
-  const nextExports = Object.fromEntries([...Object.entries(exports), [exportKey, exportTarget]].sort(([left], [right]) => byCodeUnit(left, right)));
+  const nextExports = Object.fromEntries([...Object.entries(exports), [exportKey, exportTarget]].toSorted(([left], [right]) => byCodeUnit(left, right)));
   const contents = `${JSON.stringify({ ...target.manifest, exports: nextExports }, null, 2)}\n`;
   return {
     kind: "write-file",
@@ -422,9 +422,9 @@ function exportTargetMatches(value: unknown, target: string): boolean {
 function boundaryTargetRoot(config: MonocarveConfig, targetPath: string): string | undefined {
   const exact = config.firstPartyPackages
     .filter((item) => targetPath === item.root || targetPath.startsWith(`${item.root}/`))
-    .sort((left, right) => right.root.length - left.root.length)[0];
+    .toSorted((left, right) => right.root.length - left.root.length)[0];
   if (exact) return exact.root;
-  for (const root of [...config.packageRoots].sort((left, right) => right.length - left.length)) {
+  for (const root of [...config.packageRoots].toSorted((left, right) => right.length - left.length)) {
     if (!targetPath.startsWith(`${root}/`)) continue;
     const child = targetPath.slice(root.length + 1).split("/")[0];
     if (child) return posix.join(root, child);
@@ -467,7 +467,7 @@ function resolveBoundaryImporter(
     if (namedBindings !== undefined && ts.isNamedImports(namedBindings)) {
       for (const element of namedBindings.elements) importedSymbols.push((element.propertyName ?? element.name).text);
     }
-    return { path: importerPath, preconditionHash: hashText(text), mode, text, specifier, importedSymbols: [...new Set(importedSymbols)].sort(byCodeUnit) };
+    return { path: importerPath, preconditionHash: hashText(text), mode, text, specifier, importedSymbols: [...new Set(importedSymbols)].toSorted(byCodeUnit) };
   }
   const configuredCall = findConfiguredModuleCall(source, rootDir, importerPath, retainedPath, compilerOptions, moduleSpecifierCalls);
   if (configuredCall !== undefined) {

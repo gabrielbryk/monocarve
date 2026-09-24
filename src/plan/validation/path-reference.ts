@@ -22,7 +22,7 @@ export function validatePathReferenceRewrite(
   if (operation.documentKind !== expectedKind) {
     issues.add("path-reference-kind", `rewrite-path-reference documentKind for ${operation.file} must be ${expectedKind}, got ${operation.documentKind}`, at);
   }
-  const sorted = [...operation.rewrites].sort((left, right) => left.line - right.line || left.column - right.column || byCodeUnit(left.donor, right.donor));
+  const sorted = [...operation.rewrites].toSorted((left, right) => left.line - right.line || left.column - right.column || byCodeUnit(left.donor, right.donor));
   if (JSON.stringify(operation.rewrites) !== JSON.stringify(sorted)) {
     issues.add("path-reference-sort", `rewrite-path-reference rewrites must be sorted by (line, column, donor): ${operation.file}`, at);
   }

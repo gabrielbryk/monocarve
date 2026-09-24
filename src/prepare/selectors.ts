@@ -109,13 +109,13 @@ export function selectTypeOnlyDeclarations(input: SelectTypeOnlyDeclarationsInpu
   const compatibilitySurface = selected
     .filter((group) => group.exported)
     .map((group) => ({ name: group.name, groupId: group.id, reexportAs: "type" as const }))
-    .sort(compareCompatibility);
+    .toSorted(compareCompatibility);
   return {
     sourcePath: graph.sourcePath,
     sourceHash: graph.sourceHash,
     declarations: declarations.sort(compareSelectedDeclaration),
-    requestedGroupIds: [...requested].sort(byCodeUnit),
-    closureGroupIds: [...selectedIds].sort(byCodeUnit),
+    requestedGroupIds: [...requested].toSorted(byCodeUnit),
+    closureGroupIds: [...selectedIds].toSorted(byCodeUnit),
     imports,
     relativeInlineImportTypes,
     compatibilitySurface,
@@ -146,7 +146,7 @@ function resolveRequestedGroups(graph: SymbolGraph, input: SelectTypeOnlyDeclara
 
 function collectClosure(graph: SymbolGraph, requested: ReadonlySet<Sha256>): Set<Sha256> {
   const result = new Set(requested);
-  const pending = [...requested].sort(byCodeUnit);
+  const pending = [...requested].toSorted(byCodeUnit);
   while (pending.length > 0) {
     const source = pending.shift();
     if (!source) continue;
@@ -356,7 +356,7 @@ function collectRequiredImports(
       });
     }
   }
-  return [...result.values()].sort(compareImport);
+  return [...result.values()].toSorted(compareImport);
 }
 
 function importBindings(sourceFile: ts.SourceFile, checker: ts.TypeChecker): Map<ts.Symbol, RequiredImportBinding> {
@@ -445,8 +445,8 @@ function retainedConsumers(graph: SymbolGraph, selectedIds: ReadonlySet<Sha256>)
     consumers.set(edge.target, set);
   }
   return [...consumers]
-    .map(([groupId, ids]) => ({ groupId, name: groupForId(graph, groupId).name, consumedByGroupIds: [...ids].sort(byCodeUnit) }))
-    .sort((left, right) => byCodeUnit(left.groupId, right.groupId));
+    .map(([groupId, ids]) => ({ groupId, name: groupForId(graph, groupId).name, consumedByGroupIds: [...ids].toSorted(byCodeUnit) }))
+    .toSorted((left, right) => byCodeUnit(left.groupId, right.groupId));
 }
 
 function compareSelectedDeclaration(left: SelectedTypeDeclaration, right: SelectedTypeDeclaration): number {
