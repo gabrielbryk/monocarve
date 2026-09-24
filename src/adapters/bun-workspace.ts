@@ -12,21 +12,26 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { LockfileError } from "./lockfile-error.ts";
-import type { AdapterEditResult, WorkspacePackage } from "./types.ts";
-import { assertEnumerableGlobs, enumerateWorkspacePackages, globCoversPackage } from "./workspace-globs.ts";
+import type { AdapterEditResult, WorkspaceInspection, WorkspacePackage } from "./types.ts";
+import { assertEnumerableGlobs, globsCoverPackage, resolveWorkspacePackages } from "./workspace-globs.ts";
 
 const WORKSPACES_KEY = /^(\s*)"workspaces"\s*:\s*(.*)$/u;
 const ARRAY_ENTRY = /^(\s*)"((?:[^"\\]|\\.)*)"(,?)\s*$/u;
 const ARRAY_CLOSE = /^\s*\]/u;
 
 export async function listPackages(rootDir: string, manifestName: string): Promise<WorkspacePackage[]> {
+  return [...(await inspectWorkspace(rootDir, manifestName)).packages];
+}
+
+export async function inspectWorkspace(rootDir: string, manifestName: string): Promise<WorkspaceInspection> {
   const manifestPath = join(rootDir, manifestName);
-  if (!existsSync(manifestPath)) return [];
-  return enumerateWorkspacePackages(rootDir, workspaceGlobs(readFileSync(manifestPath, "utf8")));
+  if (!existsSync(manifestPath)) return { packages: [], unmatchedPatterns: [] };
+  const result = resolveWorkspacePackages(rootDir, workspaceGlobs(readFileSync(manifestPath, "utf8")));
+  return { packages: result.packages, unmatchedPatterns: result.unmatched };
 }
 
 export function workspaceManifestEdit(manifestText: string, packageRoot: string): AdapterEditResult {
-  if (workspaceGlobs(manifestText).some((glob) => globCoversPackage(glob, packageRoot))) return { kind: "already-satisfied" };
+  if (globsCoverPackage(workspaceGlobs(manifestText), packageRoot)) return { kind: "already-satisfied" };
   const lines = manifestText.split("\n");
   const keyIndex = lines.findIndex((line) => WORKSPACES_KEY.test(line));
   if (keyIndex < 0) return { kind: "unmet-precondition", reason: "the root package.json declares no workspaces field" };

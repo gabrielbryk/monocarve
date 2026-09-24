@@ -27,6 +27,14 @@ const LOCKFILE = bunAdapter.lockfileName;
 /** Absent means every case below reports as skipped, not as passed. */
 const BUN = Bun.which("bun");
 
+type FrozenLockfileOnlyBehavior = "rewrites" | "preserves";
+
+function frozenLockfileOnlyBehavior(version: string): FrozenLockfileOnlyBehavior {
+  if (version.startsWith("1.3.")) return "rewrites";
+  if (version.startsWith("1.4.")) return "preserves";
+  throw new Error(`unmeasured Bun version for frozen lockfile behavior: ${version}`);
+}
+
 /** A copy of the committed fixture, outside every repository. */
 function workspace(): string {
   const root = join(scratchDirectory(), "workspace");
@@ -162,14 +170,15 @@ describe("lockfile verification against real bun", () => {
   );
 
   test.skipIf(BUN === null)(
-    "--frozen-lockfile does not make --lockfile-only refuse a divergent lockfile",
+    "--frozen-lockfile behavior for --lockfile-only is version-aware",
     () => {
-      // Measured, and recorded because the adapter's command depends on it: a
-      // reader could reasonably assume the two flags together are a check, and
-      // build a verification on the exit code instead of on the bytes. They are
-      // not a check. Given a lockfile missing a workspace link, bun 1.3.14
-      // rewrites it and exits 0 — so comparing the bytes is the only thing that
-      // answers the question, which is what `verifyLockfile` does.
+      // Measured because the adapter's command depends on it: a reader could
+      // reasonably assume the two flags together are a check, and build a
+      // verification on the exit code instead of on the bytes. They are not a
+      // check. Bun 1.3 rewrites a divergent lockfile and exits 0; Bun 1.4
+      // preserves it and still exits 0. Comparing bytes is the only behavior
+      // that answers whether the splice is canonical, which is what
+      // `verifyLockfile` does.
       const root = workspace();
       const baseline = readFileSync(join(root, LOCKFILE), "utf8");
       const divergent = baseline.replace('    "@acme/format": ["@acme/format@workspace:libs/format"],\n\n', "");
@@ -182,7 +191,9 @@ describe("lockfile verification against real bun", () => {
         stderr: "pipe",
       });
       expect(run.exitCode).toBe(0);
-      expect(readFileSync(join(root, LOCKFILE), "utf8")).not.toBe(divergent);
+      const after = readFileSync(join(root, LOCKFILE), "utf8");
+      if (frozenLockfileOnlyBehavior(Bun.version) === "rewrites") expect(after).not.toBe(divergent);
+      else expect(after).toBe(divergent);
     },
     120_000,
   );
