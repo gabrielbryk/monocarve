@@ -4,14 +4,52 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  validate:
+  # Fast, non-test checks: typecheck, formatting, the oxlint ratchet gate,
+  # complexity/file-size policies, and knip. None of these spawn `pnpm` or
+  # need the bubblewrap/strace sandbox, so this job skips both.
+  static:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - name: Cache bun install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-install-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-install-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run format:check
+      - run: bun run lint
+      - run: bun run complexity
+      - run: bun run max-file-lines
+      - run: bun run knip
+
+  # `bun test` sharded across 4 parallel jobs. Bun 1.3.14 (pinned via
+  # `packageManager`) natively supports `--shard=N/M`, so no custom
+  # splitting script is needed.
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -20,6 +58,13 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 11.17.0
+      - name: Cache bun install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-install-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-install-${{ runner.os }}-
       # Executable-config assessment runs config in a bwrap sandbox traced by
       # strace. Ubuntu 24.04 restricts unprivileged user namespaces via AppArmor.
       - name: Install assessment sandbox tools
@@ -29,7 +74,54 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           bwrap --unshare-all --ro-bind / / true
       - run: bun install --frozen-lockfile
-      - run: bun run check
+      # Same timeout as the `test` script; sharded via bun's native flag.
+      - run: bun test --timeout 60000 --shard=${{ matrix.shard }}/4
+
+  # Publication proof: bundle, pack + install in a clean consumer, build the
+  # standalone binary, verify it has no package-manager dependency, and
+  # smoke-test the CLI.
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - name: Cache bun install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-install-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-install-${{ runner.os }}-
+      # verify-standalone builds and runs the assessment binary against a
+      # fixture workspace whose config is executable, which needs the same
+      # bwrap/strace sandbox as the test suite.
+      - name: Install assessment sandbox tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap strace
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          bwrap --unshare-all --ro-bind / / true
+      - run: bun install --frozen-lockfile
       - run: bun run build:bundle
       - run: bun run verify-package
+      - run: bun run build
+      - run: bun run verify-standalone
       - run: bun run cli -- --help
+
+  # Branch protection requires a check literally named "validate" — keep
+  # this job and its name exactly as-is.
+  validate:
+    if: always()
+    needs: [static, test, package]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check required jobs succeeded
+        run: |
+          if [ "${{ contains(needs.*.result, 'failure') }}" = "true" ] || [ "${{ contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+            echo "one or more required jobs did not succeed"
+            exit 1
+          fi
