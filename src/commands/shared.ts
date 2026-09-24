@@ -18,13 +18,15 @@ export function systemReason(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export async function load(args: ParsedArgs): Promise<LoadedConfig> {
+export async function load(args: ParsedArgs, options: { readonly refuseStaticFilesystemImports?: boolean; readonly executionBoundary?: "snapshot" } = {}): Promise<LoadedConfig> {
   const configPath = flagString(args, "config");
   const cwd = flagString(args, "cwd");
   try {
     return await loadConfig({
       ...(configPath === undefined ? {} : { configPath }),
       ...(cwd === undefined ? {} : { cwd }),
+      ...(options.refuseStaticFilesystemImports ? { refuseStaticFilesystemImports: true } : {}),
+      ...(options.executionBoundary === "snapshot" ? { executionBoundary: "snapshot" as const } : {}),
     });
   } catch (error) {
     if (error instanceof MonocarveError) throw error;
@@ -74,7 +76,7 @@ function asScanReport(value: unknown, application: string, path: string): ScanRe
   return value as ScanReport;
 }
 
-function suppliedReports(args: ParsedArgs, rootDir: string): Record<string, ScanReport> | undefined {
+export function suppliedReports(args: ParsedArgs, rootDir: string): Record<string, ScanReport> | undefined {
   const entries = args.repeated.get("graph") ?? [];
   if (entries.length === 0) return undefined;
   const reports: Record<string, ScanReport> = {};
