@@ -26,9 +26,9 @@
   },
   "exports": {
     ".": {
-      "types": "./dist/types/index.d.ts",
-      "import": "./dist/index.js",
-      "default": "./dist/index.js"
+      "types": "./dist/types/config.d.ts",
+      "import": "./dist/config.js",
+      "default": "./dist/config.js"
     },
     "./config": {
       "types": "./dist/types/config.d.ts",
@@ -62,6 +62,7 @@
     "quality": "bun run max-file-lines && bun run complexity && bun run oxlint-ratchet",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
+    "knip": "knip",
     "check": "bun run typecheck && bun run test && bun run quality",
     "verify-package": "bun run ./scripts/verify-package.ts",
     "verify-standalone": "bun run ./scripts/verify-standalone.ts",
@@ -77,6 +78,7 @@
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",
+    "knip": "6.38.0",
     "oxc-parser": "^0.143.0",
     "oxfmt": "0.67.0",
     "oxlint": "1.80.0",

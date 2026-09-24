@@ -4,7 +4,7 @@
  * A plausible but broken package can pass repository tests: npm may omit a
  * source entrypoint, or installed bins and exports may not resolve. This packs
  * the current tree, installs that exact tarball in a fresh consumer, and runs
- * the public root/config imports and every declared binary. It fails for each
+ * the public root/config imports (which must expose the same surface) and every declared binary. It fails for each
  * of those concrete publication defects.
  */
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -112,7 +112,14 @@ try {
 
   writeFileSync(
     join(consumer, "probe.ts"),
-    `import { TOOL_NAME } from ${JSON.stringify(pkg.name)};\nimport { defineConfig } from ${JSON.stringify(`${pkg.name}/config`)};\nif (typeof TOOL_NAME !== "string" || typeof defineConfig !== "function") throw new Error("public API unavailable");\n`,
+    [
+      `import * as root from ${JSON.stringify(pkg.name)};`,
+      `import * as config from ${JSON.stringify(`${pkg.name}/config`)};`,
+      `if (typeof root.defineConfig !== "function" || typeof config.defineConfig !== "function") throw new Error("public API unavailable");`,
+      `const rootNames = Object.keys(root).sort().join(",");`,
+      `if (rootNames !== Object.keys(config).sort().join(",")) throw new Error(\`root export diverges from ./config: \${rootNames}\`);`,
+      "",
+    ].join("\n"),
   );
   run("bun", ["run", "./probe.ts"], consumer);
 

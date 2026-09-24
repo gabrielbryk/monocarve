@@ -5,25 +5,21 @@
  */
 import { describe, expect, test } from "bun:test";
 
+import { CAMPAIGN_LEDGER_SCHEMA_VERSION, type CampaignChildApplication, type CampaignLedger, type GraphMetricSnapshot } from "../src/campaign/ledger-types.ts";
+import { assertCampaignLedgerValid, CampaignLedgerValidationError } from "../src/campaign/ledger-validation.ts";
 import {
   appendCampaignChild,
-  assertCampaignLedgerValid,
-  CAMPAIGN_LEDGER_SCHEMA_VERSION,
-  CampaignLedgerValidationError,
   completeCampaign,
   createCampaignLedger,
   evaluateCampaignStopConditions,
   graphMetricSnapshot,
-  hashJson,
   parseCampaignLedger,
   recordCampaignChildApplication,
   serializeCampaignLedger,
-  type AuditReport,
-  type CampaignChildApplication,
-  type CampaignLedger,
-  type GraphMetricSnapshot,
-} from "../src/index.ts";
+} from "../src/campaign/ledger.ts";
 import type { PreparationAuditReport } from "../src/prepare/audit.ts";
+import type { AuditReport } from "../src/transaction/audit-types.ts";
+import { hashJson } from "../src/util/hash.ts";
 
 const HASH = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const BASELINE = "base-commit";

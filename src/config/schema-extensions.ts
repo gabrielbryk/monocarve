@@ -35,6 +35,7 @@ export const generatedSourceAdoptions = z
     });
   });
 
+/** Reviewed adoptions of orphaned generated output as durable source. */
 export type GeneratedSourceAdoptionsConfig = z.output<typeof generatedSourceAdoptions>;
 
 /** Exact JSON-pointer fields whose module paths resolve from a declared root. */
@@ -50,6 +51,7 @@ export const runtimeModuleRegistries = z
   )
   .default([]);
 
+/** JSON-pointer fields whose module paths resolve from a declared root. */
 export type RuntimeModuleRegistriesConfig = z.output<typeof runtimeModuleRegistries>;
 
 export const graph = z.strictObject({
@@ -63,4 +65,5 @@ export const graph = z.strictObject({
   cache: z.boolean().default(true),
 });
 
+/** Dependency-graph scanning options. */
 export type GraphConfig = z.output<typeof graph>;

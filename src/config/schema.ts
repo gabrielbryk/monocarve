@@ -1,28 +1,41 @@
 import { z } from "zod";
 
 import { SCRATCH_DIRNAME } from "../branding.ts";
+import { DEFAULT_SOURCE_EXTENSIONS } from "../util/source-policy.ts";
 import { regexSource, relativePath } from "./primitives.ts";
 import { validateExtractionProfiles } from "./profiles.ts";
 import { assetEmissionProofs, generatedArtifacts, pathMigrations, postJournalPreparers, transaction } from "./schema-artifacts.ts";
 import { application, commitTemplates, extractionProfiles, firstPartyPackage, gates, preparationPolicy, preparers, scaffoldTemplates } from "./schema-core.ts";
+import { generatedSourceAdoptions, graph, runtimeModuleRegistries } from "./schema-extensions.ts";
 import {
   compositionBoundaries,
-  generatedSourceAdoptions,
-  graph,
   integrationTestSuites,
   modulePromotions,
   pathReferences,
   pathReferenceRewrites,
   portfolio,
   portPromotions,
-  runtimeModuleRegistries,
   testKinds,
   testRelocation,
   valueSplits,
 } from "./schema-policy.ts";
-import { DEFAULT_SOURCE_EXTENSIONS } from "./source-policy.ts";
 import { validateFirstPartyPackages, validateIntegrationTestSuites, validateTestKinds } from "./validation.ts";
 
+/**
+ * Adapters the registry can actually build. The enums above still name the
+ * unported ones so the registry seam keeps its exhaustive switch, but config
+ * validation refuses them up front instead of failing later at runtime.
+ */
+const SUPPORTED_PACKAGE_MANAGERS: readonly string[] = ["pnpm", "bun"];
+const SUPPORTED_TASK_RUNNERS: readonly string[] = ["moon", "none"];
+
+function supportedOnly(supported: readonly string[], noun: string): (value: string, context: z.RefinementCtx) => void {
+  return (value, context) => {
+    if (!supported.includes(value)) context.addIssue({ code: "custom", message: `${value} is not supported yet; supported ${noun}: ${supported.join(", ")}` });
+  };
+}
+
+/** Zod schema for the complete monocarve config; `parse` applies every default. */
 export const monocarveConfigSchema = z
   .strictObject({
     /**
@@ -75,10 +88,10 @@ export const monocarveConfigSchema = z
     packageNamePattern: regexSource.optional(),
 
     /** Selects the package-manager adapter: workspace membership + lockfile ops. */
-    packageManager: z.enum(["pnpm", "bun", "npm", "yarn"]).default("pnpm"),
+    packageManager: z.enum(["pnpm", "bun", "npm", "yarn"]).default("pnpm").superRefine(supportedOnly(SUPPORTED_PACKAGE_MANAGERS, "package managers")),
 
     /** Selects the task-runner adapter: project files and gate invocation. */
-    taskRunner: z.enum(["moon", "nx", "turbo", "none"]).default("none"),
+    taskRunner: z.enum(["moon", "nx", "turbo", "none"]).default("none").superRefine(supportedOnly(SUPPORTED_TASK_RUNNERS, "task runners")),
 
     gates: gates.prefault({}),
     commitTemplates: commitTemplates.prefault({}),
