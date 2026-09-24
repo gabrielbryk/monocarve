@@ -6,8 +6,8 @@ import { join } from "node:path";
 
 import { statusShort } from "../src/util/git.ts";
 import { registerCliTailTests } from "./support/cli-tail.ts";
-import { FIXTURE, PLAN_DIR, committedWorkspace, existsSync, readFileSync, run, runJson, runJsonIn, writeFileSync } from "./support/cli.ts";
-import { cleanupFixtures } from "./support/fixture-repo.ts";
+import { PLAN_DIR, committedWorkspace, existsSync, readFileSync, runIn, runJson, runJsonIn, writeFileSync } from "./support/cli.ts";
+import { assertGitWorktreeAddWorks, cleanupFixtures, fixtureGit } from "./support/fixture-repo.ts";
 
 interface CandidateSummary {
   readonly id: string;
@@ -32,16 +32,62 @@ let candidate: CandidateSummary;
 let candidates: CandidateSummary[] = [];
 let planPath = "";
 
+/**
+ * A throwaway, self-contained git checkout of the fixture, used by every test
+ * that actually applies or simulates a plan (`apply`, `doctor`).
+ *
+ * `FIXTURE` (`fixtures/basic-monorepo`) intentionally has no `.git` of its own
+ * — it is a static tree shared read-only by every `*-cli` suite. Simulation
+ * (`createWorktree`) runs `git worktree add` against the repository that
+ * *contains* its `cwd`, so pointed at `FIXTURE` directly it walks up and
+ * registers a real, detached worktree against THIS checkout's own `.git` —
+ * mutating the shared repository every other agent and suite is using, and
+ * leaving `git worktree add --detach` checkouts (and, on a failed gate,
+ * `.diagnostics` directories) behind in it. `committedWorkspace()` gives
+ * `apply`/`doctor` their own real, disposable repository instead, so
+ * simulation stays entirely inside it; its own baseline commit (not this
+ * checkout's HEAD) is what a plan compiled here is measured against, so a
+ * fixture edit is reflected without depending on this checkout's history.
+ */
+let applyWorkspace = "";
+let applyCandidate: CandidateSummary;
+/**
+ * A failed manifest-gate deliberately keeps its simulation worktree (see
+ * `simulate.ts`'s unconditional `keep = true` on `gateRun.failure`), so this
+ * suite disposes it itself rather than leaving it in the shared scratch
+ * cache. Captured, never guessed: the path is whatever the product reported,
+ * so cleanup never sweeps a directory this suite did not create.
+ */
+let keptWorktreePath: string | undefined;
+
 describe("cli pipeline", () => {
   beforeAll(async () => {
+    assertGitWorktreeAddWorks();
     const portfolio = await runJson<PortfolioReport>("portfolio", "--recommendation", "all", "--strategy", "max-loc");
     candidates = portfolio.top;
     const chart = portfolio.top.find((entry) => entry.assets.length > 0);
     if (!chart) throw new Error("fixture portfolio produced no candidate with assets");
     candidate = chart;
+
+    applyWorkspace = committedWorkspace();
+    const applyPortfolio = await runJsonIn<PortfolioReport>(applyWorkspace, "portfolio", "--recommendation", "all", "--strategy", "max-loc");
+    const applyChart = applyPortfolio.top.find((entry) => entry.assets.length > 0);
+    if (!applyChart) throw new Error("apply workspace portfolio produced no candidate with assets");
+    applyCandidate = applyChart;
   }, 120_000);
 
   afterAll(() => {
+    // Dispose exactly the one worktree this suite kept (the failing-gate
+    // doctor run), and only that one — never a blind sweep of the shared
+    // scratch cache, which other suites and other concurrent agents are also
+    // using. Must run before `cleanupFixtures()` removes `applyWorkspace`
+    // itself, since disposal needs that repository to still exist.
+    if (keptWorktreePath) {
+      fixtureGit(applyWorkspace, "worktree", "remove", "--force", keptWorktreePath);
+      rmSync(keptWorktreePath, { recursive: true, force: true });
+      rmSync(`${keptWorktreePath}.diagnostics`, { recursive: true, force: true });
+      fixtureGit(applyWorkspace, "worktree", "prune");
+    }
     rmSync(PLAN_DIR, { recursive: true, force: true });
     cleanupFixtures();
   });
@@ -139,51 +185,56 @@ describe("cli pipeline", () => {
   }, 300_000);
 
   test("apply simulates rather than changing the invoked checkout", async () => {
-    const written = await runJson<{ output: string }>("plan", "--candidate", candidate.id, "--package-name", "@acme/chart", "--write");
+    const written = await runJsonIn<{ output: string }>(applyWorkspace, "plan", "--candidate", applyCandidate.id, "--package-name", "@acme/chart", "--write");
     planPath = written.output;
-    const result = await runJson<{ ok: boolean; planId: string; rolledBack: boolean; failure?: string }>("apply", "--plan", planPath);
+    const result = await runJsonIn<{ ok: boolean; planId: string; rolledBack: boolean; failure?: string }>(applyWorkspace, "apply", "--plan", planPath);
     expect(result).toMatchObject({ ok: true, planId: expect.any(String), rolledBack: false });
-    expect(existsSync(join(FIXTURE, "apps/web/src/widgets/chart.ts"))).toBe(true);
-    expect(existsSync(join(FIXTURE, "libs/chart"))).toBe(false);
+    expect(existsSync(join(applyWorkspace, "apps/web/src/widgets/chart.ts"))).toBe(true);
+    expect(existsSync(join(applyWorkspace, "libs/chart"))).toBe(false);
   }, 300_000);
 
   test("doctor replays gates and refuses gate bypasses", async () => {
-    const statusBefore = statusShort(FIXTURE);
-    const report = await runJson<{ schema: string; manifest: string; validation: { ok: boolean }; simulation: { ok: boolean; gates: { command: string }[] } }>(
-      "doctor",
-      "--plan",
-      planPath,
-    );
+    const statusBefore = statusShort(applyWorkspace);
+    const report = await runJsonIn<{
+      schema: string;
+      manifest: string;
+      validation: { ok: boolean };
+      simulation: { ok: boolean; gates: { command: string }[] };
+    }>(applyWorkspace, "doctor", "--plan", planPath);
     expect(report.schema).toBe("doctor");
     expect(report.manifest).toBe(planPath);
     expect(report.validation.ok).toBe(true);
     expect(report.simulation.ok).toBe(true);
     expect(report.simulation.gates.map((gate) => gate.command)).toContain("sh scripts/check-module-ledger.sh");
-    const refused = await run("doctor", "--plan", planPath, "--skip-gates");
+    const refused = await runIn(applyWorkspace, "doctor", "--plan", planPath, "--skip-gates");
     expect(refused.code).toBe(64);
     expect(refused.stderr).toContain("doctor always runs the manifest's gates");
-    expect(statusShort(FIXTURE)).toBe(statusBefore);
+    expect(statusShort(applyWorkspace)).toBe(statusBefore);
   }, 300_000);
 
   test("doctor reports a configured manifest-gate failure without applying", async () => {
     const brokenPath = ".monocarve/doctor-failing-gate.json";
-    const broken = JSON.parse(readFileSync(join(FIXTURE, planPath), "utf8")) as { gates: { workspace: string[] } };
+    const broken = JSON.parse(readFileSync(join(applyWorkspace, planPath), "utf8")) as { gates: { workspace: string[] } };
     broken.gates.workspace = ["printf 'apps/web/src/Broken.ts:7:3 lint error\\n' >&2; false"];
-    writeFileSync(join(FIXTURE, brokenPath), `${JSON.stringify(broken, null, 2)}\n`);
-    const result = await run("doctor", "--plan", brokenPath);
+    writeFileSync(join(applyWorkspace, brokenPath), `${JSON.stringify(broken, null, 2)}\n`);
+    const result = await runIn(applyWorkspace, "doctor", "--plan", brokenPath);
     expect(result.code).toBe(1);
-    const report = JSON.parse(result.stdout) as { simulation: { ok: boolean; failure?: string } };
+    const report = JSON.parse(result.stdout) as { simulation: { ok: boolean; failure?: string; worktreePath?: string } };
     expect(report.simulation.ok).toBe(false);
     expect(report.simulation.failure).toContain("gate failed (workspace): printf");
     expect(report.simulation.failure).toContain("apps/web/src/Broken.ts:7:3 lint error");
-    expect(existsSync(join(FIXTURE, "apps/web/src/widgets/chart.ts"))).toBe(true);
+    expect(existsSync(join(applyWorkspace, "apps/web/src/widgets/chart.ts"))).toBe(true);
+    // The failing gate is expected to keep its simulation worktree (see
+    // `keptWorktreePath` above); record it for the suite's own cleanup.
+    expect(report.simulation.worktreePath).toBeTruthy();
+    keptWorktreePath = report.simulation.worktreePath;
   }, 300_000);
 
   test("apply refuses to bypass its simulation proof", async () => {
-    const result = await run("apply", "--plan", planPath, "--skip-simulation");
+    const result = await runIn(applyWorkspace, "apply", "--plan", planPath, "--skip-simulation");
     expect(result.code).toBe(64);
     expect(result.stderr).toContain("apply always runs simulation first");
   }, 120_000);
 
-  registerCliTailTests({ candidate: () => candidate, planPath: () => planPath });
+  registerCliTailTests({ candidate: () => candidate, planPath: () => planPath, workspace: () => applyWorkspace });
 });

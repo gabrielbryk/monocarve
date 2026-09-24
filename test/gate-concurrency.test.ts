@@ -85,18 +85,26 @@ describe("gate concurrency", () => {
     let active = 0;
     let peak = 0;
     const completions: string[] = [];
+    // Later commands deliberately finish first, via explicit release latches
+    // rather than staggered sleeps — a wall-clock race is exactly what would
+    // make this flaky under load. Selecting/pushing results by completion
+    // order (instead of declared order) would report `third` as the failure
+    // before `second`.
+    const release = new Map([
+      ["first", deferred()],
+      ["second", deferred()],
+      ["third", deferred()],
+    ]);
     const runner: GateCommandRunner = async ([command]) => {
       active += 1;
       peak = Math.max(peak, active);
-      // Later commands deliberately finish first. Selecting/process-pushing by
-      // completion order would report `third` as the failure before `second`.
-      await Bun.sleep({ first: 30, second: 20, third: 10 }[command!]!);
+      await release.get(command!)!.promise;
       active -= 1;
       completions.push(command!);
       return { exitCode: command === "second" || command === "third" ? 1 : 0, stdout: `${command}\n`, stderr: "" };
     };
 
-    const result = await runGateTiers({
+    const running = runGateTiers({
       gates: { ...emptyGates, package: ["first", "second", "third"] },
       maxConcurrency: 3,
       cwd: "/fixture",
@@ -104,6 +112,20 @@ describe("gate concurrency", () => {
       wrapCommand: (command) => [command],
       runner,
     });
+
+    // Let all three commands reach their latch (they are all admitted at once
+    // under maxConcurrency: 3) before releasing them out of declared order.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    release.get("third")!.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    release.get("second")!.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    release.get("first")!.resolve();
+    const result = await running;
 
     expect(peak).toBe(3);
     expect(completions).toEqual(["third", "second", "first"]);

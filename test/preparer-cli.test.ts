@@ -294,7 +294,7 @@ test("preparer-plan keeps noisy successful disposable installs out of JSON stdou
       // bound so a passing run is proof the CLI returned before the writer
       // could have fired, not just that the host happened to be fast. Do not
       // "fix" a flake here by moving only the bound — raise both together.
-      "(sleep 10; printf 'late inherited-pipe output\\n') &",
+      "(sleep 30; printf 'late inherited-pipe output\\n') &",
       "exit 0",
       "",
     ].join("\n"),
@@ -340,9 +340,12 @@ test("preparer-plan keeps noisy successful disposable installs out of JSON stdou
   // `drainAfterExit` gives the streams a fixed 250ms grace period after the
   // child exits, then cancels them, rather than waiting for the pipe to
   // close). It is coupled to the fixture's background writer delay above:
-  // that writer sleeps 10s, so finishing well under that is still proof the
+  // that writer sleeps 30s, so finishing well under that is still proof the
   // CLI didn't wait for it. Raise both numbers together, never just one.
-  expect(duration).toBeLessThan(8_000);
+  // Widened generously (previously 8s) so a loaded host does not flake this
+  // secondary check; the load-independent proof is the absence assertion
+  // below.
+  expect(duration).toBeLessThan(20_000);
   expect(stderr).toBe("");
   expect(stdout).not.toContain("NOISY_INSTALL_OUTPUT");
   expect(stdout).not.toContain("nested gate output");
