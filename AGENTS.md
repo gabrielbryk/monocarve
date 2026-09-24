@@ -65,7 +65,8 @@ proof, because it is trusted. When you touch the audit or the validator:
   case that makes it fail, and that is why the passing case means something.
 
 Unimplemented seams throw `NotYetPortedError`, whose message begins `not yet
-ported`. What remains is the non-default adapters (bun, npm, yarn, nx, turbo) —
+ported`. What remains is the npm and yarn package-manager adapters and the nx and turbo
+task-runner adapters —
 `grep -rn "not yet ported" src/` is the definitive list. Never replace a stub
 with a partial implementation that returns plausible data.
 

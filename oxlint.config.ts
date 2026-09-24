@@ -1,19 +1,14 @@
 import { defineConfig } from "oxlint";
 
 /**
- * Standalone equivalent of Keel's `@keel/eslint` `base` preset
- * (keel-base/libs/eslint/src/oxlint-configs.ts), minus what does not port:
+ * Standalone oxlint configuration. Category policy, env, and the built-in rule
+ * triage follow one rule: a rule ends at `error` with zero violations, or it
+ * stays off. Pre-existing findings are ratcheted by
+ * `scripts/quality/oxlint-ratchet.ts` rather than disabled.
  *
- *  - the `keel/*` custom plugin rules (workspace-internal, Keel-only);
- *  - the vitest plugin/rules (monocarve uses `bun:test`, not vitest);
- *  - the npm dependency fences (`no-restricted-imports` for drizzle-orm /
- *    the model SDK) — those encode Keel's own layering, not monocarve's;
- *  - the `frontend`/`backend` preset variants — monocarve is a CLI with no
- *    React surface.
- *
- * Everything else — category policy, env, and the built-in rule triage
- * (§9-style: a rule ends at `error` with zero violations, or it stays off)
- * — is reproduced as-is from Keel's `base`.
+ * Deliberately absent: test-framework plugins (monocarve uses `bun:test`),
+ * dependency-fence `no-restricted-imports` rules (there is no layering to
+ * fence), and frontend/React rules (monocarve is a CLI).
  */
 export default defineConfig({
   plugins: ["typescript", "unicorn", "oxc", "import", "promise", "node"],
