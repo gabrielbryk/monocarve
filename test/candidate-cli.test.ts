@@ -71,7 +71,7 @@ describe("candidate CLI", () => {
   test("refuses absent ids and invalid eligibility values", async () => {
     const absent = await run("candidates", "--candidate", "c-absent");
     expect(absent.code).toBe(1);
-    expect(absent.stderr).toContain("CandidateLookupError: candidate not found: c-absent");
+    expect(absent.stderr).toContain("monocarve: candidate not found: c-absent");
 
     const invalid = await run("candidates", "--eligibility", "maybe");
     expect(invalid.code).toBe(64);
