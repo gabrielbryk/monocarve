@@ -12,8 +12,9 @@ function linkTypeScript(source: string, path: string): string {
   if (required && !load.test(source)) throw new Error(`dependency-cruiser TypeScript integration changed: ${path}`);
   if (load.test(source)) return source.replace(load, 'import typescript from "typescript";');
   if (!path.endsWith("/extract/transpile/meta.mjs")) return source;
-  const availability = 'typescript: tryAvailable("typescript", meta.supportedTranspilers.typescript),';
-  if (!source.includes(availability)) throw new Error(`dependency-cruiser TypeScript availability changed: ${path}`);
+  // 16.x spells this `tryAvailable(...)` on one line; 18.x `tryImportAvailable(...)` across several.
+  const availability = /typescript: try(?:Import)?Available\(\s*"typescript",\s*meta\.supportedTranspilers\.typescript,?\s*\),/u;
+  if (!availability.test(source)) throw new Error(`dependency-cruiser TypeScript availability changed: ${path}`);
   return source.replace(availability, "typescript: true,");
 }
 
