@@ -187,6 +187,13 @@ function isInside(path: string): boolean {
 function disposeWorktree(rootDir: string, path: string): void {
   tryGit({ cwd: rootDir }, "worktree", "remove", "--force", path);
   rmSync(path, { recursive: true, force: true });
+  // `runGateTiers` writes a failed gate's full logs to `${worktree.path}.diagnostics`
+  // (see simulate.ts), a sibling directory rather than something inside the
+  // worktree itself so it survives a `git worktree remove`. It is only ever
+  // disposed here, alongside the worktree it diagnoses: a run that keeps the
+  // worktree (a failed gate, or `transaction.cleanup: false`) never calls this
+  // function, so the diagnostics directory correctly outlives it too.
+  rmSync(`${path}.diagnostics`, { recursive: true, force: true });
   tryGit({ cwd: rootDir }, "worktree", "prune");
 }
 

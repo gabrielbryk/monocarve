@@ -214,6 +214,46 @@ export function fixtureRepo(files: Record<string, string>, branch = "extraction-
   return root;
 }
 
+let worktreeAddChecked = false;
+
+/**
+ * Confirm `git worktree add` actually works in this environment before a
+ * suite relies on it, and fail with an actionable message instead of a
+ * confusing deep failure inside product code.
+ *
+ * Some hosts install a local `git` wrapper on `PATH` ahead of the real
+ * binary that refuses `git worktree add` outright (for example, to force
+ * worktree creation through a specific tool instead) unless an explicit
+ * environment variable opts back in. This probes with a real, disposable
+ * fixture repository rather than matching any wrapper's message text, so it
+ * has no dependency on this machine's paths or a particular wrapper's
+ * wording — it simply asks "does the operation these tests need actually
+ * work right now?"
+ *
+ * Cached for the process: the answer cannot change mid-run, and every
+ * caller after the first should not pay for a redundant probe.
+ */
+export function assertGitWorktreeAddWorks(): void {
+  if (worktreeAddChecked) return;
+  worktreeAddChecked = true;
+  const root = fixtureRepo({ "README.md": "git worktree add probe\n" }, "worktree-add-probe");
+  const destination = join(testScratchRoot(), `worktree-add-probe-${Date.now()}`);
+  try {
+    fixtureGit(root, "worktree", "add", "--detach", destination, "HEAD");
+    fixtureGit(root, "worktree", "remove", "--force", destination);
+  } catch (error) {
+    throw new Error(
+      "`git worktree add` is refused in this environment, and several suites in this repository create real, " +
+        "disposable simulation worktrees to run gates honestly. If a local git wrapper is blocking it, set " +
+        "ALLOW_GIT_WORKTREE_ADD=1 for the test run (see CONTRIBUTING.md); otherwise this host cannot run these " +
+        "suites as written.",
+      { cause: error },
+    );
+  } finally {
+    rmSync(destination, { recursive: true, force: true });
+  }
+}
+
 export function cleanupFixtures(): void {
   while (created.length > 0) {
     try {

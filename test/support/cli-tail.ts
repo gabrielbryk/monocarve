@@ -16,9 +16,16 @@ interface PortfolioReport {
   readonly top: CandidateSummary[];
 }
 
-export function registerCliTailTests(input: { readonly candidate: () => CandidateSummary; readonly planPath: () => string }): void {
+export function registerCliTailTests(input: {
+  readonly candidate: () => CandidateSummary;
+  readonly planPath: () => string;
+  readonly workspace: () => string;
+}): void {
   test("audit refuses a plan that has not been applied", async () => {
-    const result = await run("audit", "--plan", input.planPath());
+    // This plan was compiled and applied against the throwaway `workspace`
+    // (see cli.test.ts), not `FIXTURE` — audit must be pointed at the same
+    // checkout the plan's paths and baseline commit actually belong to.
+    const result = await runIn(input.workspace(), "audit", "--plan", input.planPath());
     expect(result.code).toBe(1);
     const report = JSON.parse(result.stdout) as { passed: boolean; byteFidelity: { failures: string[] } };
     expect(report.passed).toBe(false);

@@ -6,6 +6,7 @@ import { loadSnapshotConfig } from "../src/assessment/config-snapshot.ts";
 import { hashBytes } from "../src/util/hash.ts";
 import { runIn } from "./support/cli.ts";
 import { fixtureGit, scratchDirectory } from "./support/fixture-repo.ts";
+import { sandboxAvailable, sandboxSkipReason } from "./support/sandbox.ts";
 
 function config(source: string): { readonly root: string; readonly path: string } {
   const root = scratchDirectory();
@@ -14,7 +15,7 @@ function config(source: string): { readonly root: string; readonly path: string 
   return { root, path };
 }
 
-test("multi-file executable TS config imports a captured relative helper", () => {
+test.skipIf(!sandboxAvailable())(`multi-file executable TS config imports a captured relative helper (${sandboxSkipReason()})`, () => {
   const { root, path } = config('import { setting } from "./helper.ts"; export default { setting };');
   writeFileSync(join(root, "helper.ts"), "export const setting: number = 42;\n");
   const result = loadSnapshotConfig(path);
@@ -22,7 +23,7 @@ test("multi-file executable TS config imports a captured relative helper", () =>
   expect(result.files.map((entry) => entry.path)).toEqual([path, join(root, "helper.ts")]);
 });
 
-test("executable TS config imports an installed package from captured metadata and bytes", () => {
+test.skipIf(!sandboxAvailable())(`executable TS config imports an installed package from captured metadata and bytes (${sandboxSkipReason()})`, () => {
   const { root, path } = config('import { setting } from "@acme/config"; export default { setting };');
   const packageRoot = join(root, "node_modules/@acme/config");
   mkdirSync(packageRoot, { recursive: true });
@@ -76,7 +77,7 @@ test("fetch file URL outside captured inputs is refused", () => {
   expect(() => loadSnapshotConfig(path)).toThrow("ASSESSMENT_CONFIG_UNBOUND");
 });
 
-test("change and restore during execution cannot change captured helper bytes", () => {
+test.skipIf(!sandboxAvailable())(`change and restore during execution cannot change captured helper bytes (${sandboxSkipReason()})`, () => {
   const { root, path } = config('import { setting } from "./helper.ts"; export default { setting };');
   const helper = join(root, "helper.ts");
   const original = "export const setting = 42;\n";
@@ -95,40 +96,44 @@ test("snapshot does not allow config writes into the workspace", () => {
   expect(existsSync(join(root, "write-attempt"))).toBeFalse();
 });
 
-test("assessment CLI accepts a TS config with an imported helper and binds its bytes", async () => {
-  const root = scratchDirectory();
-  mkdirSync(join(root, "apps/web/src"), { recursive: true });
-  mkdirSync(join(root, "packages"));
-  writeFileSync(join(root, "apps/web/src/main.ts"), "export const main = 1;\n");
-  writeFileSync(
-    join(root, "apps/web/tsconfig.json"),
-    '{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","noEmit":true},"include":["src/**/*.ts"]}\n',
-  );
-  writeFileSync(join(root, "package.json"), '{"private":true,"workspaces":[]}\n');
-  writeFileSync(join(root, "bun.lock"), "{}\n");
-  writeFileSync(
-    join(root, "monocarve.config.json"),
-    JSON.stringify({
-      applications: [{ name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json" }],
-      packageRoots: ["packages"],
-      packageManager: "bun",
-      scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
-    }),
-  );
-  const helper = join(root, "config-helper.ts");
-  writeFileSync(helper, 'import config from "./monocarve.config.json"; export default config;\n');
-  writeFileSync(join(root, "monocarve.config.ts"), 'import config from "./config-helper.ts"; export default config;\n');
-  fixtureGit(root, "init", "-q", "-b", "config-fixture");
-  fixtureGit(root, "config", "user.email", "fixture@example.invalid");
-  fixtureGit(root, "config", "user.name", "Fixture");
-  fixtureGit(root, "add", ".");
-  fixtureGit(root, "commit", "-qm", "fixture");
-  const result = await runIn(root, "assess", "--app", "web", "--evidence-dir", "evidence", "--json");
-  if (result.code !== 0) throw new Error(`assessment failed: ${result.stdout}\n${result.stderr}`);
-  expect(result.code).toBe(0);
-  const inventory = JSON.parse(readFileSync(join(root, "evidence/input-inventory.json"), "utf8")) as { entries: Array<{ path: string; sha256: string }> };
-  expect(inventory.entries.some((entry) => entry.path === "config-helper.ts" && entry.sha256 === hashBytes(readFileSync(helper)))).toBeTrue();
-}, 60_000);
+test.skipIf(!sandboxAvailable())(
+  `assessment CLI accepts a TS config with an imported helper and binds its bytes (${sandboxSkipReason()})`,
+  async () => {
+    const root = scratchDirectory();
+    mkdirSync(join(root, "apps/web/src"), { recursive: true });
+    mkdirSync(join(root, "packages"));
+    writeFileSync(join(root, "apps/web/src/main.ts"), "export const main = 1;\n");
+    writeFileSync(
+      join(root, "apps/web/tsconfig.json"),
+      '{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","noEmit":true},"include":["src/**/*.ts"]}\n',
+    );
+    writeFileSync(join(root, "package.json"), '{"private":true,"workspaces":[]}\n');
+    writeFileSync(join(root, "bun.lock"), "{}\n");
+    writeFileSync(
+      join(root, "monocarve.config.json"),
+      JSON.stringify({
+        applications: [{ name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json" }],
+        packageRoots: ["packages"],
+        packageManager: "bun",
+        scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
+      }),
+    );
+    const helper = join(root, "config-helper.ts");
+    writeFileSync(helper, 'import config from "./monocarve.config.json"; export default config;\n');
+    writeFileSync(join(root, "monocarve.config.ts"), 'import config from "./config-helper.ts"; export default config;\n');
+    fixtureGit(root, "init", "-q", "-b", "config-fixture");
+    fixtureGit(root, "config", "user.email", "fixture@example.invalid");
+    fixtureGit(root, "config", "user.name", "Fixture");
+    fixtureGit(root, "add", ".");
+    fixtureGit(root, "commit", "-qm", "fixture");
+    const result = await runIn(root, "assess", "--app", "web", "--evidence-dir", "evidence", "--json");
+    if (result.code !== 0) throw new Error(`assessment failed: ${result.stdout}\n${result.stderr}`);
+    expect(result.code).toBe(0);
+    const inventory = JSON.parse(readFileSync(join(root, "evidence/input-inventory.json"), "utf8")) as { entries: Array<{ path: string; sha256: string }> };
+    expect(inventory.entries.some((entry) => entry.path === "config-helper.ts" && entry.sha256 === hashBytes(readFileSync(helper)))).toBeTrue();
+  },
+  60_000,
+);
 
 test("a concurrent outside read that strace splits across threads still invalidates authority", () => {
   // A background fs read overlapping main-thread file calls is logged as an
@@ -155,7 +160,7 @@ test("a failed outside statfs invalidates authority", () => {
   expect(() => loadSnapshotConfig(path)).toThrow("ASSESSMENT_CONFIG_UNBOUND");
 });
 
-test("a builtin imported without the node: prefix is not captured as a file", () => {
+test.skipIf(!sandboxAvailable())(`a builtin imported without the node: prefix is not captured as a file (${sandboxSkipReason()})`, () => {
   const { path } = config('import { join } from "path"; export default { value: join("a", "b") };');
   expect(loadSnapshotConfig(path).value).toEqual({ value: "a/b" });
 });
