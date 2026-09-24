@@ -9,7 +9,7 @@ import { byCodeUnit } from "../util/hash.ts";
 import { cssRuleSurface } from "./css-surface.ts";
 import { createWorktree } from "./worktree.ts";
 
-export interface AssetEmissionCheck {
+interface AssetEmissionCheck {
   readonly id: string;
   readonly passed: boolean;
   readonly baselineFiles: number;

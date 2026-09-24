@@ -10,7 +10,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { buildDependencyGraph, type ScanReport } from "../src/graph/build.ts";
 import { verifyPreparationResultModes } from "../src/prepare/audit-modes.ts";
 import { auditPreparationSync } from "../src/prepare/audit.ts";
-import { compileBoundaryPreparationManifest, type CompileBoundaryPreparationManifestInput } from "../src/prepare/build.ts";
+import { compileBoundaryPreparationManifest, type CompileBoundaryPreparationManifestInput } from "../src/prepare/build-boundary.ts";
 import { executePreparationJournal } from "../src/prepare/journal.ts";
 import type { PreparationManifest } from "../src/prepare/manifest-types.ts";
 import { createPreparationManifest, serializePreparationManifest, validatePreparationManifest } from "../src/prepare/manifest.ts";

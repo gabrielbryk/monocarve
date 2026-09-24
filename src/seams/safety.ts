@@ -19,7 +19,7 @@ export type TypeOnlyExtractionRefusalCode =
   | "non-type-declaration";
 
 /** Stable source evidence; offsets are UTF-16 offsets used by TypeScript. */
-export interface TypeOnlyExtractionEvidence {
+interface TypeOnlyExtractionEvidence {
   readonly code: TypeOnlyExtractionRefusalCode;
   readonly message: string;
   readonly start?: number;

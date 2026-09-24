@@ -10,7 +10,7 @@ export interface PreparationCommitSpec {
 }
 
 /** The immutable revision and resolved configuration the plan was compiled from. */
-export interface PreparationBaseline {
+interface PreparationBaseline {
   readonly commit: string;
   /** The baseline commit's committer date; it is also the manifest's createdAt. */
   readonly committerDate: string;
@@ -202,7 +202,7 @@ export interface DeleteModuleOperation {
 }
 
 /** Explicit, byte-recorded conversion of orphaned generated output to source. */
-export interface AdoptGeneratedSourceOperation {
+interface AdoptGeneratedSourceOperation {
   readonly kind: "adopt-generated-source";
   readonly file: PreparationFileMutation;
   readonly declaredSource: string;
@@ -212,7 +212,7 @@ export interface AdoptGeneratedSourceOperation {
 }
 
 /** A generator deleted only with an exhaustive proof of its former outputs. */
-export interface DeleteGeneratedSourceGeneratorOperation {
+interface DeleteGeneratedSourceGeneratorOperation {
   readonly kind: "delete-generated-source-generator";
   readonly file: PreparationFileMutation;
   readonly adoptedOutputs: readonly string[];

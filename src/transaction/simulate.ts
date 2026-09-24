@@ -22,9 +22,8 @@ import { runGateTiers } from "./simulate-gates.ts";
 import { createWorktree, installWorkspaceDependencies, linkPlannedPackage } from "./worktree.ts";
 
 export { runGateTiers } from "./simulate-gates.ts";
-export type { GateTierOptions, GateTierRun } from "./simulate-gates.ts";
 
-export class SimulationError extends MonocarveError {
+class SimulationError extends MonocarveError {
   override readonly name = "SimulationError";
 }
 export interface GateResult {

@@ -4,7 +4,7 @@ import type { DependencyGraph } from "../graph/model.ts";
 import { PlanningError } from "../plan/context.ts";
 import { git, resolveCommit, showBaseline } from "../util/git.ts";
 import { byCodeUnit, hashText, type Sha256 } from "../util/hash.ts";
-import { baselineFileMode, type PreparationManifestRendering } from "./build.ts";
+import { baselineFileMode, type PreparationManifestRendering } from "./build-shared.ts";
 import type { PreparationManifest, PreparationReplayOperation } from "./manifest-types.ts";
 import { createPreparationManifest, assertPreparationManifestValid, preparationOperationPaths } from "./manifest.ts";
 import { preparationPostJournalRecords } from "./post-journal.ts";

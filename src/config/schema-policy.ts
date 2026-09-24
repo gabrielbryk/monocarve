@@ -1,14 +1,6 @@
 import { z } from "zod";
 
 import { protectedPath, regexSource, relativePath } from "./primitives.ts";
-export {
-  generatedSourceAdoptions,
-  graph,
-  runtimeModuleRegistries,
-  type GeneratedSourceAdoptionsConfig,
-  type GraphConfig,
-  type RuntimeModuleRegistriesConfig,
-} from "./schema-extensions.ts";
 
 const domain = z.strictObject({ name: z.string().min(1), patterns: z.array(regexSource).min(1) });
 
@@ -115,6 +107,7 @@ export const portfolio = z.strictObject({
   equivalenceThreshold: z.number().min(0.5).max(1).default(0.95),
 });
 
+/** Portfolio analysis settings: domains, nested domain roots, and framework coupling. */
 export type PortfolioConfig = z.output<typeof portfolio>;
 
 /**
@@ -125,6 +118,7 @@ export type PortfolioConfig = z.output<typeof portfolio>;
  */
 export const testRelocation = z.strictObject({ strategy: z.enum(["all-importers", "self-contained"]).default("all-importers") });
 
+/** How tests follow extracted modules (`all-importers` or `self-contained`). */
 export type TestRelocationConfig = z.output<typeof testRelocation>;
 
 /** Explicit test intent. When present it replaces the legacy flat matcher. */
@@ -132,7 +126,9 @@ export const testKinds = z
   .strictObject({ unit: z.array(regexSource).default([]), integration: z.array(regexSource).default([]), e2e: z.array(regexSource).default([]) })
   .optional();
 
+/** Test classification used by `testKinds` matchers. */
 export type TestKind = "unit" | "integration" | "e2e";
+/** Explicit per-kind test matchers; replaces the legacy flat matcher when present. */
 export type TestKindsConfig = z.output<typeof testKinds>;
 
 /**
@@ -140,7 +136,7 @@ export type TestKindsConfig = z.output<typeof testKinds>;
  * workspace package.  Unlike a production extraction it has no public barrel:
  * its only permitted application edges are the explicit donor surfaces below.
  */
-export const integrationTestSuite = z.strictObject({
+const integrationTestSuite = z.strictObject({
   /** Application whose published test surface the suite is allowed to consume. */
   application: z.string().min(1),
   /** Package-kind profile that renders the leaf test package. */
@@ -157,6 +153,7 @@ export const integrationTestSuites = z
   .record(z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "must be a lowercase kebab-case identifier"), integrationTestSuite)
   .default({});
 
+/** Integration-test suites relocatable as leaf workspace packages. */
 export type IntegrationTestSuiteConfig = z.output<typeof integrationTestSuite>;
 
 /* -------------------------------------------------------------------------- */
@@ -175,7 +172,7 @@ export type IntegrationTestSuiteConfig = z.output<typeof integrationTestSuite>;
  * a directory whose extensions it never lists: that combination scans nothing,
  * silently, which is the worst way for a heuristic to be wrong.
  */
-export const textScanRoot = z.strictObject({ root: relativePath, extensions: z.array(z.string().regex(/^\./, "extension must start with a dot")).min(1) });
+const textScanRoot = z.strictObject({ root: relativePath, extensions: z.array(z.string().regex(/^\./, "extension must start with a dot")).min(1) });
 
 /**
  * Detection of moved paths that appear as **string literals** rather than as
@@ -222,6 +219,7 @@ export const pathReferences = z.strictObject({
     .default(512 * 1024),
 });
 
+/** Path-reference scanning policy for string references to moved files. */
 export type PathReferencesConfig = z.output<typeof pathReferences>;
 
 /**
@@ -243,7 +241,7 @@ export type PathReferencesConfig = z.output<typeof pathReferences>;
  * its ambiguities should be skipped instead, it can declare that, and the
  * review will name every skipped reference by (file, line, column, reason).
  */
-export const pathRewriteRoot = z.strictObject({
+const pathRewriteRoot = z.strictObject({
   root: relativePath,
   extensions: z.array(z.string().regex(/^\./, "extension must start with a dot")).min(1),
   mode: z.literal("exact-path-token"),
@@ -271,6 +269,7 @@ export const pathReferenceRewrites = z.strictObject({
     .default(512 * 1024),
 });
 
+/** Reviewed rewrites of path references in protected trees. */
 export type PathReferenceRewritesConfig = z.output<typeof pathReferenceRewrites>;
 
 /* -------------------------------------------------------------------------- */
@@ -466,6 +465,7 @@ export const modulePromotions = z
     });
   });
 
+/** Reviewed promotions of whole modules as byte-identical package surfaces. */
 export type ModulePromotionsConfig = z.output<typeof modulePromotions>;
 
 /**
@@ -495,4 +495,5 @@ export const valueSplits = z
     });
   });
 
+/** Reviewed splits of one declaration group out of a mixed module. */
 export type ValueSplitsConfig = z.output<typeof valueSplits>;

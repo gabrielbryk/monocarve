@@ -51,7 +51,7 @@ export function normalizedGraphFacts(
   };
 }
 
-export interface BoundedReport<T> {
+interface BoundedReport<T> {
   readonly total: number;
   readonly limit: number;
   readonly truncated: boolean;
@@ -60,7 +60,7 @@ export interface BoundedReport<T> {
   readonly deeperCommand: string;
 }
 
-export interface ArchitectureSummary {
+interface ArchitectureSummary {
   readonly schemaVersion: 1;
   readonly baseline: AssessmentBaselineIdentity;
   readonly qualification: AssessmentSnapshot["qualification"];

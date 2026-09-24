@@ -19,7 +19,7 @@ import type { PreparationFileMutation, PreparationManifest } from "./manifest-ty
 import { assertPreparationManifestValid, preparationOperationPaths } from "./manifest.ts";
 import { runPreparationPostJournalPreparers } from "./post-journal.ts";
 
-export class PreparationSimulationError extends MonocarveError {
+class PreparationSimulationError extends MonocarveError {
   override readonly name = "PreparationSimulationError";
 }
 
@@ -53,7 +53,7 @@ export interface SimulatePreparationOptions {
   readonly baselineGraphScanner?: PreparationBaselineGraphScanner;
 }
 
-export interface PreparationBaselineGraphScanInput {
+interface PreparationBaselineGraphScanInput {
   readonly config: MonocarveConfig;
   readonly rootDir: string;
   readonly baselineCommit: string;
@@ -62,7 +62,7 @@ export interface PreparationBaselineGraphScanInput {
 export type PreparationBaselineGraphScanner = (input: PreparationBaselineGraphScanInput) => Promise<PreparationFreshGraphEvidence>;
 
 /** Native scanner: no cached or caller-supplied graph can authorize an apply. */
-export async function scanPreparationBaselineGraph(input: PreparationBaselineGraphScanInput): Promise<PreparationFreshGraphEvidence> {
+async function scanPreparationBaselineGraph(input: PreparationBaselineGraphScanInput): Promise<PreparationFreshGraphEvidence> {
   const before = headCommit(input.rootDir);
   if (before !== input.baselineCommit) {
     throw new PreparationSimulationError(`baseline graph scan expected ${input.baselineCommit}, found ${before}`);

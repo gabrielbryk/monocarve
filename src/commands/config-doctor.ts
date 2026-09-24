@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 
 import type { ParsedArgs } from "../cli/args.ts";
 import { inspectConfig } from "../doctor/config-doctor.ts";
+import { ConfigError } from "../errors.ts";
+import { parseJson } from "../util/json.ts";
 import { load, print } from "./shared.ts";
 import type { CommandSpec } from "./types.ts";
 
@@ -21,7 +23,7 @@ async function configDoctor(args: ParsedArgs): Promise<void> {
 function readJsonConfig(path: string): unknown {
   // load() already validated this exact file. Re-reading only recovers which
   // keys the user supplied; it never changes or reinterprets effective values.
-  return JSON.parse(readFileSync(path, "utf8")) as unknown;
+  return parseJson(readFileSync(path, "utf8"), (reason) => new ConfigError(`could not re-read config ${path}: ${reason}`));
 }
 
 export const configDoctorCommands: Record<string, CommandSpec> = {

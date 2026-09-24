@@ -9,7 +9,7 @@ export interface PlanReviewContext {
   readonly approvalSubject?: string;
 }
 
-export interface PlanReviewMove {
+interface PlanReviewMove {
   readonly kind: "move" | "move-with-rewrite" | "migrate-path-key";
   readonly source: string;
   readonly target: string;
@@ -17,7 +17,7 @@ export interface PlanReviewMove {
   readonly nestedIndex?: number;
 }
 
-export interface RewrittenDocument {
+interface RewrittenDocument {
   readonly path: string;
   readonly rewrites: readonly { readonly from: string; readonly to: string }[];
 }

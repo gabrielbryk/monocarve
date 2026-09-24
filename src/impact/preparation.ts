@@ -11,7 +11,7 @@ import { runPreparationPostJournalPreparers } from "../prepare/post-journal.ts";
 import { preparationFilesystemOperations, simulatePreparation } from "../prepare/simulate.ts";
 import { createWorktree } from "../transaction/worktree.ts";
 
-export interface PortfolioImpactSnapshot {
+interface PortfolioImpactSnapshot {
   readonly applicationLines: number;
   readonly candidates: number;
   readonly eligible: number;

@@ -3,6 +3,7 @@ import type { ApplicationConfig } from "./schema-core.ts";
 import type { TestKind } from "./schema-policy.ts";
 import type { MonocarveConfig } from "./schema.ts";
 
+/** Look up a configured application by name; throws `ConfigError` listing known names when absent. */
 export function getApplication(config: MonocarveConfig, name: string): ApplicationConfig {
   const app = config.applications.find((candidate) => candidate.name === name);
   if (!app) {
@@ -21,6 +22,7 @@ export function testMatchers(config: MonocarveConfig): RegExp[] {
         .map((source) => new RegExp(source));
 }
 
+/** Whether `path` is classified as a test (see `testKindOf`). */
 export function isTestPath(config: MonocarveConfig, path: string): boolean {
   return testKindOf(config, path) !== undefined;
 }
@@ -37,6 +39,7 @@ export function testKindOf(config: MonocarveConfig, path: string): TestKind | un
   return matches[0];
 }
 
+/** Whether `path` ends with a configured asset extension. */
 export function isAssetPath(config: MonocarveConfig, path: string): boolean {
   return config.assetExtensions.some((extension) => path.endsWith(extension));
 }
@@ -47,6 +50,7 @@ export function scopedPackageName(config: MonocarveConfig, bareName: string): st
   return bareName.startsWith(config.packageScope) ? bareName : `${config.packageScope}${bareName}`;
 }
 
+/** Whether `branch` is one of the configured guarded branches. */
 export function isGuardedBranch(config: MonocarveConfig, branch: string): boolean {
   return config.guardedBranches.includes(branch);
 }

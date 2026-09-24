@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { loadSnapshotConfig } from "../src/assessment/config-snapshot.ts";
+import { loadSnapshotConfig } from "../src/config/snapshot-loader.ts";
 import { hashBytes } from "../src/util/hash.ts";
 import { runIn } from "./support/cli.ts";
 import { fixtureGit, scratchDirectory } from "./support/fixture-repo.ts";

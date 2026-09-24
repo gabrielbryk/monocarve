@@ -7,7 +7,7 @@ import ts from "typescript";
 
 import { resetCodemodCaches, rewriteResolvedImportSpecifier } from "../../src/codemod/imports.ts";
 
-export const DONOR_SPECIFIERS = ["./helpers", "./helpers.js", "./helpers.ts"] as const;
+const DONOR_SPECIFIERS = ["./helpers", "./helpers.js", "./helpers.ts"] as const;
 const OTHER_SPECIFIERS = ["./unrelated", "./unrelated.js", "node:path", "@acme/other"] as const;
 export const SHORT_PACKAGE = "@a/b";
 export const LONG_PACKAGE = "@acme/analytics-with-a-deliberately-long-name";

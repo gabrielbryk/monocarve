@@ -7,7 +7,7 @@
  * it never scans a worktree or guesses by content.
  */
 
-import type { PathMigrationInput } from "../transaction/path-migrations.ts";
+import type { PathMigrationInput } from "../plan/path-migrations.ts";
 
 function objectAtPointer(value: unknown, pointer: string): Record<string, unknown> {
   if (!pointer.startsWith("/")) throw new Error(`JSON pointer must start with '/': ${pointer}`);

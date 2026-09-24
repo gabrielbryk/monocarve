@@ -4,7 +4,7 @@ import { fileState } from "../util/files.ts";
 import { git, repositoryPrefix, showBaseline, statusEntries } from "../util/git.ts";
 import { byCodeUnit, hashJson, hashText } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";
-import { PreparerError } from "./core.ts";
+import { PreparerError } from "./error.ts";
 import type { PreparerManifest, PreparerMutation } from "./manifest.ts";
 
 /** Bind an introducing dirty config's exact committed preimage and reviewed result to a plan. */

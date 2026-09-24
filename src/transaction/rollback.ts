@@ -18,13 +18,8 @@
  *    be cleaned up. An operator needs both, and the caller keeps both.
  */
 
-import { MonocarveError } from "../errors.ts";
 import { git } from "../util/git.ts";
 import { restoreSnapshot, snapshotMismatch, type Snapshot } from "./journal.ts";
-
-export class RollbackError extends MonocarveError {
-  override readonly name = "RollbackError";
-}
 
 export interface RollbackPoint {
   /** HEAD before apply started. */

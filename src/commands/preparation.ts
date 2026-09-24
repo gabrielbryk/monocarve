@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-
 import { TOOL_NAME } from "../branding.ts";
 import {
   advanceCampaign,
@@ -11,7 +9,7 @@ import {
 } from "../campaign/index.ts";
 import { flagBool, flagNumber, flagString, flagStrings, type ParsedArgs } from "../cli/args.ts";
 import { domainFor, getApplication, renderPreparationPolicy } from "../config.ts";
-import { IoError, UsageError } from "../errors.ts";
+import { UsageError } from "../errors.ts";
 import { parseManifest } from "../plan/build.ts";
 import { buildPlanSync, serializeManifest } from "../plan/build.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
@@ -27,17 +25,17 @@ import { analyzeWorkspaceSymbols } from "../symbols/index.ts";
 import { auditPlan } from "../transaction/audit.ts";
 import { headCommit } from "../util/git.ts";
 import { hashJson } from "../util/hash.ts";
-import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
+import { parseJsonObject } from "../util/json.ts";
+import { relativeWorkspacePath } from "../util/paths.ts";
 import { campaignLedgerPath, createCampaignLedgerFile, loadCampaignLedger, persistCampaignLedger } from "./campaign-ledger-file.ts";
-import { assertPlannableTree, graphDigest, load, loadGraph, outputPath, print, systemReason, writeOutput, type LoadedGraph } from "./shared.ts";
+import { assertPlannableTree, graphDigest, load, loadGraph, outputPath, print, writeOutput, type LoadedGraph } from "./shared.ts";
 export { writeCampaignLedgerAtomically } from "./campaign-ledger-file.ts";
 import { campaignOptimize } from "./campaign-optimize.ts";
 import { boundaryCommandSpec } from "./preparation-boundary.ts";
 import { preparationCommandSpecs } from "./preparation-command-specs.ts";
 import { graphSnapshot } from "./preparation-graph.ts";
-import { parseJsonObject, readWorkspaceText, relativeTypeSpecifier } from "./preparation-io.ts";
+import { loadPreparationManifest, readWorkspaceText, relativeTypeSpecifier, requiredFlag } from "./preparation-io.ts";
 import { validateMultiPreparationSpec, validateStableCampaignSpec, type StableCampaignSpec } from "./preparation-specs.ts";
-export { readWorkspaceText } from "./preparation-io.ts";
 
 async function campaignInit(args: ParsedArgs): Promise<void> {
   if (args.flags.has("graph")) throw new UsageError("campaign init refuses --graph; it must scan the native checkout at a stable HEAD");
@@ -420,36 +418,6 @@ async function freshNativeScan(args: ParsedArgs, rootDir: string, expectedHead: 
   return loaded;
 }
 
-export function loadPreparationManifest(args: ParsedArgs, rootDir: string): { path: string; manifest: PreparationManifest } {
-  const input = flagString(args, "plan") ?? args.positionals[0];
-  if (input === undefined) throw new UsageError("a preparation plan path is required (--plan <path>)");
-  const path = relativeWorkspacePath(rootDir, input);
-  let text: string;
-  try {
-    text = readFileSync(workspacePath(rootDir, path), "utf8");
-  } catch (error) {
-    throw new IoError(`could not read preparation plan ${path}: ${systemReason(error)}`);
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch (error) {
-    throw new UsageError(`could not parse preparation plan ${path}: ${systemReason(error)}`);
-  }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new UsageError(`preparation plan ${path} is not a JSON object`);
-  }
-  if ("preparer" in parsed && !("operations" in parsed)) {
-    throw new UsageError(`preparation plan ${path} is a preparer manifest; use preparer-apply --plan ${path} (then preparer-commit) instead`);
-  }
-  if (!("operations" in parsed)) {
-    throw new UsageError(`preparation plan ${path} is missing its operations array; refusing to interpret an unknown schema as a declaration-preparation plan`);
-  }
-  const manifest = parsed as PreparationManifest;
-  assertPreparationManifestValid(manifest);
-  return { path, manifest };
-}
-
 function workspaceAnalysisFor(args: ParsedArgs, loaded: LoadedGraph) {
   const file = flagString(args, "file") ?? args.positionals[0];
   if (file === undefined) throw new UsageError("--file <path> is required");
@@ -465,12 +433,6 @@ function workspaceAnalysisFor(args: ParsedArgs, loaded: LoadedGraph) {
     sourcePath,
     affinityForPath: (path) => loaded.graph.nodes.get(path)?.domain ?? domainFor(loaded.config, path),
   });
-}
-
-export function requiredFlag(args: ParsedArgs, name: string): string {
-  const value = flagString(args, name);
-  if (value === undefined) throw new UsageError(`--${name} <value> is required`);
-  return value;
 }
 
 interface PlannedChildWithGraph extends CampaignChildPlan {

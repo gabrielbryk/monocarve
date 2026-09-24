@@ -37,7 +37,7 @@ import { PlanningError } from "./context.ts";
 import type { PathMove } from "./manifest-operations.ts";
 import { normalizeToken, PATH_TOKEN, segmentCount, stripExtension } from "./path-tokens.ts";
 
-export interface PathReferenceRewrite {
+interface PathReferenceRewrite {
   readonly from: string;
   readonly to: string;
   readonly donor: string;
@@ -63,7 +63,7 @@ export interface PathReferenceRewriteMatch extends PathReferenceRewrite {
   readonly span: { readonly start: number; readonly end: number };
 }
 
-export interface PathReferenceAmbiguity {
+interface PathReferenceAmbiguity {
   readonly file: string;
   readonly line: number;
   readonly column: number;

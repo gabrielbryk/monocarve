@@ -95,7 +95,7 @@ import type { WorkspaceContext } from "./context.ts";
 import { keysFor, normalizeToken, PATH_TOKEN, segmentCount, stripExtension } from "./path-tokens.ts";
 
 /** How a literal named the path: with its extension, or without. */
-export type PathReferenceForm = "path" | "stem";
+type PathReferenceForm = "path" | "stem";
 
 /** One string literal that names one moved path. */
 export interface PathReference {

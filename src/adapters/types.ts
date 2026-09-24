@@ -12,8 +12,10 @@
  * simulation, the apply, and the audit can each compute independently.
  */
 
-import type { LockfileImporterMode } from "../plan/manifest.ts";
 import type { Sha256 } from "../util/hash.ts";
+
+/** How a lockfile-importer plan operation edits its importer block. */
+export type LockfileImporterMode = "insert" | "replace" | "delete";
 
 /** The package.json section that owns a consumer's package reference. */
 export type ConsumerDependencySection = "runtime" | "dev";

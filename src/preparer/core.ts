@@ -6,7 +6,7 @@ import { isGuardedBranch } from "../config.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
 import { executePreparationJournal, finalizeCompletedPreparationJournal, rollbackCompletedPreparationJournal } from "../prepare/journal.ts";
 import { runPreparationPostJournalPreparers } from "../prepare/post-journal.ts";
-import { restoreSnapshot, snapshotPaths } from "../transaction/journal.ts";
+import { restoreSnapshot, snapshotPaths } from "../transaction/journal-snapshot.ts";
 import { createWorktree } from "../transaction/worktree.ts";
 import { currentBranch, git, headCommit, repositoryPrefix, resolveCommit, showBaseline, statusEntries } from "../util/git.ts";
 import { byCodeUnit, hashText, stableStringify } from "../util/hash.ts";
@@ -14,11 +14,12 @@ import { workspacePath } from "../util/paths.ts";
 import { bindBootstrapConfig } from "./bootstrap-config.ts";
 import { planPreparerCompilation, runPreparerCompilation } from "./core-compile.ts";
 import { assertCommittedMutationsMatch, assertMutationsMatchState, unique, validatedPath } from "./core-support.ts";
-import { assertPreparerManifestMatchesConfig, assertPreparerManifestShape } from "./core-validate.ts";
+import { assertPreparerManifest } from "./core-validate.ts";
 import { PreparerError } from "./error.ts";
 import type { PreparerManifest } from "./manifest.ts";
 import { runPreparerCommand } from "./run-command.ts";
 
+export { assertPreparerManifest } from "./core-validate.ts";
 export { PreparerError } from "./error.ts";
 
 export interface CompilePreparerInput {
@@ -185,11 +186,6 @@ export async function simulatePreparerManifest(options: {
   } finally {
     await worktree.dispose();
   }
-}
-
-export function assertPreparerManifest(config: MonocarveConfig, value: unknown): asserts value is PreparerManifest {
-  assertPreparerManifestShape(value);
-  assertPreparerManifestMatchesConfig(config, value);
 }
 
 /** Commit only an already-applied, byte- and mode-exact preparer result. */

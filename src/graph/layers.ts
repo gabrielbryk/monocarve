@@ -47,7 +47,7 @@ export interface ComponentReport {
  * rank and to explain, never as the sole reason to reject: the composition
  * check is a configured fact, not an inference.
  */
-export type Archetype = "contract" | "composition" | "runtime-adapter-or-ui" | "policy-candidate" | "module-candidate";
+type Archetype = "contract" | "composition" | "runtime-adapter-or-ui" | "policy-candidate" | "module-candidate";
 
 const CONTRACT_NAME = /^(?:schemas?|models?|types?|contracts?|protocol)$/;
 const POLICY_NAME = /(?:helper|rule|policy|validation|normalize|format|transform|calculate|compute)/i;
@@ -158,7 +158,7 @@ export function componentReports(config: MonocarveConfig, graph: DependencyGraph
   });
 }
 
-export interface DomainReport {
+interface DomainReport {
   readonly domain: string;
   readonly files: number;
   readonly lines: number;
@@ -172,7 +172,7 @@ export interface DomainReport {
   readonly blockedFiles: readonly string[];
 }
 
-export function domainReports(graph: DependencyGraph, application: ApplicationGraph): DomainReport[] {
+function domainReports(graph: DependencyGraph, application: ApplicationGraph): DomainReport[] {
   const { components, componentByNode, outgoing } = application.condensed;
   const domainOf = (path: string): string => graph.nodes.get(path)?.domain ?? "unknown";
   const lines = (paths: readonly string[]): number => paths.reduce((total, path) => total + (graph.nodes.get(path)?.lineCount ?? 0), 0);
@@ -211,7 +211,7 @@ export function domainReports(graph: DependencyGraph, application: ApplicationGr
   });
 }
 
-export interface DomainComponentReport {
+interface DomainComponentReport {
   readonly id: number;
   readonly layer: number;
   readonly cyclic: boolean;
@@ -222,7 +222,7 @@ export interface DomainComponentReport {
 }
 
 /** Condensation of the domain graph: which whole domains are entangled with which. */
-export function domainComponentReports(domains: readonly DomainReport[], graph: DependencyGraph, application: ApplicationGraph): DomainComponentReport[] {
+function domainComponentReports(domains: readonly DomainReport[], graph: DependencyGraph, application: ApplicationGraph): DomainComponentReport[] {
   const names = domains.map((entry) => entry.domain);
   const domainOf = (path: string): string => graph.nodes.get(path)?.domain ?? "unknown";
   const outgoing = new Map<string, string[]>(names.map((domain) => [domain, []]));

@@ -16,7 +16,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { buildDependencyGraph, type ScanReport } from "../src/graph/build.ts";
 import type { DependencyGraph } from "../src/graph/model.ts";
-import { compileBoundaryPreparationManifest, type CompileBoundaryPreparationManifestInput } from "../src/prepare/build.ts";
+import { compileBoundaryPreparationManifest, type CompileBoundaryPreparationManifestInput } from "../src/prepare/build-boundary.ts";
 import { assertPreparationManifestValid, createPreparationManifest } from "../src/prepare/manifest.ts";
 import { resolveCommit } from "../src/util/git.ts";
 import { byCodeUnit, hashText, stableStringify } from "../src/util/hash.ts";

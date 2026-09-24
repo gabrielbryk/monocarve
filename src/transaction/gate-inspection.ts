@@ -10,7 +10,7 @@ import { regenerateArtifacts } from "./regenerate.ts";
 import { commitSimulatedExtraction, runGateTiers, type GateResult } from "./simulate.ts";
 import { createWorktree, installWorkspaceDependencies, linkPlannedPackage } from "./worktree.ts";
 
-export interface GateEffect {
+interface GateEffect {
   readonly tier: GateResult["tier"];
   readonly command: string;
   readonly exitCode: number;

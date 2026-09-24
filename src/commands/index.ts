@@ -99,7 +99,7 @@ const FLAG_OVERRIDES: Readonly<Record<string, FlagOverrides>> = {
 };
 
 /** Flags retired everywhere; the parser explains instead of calling them unknown. */
-export const RETIRED_FLAGS: Readonly<Record<string, string>> = {
+const RETIRED_FLAGS: Readonly<Record<string, string>> = {
   "allow-dirty": "--allow-dirty is no longer supported; configure transaction.allowDirtyPaths instead",
 };
 

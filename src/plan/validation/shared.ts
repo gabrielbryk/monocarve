@@ -1,7 +1,7 @@
 import type { MonocarveConfig } from "../../config.ts";
 import type { PlanOperationKind } from "../manifest.ts";
 
-export type ValidationSeverity = "error" | "warning";
+type ValidationSeverity = "error" | "warning";
 
 export interface ValidationIssue {
   readonly severity: ValidationSeverity;

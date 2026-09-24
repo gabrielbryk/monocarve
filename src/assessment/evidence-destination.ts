@@ -1,9 +1,10 @@
 import { lstatSync, realpathSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
+import { isPathInside } from "../util/paths.ts";
 import { EvidenceError } from "./evidence-error.ts";
 import { assertIdentity, entryExists, fileIdentity, type FileIdentity } from "./evidence-fs.ts";
 import { assertRelativePath, validateBundle } from "./evidence-manifest.ts";
-import { overlaps, within } from "./evidence-paths.ts";
+import { overlaps } from "./evidence-paths.ts";
 import type { PriorBundle, PublicationPaths } from "./evidence-types.ts";
 
 export interface PublicationBoundary {
@@ -17,11 +18,12 @@ export function publicationPaths(rootDir: string, destination: string, analytica
   const root = realpathSync(rootDir);
   assertRelativePath(destination, "evidence destination", "EVIDENCE_DESTINATION_UNSAFE");
   const target = resolve(root, destination);
-  if (target === root || !within(root, target))
+  if (target === root || !isPathInside(root, target))
     throw new EvidenceError("EVIDENCE_DESTINATION_UNSAFE", "evidence destination escapes or names the workspace root");
   const ancestor = existingAncestor(target);
   const canonical = resolve(realpathSync(ancestor), relative(ancestor, target));
-  if (!within(root, canonical) || canonical === root) throw new EvidenceError("EVIDENCE_DESTINATION_UNSAFE", "evidence destination escapes through a symlink");
+  if (!isPathInside(root, canonical) || canonical === root)
+    throw new EvidenceError("EVIDENCE_DESTINATION_UNSAFE", "evidence destination escapes through a symlink");
   const parent = dirname(canonical);
   const parentStat = lstatSync(parent, { throwIfNoEntry: false });
   if (!parentStat?.isDirectory() || parentStat.isSymbolicLink()) {

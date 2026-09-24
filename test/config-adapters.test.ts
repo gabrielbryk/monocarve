@@ -45,17 +45,9 @@ describe("adapters", () => {
     const config = (await loadConfig({ cwd: FIXTURE })).config;
     expect(createPackageManagerAdapter(config).id).toBe("pnpm");
     expect(createTaskRunnerAdapter(config).id).toBe("moon");
-    // A ported adapter is resolved, not refused. Without this line the loop
-    // below would still pass if the registry had thrown for every manager.
+    // Every ported adapter resolves. Unported ones are rejected by config
+    // validation (see config.test.ts), so the registry never sees them.
     expect(createPackageManagerAdapter({ ...config, packageManager: "bun" }).id).toBe("bun");
-    for (const packageManager of ["npm", "yarn"] as const) {
-      expect(() => createPackageManagerAdapter({ ...config, packageManager })).toThrow(
-        `not yet ported: adapters/registry: ${packageManager} package-manager adapter`,
-      );
-    }
-    for (const taskRunner of ["nx", "turbo"] as const) {
-      expect(() => createTaskRunnerAdapter({ ...config, taskRunner })).toThrow(`not yet ported: adapters/registry: ${taskRunner} task-runner adapter`);
-    }
   });
 
   test("inserts an importer block at its sorted position and is idempotent", () => {

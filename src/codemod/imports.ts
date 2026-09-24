@@ -17,9 +17,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
 
 import ts from "typescript";
-import { JAVASCRIPT_SOURCE_EXTENSIONS, TYPESCRIPT_RESOLUTION_EXTENSIONS } from "../config/source-policy.ts";
+import { JAVASCRIPT_SOURCE_EXTENSIONS, TYPESCRIPT_RESOLUTION_EXTENSIONS } from "../util/source-policy.ts";
 
-export type ModuleReferenceKind =
+type ModuleReferenceKind =
   | "static-import"
   | "static-export"
   | "import-type"
@@ -31,7 +31,7 @@ export type ModuleReferenceKind =
   | "asset-import";
 
 /** Half-open offset range into the source text: `[start, end)`. */
-export interface SourceSpan {
+interface SourceSpan {
   readonly start: number;
   readonly end: number;
 }

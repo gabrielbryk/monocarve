@@ -5,7 +5,7 @@ import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
 import { SymbolAnalysisError } from "./analyze.ts";
 import { workspaceProgram } from "./workspace.ts";
 
-export interface CapabilityPartition {
+interface CapabilityPartition {
   readonly affinities: readonly string[];
   readonly properties: readonly string[];
   readonly declarations: readonly string[];

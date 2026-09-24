@@ -7,7 +7,7 @@ import { MonocarveError } from "../errors.ts";
 import { registerMoonProject } from "./moon-projects.ts";
 import type { AdapterEditResult, TaskRunnerAdapter } from "./types.ts";
 
-export class TaskRunnerError extends MonocarveError {
+class TaskRunnerError extends MonocarveError {
   override readonly name = "TaskRunnerError";
 }
 

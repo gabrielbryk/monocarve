@@ -21,7 +21,7 @@ import { simulatePlan, type SimulationResult } from "./simulate.ts";
 import { installWorkspaceDependencies, linkPlannedPackage } from "./worktree.ts";
 
 export { assertExactMoveDiff, assertExactScope } from "./apply-commit.ts";
-export { ApplyError, type ApplyOptions, type ApplyResult, type ApplyState } from "./apply-types.ts";
+export { ApplyError, type ApplyOptions, type ApplyResult } from "./apply-types.ts";
 
 export async function applyPlan(options: ApplyOptions): Promise<ApplyResult> {
   if (!options.commit) return applyWithoutTransaction(options);
@@ -299,14 +299,4 @@ export async function preflight(options: ApplyOptions): Promise<string[]> {
     }
   }
   return blockers;
-}
-
-/** True only for the exact manifest-only approval boundary accepted by apply. */
-export function hasApprovedManifestHead(options: ApplyOptions): boolean {
-  if (!options.manifestPath || headCommit(options.rootDir) === options.manifest.baselineCommit) return false;
-  try {
-    return approvedManifestState({ ...options, resume: false }, headCommit(options.rootDir)) === "pre-apply";
-  } catch {
-    return false;
-  }
 }

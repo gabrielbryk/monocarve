@@ -1,3 +1,4 @@
+import type { LockfileImporterMode } from "../adapters/types.ts";
 import type { FileState, Sha256 } from "../util/hash.ts";
 
 export interface MoveOperation {
@@ -30,7 +31,7 @@ export interface FsReferenceRewrite {
   readonly donor: string;
 }
 
-export interface RewriteFsReferenceOperation {
+interface RewriteFsReferenceOperation {
   readonly kind: "rewrite-fs-reference";
   readonly file: string;
   readonly rewrites: readonly FsReferenceRewrite[];
@@ -44,7 +45,7 @@ export interface RewriteFsReferenceOperation {
  * these target path tokens embedded in prose and structured data. Line and column track
  * the exact location within the document for audit and manual verification.
  */
-export interface PathReferenceRewrite {
+interface PathReferenceRewrite {
   readonly from: string;
   readonly to: string;
   /** Moved source this rewrite targets, workspace-relative at its pre-move path. */
@@ -88,7 +89,7 @@ export interface WriteFileOperation {
   readonly generator?: string;
 }
 
-export interface DeleteFileOperation {
+interface DeleteFileOperation {
   readonly kind: "delete-file";
   readonly path: string;
   readonly file: string;
@@ -98,9 +99,7 @@ export interface DeleteFileOperation {
   readonly resultHash: FileState;
 }
 
-export type LockfileImporterMode = "insert" | "replace" | "delete";
-
-export interface LockfileImporterOperation {
+interface LockfileImporterOperation {
   readonly kind: "lockfile-importer";
   readonly lockfile: string;
   readonly packageRoot: string;
@@ -150,4 +149,3 @@ export type PlanOperation =
   | MigratePathKeysOperation;
 
 export type PlanOperationKind = PlanOperation["kind"];
-export const PURE_RENAME_KINDS: readonly PlanOperationKind[] = ["move"];

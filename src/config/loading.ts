@@ -5,11 +5,12 @@ import { pathToFileURL } from "node:url";
 
 import ts from "typescript";
 
-import { loadSnapshotConfig, type ConfigSnapshotFile } from "../assessment/config-snapshot.ts";
 import { CONFIG_FILENAMES } from "../branding.ts";
 import { ConfigError } from "../errors.ts";
 import { monocarveConfigSchema, type MonocarveConfig } from "./schema.ts";
+import { loadSnapshotConfig, type ConfigSnapshotFile } from "./snapshot-loader.ts";
 
+/** Result of `loadConfig`: the validated config and where it was loaded from. */
 export interface LoadedConfig {
   /** Validated config with all defaults applied. */
   readonly config: MonocarveConfig;
@@ -21,6 +22,7 @@ export interface LoadedConfig {
   readonly configSnapshot?: readonly ConfigSnapshotFile[];
 }
 
+/** Options for `loadConfig`. */
 export interface LoadConfigOptions {
   /** Explicit config path; skips discovery. */
   readonly configPath?: string;
@@ -45,6 +47,7 @@ export function findConfigFile(startDir: string): string | null {
   }
 }
 
+/** Discover (or take `configPath`), execute, and validate a monocarve config; throws `ConfigError` when none is found or it is invalid. */
 export async function loadConfig(options: LoadConfigOptions = {}): Promise<LoadedConfig> {
   const cwd = resolve(options.cwd ?? process.cwd());
   const configPath = options.configPath ? resolve(cwd, options.configPath) : findConfigFile(cwd);
@@ -69,7 +72,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Loade
  * This is a partial guard: indirect runtime reads such as Bun.file remain unbound.
  * Ordinary config loading does not enable this policy.
  */
-export function assertNoStaticFilesystemImports(configPath: string): void {
+function assertNoStaticFilesystemImports(configPath: string): void {
   const seen = new Set<string>();
   const pending = [resolve(configPath)];
   while (pending.length > 0) {

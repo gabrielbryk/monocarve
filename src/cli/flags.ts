@@ -17,7 +17,7 @@
  *                  the handler can explain the refusal; it takes an optional value.
  */
 
-export type FlagKind = "boolean" | "value" | "repeatable" | "refused";
+type FlagKind = "boolean" | "value" | "repeatable" | "refused";
 
 export interface FlagSpec {
   readonly name: string;

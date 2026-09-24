@@ -1,14 +1,14 @@
 import { lstatSync, readFileSync, readdirSync, type Dirent } from "node:fs";
-import { isBuiltin } from "node:module";
 import { dirname, resolve } from "node:path";
 
 import ts from "typescript";
 
 import { createPackageManagerAdapter } from "../adapters/registry.ts";
+import { collectLocalConfigDependencies } from "../config/config-dependencies.ts";
 import { sourceFiles } from "../util/files.ts";
 import { byCodeUnit } from "../util/hash.ts";
-import { inside } from "./input-inventory-paths.ts";
-import { InputInventoryError, type CaptureInventoryOptions } from "./input-inventory-types.ts";
+import { isPathInside } from "../util/paths.ts";
+import type { CaptureInventoryOptions } from "./input-inventory-types.ts";
 
 /** Gather every path and directory root that participates in captured input authority. */
 export function collectInputPaths(
@@ -30,7 +30,7 @@ export function collectInputPaths(
   collectLocalConfigDependencies(options.configPath, add);
   for (const path of options.configSnapshotPaths ?? []) {
     add(path);
-    if (inside(rootDir, path)) addDirectoryAncestors(path, directoryRoots, rootDir);
+    if (isPathInside(rootDir, path)) addDirectoryAncestors(path, directoryRoots, rootDir);
     else directoryRoots.add(dirname(path));
   }
   for (const app of options.config.applications) {
@@ -76,7 +76,7 @@ function walkFiles(path: string, excluded: readonly string[], add: (path: string
     add(path);
     return;
   }
-  if (!stat.isDirectory() || excluded.some((root) => inside(root, path))) return;
+  if (!stat.isDirectory() || excluded.some((root) => isPathInside(root, path))) return;
   directories.add(path);
   for (const entry of readdirSync(path, { withFileTypes: true }).sort((a, b) => byCodeUnit(a.name, b.name))) {
     if (entry.name === ".git" || entry.name === "node_modules") continue;
@@ -211,7 +211,7 @@ function collectExportTargets(value: unknown, targets: Set<string>): void {
 function collectAncestorManifests(rootDir: string, path: string, add: (path: string) => void): void {
   let current = lstatSync(path, { throwIfNoEntry: false })?.isDirectory() ? path : dirname(path);
   const root = resolve(rootDir);
-  while (inside(root, current)) {
+  while (isPathInside(root, current)) {
     add(resolve(current, "package.json"));
     if (current === root) return;
     current = dirname(current);
@@ -240,50 +240,6 @@ export function packageRootFor(path: string): string | undefined {
   }
 }
 
-export function collectLocalConfigDependencies(path: string, add: (path: string) => void, seen = new Set<string>()): void {
-  const absolute = resolve(path);
-  if (seen.has(absolute)) return;
-  seen.add(absolute);
-  add(absolute);
-  let text: string;
-  try {
-    text = readFileSync(absolute, "utf8");
-  } catch {
-    return;
-  }
-  const source = ts.createSourceFile(absolute, text, ts.ScriptTarget.Latest, true);
-  const visit = (node: ts.Node): void => {
-    visitConfigDependencyNode(node, source, absolute, add, seen);
-    ts.forEachChild(node, visit);
-  };
-  visit(source);
-}
-
-function visitConfigDependencyNode(node: ts.Node, source: ts.SourceFile, absolute: string, add: (path: string) => void, seen: Set<string>): void {
-  const reference = moduleReferenceOf(node, source);
-  if (reference === undefined) return;
-  if (!ts.isStringLiteral(reference)) throw new InputInventoryError("ASSESSMENT_INPUT_UNBOUND", `config import cannot be inventoried: ${absolute}`, [absolute]);
-  // `fs` and `node:fs` are the same builtin; neither is a file to capture.
-  if (reference.text.startsWith("node:") || reference.text.startsWith("bun:") || isBuiltin(reference.text)) return;
-  const target = resolveConfigImport(reference.text, absolute);
-  collectLocalConfigDependencies(target, add, seen);
-}
-
-function moduleReferenceOf(node: ts.Node, source: ts.SourceFile): ts.Expression | undefined {
-  if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return node.moduleSpecifier;
-  if (ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword || node.expression.getText(source) === "require"))
-    return node.arguments[0];
-  return undefined;
-}
-
-function resolveConfigImport(specifier: string, absolute: string): string {
-  try {
-    return Bun.resolveSync(specifier, dirname(absolute));
-  } catch {
-    throw new InputInventoryError("ASSESSMENT_INPUT_UNBOUND", `config import cannot be resolved: ${specifier}`, [specifier]);
-  }
-}
-
 export function nearestInstalledManifest(rootDir: string, path: string): string | undefined {
   const boundary = resolve(rootDir, "node_modules");
   let current = dirname(path);
@@ -291,7 +247,7 @@ export function nearestInstalledManifest(rootDir: string, path: string): string 
     const manifest = resolve(current, "package.json");
     if (lstatSync(manifest, { throwIfNoEntry: false })?.isFile()) return manifest;
     const parent = dirname(current);
-    if (parent === current || (!inside(boundary, current) && inside(rootDir, current))) break;
+    if (parent === current || (!isPathInside(boundary, current) && isPathInside(rootDir, current))) break;
     current = parent;
   }
   return undefined;

@@ -3,7 +3,7 @@ import { byCodeUnit, hashJson } from "../util/hash.ts";
 
 export const VISUALIZATION_SCHEMA = "dependency-graph-v1";
 
-export interface VisualizationNode {
+interface VisualizationNode {
   readonly id: string;
   readonly label: string;
   readonly members: readonly string[];
@@ -16,7 +16,7 @@ export interface VisualizationNode {
   readonly cyclic: boolean;
 }
 
-export interface VisualizationEdge {
+interface VisualizationEdge {
   readonly id: string;
   readonly from: string;
   readonly to: string;

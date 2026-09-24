@@ -7,7 +7,7 @@
  * helpers so each proof component remains independently reviewable.
  */
 
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import ts from "typescript";
@@ -258,10 +258,4 @@ function typeRootsFor(config: MonocarveConfig, manifest: ExtractionManifest, ins
 /** Every directory a `node_modules` lookup for this extraction could plausibly start from. */
 function ownerRootsFor(config: MonocarveConfig, manifest: ExtractionManifest): string[] {
   return [...config.applications.map(applicationOwner), manifest.target.packageRoot, ""];
-}
-
-/** Read a file relative to a tree without throwing when it is absent. */
-export function readIfPresent(root: string, path: string): string | undefined {
-  const absolute = resolve(root, path);
-  return existsSync(absolute) ? readFileSync(absolute, "utf8") : undefined;
 }

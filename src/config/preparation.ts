@@ -8,12 +8,14 @@ import type { MonocarveConfig } from "./schema.ts";
 
 const PREPARATION_PLACEHOLDERS = ["app", "moduleSpecifier", "owner", "sourcePath", "targetPath"] as const;
 
+/** Placeholder values for rendering a preparation policy for one move. */
 export interface PreparationPolicyRenderInput {
   readonly sourcePath: string;
   readonly targetPath: string;
   readonly targetModuleSpecifier: string;
 }
 
+/** A preparation policy with every template rendered. */
 export interface RenderedPreparationPolicy {
   readonly commit: { readonly subject: string; readonly body?: string };
   readonly gates: { readonly package: readonly string[]; readonly project: readonly string[]; readonly workspace: readonly string[] };

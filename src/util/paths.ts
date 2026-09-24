@@ -13,7 +13,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 import { MonocarveError } from "../errors.ts";
 
-export class PathEscapeError extends MonocarveError {
+class PathEscapeError extends MonocarveError {
   override readonly name = "PathEscapeError";
 }
 
@@ -63,6 +63,16 @@ export function relativeWorkspacePath(rootDir: string, path: string): string {
   const result = relative(resolve(rootDir), absolute).replaceAll("\\", "/");
   if (!result || result.startsWith("..")) throw new PathEscapeError(`path is outside the workspace: ${path}`);
   return result;
+}
+
+/**
+ * Lexical containment: whether `path` is `root` itself or below it. Both are
+ * resolved against the cwd; symlinks are not followed (callers that need
+ * physical containment compare `realpathSync` results through this).
+ */
+export function isPathInside(root: string, path: string): boolean {
+  const rel = relative(root, path);
+  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
 }
 
 /** POSIX-normalized `relative()`, for specifiers and project references. */

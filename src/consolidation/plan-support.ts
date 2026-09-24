@@ -27,7 +27,7 @@ import type { ConsolidationCandidate } from "./candidate.ts";
 type PackageManagerAdapter = ReturnType<typeof createPackageManagerAdapter>;
 type TaskRunnerAdapter = ReturnType<typeof createTaskRunnerAdapter>;
 
-export interface ConsolidationTarget {
+interface ConsolidationTarget {
   readonly packageName: string;
   readonly packageRoot: string;
   readonly application: ApplicationConfig;
@@ -35,7 +35,7 @@ export interface ConsolidationTarget {
 }
 
 /** Validate the target package name and resolve its root/application/project id. */
-export function resolveConsolidationTarget(input: {
+function resolveConsolidationTarget(input: {
   readonly config: MonocarveConfig;
   readonly candidate: ConsolidationCandidate;
   readonly packageRootOverride: string | undefined;
@@ -58,7 +58,7 @@ export function resolveConsolidationTarget(input: {
   return { packageName, packageRoot, application, projectId };
 }
 
-export interface DonorPathResolver {
+interface DonorPathResolver {
   readonly donorFor: (filePath: string) => { root: string; slug: string } | undefined;
   readonly relativePath: (filePath: string) => string;
 }
@@ -68,7 +68,7 @@ export interface DonorPathResolver {
  * donor's relative imports while making same-named files (especially the
  * several src/index.ts barrels) unambiguous and publicly addressable.
  */
-export function createDonorPathResolver(candidate: ConsolidationCandidate): DonorPathResolver {
+function createDonorPathResolver(candidate: ConsolidationCandidate): DonorPathResolver {
   // Compute the relative path from each donor root to the file.
   const donorRoots = new Set(candidate.donors.map((d) => d.root));
 
@@ -89,12 +89,12 @@ export function createDonorPathResolver(candidate: ConsolidationCandidate): Dono
   return { donorFor, relativePath };
 }
 
-export interface ConsolidationPublicModules {
+interface ConsolidationPublicModules {
   readonly publicModules: PublicModule[];
   readonly publicSpecifierFor: ReadonlyMap<string, string>;
 }
 
-export function buildConsolidationPublicModules(input: {
+function buildConsolidationPublicModules(input: {
   readonly context: WorkspaceContext;
   readonly candidate: ConsolidationCandidate;
   readonly resolver: DonorPathResolver;
@@ -125,7 +125,7 @@ export function buildConsolidationPublicModules(input: {
   return { publicModules, publicSpecifierFor };
 }
 
-export function selectConsolidationTests(context: WorkspaceContext, candidate: ConsolidationCandidate): string[] {
+function selectConsolidationTests(context: WorkspaceContext, candidate: ConsolidationCandidate): string[] {
   return context
     .repositorySources()
     .filter((path) => candidate.donors.some((donor) => path.startsWith(`${donor.root}/`)) && context.isTest(path))
@@ -133,7 +133,7 @@ export function selectConsolidationTests(context: WorkspaceContext, candidate: C
 }
 
 /** Push move operations for every donor file, test, and asset onto `operations`/`sourceBlobs`. */
-export function buildConsolidationMoveOperations(input: {
+function buildConsolidationMoveOperations(input: {
   readonly context: WorkspaceContext;
   readonly candidate: ConsolidationCandidate;
   readonly resolver: DonorPathResolver;
@@ -506,6 +506,6 @@ export function operationPathsOf(operation: PlanOperation): string[] {
   }
 }
 
-export function donorSlug(name: string): string {
+function donorSlug(name: string): string {
   return name.replace(/^@[^/]+\//u, "").replace(/[^a-zA-Z0-9_-]+/gu, "-");
 }

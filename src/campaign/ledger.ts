@@ -6,13 +6,12 @@ import {
   type CampaignLedger,
   type CampaignLedgerInput,
   type CampaignStopEvaluation,
-  type CampaignStatus,
   type GraphMetricSnapshot,
 } from "./ledger-types.ts";
 import { assertAppendableChild, assertCampaignLedgerInputValid, assertCampaignLedgerValid, CampaignLedgerValidationError } from "./ledger-validation.ts";
 
 export * from "./ledger-types.ts";
-export { CampaignLedgerValidationError, assertCampaignLedgerValid } from "./ledger-validation.ts";
+export { assertCampaignLedgerValid } from "./ledger-validation.ts";
 
 export function createCampaignLedger(input: CampaignLedgerInput): CampaignLedger {
   assertCampaignLedgerInputValid(input);
@@ -92,16 +91,6 @@ export function parseCampaignLedger(text: string, source = "<inline>"): Campaign
   const ledger = parsed as CampaignLedger;
   assertCampaignLedgerValid(ledger);
   return ledger;
-}
-
-export function campaignLedgerDigest(ledger: CampaignLedger): string {
-  assertCampaignLedgerValid(ledger);
-  return hashJson(ledger);
-}
-
-export function campaignStatus(ledger: CampaignLedger): CampaignStatus {
-  assertCampaignLedgerValid(ledger);
-  return ledger.status;
 }
 
 /** Build a self-authenticating graph snapshot from scanner metric evidence. */

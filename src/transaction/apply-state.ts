@@ -19,7 +19,7 @@ import {
 import { errorText, errnoCode, ownerLiveness, systemProcessProbe, type ProcessProbe } from "./apply-owner.ts";
 import type { RollbackPoint } from "./rollback.ts";
 
-export type ApplyPhase = "simulating" | "applying" | "move-committed" | "wiring-committed";
+type ApplyPhase = "simulating" | "applying" | "move-committed" | "wiring-committed";
 
 /** Flag that explicitly accepts responsibility for discarding an unparseable apply lock. */
 export const FORCE_CORRUPT_LOCK_FLAG = "force-corrupt-lock" as const;

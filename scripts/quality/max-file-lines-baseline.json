@@ -1,15 +1,15 @@
 {
   "src/commands/preparation.ts": {
-    "lines": 546
+    "lines": 508
   },
   "src/consolidation/plan-support.ts": {
     "lines": 511
   },
   "src/plan/build.ts": {
-    "lines": 689
+    "lines": 685
   },
   "src/plan/scaffold-package.ts": {
-    "lines": 584
+    "lines": 583
   },
   "src/plan/validation/operations.ts": {
     "lines": 507
@@ -22,8 +22,5 @@
   },
   "test/assessment-evidence-publication.test.ts": {
     "lines": 574
-  },
-  "test/config-adapters.test.ts": {
-    "lines": 507
   }
 }

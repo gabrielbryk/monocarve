@@ -1,17 +1,16 @@
 /** bun adapter facade. Lockfile grammar lives in focused sibling modules. */
 
-import type { LockfileImporterMode } from "../plan/manifest.ts";
-import { hashText, type Sha256 } from "../util/hash.ts";
+import { PACKAGE_MANAGER_FILES } from "../config/workspace-files.ts";
 import { blockDeclaresImporter, deleteImporter, importerBlock, insertImporter, missingResolutions, replaceImporter } from "./bun-importers.ts";
 import { addBlockDependencies, addBlockDependency, removeBlockDependency, renderImporterBlock } from "./bun-render.ts";
 import { inspectWorkspace, listPackages, workspaceManifestEdit } from "./bun-workspace.ts";
+import { importerHasher } from "./importer-hash.ts";
 import { declaredPackageManagerVersion } from "./package-manager-version.ts";
-import type { PackageManagerAdapter } from "./types.ts";
+import type { LockfileImporterMode, PackageManagerAdapter } from "./types.ts";
 
 export { LockfileError } from "./lockfile-error.ts";
-export { parseBunLock } from "./bun-lock.ts";
 
-const LOCKFILE_NAME = "bun.lock";
+const LOCKFILE_NAME = PACKAGE_MANAGER_FILES.bun.lockfile;
 /**
  * bun has no workspace file of its own: membership is the root manifest's
  * `workspaces` array, so that is the file this adapter registers a new package
@@ -20,7 +19,7 @@ const LOCKFILE_NAME = "bun.lock";
  * silently optional, which for a package root outside the declared globs means
  * a package the workspace never sees.
  */
-const WORKSPACE_MANIFEST = "package.json";
+const WORKSPACE_MANIFEST = PACKAGE_MANAGER_FILES.bun.workspaceManifest;
 
 export const bunAdapter: PackageManagerAdapter = {
   id: "bun",
@@ -37,7 +36,7 @@ export const bunAdapter: PackageManagerAdapter = {
   replaceImporter,
   applyImporter: (text, root, block, mode) => applyImporter(text, root, block, mode),
   missingResolutions,
-  lockfileImporterHash: (text, root) => importerHash(text, root),
+  lockfileImporterHash: importerHasher(importerBlock),
   addBlockDependency,
   addBlockDependencies,
   removeBlockDependency,
@@ -66,9 +65,4 @@ export const bunAdapter: PackageManagerAdapter = {
 function applyImporter(text: string, root: string, block: string, mode?: LockfileImporterMode): string {
   if (mode === "delete") return deleteImporter(text, root);
   return mode === "replace" ? replaceImporter(text, root, block) : insertImporter(text, root, block);
-}
-
-function importerHash(text: string, root: string): Sha256 | undefined {
-  const block = importerBlock(text, root);
-  return block === undefined ? undefined : hashText(block);
 }

@@ -39,9 +39,10 @@ function isValidRegex(source: string): boolean {
  */
 export const templateSource = z.union([z.strictObject({ contents: z.string() }), z.strictObject({ file: relativePath })]);
 
+/** Template text given inline (`contents`) or as a repo-relative `file`. */
 export type TemplateSource = z.output<typeof templateSource>;
 
-export const publicSurfaceSchema = z
+const publicSurfaceSchema = z
   .discriminatedUnion("mode", [
     z.strictObject({ mode: z.literal("barrel") }),
     z.strictObject({
@@ -67,6 +68,7 @@ export const publicSurfaceSchema = z
 
 export const publicSurface = publicSurfaceSchema.default({ mode: "barrel" });
 
+/** How an extracted package exposes its public surface (defaults to a barrel). */
 export type PublicSurfaceConfig = z.output<typeof publicSurface>;
 
 /**
@@ -85,8 +87,6 @@ export const projectReferences = z
     dependencyTarget: relativePath.default("tsconfig.json"),
   })
   .prefault({});
-
-export type ProjectReferencesConfig = z.output<typeof projectReferences>;
 
 /**
  * The scaffold fields a profile or application may replace. Keeping this as a

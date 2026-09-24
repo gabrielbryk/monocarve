@@ -91,3 +91,15 @@ export class UsageError extends MonocarveError {
 export class IoError extends MonocarveError {
   override readonly name = "IoError";
 }
+
+/** Assessment input inventory drifted, or an input (including a config import) cannot be bound. */
+export class InputInventoryError extends MonocarveError {
+  override readonly name = "InputInventoryError";
+  constructor(
+    readonly code: "ASSESSMENT_INPUT_DRIFT" | "ASSESSMENT_INPUT_UNBOUND",
+    message: string,
+    readonly paths: readonly string[],
+  ) {
+    super(message);
+  }
+}

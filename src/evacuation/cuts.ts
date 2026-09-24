@@ -6,7 +6,7 @@ import type { RecipeStep, RetainedBlocker } from "../portfolio/types.ts";
 import { byCodeUnit } from "../util/hash.ts";
 import type { EvacuationCandidate } from "./candidate.ts";
 
-export type BoundaryCutReason = "composition-root" | "retained-root" | "outside-evacuation";
+type BoundaryCutReason = "composition-root" | "retained-root" | "outside-evacuation";
 
 export interface EvacuationBoundaryCut {
   readonly from: string;

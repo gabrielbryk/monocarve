@@ -1,13 +1,10 @@
 /** Structural validation of the JSON campaign and multi-preparation specs the CLI reads. */
 import { UsageError } from "../errors.ts";
+import { isJsonObject } from "../util/json.ts";
 
 export interface StableCampaignSpec {
   readonly application: string;
   readonly targets: readonly { readonly path: string; readonly packageName: string; readonly packageRoot?: string }[];
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 export function validateStableCampaignSpec(value: Record<string, unknown>): StableCampaignSpec {
@@ -19,7 +16,7 @@ export function validateStableCampaignSpec(value: Record<string, unknown>): Stab
   const identities = new Set<string>();
   const targets: StableCampaignSpec["targets"][number][] = [];
   for (const [index, entry] of rawTargets.entries()) {
-    const target: Record<string, unknown> = isPlainObject(entry) ? entry : {};
+    const target: Record<string, unknown> = isJsonObject(entry) ? entry : {};
     const path = target.path;
     const packageName = target.packageName;
     const packageRoot = target.packageRoot;
@@ -52,7 +49,7 @@ export function validateMultiPreparationSpec(value: Record<string, unknown>): Mu
   if (typeof candidate !== "string" || !Array.isArray(rawMembers) || rawMembers.length < 2)
     throw new UsageError("multi-file preparation spec requires candidate and at least two members");
   const members = rawMembers.map((entry, index) => {
-    const member: Record<string, unknown> = isPlainObject(entry) ? entry : {};
+    const member: Record<string, unknown> = isJsonObject(entry) ? entry : {};
     const { file, candidate: memberCandidate, target, moduleSpecifier, groups } = member;
     if (
       typeof file !== "string" ||

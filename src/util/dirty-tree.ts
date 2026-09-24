@@ -16,7 +16,7 @@
 import { statusEntries } from "./git.ts";
 
 /** Equal paths and directory containment overlap; string-prefix matches do not. */
-export function pathOverlaps(left: string, right: string): boolean {
+function pathOverlaps(left: string, right: string): boolean {
   const normalizedLeft = left.replace(/\/+$/, "");
   const normalizedRight = right.replace(/\/+$/, "");
   return normalizedLeft === normalizedRight || normalizedLeft.startsWith(`${normalizedRight}/`) || normalizedRight.startsWith(`${normalizedLeft}/`);

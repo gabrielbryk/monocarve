@@ -127,13 +127,13 @@ function assertManifestRecordsShape(manifest: ManifestShape): asserts manifest i
 }
 
 /** Structural shape validation only — no configuration lookups. */
-export function assertPreparerManifestShape(value: unknown): asserts value is PreparerManifest {
+function assertPreparerManifestShape(value: unknown): asserts value is PreparerManifest {
   assertManifestEnvelopeShape(value);
   assertManifestRecordsShape(value);
 }
 
 /** Configuration-consistency validation of an already shape-checked manifest. */
-export function assertPreparerManifestMatchesConfig(config: MonocarveConfig, manifest: PreparerManifest): void {
+function assertPreparerManifestMatchesConfig(config: MonocarveConfig, manifest: PreparerManifest): void {
   if (manifest.baseline.configDigest !== configDigest(config)) throw new PreparerError("preparer manifest configuration digest mismatch");
   const { planId: _planId, ...draft } = manifest;
   if (manifest.planId !== hashJson(draft)) throw new PreparerError("preparer manifest identity mismatch");
@@ -228,4 +228,10 @@ function assertPreparerCreatesMatchMutations(manifest: PreparerManifest): void {
     const alreadyCreated = mutation.preconditionHash === mutation.resultHash && mutation.preconditionMode === mutation.resultMode;
     if (!absent && !alreadyCreated) throw new PreparerError(`preparer manifest create precondition is neither missing nor exact: ${create.path}`);
   }
+}
+
+/** Shape and config validation for a preparer manifest; pure, so transaction code may call it. */
+export function assertPreparerManifest(config: MonocarveConfig, value: unknown): asserts value is PreparerManifest {
+  assertPreparerManifestShape(value);
+  assertPreparerManifestMatchesConfig(config, value);
 }

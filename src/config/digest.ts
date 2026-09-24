@@ -25,6 +25,7 @@
 import { hashJson, type Sha256 } from "../util/hash.ts";
 import type { MonocarveConfig } from "./schema.ts";
 
+/** SHA-256 identity of a validated config, excluding machine-local `transaction.worktreeRoot`. */
 export function configDigest(config: MonocarveConfig): Sha256 {
   // Destructured out rather than deleted from a clone, so adding a field to
   // the transaction block cannot silently fall out of the digest.

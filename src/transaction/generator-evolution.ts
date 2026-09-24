@@ -4,7 +4,8 @@ import { relative } from "node:path";
 
 import type { MonocarveConfig } from "../config.ts";
 import type { ExtractionManifest, GeneratedFileRecord } from "../plan/manifest.ts";
-import { assertPreparerManifest, type PreparerManifest } from "../preparer/index.ts";
+import { assertPreparerManifest } from "../preparer/core-validate.ts";
+import type { PreparerManifest } from "../preparer/manifest.ts";
 import { git, repositoryPrefix, showBaseline } from "../util/git.ts";
 import { hashText } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";

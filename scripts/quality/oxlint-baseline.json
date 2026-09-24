@@ -113,10 +113,6 @@
     "typescript(no-unnecessary-type-parameters)": 1,
     "typescript(no-unsafe-type-assertion)": 1
   },
-  "src/assessment/config-snapshot.ts": {
-    "typescript(no-unnecessary-condition)": 2,
-    "unicorn(no-useless-spread)": 1
-  },
   "src/assessment/evidence-cleanup.ts": {
     "oxc(no-map-spread)": 2,
     "unicorn(no-array-reverse)": 1
@@ -229,16 +225,12 @@
     "typescript(no-unnecessary-template-expression)": 1,
     "typescript(no-unsafe-type-assertion)": 1
   },
-  "src/commands/preparation-boundary.ts": {
-    "import(no-cycle)": 1
-  },
   "src/commands/preparation-io.ts": {
     "typescript(no-unsafe-type-assertion)": 1
   },
   "src/commands/preparation.ts": {
-    "import(no-cycle)": 1,
     "typescript(no-non-null-assertion)": 3,
-    "typescript(no-unsafe-type-assertion)": 2
+    "typescript(no-unsafe-type-assertion)": 1
   },
   "src/commands/preparers.ts": {
     "typescript(no-non-null-assertion)": 1
@@ -269,6 +261,10 @@
     "typescript(no-non-null-assertion)": 1,
     "typescript(no-unsafe-type-assertion)": 1
   },
+  "src/config/snapshot-loader.ts": {
+    "typescript(no-unnecessary-condition)": 2,
+    "unicorn(no-useless-spread)": 1
+  },
   "src/config/validation.ts": {
     "typescript(consistent-type-imports)": 1
   },
@@ -287,7 +283,7 @@
   "src/doctor/config-doctor.ts": {
     "typescript(no-unnecessary-condition)": 1,
     "typescript(no-unnecessary-type-assertion)": 1,
-    "typescript(no-unsafe-type-assertion)": 4
+    "typescript(no-unsafe-type-assertion)": 3
   },
   "src/evacuation/assessment.ts": {
     "typescript(no-non-null-assertion)": 1
@@ -403,6 +399,9 @@
     "typescript(no-non-null-assertion)": 4,
     "unicorn(no-array-sort)": 1
   },
+  "src/plan/path-migrations.ts": {
+    "typescript(no-unnecessary-condition)": 1
+  },
   "src/plan/path-reference-rewrites.ts": {
     "typescript(no-non-null-assertion)": 8
   },
@@ -425,7 +424,6 @@
   },
   "src/plan/scaffold-package.ts": {
     "eslint(no-shadow)": 1,
-    "import(no-cycle)": 1,
     "typescript(no-non-null-assertion)": 4,
     "typescript(no-unsafe-assignment)": 3,
     "typescript(no-unsafe-member-access)": 2,
@@ -433,11 +431,7 @@
     "unicorn(no-useless-fallback-in-spread)": 1
   },
   "src/plan/scaffold-shared.ts": {
-    "typescript(no-unsafe-type-assertion)": 2
-  },
-  "src/plan/scaffold.ts": {
-    "import(no-cycle)": 1,
-    "typescript(consistent-return)": 1
+    "typescript(no-unsafe-type-assertion)": 1
   },
   "src/plan/static-fs-references.ts": {
     "typescript(no-non-null-assertion)": 1,
@@ -569,7 +563,6 @@
     "typescript(no-non-null-assertion)": 3
   },
   "src/prepare/build-boundary.ts": {
-    "import(no-cycle)": 1,
     "oxc(no-map-spread)": 2,
     "typescript(no-unsafe-assignment)": 2,
     "typescript(no-unsafe-type-assertion)": 3,
@@ -577,7 +570,6 @@
     "unicorn(no-array-sort)": 1
   },
   "src/prepare/build.ts": {
-    "import(no-cycle)": 1,
     "oxc(no-map-spread)": 1,
     "typescript(no-non-null-assertion)": 2,
     "typescript(no-unnecessary-boolean-literal-compare)": 1
@@ -636,9 +628,6 @@
     "typescript(no-non-null-assertion)": 3,
     "typescript(no-redundant-type-constituents)": 1
   },
-  "src/preparer/bootstrap-config.ts": {
-    "import(no-cycle)": 1
-  },
   "src/preparer/bootstrap.ts": {
     "typescript(no-non-null-assertion)": 1,
     "typescript(no-unsafe-type-assertion)": 1
@@ -657,7 +646,6 @@
     "typescript(no-unsafe-type-assertion)": 1
   },
   "src/preparer/core.ts": {
-    "import(no-cycle)": 1,
     "oxc(no-map-spread)": 1,
     "typescript(no-unsafe-type-assertion)": 1,
     "unicorn(no-array-sort)": 2
@@ -780,13 +768,7 @@
     "typescript(no-unnecessary-type-conversion)": 1,
     "typescript(no-unsafe-type-assertion)": 2
   },
-  "src/transaction/journal.ts": {
-    "unicorn(no-array-reverse)": 1
-  },
   "src/transaction/lockfile-verify.ts": {
-    "typescript(no-unnecessary-condition)": 1
-  },
-  "src/transaction/path-migrations.ts": {
     "typescript(no-unnecessary-condition)": 1
   },
   "src/transaction/postconditions.ts": {

@@ -1,10 +1,7 @@
 import type { ExtractionManifest, GeneratedFileRecord, MoveOperation, MoveWithRewriteOperation, PlanOperation } from "./manifest.ts";
 
-export function isMove(operation: PlanOperation): operation is MoveOperation {
+function isMove(operation: PlanOperation): operation is MoveOperation {
   return operation.kind === "move";
-}
-export function isMoveWithRewrite(operation: PlanOperation): operation is MoveWithRewriteOperation {
-  return operation.kind === "move-with-rewrite";
 }
 export function isAnyMove(operation: PlanOperation): operation is MoveOperation | MoveWithRewriteOperation {
   return operation.kind === "move" || operation.kind === "move-with-rewrite";
@@ -30,7 +27,7 @@ export function operationTargets(operation: PlanOperation): string[] {
       return [operation.path];
   }
 }
-export function operationSources(operation: PlanOperation): string[] {
+function operationSources(operation: PlanOperation): string[] {
   return operation.kind === "move" || operation.kind === "move-with-rewrite" ? [operation.source] : [];
 }
 export function operationPaths(operation: PlanOperation): string[] {

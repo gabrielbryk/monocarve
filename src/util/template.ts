@@ -14,7 +14,7 @@ export type TemplateVars = Readonly<Record<string, string>>;
 
 const PLACEHOLDER = /\{([a-zA-Z][a-zA-Z0-9_]*)\}/g;
 
-export class TemplateError extends MonocarveError {
+class TemplateError extends MonocarveError {
   override readonly name = "TemplateError";
 }
 

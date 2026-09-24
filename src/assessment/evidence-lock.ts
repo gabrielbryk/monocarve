@@ -16,7 +16,7 @@ import { equalOwnedBytes } from "./evidence-recovery-write.ts";
 import { recoveryError } from "./evidence-recovery.ts";
 import type { PublicationPaths } from "./evidence-types.ts";
 
-export interface LockOwner {
+interface LockOwner {
   readonly schemaVersion: 1;
   readonly pid: number;
   readonly processStart: string | null;
@@ -40,7 +40,7 @@ export interface LockProcessProbe {
   signal(pid: number): "exists" | "missing" | "unknown";
 }
 
-export const procfsLockProbe: LockProcessProbe = {
+const procfsLockProbe: LockProcessProbe = {
   startIdentity: processStart,
   signal(pid) {
     try {
@@ -129,7 +129,7 @@ export function releaseLock(lock: string, identity: FileIdentity, ownerIdentity:
  * identity (no procfs, EPERM on /proc) or an owner recorded without one is
  * `uncertain`, which callers treat as held.
  */
-export function ownerState(lock: string, probe: LockProcessProbe = procfsLockProbe): "live" | "dead" | "uncertain" {
+function ownerState(lock: string, probe: LockProcessProbe = procfsLockProbe): "live" | "dead" | "uncertain" {
   try {
     const owner = JSON.parse(readFileSync(resolve(lock, "owner.json"), "utf8")) as Partial<LockOwner>;
     if (owner.schemaVersion !== 1 || !Number.isSafeInteger(owner.pid) || typeof owner.pid !== "number" || owner.pid <= 0 || !("processStart" in owner))

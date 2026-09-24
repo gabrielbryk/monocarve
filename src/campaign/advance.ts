@@ -18,7 +18,7 @@ import {
   type GraphMetricSnapshot,
 } from "./ledger.ts";
 
-export class CampaignAdvanceError extends MonocarveError {
+class CampaignAdvanceError extends MonocarveError {
   override readonly name = "CampaignAdvanceError";
 }
 
@@ -44,14 +44,14 @@ export interface AdvanceCampaignOptions {
   readonly stopForReview?: boolean;
 }
 
-export interface CampaignAdvanceStopped {
+interface CampaignAdvanceStopped {
   readonly outcome: "stopped";
   readonly reason: "no-next-child" | "stop-condition";
   readonly campaign: CampaignLedger;
   readonly graph: GraphMetricSnapshot;
 }
 
-export interface CampaignAdvancePlanned {
+interface CampaignAdvancePlanned {
   readonly outcome: "review-required" | "ready-to-apply";
   readonly campaign: CampaignLedger;
   readonly child: CampaignChildPlan;

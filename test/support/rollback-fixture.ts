@@ -98,12 +98,12 @@ export { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, read, write } 
 
 export const DONOR = "apps/api/src/widget/widget.ts";
 export const TARGET = "libs/analytics/src/widget/widget.ts";
-export const CONSUMER = "apps/api/src/consumer.ts";
+const CONSUMER = "apps/api/src/consumer.ts";
 export const ENTRYPOINT = "libs/analytics/src/index.ts";
 /** Last operation's target, and the only one whose parent directory no earlier operation creates. */
 export const TOKENS = "libs/analytics/generated/tokens.ts";
 export const TOKENS_DIR = "libs/analytics/generated";
-export const PACKAGE = "@acme/analytics";
+const PACKAGE = "@acme/analytics";
 export const PACKAGE_ROOT = "libs/analytics";
 
 const DONOR_TEXT = "export const widgetValue = 1;\n";
@@ -111,11 +111,11 @@ const CONSUMER_TEXT = 'import { widgetValue } from "./widget/widget.ts";\n\nexpo
 export const BARREL = 'export * from "./widget/widget.ts";\n';
 const TOKENS_TEXT = "export const tokens = 1;\n";
 
-export const LOCKFILE = ["lockfileVersion: '9.0'", "", "importers:", "", "  .: {}", "", "  libs/zeta: {}", ""].join("\n");
-export const IMPORTER_BLOCK = pnpmAdapter.importerBlock(LOCKFILE.replace("  libs/zeta: {}", "  libs/analytics: {}\n\n  libs/zeta: {}"), PACKAGE_ROOT)!;
+const LOCKFILE = ["lockfileVersion: '9.0'", "", "importers:", "", "  .: {}", "", "  libs/zeta: {}", ""].join("\n");
+const IMPORTER_BLOCK = pnpmAdapter.importerBlock(LOCKFILE.replace("  libs/zeta: {}", "  libs/analytics: {}\n\n  libs/zeta: {}"), PACKAGE_ROOT)!;
 export const LOCKFILE_APPLIED = pnpmAdapter.insertImporter(LOCKFILE, PACKAGE_ROOT, IMPORTER_BLOCK);
 
-export function packageManifest(name: string): string {
+function packageManifest(name: string): string {
   return `${JSON.stringify(
     {
       name,
@@ -226,7 +226,7 @@ export const MANIFEST_PATH = "plans/fixture-rollback.json";
  */
 const PER_FIXTURE_FILES = new Set([MANIFEST_PATH, `${CONFIG_BASENAME}.json`]);
 
-export function landManifest(root: string, manifest: ExtractionManifest): string {
+function landManifest(root: string, manifest: ExtractionManifest): string {
   const path = MANIFEST_PATH;
   write(root, path, `${JSON.stringify(manifest, null, 2)}\n`);
   fixtureGit(root, "add", "--", path);
@@ -272,7 +272,7 @@ export interface RepoState {
   readonly staged: string;
 }
 
-export function walk(root: string, prefix = ""): { files: Record<string, string>; directories: string[] } {
+function walk(root: string, prefix = ""): { files: Record<string, string>; directories: string[] } {
   const files: Record<string, string> = {};
   const directories: string[] = [];
   for (const entry of readdirSync(join(root, prefix), { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
@@ -376,7 +376,7 @@ export async function withReadOnlyDirectory(absolute: string, body: () => Promis
  * than any position can produce.
  */
 export const RESTORED_BEFORE_OPERATION = [0, 2, 3, 4, 5];
-export const JOURNAL_PATHS = 6;
+const JOURNAL_PATHS = 6;
 
 /** What the journal says when it put `count` paths back; it says nothing at zero. */
 export function restoreNote(count: number): string {

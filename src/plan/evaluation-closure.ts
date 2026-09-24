@@ -82,7 +82,7 @@ import type { EscapeRewrite, SideEffectsDeclaration } from "./manifest.ts";
  * table in the module comment.
  */
 /** A third-party package the closure reaches, and what it says about itself. */
-export interface ReachedPackage {
+interface ReachedPackage {
   readonly name: string;
   readonly sideEffects: SideEffectsDeclaration;
 }

@@ -8,15 +8,16 @@ import { qualifyWorkspace } from "../assessment/qualify-workspace.ts";
 import { resolveExtractionProfile, scaffoldFor, type LoadedConfig, type MonocarveConfig, type ScaffoldTemplatesConfig } from "../config.ts";
 import { NotYetPortedError } from "../errors.ts";
 import { statusEntries } from "../util/git.ts";
+import { isJsonObject } from "../util/json.ts";
 
-export type ConfigValueSource = "explicit" | "default" | "unknown";
+type ConfigValueSource = "explicit" | "default" | "unknown";
 
 export interface ConfigDoctorInput extends Pick<LoadedConfig, "config" | "configPath" | "rootDir"> {
   /** The pre-parse config object, when the caller has it. Enables exact provenance. */
   readonly userConfig?: unknown;
 }
 
-export interface AdapterStatus {
+interface AdapterStatus {
   readonly configured: string;
   readonly status: "available" | "not-yet-ported";
   readonly detail?: string;
@@ -410,5 +411,5 @@ function adapterStatus(configured: string, factory: () => unknown): AdapterStatu
 }
 
 function objectValue(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+  return isJsonObject(value) ? value : undefined;
 }

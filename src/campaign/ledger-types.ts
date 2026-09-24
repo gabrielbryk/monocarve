@@ -6,7 +6,7 @@ import type { Sha256 } from "../util/hash.ts";
 export const CAMPAIGN_LEDGER_SCHEMA_VERSION = 1 as const;
 
 export type CampaignStatus = "active" | "completed" | "stopped";
-export type CampaignChildKind = "preparation" | "extraction";
+type CampaignChildKind = "preparation" | "extraction";
 
 /** A graph snapshot is deliberately generic: every metric is a non-negative count. */
 export interface GraphMetricSnapshot {
@@ -26,12 +26,12 @@ interface CampaignAuditEvidenceBase {
   readonly digest: Sha256;
 }
 
-export interface ExtractionCampaignAuditEvidence extends CampaignAuditEvidenceBase {
+interface ExtractionCampaignAuditEvidence extends CampaignAuditEvidenceBase {
   readonly kind: "extraction";
   readonly report: AuditReport;
 }
 
-export interface PreparationCampaignAuditEvidence extends CampaignAuditEvidenceBase {
+interface PreparationCampaignAuditEvidence extends CampaignAuditEvidenceBase {
   readonly kind: "preparation";
   readonly report: PreparationAuditReport;
 }
@@ -39,7 +39,7 @@ export interface PreparationCampaignAuditEvidence extends CampaignAuditEvidenceB
 /** The evidence format must match the child it records; reports are never coerced. */
 export type CampaignAuditEvidence = ExtractionCampaignAuditEvidence | PreparationCampaignAuditEvidence;
 
-export interface CampaignGraphTransition {
+interface CampaignGraphTransition {
   readonly before: GraphMetricSnapshot;
   readonly after: GraphMetricSnapshot;
 }
@@ -57,7 +57,7 @@ export interface CampaignChildPlan {
   readonly graphDigest?: Sha256;
 }
 
-export interface PlannedCampaignChild extends CampaignChildPlan {
+interface PlannedCampaignChild extends CampaignChildPlan {
   readonly graphDigest: Sha256;
   readonly status: "planned";
 }
@@ -102,9 +102,6 @@ export interface CampaignStopEvaluation {
   readonly ledger: CampaignLedger;
   readonly condition?: CampaignStopCondition;
 }
-
-/** Compatibility name for callers that persist the ledger as a manifest. */
-export type CampaignManifest = CampaignLedger;
 
 export interface CampaignChildApplication {
   readonly childId: string;

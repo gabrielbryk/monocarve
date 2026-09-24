@@ -18,7 +18,7 @@ import { isExtractionManifestLike } from "../plan/manifest.ts";
 import { compileModulePromotion, modulePromotionImporterEvidence } from "../plan/module-promotion.ts";
 import { applyPreparation } from "../prepare/apply.ts";
 import { resolveBoundaries } from "../prepare/boundary-resolve.ts";
-import { compileBoundaryPreparationManifest } from "../prepare/build.ts";
+import { compileBoundaryPreparationManifest } from "../prepare/build-boundary.ts";
 import { compileGeneratedSourceAdoption, generatedSourceAdoptionPolicyAnchor } from "../prepare/generated-source-adoption.ts";
 import { serializePreparationManifest } from "../prepare/index.ts";
 import { simulatePreparation } from "../prepare/simulate.ts";
@@ -26,7 +26,7 @@ import { compileValueSplit } from "../prepare/value-split.ts";
 import { applyPlan } from "../transaction/apply.ts";
 import { simulatePlan } from "../transaction/simulate.ts";
 import { relativeWorkspacePath } from "../util/paths.ts";
-import { loadPreparationManifest, readWorkspaceText, requiredFlag } from "./preparation.ts";
+import { loadPreparationManifest, readWorkspaceText, requiredFlag } from "./preparation-io.ts";
 import { graphDigest, load, loadGraph, loadManifest, outputPath, print, writeOutput, type LoadedGraph } from "./shared.ts";
 import type { CommandSpec } from "./types.ts";
 

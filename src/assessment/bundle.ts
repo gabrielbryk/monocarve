@@ -65,7 +65,7 @@ export const CORE_ASSESSMENT_ARTIFACTS = [
 ] as const;
 export const FULL_PORTFOLIO_PATH = "portfolio-full.json";
 
-export function assessmentArtifacts(snapshot: AssessmentSnapshot, reports: AssessmentReports, batch?: DeclarationBatchResult): Record<string, string> {
+function assessmentArtifacts(snapshot: AssessmentSnapshot, reports: AssessmentReports, batch?: DeclarationBatchResult): Record<string, string> {
   const artifacts: Record<string, string> = {
     "summary.json": json(reports.summary),
     "layers.json": json({ schemaVersion: 1, baseline: snapshot.baseline, report: reports.layers }),
@@ -194,10 +194,6 @@ export function publishDeclarationBatch(input: {
     ...(input.replaceGenerated ? { replaceGenerated: true } : {}),
     ...(input.maxBytes === undefined ? {} : { maxBytes: input.maxBytes }),
   });
-}
-
-export function deriveAndPublishAssessment(input: Parameters<typeof publishAssessment>[0]): PublishEvidenceResult<AssessmentManifest> {
-  return publishAssessment(input);
 }
 
 export function defaultAssessmentArguments(application: string, input: { limit?: number; fullPortfolio?: boolean } = {}): AssessmentAnalyticalArguments {

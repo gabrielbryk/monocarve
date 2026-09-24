@@ -92,7 +92,7 @@ export interface CompatibilityShim {
   readonly lineCount: number;
 }
 
-export type RecommendationReasonCode =
+type RecommendationReasonCode =
   | "generic-target"
   | "composition-adjacent"
   | "compatibility-shim"

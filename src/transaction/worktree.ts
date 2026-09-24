@@ -23,6 +23,7 @@ import { MonocarveError } from "../errors.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
 import { isDirectory } from "../util/files.ts";
 import { git, tryGit } from "../util/git.ts";
+import { isPathInside } from "../util/paths.ts";
 import { failedGateOutput } from "./gate-diagnostics.ts";
 
 export class WorktreeError extends MonocarveError {
@@ -150,11 +151,6 @@ function canonicalPath(path: string): string {
   return resolve(realpathSync(existing), ...unresolved);
 }
 
-function isPathInside(parent: string, candidate: string): boolean {
-  const path = relative(parent, candidate);
-  return path === "" || isInside(path);
-}
-
 /** Run the configured install against the tree as it exists at this moment. */
 export function installWorkspaceDependencies(workspacePath: string, command: readonly string[] | undefined): void {
   if (!command || command.length === 0) throw new WorktreeError("nodeModules: install requires an install command");
@@ -174,14 +170,8 @@ export function installWorkspaceDependencies(workspacePath: string, command: rea
 function relativeInside(repositoryRoot: string, rootDir: string): string {
   const root = resolve(repositoryRoot);
   const workspace = resolve(rootDir);
-  const path = relative(root, workspace);
-  if (!isInside(path)) throw new WorktreeError(`${rootDir} is not inside ${repositoryRoot}`);
-  return path;
-}
-
-/** Whether a path returned by `relative()` stays at or below its origin. */
-function isInside(path: string): boolean {
-  return !isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`);
+  if (!isPathInside(root, workspace)) throw new WorktreeError(`${rootDir} is not inside ${repositoryRoot}`);
+  return relative(root, workspace);
 }
 
 function disposeWorktree(rootDir: string, path: string): void {
@@ -266,7 +256,7 @@ function worktreeLocalTarget(worktree: string, root: string, from: string): stri
   }
   const workspace = realpathSync(root);
   const path = relative(workspace, resolved);
-  if (!isInside(path) || path.split(sep).includes("node_modules")) return null;
+  if (!isPathInside(workspace, resolved) || path.split(sep).includes("node_modules")) return null;
   return join(worktree, path);
 }
 

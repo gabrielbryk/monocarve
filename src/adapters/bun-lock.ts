@@ -115,7 +115,7 @@ export function packageInsertion(section: LockSection, key: string): { index: nu
 }
 
 /** A registry name, as opposed to a `parent/child` resolution chain. */
-export function isTopLevelKey(key: string): boolean {
+function isTopLevelKey(key: string): boolean {
   const slashes = key.split("/").length - 1;
   return key.startsWith("@") ? slashes === 1 : slashes === 0;
 }

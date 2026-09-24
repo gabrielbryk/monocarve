@@ -7,6 +7,7 @@ import type { ScaffoldTemplateOverrides } from "./primitives.ts";
 import type { ApplicationConfig, RenderedExtractionProfile, ResolvedExtractionProfile, ScaffoldTemplatesConfig } from "./schema-core.ts";
 import type { MonocarveConfig } from "./schema.ts";
 
+/** Effective scaffold templates for an application: global templates with its per-field overrides applied. */
 export function scaffoldFor(config: MonocarveConfig, app: ApplicationConfig): ScaffoldTemplatesConfig {
   const override = app.scaffoldTemplates;
   if (!override) return config.scaffoldTemplates;
