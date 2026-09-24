@@ -37,7 +37,7 @@ export function analyzePlanConflicts(plans: readonly CampaignPlan[]): PlanConfli
   assertUnique(plans, (plan) => plan.candidateId, "candidate id");
   assertUnique(plans, (plan) => plan.manifest.planId, "plan id");
   assertCompatiblePlans(plans);
-  const subjects = plans.map(toSubject).sort(compareSubjects);
+  const subjects = plans.map(toSubject).toSorted(compareSubjects);
   const conflicts = collectConflicts(subjects);
   return { baselineCommit: plans[0]!.manifest.baselineCommit, graphDigest: plans[0]!.manifest.graphDigest, conflicts, waves: buildWaves(subjects, conflicts) };
 }

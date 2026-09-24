@@ -185,7 +185,7 @@ export function consumerEvidence(config: MonocarveConfig, manifest: ExtractionMa
   collectDeclaredConsumerFailures(manifest, rootDir, state.consumerFailures);
 
   if (state.movedPathEdges.length > 0) {
-    state.consumerFailures.push(`references into moved paths remain: ${[...new Set(state.movedPathEdges)].sort()[0]}`);
+    state.consumerFailures.push(`references into moved paths remain: ${[...new Set(state.movedPathEdges)].toSorted()[0]}`);
   }
   return {
     consumerFailures: state.consumerFailures,

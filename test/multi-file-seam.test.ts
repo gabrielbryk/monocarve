@@ -34,7 +34,7 @@ afterAll(cleanupFixtures);
 test("finds one exact cross-file type cycle and keeps disjoint groups separate", () => {
   const result = plan(workspace("cycle"));
   const cycle = result.candidates.find((candidate) => candidate.groups.some((group) => group.name === "A"));
-  expect(cycle?.groups.map((group) => group.name).sort()).toEqual(["A", "B"]);
+  expect(cycle?.groups.map((group) => group.name).toSorted()).toEqual(["A", "B"]);
   expect(cycle?.cyclic).toBe(true);
   expect(cycle?.sourcePaths).toEqual(["src/a.ts", "src/b.ts"]);
   expect(cycle?.affectedConsumers).toEqual(
@@ -152,7 +152,7 @@ test("compiles and independently simulates a reviewed cross-file type cycle as o
     }),
   ).toThrow(/exactly cover/);
   expect(manifest.operations).toHaveLength(2);
-  expect(manifest.declarations.map((group) => group.name).sort()).toEqual(["A", "B"]);
+  expect(manifest.declarations.map((group) => group.name).toSorted()).toEqual(["A", "B"]);
   expect(manifest.changedFiles).toEqual(["apps/api/src/a-types.ts", "apps/api/src/a.ts", "apps/api/src/b-types.ts", "apps/api/src/b.ts"]);
   const simulation = await simulatePreparation({
     config,

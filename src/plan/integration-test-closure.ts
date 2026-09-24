@@ -18,7 +18,7 @@ export interface IntegrationTestClosure {
 export function selectIntegrationTestRoots(context: WorkspaceContext, suiteName: string, suite: IntegrationTestSuiteConfig): string[] {
   const roots = sourcePathsWithinSuite(context, suite)
     .filter((path) => suite.patterns.some((pattern) => new RegExp(pattern).test(path)))
-    .sort();
+    .toSorted();
   if (roots.length === 0) throw new PlanningError(`integration test suite ${suiteName} selects no source files`);
   for (const test of roots) requireIntegrationTest(context, suiteName, test);
   return roots;
@@ -41,9 +41,9 @@ export function collectIntegrationTestClosure(
     if (fileRewrites.length > 0) rewrites.set(test, fileRewrites);
   }
 
-  const tests = [...selected].sort();
+  const tests = [...selected].toSorted();
   refuseInboundConsumers(context, tests);
-  return { tests, assets: [...assets].sort(), rewrites };
+  return { tests, assets: [...assets].toSorted(), rewrites };
 }
 
 function sourcePathsWithinSuite(context: WorkspaceContext, suite: IntegrationTestSuiteConfig): string[] {

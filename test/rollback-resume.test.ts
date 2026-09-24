@@ -32,7 +32,7 @@ describe("--resume converges on the same tree as a clean apply", () => {
       diff: fixtureGit(root, "diff", "--name-status", "--find-renames=100%", `${manifest.baselineCommit}..HEAD`, "--")
         .split("\n")
         .filter((line) => !line.endsWith(MANIFEST_PATH))
-        .sort(),
+        .toSorted(),
       files: comparableFiles(root),
       subjects: fixtureGit(root, "log", "--format=%s", "-3"),
       status: fixtureGit(root, "status", "--porcelain=v1", "--untracked-files=all"),

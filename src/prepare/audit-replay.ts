@@ -49,7 +49,7 @@ export function verifyRenderedReplay(operation: ExtractTypeDeclarationsOperation
         targetExtractionHash: item.targetExtraction.hash,
         synthesizedExport: item.synthesizedExport,
       }))
-      .sort((left, right) => byCodeUnit(left.selectorId ?? "", right.selectorId ?? ""));
+      .toSorted((left, right) => byCodeUnit(left.selectorId ?? "", right.selectorId ?? ""));
     const actual = operation.targetDeclarationProofs.map((item) => ({ ...item }));
     if (expected.some((item) => item.selectorId === undefined) || hashJson(expected) !== hashJson(actual)) {
       failures.push(`replay does not reproduce target declaration proofs: ${operation.target.path}`);

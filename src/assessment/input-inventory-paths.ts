@@ -25,7 +25,7 @@ export function directoryMembership(rootDir: string, path: string, excluded: rea
   const entries = readdirSync(path, { withFileTypes: true })
     .filter((entry) => entry.name !== ".git" && !excluded.some((root) => inside(root, resolve(path, entry.name))))
     .map((entry) => ({ name: entry.name, kind: directoryEntryKind(entry) }))
-    .sort((a, b) => byCodeUnit(a.name, b.name));
+    .toSorted((a, b) => byCodeUnit(a.name, b.name));
   return { ...named, entries };
 }
 

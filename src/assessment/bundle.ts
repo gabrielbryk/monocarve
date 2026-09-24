@@ -78,7 +78,7 @@ export function assessmentArtifacts(snapshot: AssessmentSnapshot, reports: Asses
   if (reports.fullPortfolio !== undefined)
     artifacts["portfolio-full.json"] = json({ schemaVersion: 1, baseline: snapshot.baseline, result: reports.fullPortfolio });
   const rawReports = rawReportPaths(Object.keys(snapshot.reports));
-  for (const [application, report] of Object.entries(snapshot.reports).sort(([left], [right]) => byCodeUnit(left, right)))
+  for (const [application, report] of Object.entries(snapshot.reports).toSorted(([left], [right]) => byCodeUnit(left, right)))
     artifacts[rawReports[application]!] = json(canonicalizeScanReport(snapshot.rootDir, report));
   if (batch !== undefined) appendAssessmentBatchArtifacts(artifacts, snapshot.baseline, batch);
   return artifacts;
@@ -97,7 +97,7 @@ function assessmentFindings(findings: string, batch: DeclarationBatchResult | un
 
 function appendAssessmentBatchArtifacts(artifacts: Record<string, string>, baseline: AssessmentBaselineIdentity, batch: DeclarationBatchResult): void {
   artifacts["split-aggregate.json"] = json(batch.aggregate);
-  for (const [path, report] of Object.entries(batch.reports).sort(([left], [right]) => byCodeUnit(left, right))) {
+  for (const [path, report] of Object.entries(batch.reports).toSorted(([left], [right]) => byCodeUnit(left, right))) {
     artifacts[path] = json({ schemaVersion: 1, baseline, report });
   }
 }
@@ -162,15 +162,15 @@ export function publishDeclarationBatch(input: {
     "input-inventory.json": json(input.snapshot.inputInventory),
   };
   const rawReports = rawReportPaths(Object.keys(input.snapshot.reports));
-  for (const [application, report] of Object.entries(input.snapshot.reports).sort(([left], [right]) => byCodeUnit(left, right)))
+  for (const [application, report] of Object.entries(input.snapshot.reports).toSorted(([left], [right]) => byCodeUnit(left, right)))
     artifacts[rawReports[application]!] = json(canonicalizeScanReport(input.snapshot.rootDir, report));
-  for (const [path, report] of Object.entries(input.batch.reports).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))) {
+  for (const [path, report] of Object.entries(input.batch.reports).toSorted(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))) {
     artifacts[path] = json({ schemaVersion: 1, baseline: input.snapshot.baseline, report });
   }
   const sourceHashes = Object.fromEntries(
     input.batch.aggregate.entries
       .map((entry): [string, string] => [entry.sourcePath, entry.sourceHash])
-      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
+      .toSorted(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
   );
   return publishEvidence<DeclarationBatchManifest>({
     rootDir: input.snapshot.rootDir,
@@ -237,8 +237,8 @@ function assertBatchPublicationContract(input: Parameters<typeof publishDeclarat
 }
 
 function assertBatchArtifactBindings(input: Parameters<typeof publishDeclarationBatch>[0]): void {
-  const reportPaths = Object.keys(input.batch.reports).sort(byCodeUnit);
-  const entryPaths = input.batch.aggregate.entries.map((entry) => entry.reportPath).sort(byCodeUnit);
+  const reportPaths = Object.keys(input.batch.reports).toSorted(byCodeUnit);
+  const entryPaths = input.batch.aggregate.entries.map((entry) => entry.reportPath).toSorted(byCodeUnit);
   if (stableStringify(reportPaths) !== stableStringify(entryPaths)) throw bundleContractError("batch aggregate does not bind exactly its detail reports");
   const completed = input.batch.aggregate.entries.map((entry) => entry.sourcePath);
   if (stableStringify(completed) !== stableStringify(input.batch.aggregate.completed))
@@ -277,7 +277,7 @@ function isSplitSelection(selection: AssessmentAnalyticalArguments["splitSelecti
 
 function isCanonicalFileSelection(paths: readonly string[]): boolean {
   return (
-    Array.isArray(paths) && paths.every((path) => typeof path === "string") && stableStringify(paths) === stableStringify([...new Set(paths)].sort(byCodeUnit))
+    Array.isArray(paths) && paths.every((path) => typeof path === "string") && stableStringify(paths) === stableStringify([...new Set(paths)].toSorted(byCodeUnit))
   );
 }
 
@@ -296,7 +296,7 @@ function json(value: unknown): string {
   return `${stableStringify(value, 2)}\n`;
 }
 export function rawReportPaths(applications: readonly string[]): Record<string, string> {
-  const names = [...new Set(applications)].sort(byCodeUnit);
+  const names = [...new Set(applications)].toSorted(byCodeUnit);
   if (names.some((name) => name.length === 0)) throw new Error("application names must be non-empty");
   return Object.fromEntries(names.map((name, index) => [name, `raw/application-${index}.json`])) as Record<string, string>;
 }

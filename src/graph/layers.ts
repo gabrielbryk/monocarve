@@ -85,7 +85,7 @@ function workspaceDependencies(config: MonocarveConfig, graph: DependencyGraph, 
         .filter((owner) => owner !== "" && (isPackageOwner(config, owner) || isFirstPartyPackageOwner(config, owner))),
       ...component.flatMap((node) => [...(graph.workspaceDependenciesBySource.get(node) ?? [])]),
     ]),
-  ].sort();
+  ].toSorted();
 }
 
 function flags(
@@ -112,7 +112,7 @@ export function componentReports(config: MonocarveConfig, graph: DependencyGraph
   return components.map((component, id) => {
     const closureNodes = [...transitive(id, outgoing)].flatMap((dependency) => components[dependency] ?? []);
     const allNodes = [...component, ...closureNodes];
-    const domains = [...new Set(component.map((node) => graph.nodes.get(node)?.domain ?? "unknown"))].sort();
+    const domains = [...new Set(component.map((node) => graph.nodes.get(node)?.domain ?? "unknown"))].toSorted();
     const directEdges = graph.edges.filter((edge) => component.includes(edge.from));
     const framework = frameworkDependencies(config, graph, component);
     const libraries = workspaceDependencies(config, graph, component, directEdges);
@@ -135,23 +135,23 @@ export function componentReports(config: MonocarveConfig, graph: DependencyGraph
       cyclic: component.length > 1 || component.some((node) => selfEdges.has(node)),
       nodes: component,
       lines: lines(component),
-      dependencies: [...(outgoing.get(id) ?? [])].sort((left, right) => left - right),
-      dependents: [...(incoming.get(id) ?? [])].sort((left, right) => left - right),
-      inboundNodes: [...(incoming.get(id) ?? [])].flatMap((dependency) => components[dependency] ?? []).sort(),
-      testImporterFiles: [...new Set(component.flatMap((node) => [...(graph.testImporters.get(node) ?? [])]))].sort(),
+      dependencies: [...(outgoing.get(id) ?? [])].toSorted((left, right) => left - right),
+      dependents: [...(incoming.get(id) ?? [])].toSorted((left, right) => left - right),
+      inboundNodes: [...(incoming.get(id) ?? [])].flatMap((dependency) => components[dependency] ?? []).toSorted(),
+      testImporterFiles: [...new Set(component.flatMap((node) => [...(graph.testImporters.get(node) ?? [])]))].toSorted(),
       transitiveClosure: closureNodes.sort(),
       transitiveClosureLines: lines(allNodes),
       domains,
       closedWithinDomain: domains.length === 1 && allNodes.every((node) => graph.nodes.get(node)?.domain === domains[0]),
       libraryDependencies: libraries,
-      externalPackages: [...new Set(component.flatMap((node) => [...(graph.externalBySource.get(node) ?? [])]))].sort(),
+      externalPackages: [...new Set(component.flatMap((node) => [...(graph.externalBySource.get(node) ?? [])]))].toSorted(),
       frameworkDependencies: framework,
       archetype: kind,
       generated,
       dynamicImports: directEdges
         .filter((edge) => edge.dynamic)
         .map((edge) => edge.specifier)
-        .sort(),
+        .toSorted(),
       typeOnlyEdges: directEdges.filter((edge) => edge.typeOnly).length,
       flags: flags(config, component, framework, kind, generatedSourceMissing),
     };
@@ -177,7 +177,7 @@ export function domainReports(graph: DependencyGraph, application: ApplicationGr
   const domainOf = (path: string): string => graph.nodes.get(path)?.domain ?? "unknown";
   const lines = (paths: readonly string[]): number => paths.reduce((total, path) => total + (graph.nodes.get(path)?.lineCount ?? 0), 0);
 
-  return [...new Set(application.nodes.map(domainOf))].sort().map((domain) => {
+  return [...new Set(application.nodes.map(domainOf))].toSorted().map((domain) => {
     const nodes = application.nodes.filter((node) => domainOf(node) === domain);
     const nodeSet = new Set(nodes);
     const closed = nodes.filter((node) => {
@@ -187,7 +187,7 @@ export function domainReports(graph: DependencyGraph, application: ApplicationGr
     const crossDomainEdges = graph.edges
       .filter((edge) => nodeSet.has(edge.from) && application.nodeSet.has(edge.to) && domainOf(edge.to) !== domain)
       .map((edge) => ({ from: edge.from, to: edge.to, typeOnly: edge.typeOnly }))
-      .sort((left, right) => byCodeUnit(left.from, right.from) || byCodeUnit(left.to, right.to));
+      .toSorted((left, right) => byCodeUnit(left.from, right.from) || byCodeUnit(left.to, right.to));
 
     return {
       domain,
@@ -197,14 +197,14 @@ export function domainReports(graph: DependencyGraph, application: ApplicationGr
       dependencyClosedLines: lines(closed),
       dependencyClosedPercent: nodes.length === 0 ? 0 : Math.round((closed.length / nodes.length) * 1000) / 10,
       dependencyClosedFileList: closed,
-      dependencyDomains: [...new Set(crossDomainEdges.map((edge) => domainOf(edge.to)))].sort(),
+      dependencyDomains: [...new Set(crossDomainEdges.map((edge) => domainOf(edge.to)))].toSorted(),
       dependentDomains: [
         ...new Set(
           graph.edges
             .filter((edge) => nodeSet.has(edge.to) && application.nodeSet.has(edge.from) && domainOf(edge.from) !== domain)
             .map((edge) => domainOf(edge.from)),
         ),
-      ].sort(),
+      ].toSorted(),
       crossDomainEdges,
       blockedFiles: nodes.filter((node) => !closed.includes(node)),
     };
@@ -269,10 +269,10 @@ export function domainComponentReports(domains: readonly DomainReport[], graph: 
         domains: component,
         files: members.reduce((total, entry) => total + entry.files, 0),
         lines: members.reduce((total, entry) => total + entry.lines, 0),
-        dependencies: [...(componentOutgoing.get(id) ?? [])].sort((left, right) => left - right),
+        dependencies: [...(componentOutgoing.get(id) ?? [])].toSorted((left, right) => left - right),
       };
     })
-    .sort((left, right) => left.layer - right.layer || byCodeUnit(left.domains[0] ?? "", right.domains[0] ?? ""));
+    .toSorted((left, right) => left.layer - right.layer || byCodeUnit(left.domains[0] ?? "", right.domains[0] ?? ""));
 }
 
 export interface LayerReport {
@@ -300,7 +300,7 @@ export function analyzeLayers(config: MonocarveConfig, graph: DependencyGraph, a
   const applicationGraph = buildApplicationGraph(graph, application);
   const components = componentReports(config, graph, applicationGraph);
   const domains = domainReports(graph, applicationGraph);
-  const owners = [...new Set(graph.paths.map((path) => graph.nodes.get(path)?.owner ?? "unknown"))].sort();
+  const owners = [...new Set(graph.paths.map((path) => graph.nodes.get(path)?.owner ?? "unknown"))].toSorted();
 
   return {
     schemaVersion: 1,
@@ -321,9 +321,9 @@ export function analyzeLayers(config: MonocarveConfig, graph: DependencyGraph, a
     unresolvedRelativeImports: graph.unresolved,
     externalPackages: [...graph.externalPackages.entries()]
       .map(([name, count]) => ({ name, count }))
-      .sort((left, right) => right.count - left.count || byCodeUnit(left.name, right.name)),
+      .toSorted((left, right) => right.count - left.count || byCodeUnit(left.name, right.name)),
     domains,
     domainComponents: domainComponentReports(domains, graph, applicationGraph),
-    components: components.slice().sort((left, right) => left.layer - right.layer || byCodeUnit(left.nodes[0] ?? "", right.nodes[0] ?? "")),
+    components: components.slice().toSorted((left, right) => left.layer - right.layer || byCodeUnit(left.nodes[0] ?? "", right.nodes[0] ?? "")),
   };
 }

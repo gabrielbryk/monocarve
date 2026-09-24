@@ -23,7 +23,7 @@ export function renderTemplate(template: string, vars: TemplateVars): string {
     const value = vars[key];
     if (value === undefined) {
       throw new TemplateError(
-        `unknown placeholder {${key}} in template ${JSON.stringify(template)}; known: ${Object.keys(vars).sort().join(", ") || "(none)"}`,
+        `unknown placeholder {${key}} in template ${JSON.stringify(template)}; known: ${Object.keys(vars).toSorted().join(", ") || "(none)"}`,
       );
     }
     return value;
@@ -37,5 +37,5 @@ export function templatePlaceholders(template: string): string[] {
     const name = match[1];
     if (name !== undefined) found.add(name);
   }
-  return [...found].sort();
+  return [...found].toSorted();
 }

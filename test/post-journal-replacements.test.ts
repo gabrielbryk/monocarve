@@ -79,7 +79,7 @@ describe("post-journal declarative edits", () => {
           verify,
         },
       ],
-      changedFiles: [...base.changedFiles, "generated/value.txt", "tools/module-registry.ts"].sort(),
+      changedFiles: [...base.changedFiles, "generated/value.txt", "tools/module-registry.ts"].toSorted(),
     };
     const simulation = await simulatePlan({ config, rootDir: root, manifest, skipGates: true });
     expect(simulation.failure).toBeUndefined();
@@ -121,7 +121,7 @@ describe("post-journal declarative edits", () => {
       ],
       emittedModuleSpecifiers: [],
     } as const;
-    const manifest: ExtractionManifest = { ...base, postJournalPreparers: [record], changedFiles: [...base.changedFiles, "tools/module-registry.ts"].sort() };
+    const manifest: ExtractionManifest = { ...base, postJournalPreparers: [record], changedFiles: [...base.changedFiles, "tools/module-registry.ts"].toSorted() };
     const tampered: ExtractionManifest = { ...manifest, postJournalPreparers: [{ ...record, replacements: [{ ...replacement, after: '"other"' }] }] };
     expect((await simulatePlan({ config, rootDir: root, manifest: tampered, skipGates: true })).failure).toContain("differs from current configuration");
     const missingReplacement = { ...replacement, before: '"absent"' };
@@ -158,7 +158,7 @@ describe("post-journal declarative edits", () => {
     const ambiguousManifest: ExtractionManifest = {
       ...ambiguousBase,
       postJournalPreparers: [ambiguousRecord],
-      changedFiles: [...ambiguousBase.changedFiles, "tools/module-registry.ts"].sort(),
+      changedFiles: [...ambiguousBase.changedFiles, "tools/module-registry.ts"].toSorted(),
     };
     expect((await simulatePlan({ config: ambiguousConfig, rootDir: ambiguousRoot, manifest: ambiguousManifest, skipGates: true })).failure).toContain(
       "before text is ambiguous",

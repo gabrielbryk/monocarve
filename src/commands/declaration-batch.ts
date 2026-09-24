@@ -116,7 +116,7 @@ async function executeDeclarationBatch(args: ParsedArgs, invocation: BatchInvoca
     ...defaultAssessmentArguments(invocation.application),
     splitSelection:
       invocation.hotspotCount === undefined
-        ? { mode: "files" as const, paths: [...new Set(invocation.files)].sort(byCodeUnit) }
+        ? { mode: "files" as const, paths: [...new Set(invocation.files)].toSorted(byCodeUnit) }
         : { mode: "hotspots" as const, count: invocation.hotspotCount },
   };
   const result = publishDeclarationBatch({

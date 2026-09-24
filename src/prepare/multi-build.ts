@@ -38,14 +38,14 @@ export function compileMultiFilePreparationManifest(input: CompileMultiFilePrepa
       graphDigest: input.graphDigest,
     }),
   );
-  const selected = manifests.flatMap((manifest) => manifest.declarations.map((group) => group.groupId)).sort(byCodeUnit);
-  const expected = [...candidate.groupIds].sort(byCodeUnit);
+  const selected = manifests.flatMap((manifest) => manifest.declarations.map((group) => group.groupId)).toSorted(byCodeUnit);
+  const expected = [...candidate.groupIds].toSorted(byCodeUnit);
   if (selected.length !== expected.length || selected.some((id, index) => id !== expected[index]))
     throw new PlanningError("multi-file preparation members must exactly cover the reviewed atomic candidate");
-  const sourcePaths = [...new Set(manifests.flatMap((manifest) => manifest.declarations.map((group) => group.sourcePath)))].sort(byCodeUnit);
+  const sourcePaths = [...new Set(manifests.flatMap((manifest) => manifest.declarations.map((group) => group.sourcePath)))].toSorted(byCodeUnit);
   if (sourcePaths.length !== candidate.sourcePaths.length || sourcePaths.some((path, index) => path !== candidate.sourcePaths[index]))
     throw new PlanningError("multi-file preparation members do not cover the candidate source files");
-  const operations = manifests.flatMap((item) => item.operations).sort(operationOrder);
+  const operations = manifests.flatMap((item) => item.operations).toSorted(operationOrder);
   const mutationPaths = operations.flatMap((operation) =>
     operation.kind === "extract-type-declarations" ? [operation.donor.path, operation.target.path] : [operation.file.path],
   );
@@ -53,7 +53,7 @@ export function compileMultiFilePreparationManifest(input: CompileMultiFilePrepa
   const commits = manifests.map((item) => item.commits.prepare);
   if (commits.some((commit) => hashJson(commit) !== hashJson(commits[0])))
     throw new PlanningError("multi-file preparation members render different commit metadata");
-  const union = (values: readonly (readonly string[])[]) => [...new Set(values.flat())].sort(byCodeUnit);
+  const union = (values: readonly (readonly string[])[]) => [...new Set(values.flat())].toSorted(byCodeUnit);
   const first = manifests[0];
   if (!first) throw new PlanningError("multi-file preparation requires at least one reviewed member");
   const manifest = createPreparationManifest({
@@ -64,11 +64,11 @@ export function compileMultiFilePreparationManifest(input: CompileMultiFilePrepa
     graphDigest: first.graphDigest,
     declarations: manifests
       .flatMap((item) => item.declarations)
-      .sort(
+      .toSorted(
         (a, b) => byCodeUnit(a.sourcePath, b.sourcePath) || a.declarations[0]!.span.start - b.declarations[0]!.span.start || byCodeUnit(a.groupId, b.groupId),
       ),
     operations,
-    compatibilityReexports: manifests.flatMap((item) => item.compatibilityReexports).sort((a, b) => byCodeUnit(a.fromPath, b.fromPath)),
+    compatibilityReexports: manifests.flatMap((item) => item.compatibilityReexports).toSorted((a, b) => byCodeUnit(a.fromPath, b.fromPath)),
     changedFiles: union(manifests.map((item) => item.changedFiles)),
     commits: { prepare: first.commits.prepare },
     gates: {

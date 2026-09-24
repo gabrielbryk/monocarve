@@ -77,11 +77,11 @@ export function compilePreparationManifest(input: CompilePreparationManifestInpu
     { sourcePath: input.seam.sourcePath, targetPath: input.targetPath, targetModuleSpecifier: input.targetModuleSpecifier },
     input.rendering,
   );
-  const reviewed = [...new Set(input.reviewedGroupIds)].sort(byCodeUnit);
+  const reviewed = [...new Set(input.reviewedGroupIds)].toSorted(byCodeUnit);
   if (reviewed.length === 0 || reviewed.length !== input.reviewedGroupIds.length) {
     throw new PlanningError("preparation requires a non-empty, duplicate-free reviewed symbol selection");
   }
-  const proposed = input.seam.movedGroups.map((group) => group.id).sort(byCodeUnit);
+  const proposed = input.seam.movedGroups.map((group) => group.id).toSorted(byCodeUnit);
   if (reviewed.length !== proposed.length || reviewed.some((id, index) => id !== proposed[index])) {
     throw new PlanningError("reviewed symbol selection must exactly match the seam's moved declaration groups");
   }
@@ -162,9 +162,9 @@ export function compilePreparationManifest(input: CompilePreparationManifestInpu
   const groups: PreparationDeclarationGroupSelector[] = [...declarations.values()]
     .map((group) => ({
       ...group,
-      declarations: [...group.declarations].sort((left, right) => left.span.start - right.span.start || byCodeUnit(left.declarationId, right.declarationId)),
+      declarations: [...group.declarations].toSorted((left, right) => left.span.start - right.span.start || byCodeUnit(left.declarationId, right.declarationId)),
     }))
-    .sort((left, right) => left.declarations[0]!.span.start - right.declarations[0]!.span.start || byCodeUnit(left.groupId, right.groupId));
+    .toSorted((left, right) => left.declarations[0]!.span.start - right.declarations[0]!.span.start || byCodeUnit(left.groupId, right.groupId));
   const targetImportProofs = new Map<string, PreparationTargetImportProof>();
   const rewriteRelative = (originalSpecifier: string): RelativeTypeImportRewrite => {
     const rewrite = input.rewriteRelativeTypeImport?.({
@@ -199,7 +199,7 @@ export function compilePreparationManifest(input: CompilePreparationManifestInpu
       targetImportProofs.set(`${proof.originalSpecifier}\0${proof.targetSpecifier}\0${proof.localName}\0${proof.importedName}\0${proof.kind}`, proof);
       return { ...item, moduleSpecifier: rewrite.targetSpecifier, proofBaselineHash: selection.sourceHash };
     })
-    .sort(
+    .toSorted(
       (left, right) =>
         byCodeUnit(left.moduleSpecifier, right.moduleSpecifier) ||
         byCodeUnit(left.localName, right.localName) ||
@@ -220,8 +220,8 @@ export function compilePreparationManifest(input: CompilePreparationManifestInpu
       requiredAs: "type" as const,
       proofBaselineHash: selection.sourceHash,
     }))
-    .sort((left, right) => byCodeUnit(left.moduleSpecifier, right.moduleSpecifier) || byCodeUnit(left.localName, right.localName));
-  const reExportNames = selection.compatibilitySurface.map((item) => item.name).sort(byCodeUnit);
+    .toSorted((left, right) => byCodeUnit(left.moduleSpecifier, right.moduleSpecifier) || byCodeUnit(left.localName, right.localName));
+  const reExportNames = selection.compatibilitySurface.map((item) => item.name).toSorted(byCodeUnit);
   const replay = renderTypeOnlyExtraction({
     baselineText: sourceText,
     baselineHash: selection.sourceHash,
@@ -260,7 +260,7 @@ export function compilePreparationManifest(input: CompilePreparationManifestInpu
         synthesizedExport: proof.synthesizedExport,
       };
     })
-    .sort((left, right) => byCodeUnit(left.selectorId, right.selectorId));
+    .toSorted((left, right) => byCodeUnit(left.selectorId, right.selectorId));
   const manifest = createPreparationManifest({
     schemaVersion: 1,
     createdAt: baseline.committedAt,
@@ -281,7 +281,7 @@ export function compilePreparationManifest(input: CompilePreparationManifestInpu
         target: { path: input.targetPath, preconditionHash: MISSING, preconditionMode: "missing", resultHash: replay.target.hash, resultMode: 0o644 },
         moduleSpecifier: input.targetModuleSpecifier,
         declarations: groups,
-        targetImportProofs: [...targetImportProofs.values()].sort(
+        targetImportProofs: [...targetImportProofs.values()].toSorted(
           (left, right) =>
             byCodeUnit(left.targetSpecifier, right.targetSpecifier) ||
             byCodeUnit(left.localName, right.localName) ||
@@ -309,15 +309,15 @@ export function compilePreparationManifest(input: CompilePreparationManifestInpu
               moduleSpecifier: input.targetModuleSpecifier,
               exports: selection.compatibilitySurface
                 .map((item) => ({ name: item.name, typeOnly: true as const }))
-                .sort((left, right) => byCodeUnit(left.name, right.name)),
+                .toSorted((left, right) => byCodeUnit(left.name, right.name)),
             },
           ],
-    changedFiles: [selection.sourcePath, input.targetPath].sort(byCodeUnit),
+    changedFiles: [selection.sourcePath, input.targetPath].toSorted(byCodeUnit),
     commits: { prepare: input.rendering.commit },
     gates: {
-      package: [...input.rendering.gates.package].sort(byCodeUnit),
-      project: [...input.rendering.gates.project].sort(byCodeUnit),
-      workspace: [...input.rendering.gates.workspace].sort(byCodeUnit),
+      package: [...input.rendering.gates.package].toSorted(byCodeUnit),
+      project: [...input.rendering.gates.project].toSorted(byCodeUnit),
+      workspace: [...input.rendering.gates.workspace].toSorted(byCodeUnit),
     },
   });
   assertPreparationManifestValid(manifest);

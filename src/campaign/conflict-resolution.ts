@@ -79,7 +79,7 @@ function uniqueAccesses(accesses: readonly OperationPathAccess[]): OperationPath
     const key = JSON.stringify([current.path, current.scope, current.mode, current.role, current.operationIndex, current.operationKind, current.keys]);
     unique.set(key, current);
   }
-  return [...unique.values()].sort(compareAccesses);
+  return [...unique.values()].toSorted(compareAccesses);
 }
 
 function isMergeablePair(left: OperationPathAccess, right: OperationPathAccess): boolean {

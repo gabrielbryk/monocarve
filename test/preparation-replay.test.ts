@@ -30,7 +30,7 @@ function proven(moduleSpecifier: string, importedName: string, localName = impor
 }
 
 function input(selected: readonly TypeOnlyExtractionSpan[] = [span("Item", "interface"), span("ItemLabel", "type-alias")]) {
-  const reExportNames = [...new Set(selected.filter((item) => item.originallyExported).map((item) => item.name))].sort();
+  const reExportNames = [...new Set(selected.filter((item) => item.originallyExported).map((item) => item.name))].toSorted();
   return {
     baselineText: baseline,
     baselineHash: hashText(baseline),

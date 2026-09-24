@@ -58,7 +58,7 @@ export interface PlanExistingPackageBoundaryResult {
 export function planExistingPackageBoundary(input: PlanExistingPackageBoundaryInput): PlanExistingPackageBoundaryResult {
   const { boundary } = input;
   const donorPath = resolve(input.rootDir, boundary.retained);
-  const importers = [...input.importers].sort((left, right) => byCodeUnit(left.path, right.path));
+  const importers = [...input.importers].toSorted((left, right) => byCodeUnit(left.path, right.path));
   const rewrites = importers.map((importer) => planImporterRewrite(input, donorPath, importer));
   return boundary.retire ? { rewrites, deletion: planDeletion(input, rewrites) } : { rewrites };
 }
@@ -99,7 +99,7 @@ function planImporterRewrite(input: PlanExistingPackageBoundaryInput, donorPath:
       {
         from: importer.specifier,
         to: boundary.replacementSpecifier,
-        symbols: [...importer.importedSymbols].sort(byCodeUnit),
+        symbols: [...importer.importedSymbols].toSorted(byCodeUnit),
         ...(importer.moduleSpecifierCall === undefined ? {} : { moduleSpecifierCall: importer.moduleSpecifierCall }),
       },
     ],
@@ -117,5 +117,5 @@ function planDeletion(input: PlanExistingPackageBoundaryInput, rewrites: readonl
     resultHash: hashText(""),
     resultMode: 0,
   };
-  return { kind: "delete-module", file, importerProof: rewrites.map((rewrite) => rewrite.file.path).sort(byCodeUnit) };
+  return { kind: "delete-module", file, importerProof: rewrites.map((rewrite) => rewrite.file.path).toSorted(byCodeUnit) };
 }

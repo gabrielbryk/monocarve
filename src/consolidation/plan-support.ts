@@ -129,7 +129,7 @@ export function selectConsolidationTests(context: WorkspaceContext, candidate: C
   return context
     .repositorySources()
     .filter((path) => candidate.donors.some((donor) => path.startsWith(`${donor.root}/`)) && context.isTest(path))
-    .sort();
+    .toSorted();
 }
 
 /** Push move operations for every donor file, test, and asset onto `operations`/`sourceBlobs`. */
@@ -464,7 +464,7 @@ function retirementDependencyOperations(input: {
   const operations: PlanOperation[] = [];
   const lockfile = input.packageManager.lockfileName;
   let lockfileText = input.context.exists(lockfile) ? input.context.text(lockfile) : "";
-  for (const owner of [...new Set(input.owners)].sort()) {
+  for (const owner of [...new Set(input.owners)].toSorted()) {
     const manifestPath = owner === "." ? "package.json" : `${owner}/package.json`;
     if (!input.context.exists(manifestPath)) continue;
     const manifest = parseJsonFile(input.context.text(manifestPath), manifestPath) as Record<string, unknown>;

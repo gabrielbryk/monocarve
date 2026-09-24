@@ -118,7 +118,7 @@ async function campaignResolve(args: ParsedArgs): Promise<void> {
         outcome: "ambiguous",
         detail: matches
           .map(({ id }) => id)
-          .sort()
+          .toSorted()
           .join(", "),
       });
       break;

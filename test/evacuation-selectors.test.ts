@@ -27,7 +27,7 @@ function graph(paths: readonly string[] = [...backend, ...frontend, ...packages]
   return {
     rootDir: "/workspace",
     nodes,
-    paths: [...paths].sort(),
+    paths: [...paths].toSorted(),
     edges: [],
     outgoing: new Map(),
     incoming: new Map(),

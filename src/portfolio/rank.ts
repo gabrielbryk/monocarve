@@ -52,7 +52,7 @@ export function buildPortfolio(options: PortfolioOptions): Portfolio {
 
 /** Select compatible candidates against one unchanged baseline. */
 function selectNonOverlapping(candidates: readonly PortfolioCandidate[]): string[] {
-  const ranked = [...candidates].sort((left, right) => right.score - left.score || byCodeUnit(left.id, right.id));
+  const ranked = [...candidates].toSorted((left, right) => right.score - left.score || byCodeUnit(left.id, right.id));
   const occupied = new Set<string>();
   const selected: string[] = [];
   for (const candidate of ranked) {
@@ -78,13 +78,13 @@ function candidateFor(
   if (report.application === null) return null;
   const components = applicationGraph.condensed.components;
   const ids = new Set<number>([report.id, ...transitive(report.id, applicationGraph.condensed.outgoing)]);
-  const closure = [...ids].flatMap((id) => components[id] ?? []).sort();
+  const closure = [...ids].flatMap((id) => components[id] ?? []).toSorted();
   if (closure.length === 0) return null;
 
   const closureReports = [...ids].map((id) => reports[id]).filter((item): item is ComponentReport => item !== undefined);
-  const owners = [...new Set(closure.map((path) => graph.nodes.get(path)?.owner ?? "unknown"))].sort();
-  const domains = [...new Set(closure.map((path) => domainFor(config, path)))].sort();
-  const directTests = [...new Set(closure.flatMap((path) => [...(graph.testImporters.get(path) ?? [])]))].sort();
+  const owners = [...new Set(closure.map((path) => graph.nodes.get(path)?.owner ?? "unknown"))].toSorted();
+  const domains = [...new Set(closure.map((path) => domainFor(config, path)))].toSorted();
+  const directTests = [...new Set(closure.flatMap((path) => [...(graph.testImporters.get(path) ?? [])]))].toSorted();
   const id = `c-${hashText(closure.join("\n")).slice(0, 12)}`;
   const assessment = assessCandidate(config, context, pathReferences, graph, report, closure, closureReports, owners, domains, []);
 
@@ -125,7 +125,7 @@ function candidateFor(
     tests,
     assets: assessed.assets,
     sccs: candidateSccs(ids, components),
-    seed: { id: sccId(report.nodes), members: [...report.nodes].sort() },
+    seed: { id: sccId(report.nodes), members: [...report.nodes].toSorted() },
     lineCount,
     owners,
     domains,
@@ -152,8 +152,8 @@ function candidateSccs(ids: ReadonlySet<number>, components: readonly (readonly 
   return [...ids]
     .map((componentId) => components[componentId] ?? [])
     .filter((component) => component.length > 0)
-    .map((component): Scc => ({ id: sccId(component), members: [...component].sort() }))
-    .sort((left, right) => left.id.localeCompare(right.id));
+    .map((component): Scc => ({ id: sccId(component), members: [...component].toSorted() }))
+    .toSorted((left, right) => left.id.localeCompare(right.id));
 }
 
 function consumerRefs(graph: DependencyGraph, report: ComponentReport, closure: readonly string[]): ConsumerRef[] {
@@ -171,15 +171,15 @@ function consumerRefs(graph: DependencyGraph, report: ComponentReport, closure: 
     .map(([file, specifiers]) => ({
       file,
       owner: graph.nodes.get(file)?.owner ?? "unknown",
-      specifiers: [...specifiers].sort(),
+      specifiers: [...specifiers].toSorted(),
       external: graph.nodes.get(file)?.application !== application,
     }))
-    .sort((left, right) => left.file.localeCompare(right.file));
+    .toSorted((left, right) => left.file.localeCompare(right.file));
 }
 
 function packageDependencies(graph: DependencyGraph, report: ComponentReport): string[] {
   const ownerToPackage = new Map([...graph.workspace.packageNames.entries()].map(([name, owner]) => [owner, name]));
-  return [...new Set(report.libraryDependencies.map((owner) => ownerToPackage.get(owner) ?? owner))].sort();
+  return [...new Set(report.libraryDependencies.map((owner) => ownerToPackage.get(owner) ?? owner))].toSorted();
 }
 
 export function suggestedPackageName(config: MonocarveConfig, application: string, domains: readonly string[], candidateId: string): string {
@@ -215,7 +215,7 @@ export function pickNext(portfolio: Portfolio, alreadyExtracted: readonly string
   return (
     portfolio.candidates
       .filter((candidate) => candidate.eligible && candidate.recommendation?.status === "recommended" && !skip.has(candidate.id))
-      .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))[0] ?? null
+      .toSorted((left, right) => right.score - left.score || left.id.localeCompare(right.id))[0] ?? null
   );
 }
 

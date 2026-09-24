@@ -111,7 +111,7 @@ function manifestFor(root: string, landedConsumer: string, delta: DynamicImportD
       },
     ],
     generatedFiles: [],
-    changedFiles: [DONOR, TARGET, CONSUMER, ENTRYPOINT].sort(),
+    changedFiles: [DONOR, TARGET, CONSUMER, ENTRYPOINT].toSorted(),
     expectedDynamicImportDelta: delta,
     evaluationEffects: [],
     metrics: { movedFiles: 1, movedLines: 1, applicationLinesBefore: 4, applicationLinesAfter: 3, consumers: 1 },

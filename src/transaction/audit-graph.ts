@@ -86,7 +86,7 @@ function dynamicSignatures(source: string, importer: string, rootDir: string): s
   return inventoryModuleReferences(source, importer, false, rootDir)
     .filter((reference) => reference.dynamic)
     .map((reference) => reference.specifier ?? "<unsupported>")
-    .sort();
+    .toSorted();
 }
 function multisetDelta(before: readonly string[], after: readonly string[]): DynamicImportDelta {
   const counts = (values: readonly string[]): Map<string, number> =>

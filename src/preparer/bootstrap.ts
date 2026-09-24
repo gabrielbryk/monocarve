@@ -106,8 +106,8 @@ function bootstrapGit(rootDir: string, index: string, excludes: string, args: re
 
 function assertExactCommit(rootDir: string, baseline: string, result: string, paths: readonly string[]): void {
   if (git({ cwd: rootDir }, "rev-parse", `${result}^`) !== baseline) throw new PreparerError("bootstrap hook changed commit ancestry");
-  const actual = git({ cwd: rootDir }, "diff-tree", "--no-commit-id", "--name-only", "-r", result).split("\n").filter(Boolean).sort(byCodeUnit);
-  const expected = paths.map((path) => `${repositoryPrefix(rootDir)}${path}`).sort(byCodeUnit);
+  const actual = git({ cwd: rootDir }, "diff-tree", "--no-commit-id", "--name-only", "-r", result).split("\n").filter(Boolean).toSorted(byCodeUnit);
+  const expected = paths.map((path) => `${repositoryPrefix(rootDir)}${path}`).toSorted(byCodeUnit);
   if (actual.length !== expected.length || actual.some((item, index) => item !== expected[index]))
     throw new PreparerError(`bootstrap commit scope differs from config and manifest: ${actual.join(", ")}`);
 }
@@ -130,5 +130,5 @@ function state(root: string, path: string): { readonly hash: ReturnType<typeof f
 }
 
 function unique(items: readonly string[]): string[] {
-  return [...new Set(items)].sort(byCodeUnit);
+  return [...new Set(items)].toSorted(byCodeUnit);
 }

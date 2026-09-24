@@ -50,7 +50,7 @@ function withScaffoldWorkspaceReferences(input: ScaffoldInput, projected: Record
       packageReferences.add(owner);
     }
   }
-  return { ...input, dependencies: { ...input.dependencies, packageReferences: [...packageReferences].sort() } };
+  return { ...input, dependencies: { ...input.dependencies, packageReferences: [...packageReferences].toSorted() } };
 }
 
 function workspaceDependencySections(projected: Record<string, unknown>): [string, Record<string, string>][] {
@@ -134,7 +134,7 @@ function packageManifestOperation(input: ScaffoldInput, scaffolding: boolean): P
 
 function assetSideEffects(input: ScaffoldInput, declared: unknown): unknown {
   if (declared !== false || !input.assets?.length) return declared;
-  const extensions = [...new Set(input.assets.flatMap((path) => input.config.assetExtensions.filter((extension) => path.endsWith(extension))))].sort();
+  const extensions = [...new Set(input.assets.flatMap((path) => input.config.assetExtensions.filter((extension) => path.endsWith(extension))))].toSorted();
   return extensions.length === 0 ? declared : extensions.map((extension) => `**/*${extension}`);
 }
 
@@ -256,7 +256,7 @@ function assertNoBarrelExportCollisions(input: ScaffoldInput, entrypoint: string
   }
   if (collisions.size > 0) {
     throw new PlanningError(
-      `cannot generate ${input.packageName} entrypoint ${entrypoint} with ambiguous export-star bindings: ${[...collisions].sort().join(", ")}; choose a separate package or configure an explicit export surface`,
+      `cannot generate ${input.packageName} entrypoint ${entrypoint} with ambiguous export-star bindings: ${[...collisions].toSorted().join(", ")}; choose a separate package or configure an explicit export surface`,
     );
   }
 }

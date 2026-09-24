@@ -122,7 +122,7 @@ export function manifestDiff(before: ExtractionManifest, after: ExtractionManife
 function diffValue(before: unknown, after: unknown, path: string, changes: ManifestChange[]): void {
   if (stableStringify(before) === stableStringify(after)) return;
   if (isRecord(before) && isRecord(after)) {
-    const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
+    const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])].toSorted();
     for (const key of keys) {
       if (path === "" && PROVENANCE_FIELDS.has(key)) continue;
       diffValue(before[key], after[key], path === "" ? key : `${path}.${key}`, changes);

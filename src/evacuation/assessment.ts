@@ -45,9 +45,9 @@ export function assessEvacuationCandidate(options: AssessEvacuationOptions): Ass
   const reports = componentReports(config, graph, buildApplicationGraph(graph, evacuation.application));
   const moved = new Set(evacuation.files);
   const closureReports = reports.filter((report) => report.nodes.some((path) => moved.has(path)));
-  const domains = [...new Set(evacuation.files.map((path) => domainFor(config, path)))].sort(byCodeUnit);
-  const owners = [...new Set(evacuation.files.map((path) => graph.nodes.get(path)?.owner ?? "unknown"))].sort(byCodeUnit);
-  const directTests = [...new Set(evacuation.files.flatMap((path) => [...(graph.testImporters.get(path) ?? [])]))].sort(byCodeUnit);
+  const domains = [...new Set(evacuation.files.map((path) => domainFor(config, path)))].toSorted(byCodeUnit);
+  const owners = [...new Set(evacuation.files.map((path) => graph.nodes.get(path)?.owner ?? "unknown"))].toSorted(byCodeUnit);
+  const directTests = [...new Set(evacuation.files.flatMap((path) => [...(graph.testImporters.get(path) ?? [])]))].toSorted(byCodeUnit);
   const aggregate = aggregateReport(graph, evacuation, closureReports, domains, directTests);
   const firstAssessment = assessCandidate(config, context, pathReferences, graph, aggregate, evacuation.files, closureReports, owners, domains, []);
 
@@ -101,7 +101,7 @@ export function assessEvacuationCandidate(options: AssessEvacuationOptions): Ass
     coverage: tests.length === 0 ? 0 : Math.min(1, tests.length / evacuation.files.length),
     eligible: rejectionReasons.length === 0,
     rejectionReasons,
-    warnings: [...new Set(assessment.warnings)].sort(byCodeUnit),
+    warnings: [...new Set(assessment.warnings)].toSorted(byCodeUnit),
     rewriteEscapes: assessment.rewriteEscapes,
     compatibilityShims,
     classification: assessment.classification,
@@ -140,23 +140,23 @@ function aggregateReport(
     lines: evacuation.lineCount,
     dependencies: [],
     dependents: [],
-    inboundNodes: [...new Set(inboundNodes)].sort(byCodeUnit),
+    inboundNodes: [...new Set(inboundNodes)].toSorted(byCodeUnit),
     testImporterFiles: tests,
     transitiveClosure: evacuation.absorbedSccPeers,
     transitiveClosureLines: evacuation.lineCount,
     domains,
     closedWithinDomain: domains.length === 1,
     libraryDependencies: evacuation.dependencies,
-    externalPackages: [...new Set(evacuation.files.flatMap((path) => [...(graph.externalBySource.get(path) ?? [])]))].sort(byCodeUnit),
-    frameworkDependencies: [...new Set(reports.flatMap((report) => report.frameworkDependencies))].sort(byCodeUnit),
+    externalPackages: [...new Set(evacuation.files.flatMap((path) => [...(graph.externalBySource.get(path) ?? [])]))].toSorted(byCodeUnit),
+    frameworkDependencies: [...new Set(reports.flatMap((report) => report.frameworkDependencies))].toSorted(byCodeUnit),
     archetype: "module-candidate",
-    generated: reports.flatMap((report) => report.generated).sort((left, right) => byCodeUnit(left.node, right.node)),
+    generated: reports.flatMap((report) => report.generated).toSorted((left, right) => byCodeUnit(left.node, right.node)),
     dynamicImports: directEdges
       .filter((edge) => edge.dynamic)
       .map((edge) => edge.specifier)
-      .sort(byCodeUnit),
+      .toSorted(byCodeUnit),
     typeOnlyEdges: directEdges.filter((edge) => edge.typeOnly).length,
-    flags: [...new Set(reports.flatMap((report) => report.flags).filter((flag) => flag !== "composition-root" && flag !== "composition-or-route"))].sort(
+    flags: [...new Set(reports.flatMap((report) => report.flags).filter((flag) => flag !== "composition-root" && flag !== "composition-or-route"))].toSorted(
       byCodeUnit,
     ),
   };

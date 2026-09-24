@@ -71,7 +71,7 @@ test("compiles a deterministic full-SCC partition with exact boundary evidence",
 
   expect(stableStringify(first)).toBe(stableStringify(second));
   expect(first.movedGroups.map((group) => group.name)).toEqual(["price"]);
-  expect(first.retainedGroups.map((group) => group.name).sort()).toEqual(["Customer", "Invoice", "alpha", "beta", "greet"]);
+  expect(first.retainedGroups.map((group) => group.name).toSorted()).toEqual(["Customer", "Invoice", "alpha", "beta", "greet"]);
   expect(first.requiredImports).toEqual([
     expect.objectContaining({
       importer: "moved",
@@ -100,7 +100,7 @@ test("keeps a cyclic SCC intact and never calls its cycle broken", () => {
   expect(plan.movedGroups.map((group) => group.name)).toEqual(["alpha", "beta"]);
   expect(plan.cyclesBroken).toEqual([]);
   expect(plan.cyclesRetained).toHaveLength(1);
-  expect(plan.cyclesRetained[0]?.groupIds).toEqual(plan.movedGroups.map((group) => group.id).sort());
+  expect(plan.cyclesRetained[0]?.groupIds).toEqual(plan.movedGroups.map((group) => group.id).toSorted());
   expect(plan.eligibleForTypeOnlyPreparation).toBe(false);
   expect(plan.remainingBlockers.map((blocker) => blocker.code)).toEqual([
     "cyclic-component",

@@ -23,7 +23,7 @@ export function preparationPostJournalRecords(config: MonocarveConfig, changedPa
     .map((preparer) => ({
       id: preparer.id,
       ...(preparer.command === undefined ? {} : { command: preparer.command }),
-      outputs: [...new Set([...preparer.outputs, ...(preparer.creates?.map((item) => item.path) ?? [])])].sort(),
+      outputs: [...new Set([...preparer.outputs, ...(preparer.creates?.map((item) => item.path) ?? [])])].toSorted(),
       ...(preparer.replacements === undefined
         ? {}
         : {
@@ -38,7 +38,7 @@ export function preparationPostJournalRecords(config: MonocarveConfig, changedPa
       ...(preparer.creates === undefined ? {} : { creates: preparer.creates.map((item) => ({ ...item, mode: item.mode ?? 0o644 })) }),
       emittedModuleSpecifiers: [...preparer.emittedModuleSpecifiers]
         .map((item) => ({ ...item }))
-        .sort((left, right) => left.source.localeCompare(right.source) || left.resolutionBase.localeCompare(right.resolutionBase)),
+        .toSorted((left, right) => left.source.localeCompare(right.source) || left.resolutionBase.localeCompare(right.resolutionBase)),
       ...(preparer.verify === undefined ? {} : { verify: preparer.verify }),
     }));
 }
@@ -60,11 +60,11 @@ function triggeredArtifactSetMismatch(
 ): string | undefined {
   const expectedArtifactPaths = triggeredArtifacts(config, triggerPaths)
     .map((item) => item.path)
-    .sort();
+    .toSorted();
   if (
     artifacts
       .map((item) => item.path)
-      .sort()
+      .toSorted()
       .join("\n") !== expectedArtifactPaths.join("\n")
   ) {
     return "preparation generated artifact set differs from current triggered configuration; recompile the plan";
@@ -123,11 +123,11 @@ function triggeredPreparerSetMismatch(
 ): string | undefined {
   const expectedPreparerIds = triggeredPostJournalPreparers(config, triggerPaths)
     .map((item) => item.id)
-    .sort();
+    .toSorted();
   if (
     records
       .map((item) => item.id)
-      .sort()
+      .toSorted()
       .join("\n") !== expectedPreparerIds.join("\n")
   ) {
     return "preparation post-journal preparer set differs from current triggered configuration; recompile the plan";
@@ -151,13 +151,13 @@ function preparerPolicyMismatch(record: PostJournalPreparerRecord, configured: r
   const preparer = configured.find((item) => item.id === record.id);
   const emittedModuleSpecifiers = preparer?.emittedModuleSpecifiers
     .map((item) => ({ ...item }))
-    .sort((left, right) => left.source.localeCompare(right.source) || left.resolutionBase.localeCompare(right.resolutionBase));
+    .toSorted((left, right) => left.source.localeCompare(right.source) || left.resolutionBase.localeCompare(right.resolutionBase));
   const policy =
     preparer === undefined
       ? undefined
       : {
           ...(preparer.command === undefined ? {} : { command: preparer.command }),
-          outputs: [...new Set([...preparer.outputs, ...(preparer.creates?.map((item) => item.path) ?? [])])].sort(),
+          outputs: [...new Set([...preparer.outputs, ...(preparer.creates?.map((item) => item.path) ?? [])])].toSorted(),
           ...(preparer.replacements === undefined
             ? {}
             : {

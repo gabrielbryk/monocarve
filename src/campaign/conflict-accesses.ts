@@ -142,6 +142,6 @@ function access(
     role,
     operationIndex,
     operationKind,
-    keys: [...new Set(keys)].sort(byCodeUnit),
+    keys: [...new Set(keys)].toSorted(byCodeUnit),
   };
 }

@@ -107,7 +107,7 @@ export function generatedFilesFor(
             ...(preparer.verify === undefined ? {} : { verify: preparer.verify }),
           }));
   });
-  return [...declared, ...triggered, ...postJournal].sort((left, right) => byCodeUnit(left.path, right.path));
+  return [...declared, ...triggered, ...postJournal].toSorted((left, right) => byCodeUnit(left.path, right.path));
 }
 
 export function pathMigrationOperations(
@@ -119,7 +119,7 @@ export function pathMigrationOperations(
   const moves: PathMove[] = operations
     .filter((operation) => operation.kind === "move" || operation.kind === "move-with-rewrite")
     .map((operation) => ({ source: operation.source, target: operation.target }))
-    .sort((left, right) => byCodeUnit(left.source, right.source) || byCodeUnit(left.target, right.target));
+    .toSorted((left, right) => byCodeUnit(left.source, right.source) || byCodeUnit(left.target, right.target));
   return triggeredPathMigrations(
     config,
     moves.map((move) => move.source),
@@ -136,7 +136,7 @@ export function pathMigrationOperations(
       }
       return [{ kind: "migrate-path-keys", ...shape, preconditionHash, resultHash }];
     })
-    .sort((left, right) => byCodeUnit(left.path, right.path));
+    .toSorted((left, right) => byCodeUnit(left.path, right.path));
 }
 
 /**
@@ -167,7 +167,7 @@ export function pathReferenceRewriteOperations(
   const moves: PathMove[] = operations
     .filter((operation) => operation.kind === "move" || operation.kind === "move-with-rewrite")
     .map((operation) => ({ source: operation.source, target: operation.target }))
-    .sort((left, right) => byCodeUnit(left.source, right.source) || byCodeUnit(left.target, right.target));
+    .toSorted((left, right) => byCodeUnit(left.source, right.source) || byCodeUnit(left.target, right.target));
   if (moves.length === 0) return [];
 
   const scanSettings = { onAmbiguousMatch: settings.onAmbiguousMatch, matchExtensionless: settings.matchExtensionless, minSegments: settings.minSegments };
@@ -212,7 +212,7 @@ export function pathReferenceRewriteOperations(
   }
   return [...byFile.entries()]
     .map(([file, entry]) => {
-      const rewrites = [...entry.rewrites].sort((left, right) => left.line - right.line || left.column - right.column || byCodeUnit(left.donor, right.donor));
+      const rewrites = [...entry.rewrites].toSorted((left, right) => left.line - right.line || left.column - right.column || byCodeUnit(left.donor, right.donor));
       const positions = new Set<string>();
       for (const rewrite of rewrites) {
         const position = `${rewrite.line}:${rewrite.column}`;
@@ -232,7 +232,7 @@ export function pathReferenceRewriteOperations(
         resultHash,
       };
     })
-    .sort((left, right) => byCodeUnit(left.file, right.file));
+    .toSorted((left, right) => byCodeUnit(left.file, right.file));
 }
 
 export function graphDigest(graph: DependencyGraph): Sha256 {
@@ -240,10 +240,10 @@ export function graphDigest(graph: DependencyGraph): Sha256 {
     nodes: graph.paths,
     edges: graph.edges.map((edge) => [edge.from, edge.to, edge.specifier, edge.kind]),
     unresolved: graph.unresolved.map((entry) => [entry.source, entry.specifier]),
-    testKinds: [...graph.testKinds.entries()].sort(([left], [right]) => byCodeUnit(left, right)),
+    testKinds: [...graph.testKinds.entries()].toSorted(([left], [right]) => byCodeUnit(left, right)),
     testImporters: [...graph.testImporters.entries()]
-      .map(([target, importers]) => ({ target, importers: [...importers].sort(byCodeUnit) }))
-      .sort((left, right) => byCodeUnit(left.target, right.target)),
+      .map(([target, importers]) => ({ target, importers: [...importers].toSorted(byCodeUnit) }))
+      .toSorted((left, right) => byCodeUnit(left.target, right.target)),
   });
 }
 

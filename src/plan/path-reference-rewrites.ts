@@ -243,11 +243,11 @@ function distinctResolutions(group: readonly Candidate[]): Candidate[] {
 }
 
 function ambiguityFor(file: string, candidate: Candidate, donors: readonly string[], reason: string): PathReferenceAmbiguity {
-  return { file, line: candidate.line, column: candidate.column, token: candidate.from, reason, donors: [...donors].sort(byCodeUnit) };
+  return { file, line: candidate.line, column: candidate.column, token: candidate.from, reason, donors: [...donors].toSorted(byCodeUnit) };
 }
 
 function sortByPosition<T extends { readonly line: number; readonly column: number }>(items: readonly T[], tiebreak: (item: T) => string): T[] {
-  return [...items].sort((left, right) => left.line - right.line || left.column - right.column || byCodeUnit(tiebreak(left), tiebreak(right)));
+  return [...items].toSorted((left, right) => left.line - right.line || left.column - right.column || byCodeUnit(tiebreak(left), tiebreak(right)));
 }
 
 function resolveSpan(file: string, group: readonly Candidate[], ambiguities: PathReferenceAmbiguity[]): PathReferenceRewriteMatch | null {

@@ -2,7 +2,7 @@ import { hashText } from "../util/hash.ts";
 import type { CandidateEquivalenceGroup, PortfolioCandidate } from "./types.ts";
 
 export function groupEquivalentCandidates(candidates: readonly PortfolioCandidate[], threshold: number): CandidateEquivalenceGroup[] {
-  const remaining = [...candidates].sort((left, right) => left.id.localeCompare(right.id));
+  const remaining = [...candidates].toSorted((left, right) => left.id.localeCompare(right.id));
   const groups: CandidateEquivalenceGroup[] = [];
   while (remaining.length > 0) {
     const seed = remaining.shift()!;
@@ -15,7 +15,7 @@ export function groupEquivalentCandidates(candidates: readonly PortfolioCandidat
       }
     }
     members.sort((left, right) => right.score - left.score || left.id.localeCompare(right.id));
-    const ids = members.map((candidate) => candidate.id).sort();
+    const ids = members.map((candidate) => candidate.id).toSorted();
     const shared = members.reduce<Set<string>>((set, candidate) => new Set([...set].filter((path) => candidate.files.includes(path))), new Set(seed.files));
     groups.push({
       id: `eg-${hashText(ids.join("\n")).slice(0, 12)}`,

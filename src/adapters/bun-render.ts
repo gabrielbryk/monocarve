@@ -66,7 +66,7 @@ export function addBlockDependencies(block: string, input: RenderImporterInput):
     ["dev", input.devDependencies],
   ];
   for (const [section, dependencies] of declared) {
-    for (const name of Object.keys(dependencies).sort()) next = addBlockDependency(next, name, dependencies[name]!, "", section);
+    for (const name of Object.keys(dependencies).toSorted()) next = addBlockDependency(next, name, dependencies[name]!, "", section);
   }
   return next;
 }
@@ -165,7 +165,7 @@ function renderSections(input: RenderImporterInput): string[] {
     ["optionalDependencies", input.optionalDependencies ?? {}],
   ];
   return declared.flatMap(([section, values]) => {
-    const names = Object.keys(values).sort();
+    const names = Object.keys(values).toSorted();
     return names.length === 0
       ? []
       : sectionLines(

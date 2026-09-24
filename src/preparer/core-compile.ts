@@ -95,7 +95,7 @@ export async function runPreparerCompilation(input: CompilePreparerInput, plan: 
   // rewrite has already landed. Keep every declared mutation path in trigger
   // scope even when it is at the terminal state, otherwise a stale derived
   // artifact can never be repaired by recompiling the same preparer.
-  const triggerPaths = initialMutations.map((item) => item.path).sort(byCodeUnit);
+  const triggerPaths = initialMutations.map((item) => item.path).toSorted(byCodeUnit);
   const generatedArtifacts = expandGeneratedArtifacts(input.config, triggerPaths);
   const postJournalPreparers = preparationPostJournalRecords(input.config, triggerPaths);
   const generatedPaths = unique([...generatedArtifacts.map((item) => item.path), ...postJournalPreparers.flatMap((item) => item.outputs)]);
@@ -113,7 +113,7 @@ export async function runPreparerCompilation(input: CompilePreparerInput, plan: 
   const changedFiles = unique([...outputs, ...generatedPaths]);
   const undeclared = changed.filter((path) => !changedFiles.includes(path));
   if (undeclared.length > 0) throw new PreparerError(`preparer wrote undeclared repository-visible path(s): ${undeclared.join(", ")}`);
-  const mutations = [...initialMutations, ...generatedPaths.map((path): PreparerMutation => mutation(workspacePath, path, generatedBefore[path]!))].sort(
+  const mutations = [...initialMutations, ...generatedPaths.map((path): PreparerMutation => mutation(workspacePath, path, generatedBefore[path]!))].toSorted(
     (left, right) => byCodeUnit(left.path, right.path),
   );
   const draft = {

@@ -58,7 +58,7 @@ export function firstPartyRoots(config: MonocarveConfig): string[] {
     ...config.packageRoots.map(withSlash),
     ...config.firstPartyRoots.map(withSlash),
     ...config.firstPartyPackages.map((pkg) => withSlash(pkg.root)),
-  ].sort((left, right) => right.length - left.length);
+  ].toSorted((left, right) => right.length - left.length);
 }
 
 /**
@@ -80,12 +80,12 @@ export function packageContainerRoots(config: MonocarveConfig): string[] {
         ...config.firstPartyPackages.map((pkg) => pkg.root),
       ].filter((root) => root !== "" && root !== "."),
     ),
-  ].sort();
+  ].toSorted();
 }
 
 /** Roots a file may be moved OUT of: applications and existing packages. */
 export function movableRoots(config: MonocarveConfig): string[] {
-  return [...config.applications.map((app) => withSlash(app.sourceRoot)), ...config.packageRoots.map(withSlash)].sort(
+  return [...config.applications.map((app) => withSlash(app.sourceRoot)), ...config.packageRoots.map(withSlash)].toSorted(
     (left, right) => right.length - left.length,
   );
 }

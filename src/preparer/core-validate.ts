@@ -188,7 +188,7 @@ function assertPreparerScopeMatches(
   expectedCreates: ReturnType<typeof expandCreatesPolicy>,
 ): void {
   const expectedPrimaryOutputs = unique([...renderedOutputs, ...(expectedCreates?.map((create) => create.path) ?? [])]);
-  const expectedTriggerPaths = [...expectedPrimaryOutputs].sort(byCodeUnit);
+  const expectedTriggerPaths = [...expectedPrimaryOutputs].toSorted(byCodeUnit);
   if (hashJson(manifest.triggerPaths) !== hashJson(expectedTriggerPaths))
     throw new PreparerError("preparer manifest trigger paths differ from declared mutations");
   const expectedArtifacts = expandGeneratedArtifacts(config, manifest.triggerPaths);
@@ -201,7 +201,7 @@ function assertPreparerScopeMatches(
     ...expectedPostJournal.flatMap((item) => item.outputs),
   ]);
   if (hashJson(manifest.changedFiles) !== hashJson(expectedOutputs)) throw new PreparerError("preparer manifest changed scope differs from configuration");
-  const actualOutputs = manifest.mutations.map((item) => item.path).sort(byCodeUnit);
+  const actualOutputs = manifest.mutations.map((item) => item.path).toSorted(byCodeUnit);
   if (manifest.bootstrapConfig !== undefined) {
     validatedPath(".", manifest.bootstrapConfig.path);
     if (actualOutputs.includes(manifest.bootstrapConfig.path)) throw new PreparerError("bootstrap config cannot also be a preparer output");

@@ -43,7 +43,7 @@ interface EvaluatingEdge {
 
 export function traverseEvaluationClosure(options: EvaluationTraversalOptions): EvaluationTraversal {
   const roots = firstPartyRoots(options.config);
-  const seeds = [...new Set(options.seeds)].filter((path) => evaluable(options.context, roots, path)).sort(byCodeUnit);
+  const seeds = [...new Set(options.seeds)].filter((path) => evaluable(options.context, roots, path)).toSorted(byCodeUnit);
   const state: TraversalState = {
     roots,
     edges: evaluatingEdges(options.graph),
@@ -60,10 +60,10 @@ export function traverseEvaluationClosure(options: EvaluationTraversalOptions): 
   }
   return {
     seeds,
-    reached: [...state.reached].sort(byCodeUnit),
-    modules: [...state.visited].sort(byCodeUnit),
+    reached: [...state.reached].toSorted(byCodeUnit),
+    modules: [...state.visited].toSorted(byCodeUnit),
     packageOwners: state.packageOwners,
-    opaqueSpecifiers: [...state.opaque].sort(byCodeUnit),
+    opaqueSpecifiers: [...state.opaque].toSorted(byCodeUnit),
   };
 }
 

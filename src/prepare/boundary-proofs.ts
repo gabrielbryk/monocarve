@@ -111,7 +111,7 @@ export function assertAdapterSurfaceMatchesContract(adapterText: string, adapter
   }
   const expected = new Set(contractSymbols);
   const missing = contractSymbols.filter((name) => !exported.has(name));
-  const extra = [...exported].filter((name) => !expected.has(name)).sort();
+  const extra = [...exported].filter((name) => !expected.has(name)).toSorted();
   if (missing.length > 0 || extra.length > 0) {
     throw new BoundaryProofError(
       `adapter ${adapterPath} surface does not match its contract` +

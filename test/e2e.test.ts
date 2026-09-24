@@ -102,7 +102,7 @@ describe("end to end", () => {
     // The wiring commit carries every content change, and nothing else —
     // including the regenerated ledger, which no operation writes and which the
     // extraction nonetheless invalidates.
-    const wiring = fixtureGit(root, "show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean).sort();
+    const wiring = fixtureGit(root, "show", "--name-only", "--format=", "HEAD").split("\n").filter(Boolean).toSorted();
     expect(wiring).toEqual(
       [
         "apps/web/package.json",
@@ -114,7 +114,7 @@ describe("end to end", () => {
         "libs/chart/src/index.ts",
         "libs/chart/tsconfig.json",
         "pnpm-lock.yaml",
-      ].sort(),
+      ].toSorted(),
     );
 
     // The plan declared the artifact, its blast radius named it, and the
@@ -155,7 +155,7 @@ describe("end to end", () => {
     expect(consumerText).not.toContain("./widgets/chart.ts");
     expect(consumerText).not.toContain("./types.ts");
     const declared = manifest.consumers.find((entry) => entry.file === "apps/web/src/main.ts");
-    expect(declared?.specifiers.map((rewrite) => rewrite.from).sort()).toEqual(["./types.ts", "./widgets/chart.ts"]);
+    expect(declared?.specifiers.map((rewrite) => rewrite.from).toSorted()).toEqual(["./types.ts", "./widgets/chart.ts"]);
     expect(existsSync(join(root, "libs/chart/src/widgets/chart.css"))).toBe(true);
 
     // The lockfile gained one importer block and the consuming app gained a link.

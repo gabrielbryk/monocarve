@@ -113,7 +113,7 @@ export function narrowCandidate(
   if (files.length !== sources.length) throw new UsageError(`--source must name candidate production files; requested ${sources.join(", ")}`);
   const missing = [
     ...new Set(files.flatMap((file) => (graph.outgoing.get(file) ?? []).filter((target) => candidate.files.includes(target) && !wanted.has(target)))),
-  ].sort();
+  ].toSorted();
   if (missing.length > 0) throw new UsageError(`--source selection is not closed; also select required candidate files: ${missing.join(", ")}`);
   const tests = candidate.tests.filter(
     (test) => test.startsWith(`${files[0]?.replace(/\.tsx?$/, "") ?? ""}`) || files.some((file) => test.startsWith(file.replace(/\.tsx?$/, ""))),
@@ -156,7 +156,7 @@ async function scope(args: ParsedArgs): Promise<void> {
     throw new UsageError(
       `seed path ${path} is ambiguous across candidates: ${candidates
         .map(({ id }) => id)
-        .sort()
+        .toSorted()
         .join(", ")}`,
     );
   const candidate = candidates[0]!;

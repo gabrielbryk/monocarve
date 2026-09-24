@@ -103,7 +103,7 @@ export function assertApprovedPreparerManifest(rootDir: string, path: string, ma
   const expectedPaths = [
     repositoryPath,
     ...(manifest.bootstrapConfig === undefined ? [] : [`${repositoryPrefix(rootDir)}${manifest.bootstrapConfig.path}`]),
-  ].sort(byCodeUnit);
+  ].toSorted(byCodeUnit);
   if (changed.length !== expectedPaths.length || changed.sort(byCodeUnit).some((item, index) => item !== expectedPaths[index]))
     throw new PreparerError("approved preparer commit must contain exactly the manifest and its declared bootstrap config");
   const expected = serializePreparerManifest(manifest);
@@ -200,7 +200,7 @@ export function commitPreparerOutputs(rootDir: string, config: MonocarveConfig, 
   const declared = manifest.mutations
     .filter((item) => item.preconditionHash !== item.resultHash || item.preconditionMode !== item.resultMode)
     .map((item) => item.path)
-    .sort(byCodeUnit);
+    .toSorted(byCodeUnit);
   if (declared.length === 0) throw new PreparerError("preparer output commit has no effective mutations");
   assertMutationsMatchState(rootDir, manifest.mutations);
   const dirty = unique(statusEntries(rootDir).flatMap((entry) => entry.paths)).sort(byCodeUnit);
@@ -226,8 +226,8 @@ export function commitPreparerOutputs(rootDir: string, config: MonocarveConfig, 
     throw error;
   }
   const result = headCommit(rootDir);
-  const committed = git({ cwd: rootDir }, "diff-tree", "--no-commit-id", "--name-only", "-r", result).split("\n").filter(Boolean).sort(byCodeUnit);
-  const expected = declared.map((item) => `${repositoryPrefix(rootDir)}${item}`).sort(byCodeUnit);
+  const committed = git({ cwd: rootDir }, "diff-tree", "--no-commit-id", "--name-only", "-r", result).split("\n").filter(Boolean).toSorted(byCodeUnit);
+  const expected = declared.map((item) => `${repositoryPrefix(rootDir)}${item}`).toSorted(byCodeUnit);
   if (committed.length !== expected.length || committed.some((item, index) => item !== expected[index]))
     throw new PreparerError("preparer output commit path verification failed");
   assertCommittedMutationsMatch(rootDir, result, manifest.mutations);

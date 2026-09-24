@@ -46,7 +46,7 @@ export function compileValueSplit(input: CompileValueSplitInput): PreparationMan
   const movedGroupIds = dependencyClosedGroups(analysis, group.id);
   const retainedIncoming = analysis.edges.filter((edge) => !movedGroupIds.has(edge.source) && movedGroupIds.has(edge.target));
   if (retainedIncoming.length > 0) {
-    const names = retainedIncoming.map((edge) => analysis.groups.find((item) => item.id === edge.target)?.name ?? edge.target).sort(byCodeUnit);
+    const names = retainedIncoming.map((edge) => analysis.groups.find((item) => item.id === edge.target)?.name ?? edge.target).toSorted(byCodeUnit);
     throw new PlanningError(`value split dependency is still used by retained declaration(s): ${names.join(", ")}`);
   }
   const movedGroups = analysis.groups.filter((item) => movedGroupIds.has(item.id));
@@ -54,7 +54,7 @@ export function compileValueSplit(input: CompileValueSplitInput): PreparationMan
   const declarations = declarationIds
     .map((id) => analysis.declarations.find((item) => item.id === id))
     .filter((item) => item !== undefined)
-    .sort((left, right) => left.span.start - right.span.start);
+    .toSorted((left, right) => left.span.start - right.span.start);
   if (declarations.length !== declarationIds.length) throw new PlanningError(`value split declaration closure is incomplete: ${split.symbol}`);
   const sourceFile = ts.createSourceFile(
     split.source,
@@ -72,7 +72,7 @@ export function compileValueSplit(input: CompileValueSplitInput): PreparationMan
     }
     regionByStart.set(statement.getFullStart(), { start: statement.getFullStart(), end: statement.end });
   }
-  const regions = [...regionByStart.values()].sort((left, right) => left.start - right.start);
+  const regions = [...regionByStart.values()].toSorted((left, right) => left.start - right.start);
   const importedBindings = new Map<string, ts.ImportDeclaration>();
   for (const statement of sourceFile.statements) {
     if (!ts.isImportDeclaration(statement)) continue;
@@ -93,7 +93,7 @@ export function compileValueSplit(input: CompileValueSplitInput): PreparationMan
   for (const statement of sourceFile.statements)
     if (regions.some((region) => statement.getFullStart() === region.start && statement.end === region.end)) visit(statement);
   const importText = [...usedImports]
-    .sort((left, right) => left.getStart(sourceFile) - right.getStart(sourceFile))
+    .toSorted((left, right) => left.getStart(sourceFile) - right.getStart(sourceFile))
     .map((statement) => renderTargetImport(input, split.source, split.target, statement, sourceFile))
     .join("\n");
   const declarationsText = regions
@@ -105,14 +105,14 @@ export function compileValueSplit(input: CompileValueSplitInput): PreparationMan
     throw new PlanningError(`value split declaration closure has top-level evaluation effects: ${split.symbol}`);
   }
   let donorContents = sourceText;
-  for (const region of [...regions].sort((left, right) => right.start - left.start))
+  for (const region of [...regions].toSorted((left, right) => right.start - left.start))
     donorContents = donorContents.slice(0, region.start) + donorContents.slice(region.end);
   donorContents = `${donorContents.replace(/\s*$/, "\n\n")}export { ${split.symbol} } from ${JSON.stringify(split.targetModuleSpecifier)};\n`;
   const sourceMode = baselineFileMode(input.rootDir, baseline.commit, split.source);
   const operations: PreparationReplayOperation[] = [
     write(split.source, hashText(sourceText), sourceMode, donorContents),
     write(split.target, MISSING, "missing", targetContents),
-  ].sort((left, right) => byCodeUnit(preparationOperationPaths(left)[0]!, preparationOperationPaths(right)[0]!));
+  ].toSorted((left, right) => byCodeUnit(preparationOperationPaths(left)[0]!, preparationOperationPaths(right)[0]!));
   const policyAnchor = { sourcePath: split.source, targetPath: split.target, targetModuleSpecifier: split.targetModuleSpecifier };
   const changedSourcePaths = operations.flatMap(preparationOperationPaths);
   const postJournalPreparers = preparationPostJournalRecords(input.config, changedSourcePaths);
@@ -127,12 +127,12 @@ export function compileValueSplit(input: CompileValueSplitInput): PreparationMan
     operations,
     postJournalPreparers,
     compatibilityReexports: [],
-    changedFiles: [...changedSourcePaths, ...postJournalPreparers.flatMap((item) => item.outputs)].sort(byCodeUnit),
+    changedFiles: [...changedSourcePaths, ...postJournalPreparers.flatMap((item) => item.outputs)].toSorted(byCodeUnit),
     commits: { prepare: input.rendering.commit },
     gates: {
-      package: [...input.rendering.gates.package].sort(byCodeUnit),
-      project: [...input.rendering.gates.project].sort(byCodeUnit),
-      workspace: [...input.rendering.gates.workspace].sort(byCodeUnit),
+      package: [...input.rendering.gates.package].toSorted(byCodeUnit),
+      project: [...input.rendering.gates.project].toSorted(byCodeUnit),
+      workspace: [...input.rendering.gates.workspace].toSorted(byCodeUnit),
     },
   });
   assertPreparationManifestValid(manifest);

@@ -28,7 +28,7 @@ export function donorDependencyPruningCandidates(input: {
   const manifestPath = `${input.donorRoot}/package.json`;
   if (!input.context.exists(manifestPath)) return [];
   const manifest = parseJsonFile(input.context.text(manifestPath), manifestPath) as ManifestShape;
-  const names = [...new Set([...Object.keys(input.dependencies.runtime), ...Object.keys(input.dependencies.dev)])].sort();
+  const names = [...new Set([...Object.keys(input.dependencies.runtime), ...Object.keys(input.dependencies.dev)])].toSorted();
   const usage = collectDependencyUsage({ context: input.context, donorRoot: input.donorRoot, movedSources: input.movedSources, dependencyNames: names });
   return usage.flatMap(({ name, retainedSources, tsconfigTypes, explicitlyKept }): DonorDependencyPruningCandidate[] => {
     const section = dependencySection(manifest, name);

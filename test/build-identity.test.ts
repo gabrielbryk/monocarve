@@ -34,7 +34,7 @@ test("rich executable identity composes but never changes behavioral compiler id
   expect(executableBuildIdentity()).toEqual({ schemaVersion: 1, semanticVersion: TOOL_VERSION, packagingMode: "source", compiler });
   expect(executableBuildIdentityFor("dist-source").compiler).toEqual(compiler);
   expect(executableBuildIdentityFor("standalone-bun").compiler).toEqual(compiler);
-  expect(Object.keys(compiler).sort()).toEqual(["artifactIntegrity"]);
+  expect(Object.keys(compiler).toSorted()).toEqual(["artifactIntegrity"]);
 });
 
 test("build revision is exact for Git sources and absent for source archives", () => {

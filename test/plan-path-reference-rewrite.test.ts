@@ -66,7 +66,7 @@ function manifest(root: string, operations: readonly PlanOperation[]): Extractio
     operations: [...operations],
     consumers: [],
     generatedFiles: [],
-    changedFiles: [SOURCE, TARGET, DOC].sort(),
+    changedFiles: [SOURCE, TARGET, DOC].toSorted(),
     expectedDynamicImportDelta: { added: [], removed: [] },
     evaluationEffects: [],
     metrics: { movedFiles: 1, movedLines: 1, applicationLinesBefore: 1, applicationLinesAfter: 0, consumers: 0 },
@@ -303,7 +303,7 @@ describe("plan-level rewrite-path-reference", () => {
     expect(operation.documentKind).toBe("markdown");
 
     // Validate against the manifest
-    const testManifest = { ...manifest(root, [move, operation]), changedFiles: [SOURCE, TARGET, markdownDoc].sort() };
+    const testManifest = { ...manifest(root, [move, operation]), changedFiles: [SOURCE, TARGET, markdownDoc].toSorted() };
     const result = validatePlan(testManifest, { config, rootDir: root });
     expect(result.issues.filter((issue) => issue.rule === "path-reference-kind")).toHaveLength(0);
   });

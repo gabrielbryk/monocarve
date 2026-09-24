@@ -249,7 +249,7 @@ export function validateReplayRecipe(operation: ExtractTypeDeclarationsOperation
   const expectedExports = operation.declarations
     .filter((group) => group.declarations.some((selector) => selector.originallyExported))
     .map((group) => group.name)
-    .sort(byCodeUnit);
+    .toSorted(byCodeUnit);
   validateSortedStrings(operation.reExportNames, "replay-reexports", "reExportNames", add);
   if (operation.reExportNames.length !== expectedExports.length || operation.reExportNames.some((name, index) => name !== expectedExports[index])) {
     add("replay-reexports", "reExportNames must exactly equal the originally public extracted groups", operation.donor.path);

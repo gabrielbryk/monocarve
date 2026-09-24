@@ -80,8 +80,8 @@ export function captureInputInventory(options: CaptureInventoryOptions): Assessm
       if (manifest) paths.add(manifest);
     }
   }
-  const completeEntries = [...paths].map((path) => inventoryEntry(rootDir, path)).sort(compareEntries);
-  const directories = [...directoryRoots].map((path) => directoryMembership(rootDir, path, excluded)).sort(compareDirectories);
+  const completeEntries = [...paths].map((path) => inventoryEntry(rootDir, path)).toSorted(compareEntries);
+  const directories = [...directoryRoots].map((path) => directoryMembership(rootDir, path, excluded)).toSorted(compareDirectories);
   const sourceCommit = headCommit(rootDir);
   // Dirty state is input-scoped authority, not a record of every unrelated
   // workspace artifact. In particular, a prior assessment output directory
@@ -94,7 +94,7 @@ export function captureInputInventory(options: CaptureInventoryOptions): Assessm
       const named = inventoryName(rootDir, resolve(rootDir, path));
       return inputKeys.has(`${named.namespace}:${named.path}`);
     })
-    .sort(byCodeUnit);
+    .toSorted(byCodeUnit);
   const body = { schemaVersion: 1 as const, sourceCommit, dirtyPaths, configDigest: hashJson(options.config), entries: completeEntries, directories };
   return { ...body, digest: hashJson(body) };
 }
@@ -106,13 +106,13 @@ export function verifyInputInventory(options: CaptureInventoryOptions, expected:
   const actualStates = new Map(actual.entries.map((entry) => [`${entry.namespace}:${entry.path}`, hashJson(entry)]));
   const changed = [...new Set([...expectedStates.keys(), ...actualStates.keys()])]
     .filter((key) => expectedStates.get(key) !== actualStates.get(key))
-    .sort(byCodeUnit);
+    .toSorted(byCodeUnit);
   const expectedDirectories = new Map(expected.directories.map((entry) => [`${entry.namespace}:${entry.path}`, hashJson(entry)]));
   const actualDirectories = new Map(actual.directories.map((entry) => [`${entry.namespace}:${entry.path}`, hashJson(entry)]));
   changed.push(
     ...[...new Set([...expectedDirectories.keys(), ...actualDirectories.keys()])]
       .filter((key) => expectedDirectories.get(key) !== actualDirectories.get(key))
-      .sort(byCodeUnit),
+      .toSorted(byCodeUnit),
   );
   throw new InputInventoryError("ASSESSMENT_INPUT_DRIFT", `assessment inputs changed after capture: ${changed.join(", ")}`, [...new Set(changed)]);
 }
@@ -150,14 +150,14 @@ export function assertReportsBoundToInventory(
   if (unbound.size > 0)
     throw new InputInventoryError(
       "ASSESSMENT_INPUT_UNBOUND",
-      `scanner read paths outside captured authority: ${[...unbound].sort(byCodeUnit).join(", ")}`,
-      [...unbound].sort(byCodeUnit),
+      `scanner read paths outside captured authority: ${[...unbound].toSorted(byCodeUnit).join(", ")}`,
+      [...unbound].toSorted(byCodeUnit),
     );
   if (driftedReads.size > 0)
     throw new InputInventoryError(
       "ASSESSMENT_INPUT_DRIFT",
-      `scanner read bytes differed from pre-scan inventory: ${[...driftedReads].sort(byCodeUnit).join(", ")}`,
-      [...driftedReads].sort(byCodeUnit),
+      `scanner read bytes differed from pre-scan inventory: ${[...driftedReads].toSorted(byCodeUnit).join(", ")}`,
+      [...driftedReads].toSorted(byCodeUnit),
     );
 }
 

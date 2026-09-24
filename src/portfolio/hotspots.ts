@@ -44,11 +44,11 @@ export function analyzeCouplingHotspots(graph: DependencyGraph, portfolio: Portf
           discouragedClosures,
           pressureScore: largestClosureLines + inbound * 100 + fanOut * 50 + crossDomainClosures * 250 + discouragedClosures * 100,
           suggestedAction: action(inbound, fanOut, crossDomainClosures),
-          candidateIds: closures.map((candidate) => candidate.id).sort(),
+          candidateIds: closures.map((candidate) => candidate.id).toSorted(),
         },
       ];
     })
-    .sort((left, right) => right.pressureScore - left.pressureScore || byCodeUnit(left.path, right.path));
+    .toSorted((left, right) => right.pressureScore - left.pressureScore || byCodeUnit(left.path, right.path));
 }
 
 function representativeCandidates(portfolio: Portfolio): PortfolioCandidate[] {

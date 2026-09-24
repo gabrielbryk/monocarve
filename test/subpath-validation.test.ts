@@ -104,7 +104,7 @@ function setup(): { root: string; config: MonocarveConfig; manifest: ExtractionM
     operations,
     consumers: [{ file: CONSUMER, owner: "apps/api", expectedImporter: "./alpha.ts", specifiers: rewrites, external: false, dependencySection: "runtime" }],
     generatedFiles: [],
-    changedFiles: [ALPHA, ALPHA_TARGET, BETA, BETA_TARGET, CONSUMER, ENTRYPOINT].sort(),
+    changedFiles: [ALPHA, ALPHA_TARGET, BETA, BETA_TARGET, CONSUMER, ENTRYPOINT].toSorted(),
     expectedDynamicImportDelta: { added: [], removed: [] },
     evaluationEffects: [],
     metrics: { movedFiles: 2, movedLines: 2, applicationLinesBefore: 5, applicationLinesAfter: 3, consumers: 1 },

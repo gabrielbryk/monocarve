@@ -100,7 +100,7 @@ function independent(): number { return 1 }
 function recursive(): number { return recursive() }
 `);
     const namedComponents = graph.components.map((component) => ({
-      names: component.groupIds.map((id) => groupName(graph, id)).sort(),
+      names: component.groupIds.map((id) => groupName(graph, id)).toSorted(),
       cyclic: component.cyclic,
     }));
 

@@ -85,7 +85,7 @@ function sortKeys(value: unknown): unknown {
   // object here would invoke its legacy setter and silently drop that key
   // from canonical JSON, breaking deterministic identity and replay.
   const out: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
-  for (const key of Object.keys(source).sort(byCodeUnit)) {
+  for (const key of Object.keys(source).toSorted(byCodeUnit)) {
     out[key] = sortKeys(source[key]);
   }
   return out;

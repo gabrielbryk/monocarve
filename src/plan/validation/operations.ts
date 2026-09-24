@@ -206,7 +206,7 @@ function validatePathMigrationNoops(
   const proofs = manifest.pathMigrationNoops ?? [];
   const expectedMoves = moves
     .map(({ source, target }) => ({ source, target }))
-    .sort((left, right) =>
+    .toSorted((left, right) =>
       left.source < right.source ? -1 : left.source > right.source ? 1 : left.target < right.target ? -1 : left.target > right.target ? 1 : 0,
     );
   const seen = new Set<string>();

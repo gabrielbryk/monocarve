@@ -36,7 +36,7 @@ describe("transaction lifecycle evidence", () => {
           exemptReason: "unchanged post-journal fixture",
         },
       ],
-      changedFiles: [...base.changedFiles, "quality-baseline.txt"].sort(),
+      changedFiles: [...base.changedFiles, "quality-baseline.txt"].toSorted(),
     };
     const manifestPath = approve(root, manifest);
     const approved = inspectCommitChain({ rootDir: root, manifest, manifestPath });

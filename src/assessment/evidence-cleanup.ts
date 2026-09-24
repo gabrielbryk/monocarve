@@ -44,7 +44,7 @@ export function listBundleEntries(root: string, refusal: Refusal, current = root
       const name = relative(root, absolute).replaceAll("\\", "/");
       return entry.isDirectory() ? [name, ...listBundleEntries(root, refusal, absolute)] : [name];
     })
-    .sort(byCodeUnit);
+    .toSorted(byCodeUnit);
 }
 
 export function removeQuarantinedDirectory(
@@ -75,10 +75,10 @@ export function removeQuarantinedDirectory(
   const directories = expectedDirectories(expected);
   for (const file of expected
     .filter((entry) => !directories.has(entry))
-    .sort(byCodeUnit)
+    .toSorted(byCodeUnit)
     .reverse())
     unlinkSync(resolve(quarantine, file));
-  for (const directory of [...directories].sort((a, b) => b.length - a.length || byCodeUnit(b, a))) rmdirSync(resolve(quarantine, directory));
+  for (const directory of [...directories].toSorted((a, b) => b.length - a.length || byCodeUnit(b, a))) rmdirSync(resolve(quarantine, directory));
   rmdirSync(quarantine);
   syncDirectory(dirname(path));
 }
@@ -87,7 +87,7 @@ function expectedEntries(root: string, manifest: EvidenceManifestBase | undefine
   if (manifest === undefined) return [];
   const artifacts: readonly EvidenceArtifactRecord[] = manifest.artifacts;
   const paths = [...(exists(resolve(root, "manifest.json")) ? ["manifest.json"] : []), ...artifacts.map(({ path }) => path)];
-  return [...new Set([...paths, ...expectedDirectories(paths)])].sort(byCodeUnit);
+  return [...new Set([...paths, ...expectedDirectories(paths)])].toSorted(byCodeUnit);
 }
 
 function expectedDirectories(paths: readonly string[]): Set<string> {
@@ -104,7 +104,7 @@ function listEntries(root: string, current = root): string[] {
       const name = relativeName(root, child);
       return entry.isDirectory() ? [name, ...listEntries(root, child)] : [name];
     })
-    .sort(byCodeUnit);
+    .toSorted(byCodeUnit);
 }
 
 function relativeName(root: string, path: string): string {

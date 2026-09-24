@@ -266,14 +266,14 @@ export function eligibleCandidates(portfolio: Portfolio): PortfolioCandidate[] {
   return portfolio.candidates
     .filter((candidate) => candidate.eligible)
     .slice()
-    .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id));
+    .toSorted((left, right) => right.score - left.score || left.id.localeCompare(right.id));
 }
 
 export function blockedCandidates(portfolio: Portfolio): PortfolioCandidate[] {
   return portfolio.candidates
     .filter((candidate) => !candidate.eligible)
     .slice()
-    .sort((left, right) => right.lineCount - left.lineCount || left.id.localeCompare(right.id));
+    .toSorted((left, right) => right.lineCount - left.lineCount || left.id.localeCompare(right.id));
 }
 
 /**
@@ -356,7 +356,7 @@ export function marginalBlockers(candidates: readonly Pick<PortfolioCandidate, "
         candidateIds: freed.map((candidate) => candidate.id),
       };
     })
-    .sort(
+    .toSorted(
       (left, right) =>
         right.freedCandidates - left.freedCandidates ||
         right.freedLineCount - left.freedLineCount ||

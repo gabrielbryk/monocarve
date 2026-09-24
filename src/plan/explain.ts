@@ -73,7 +73,7 @@ export function formatPlanExplanation(explanation: PlanExplanation): string {
       `Dependency ${explanation.name}`,
       ...explanation.declarations.map(({ section, version }) => `  target ${section}: ${version}`),
       ...[...explanation.decisions]
-        .sort((left, right) => byCodeUnit(left.decision, right.decision))
+        .toSorted((left, right) => byCodeUnit(left.decision, right.decision))
         .map((decision) => `  ${decision.decision}: ${decision.reasons.join(", ")}${decision.sources.length ? ` from ${decision.sources.join(", ")}` : ""}`),
       ...(explanation.pruning ? [`  donor ${explanation.pruning.mode}: ${explanation.pruning.section}`] : []),
     ].join("\n") + "\n"

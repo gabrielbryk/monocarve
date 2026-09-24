@@ -171,7 +171,7 @@ function policyAnchors(manifest: PreparationManifest): PreparationPolicyRenderIn
       return [{ sourcePath: operation.file.path, targetPath: operation.file.path, targetModuleSpecifier: operation.policySpecifier }];
     if (operation.kind !== "rewrite-module-specifier") return [];
     return [...new Set(operation.rewrites.map((rewrite) => rewrite.to))]
-      .sort(byCodeUnit)
+      .toSorted(byCodeUnit)
       .map((specifier) => ({ sourcePath: operation.file.path, targetPath: operation.file.path, targetModuleSpecifier: specifier }));
   });
 }
@@ -189,7 +189,7 @@ export function assertPreparationPolicy(config: MonocarveConfig, manifest: Prepa
   const commit = policies[0]!.commit;
   if (policies.some((policy) => hashJson(policy.commit) !== hashJson(commit)))
     throw new PreparationSimulationError("multi-file preparation members render different commit metadata");
-  const union = (tier: "package" | "project" | "workspace") => [...new Set(policies.flatMap((policy) => policy.gates[tier]))].sort();
+  const union = (tier: "package" | "project" | "workspace") => [...new Set(policies.flatMap((policy) => policy.gates[tier]))].toSorted();
   const expected = { commit, gates: { package: union("package"), project: union("project"), workspace: union("workspace") } };
   if (hashJson(expected) !== hashJson({ commit: manifest.commits.prepare, gates: manifest.gates }))
     throw new PreparationSimulationError("preparation manifest policy differs from the exact gates or commit metadata rendered by the resolved configuration");

@@ -45,7 +45,7 @@ function normalizedConsumerOwners(owners: readonly (string | ConsumerDependencyO
     const previous = sections.get(owner.owner);
     sections.set(owner.owner, previous === "runtime" || owner.dependencySection === "runtime" ? "runtime" : "dev");
   }
-  return [...sections].map(([owner, dependencySection]) => ({ owner, dependencySection })).sort((left, right) => byCodeUnit(left.owner, right.owner));
+  return [...sections].map(([owner, dependencySection]) => ({ owner, dependencySection })).toSorted((left, right) => byCodeUnit(left.owner, right.owner));
 }
 
 function consumerManifestOperation(input: ConsumerWiringInput, owner: ConsumerDependencyOwner, path: string): PlanOperation | undefined {

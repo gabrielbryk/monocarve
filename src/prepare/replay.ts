@@ -147,7 +147,7 @@ function normalizeInlineImportTypeProofs(
   selected: readonly TypeOnlyExtractionSpan[],
   proofs: readonly InlineImportTypeRewriteProof[],
 ): InlineImportTypeRewriteProof[] {
-  const sorted = [...proofs].sort(
+  const sorted = [...proofs].toSorted(
     (left, right) => left.start - right.start || left.end - right.end || byCodeUnit(left.originalSpecifier, right.originalSpecifier),
   );
   let previousEnd = -1;
@@ -199,7 +199,7 @@ function collectRelativeInlineImportLiterals(source: string, selected: readonly 
 }
 
 function rewriteInlineImportTypes(source: string, span: TypeOnlyExtractionSpan, proofs: readonly InlineImportTypeRewriteProof[]): string {
-  const owned = proofs.filter((proof) => proof.start >= span.start && proof.end <= span.end).sort((left, right) => right.start - left.start);
+  const owned = proofs.filter((proof) => proof.start >= span.start && proof.end <= span.end).toSorted((left, right) => right.start - left.start);
   let text = source.slice(span.start, span.end);
   for (const proof of owned) {
     const start = proof.start - span.start;
@@ -229,7 +229,7 @@ function assertBaseline(input: RenderTypeOnlyExtractionInput): void {
 
 function normalizeSpans(source: string, selected: readonly TypeOnlyExtractionSpan[]): TypeOnlyExtractionSpan[] {
   if (selected.length === 0) throw new PreparationReplayError("type-only extraction needs at least one selected declaration");
-  const sorted = [...selected].sort(compareSpans);
+  const sorted = [...selected].toSorted(compareSpans);
   let previousEnd = -1;
   for (const span of sorted) {
     if (!Number.isInteger(span.start) || !Number.isInteger(span.end) || span.start < 0 || span.end <= span.start || span.end > source.length) {
@@ -290,7 +290,7 @@ function declarationName(statement: ts.Statement): string | undefined {
 }
 
 function normalizeImports(imports: readonly CheckerProvenTypeImport[], baselineHash: Sha256, location: "target" | "donor"): CheckerProvenTypeImport[] {
-  const sorted = [...imports].sort(compareImports);
+  const sorted = [...imports].toSorted(compareImports);
   const bindingKeys = new Set<string>();
   const localBindings = new Set<string>();
   for (const item of sorted) {
@@ -326,7 +326,7 @@ function assertDonorImportsTarget(imports: readonly CheckerProvenTypeImport[], t
 }
 
 function normalizeReExportNames(names: readonly string[], selected: readonly TypeOnlyExtractionSpan[]): string[] {
-  const normalized = [...names].sort(byCodeUnit);
+  const normalized = [...names].toSorted(byCodeUnit);
   if (new Set(normalized).size !== normalized.length || normalized.some((name) => !isIdentifier(name))) {
     throw new PreparationReplayError("compatibility re-export names must be unique identifiers");
   }
@@ -339,7 +339,7 @@ function normalizeReExportNames(names: readonly string[], selected: readonly Typ
   const originalPublicNames = [...selectedByName]
     .filter(([, declarations]) => declarations.some((declaration) => declaration.originallyExported))
     .map(([name]) => name)
-    .sort(byCodeUnit);
+    .toSorted(byCodeUnit);
   if (normalized.length !== originalPublicNames.length || normalized.some((name, index) => name !== originalPublicNames[index])) {
     throw new PreparationReplayError("compatibility re-exports must exactly match the selected declarations' original public names");
   }

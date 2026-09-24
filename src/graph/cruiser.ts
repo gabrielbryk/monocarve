@@ -204,7 +204,7 @@ async function observeFilesystemReads<T>(
   try {
     return {
       value: await action(),
-      reads: [...reads].sort(byCodeUnit),
+      reads: [...reads].toSorted(byCodeUnit),
       fileReads: fileReads.sort((left, right) => byCodeUnit(left.path, right.path) || byCodeUnit(left.sha256, right.sha256)),
     };
   } finally {

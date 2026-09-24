@@ -177,7 +177,7 @@ function evaluationWarnings(config: MonocarveConfig, context: WorkspaceContext, 
     );
   }
   if (evaluation.packages.length > 0) {
-    const ranked = [...evaluation.packages].sort(
+    const ranked = [...evaluation.packages].toSorted(
       (left, right) => DECLARATION_RANK[left.sideEffects] - DECLARATION_RANK[right.sideEffects] || byCodeUnit(left.name, right.name),
     );
     const shown = ranked.slice(0, WARNING_EXAMPLES);
@@ -231,7 +231,7 @@ export function sizeRejections(config: MonocarveConfig, closure: readonly string
 export function protectedPathRejections(config: MonocarveConfig, movable: readonly string[]): RejectionReason[] {
   const protectedMovable = [...new Set(movable)]
     .filter((path) => config.portfolio.protectedPaths.some((protectedPath) => path === protectedPath || path.startsWith(`${protectedPath}/`)))
-    .sort(byCodeUnit);
+    .toSorted(byCodeUnit);
   if (protectedMovable.length === 0) return [];
   return [{ code: "protected-path", detail: `${protectedMovable.length} movable path(s) are protected by portfolio.protectedPaths`, edges: protectedMovable }];
 }

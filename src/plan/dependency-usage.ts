@@ -20,7 +20,7 @@ export function collectDependencyUsage(input: {
   readonly dependencyNames: readonly string[];
 }): DependencyUsageEvidence[] {
   const moved = new Set(input.movedSources);
-  const names = [...new Set(input.dependencyNames)].sort(byCodeUnit);
+  const names = [...new Set(input.dependencyNames)].toSorted(byCodeUnit);
   const retained = new Map(names.map((name) => [name, [] as string[]]));
   for (const path of input.context.repositorySources()) {
     if (moved.has(path) || input.context.ownerOf(path) !== input.donorRoot) continue;
@@ -57,7 +57,7 @@ function configuredTypes(context: WorkspaceContext, donorRoot: string): { tsconf
         packages: [...new Set([inputPackageName(context, type), typesPackageName(type)].filter((name): name is string => name !== undefined))],
       }));
     })
-    .sort((left, right) => byCodeUnit(left.tsconfig, right.tsconfig) || byCodeUnit(left.type, right.type));
+    .toSorted((left, right) => byCodeUnit(left.tsconfig, right.tsconfig) || byCodeUnit(left.type, right.type));
 }
 
 function inputPackageName(context: WorkspaceContext, type: string): string | undefined {

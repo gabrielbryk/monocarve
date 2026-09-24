@@ -128,7 +128,7 @@ export function findConsumers(
         ];
       })
       // This order is the manifest's bytes, so it is by code unit, never by locale.
-      .sort((left, right) => byCodeUnit(left.file, right.file))
+      .toSorted((left, right) => byCodeUnit(left.file, right.file))
   );
 }
 
@@ -148,11 +148,11 @@ export function consumerDependencyOwners(consumers: readonly Consumer[]): Consum
       sections.set(consumer.package, "dev");
     }
   }
-  return [...sections].map(([owner, dependencySection]) => ({ owner, dependencySection })).sort((left, right) => byCodeUnit(left.owner, right.owner));
+  return [...sections].map(([owner, dependencySection]) => ({ owner, dependencySection })).toSorted((left, right) => byCodeUnit(left.owner, right.owner));
 }
 
 /** Applications among a consumer set — the projects whose gates must be run. */
 export function consumerApplications(context: WorkspaceContext, consumers: readonly { readonly package: string }[]): string[] {
   const applications = new Set(context.config.applications.map(applicationOwner));
-  return [...new Set(consumers.map((consumer) => consumer.package).filter((owner) => applications.has(owner)))].sort();
+  return [...new Set(consumers.map((consumer) => consumer.package).filter((owner) => applications.has(owner)))].toSorted();
 }

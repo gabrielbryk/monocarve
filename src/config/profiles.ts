@@ -45,7 +45,7 @@ export function resolveExtractionProfile(config: MonocarveConfig, app: Applicati
 
   const profile = config.extractionProfiles.profiles[name];
   if (!profile) {
-    const known = Object.keys(config.extractionProfiles.profiles).sort().join(", ") || "(none)";
+    const known = Object.keys(config.extractionProfiles.profiles).toSorted().join(", ") || "(none)";
     throw new ConfigError(`unknown extraction profile ${JSON.stringify(name)}; configured: ${known}`);
   }
 
@@ -121,7 +121,7 @@ export function validateExtractionProfiles(config: MonocarveConfig, ctx: z.Refin
     ctx.addIssue({
       code: "custom",
       path: ["extractionProfiles", "default"],
-      message: `must name a configured profile; configured: ${Object.keys(profiles).sort().join(", ") || "(none)"}`,
+      message: `must name a configured profile; configured: ${Object.keys(profiles).toSorted().join(", ") || "(none)"}`,
     });
   }
 

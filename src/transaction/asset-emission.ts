@@ -68,7 +68,7 @@ function capture(root: string, proof: AssetEmissionProofConfig, timeoutMs: numbe
   const files = proof.roots
     .flatMap((configuredRoot) => walk(join(root, configuredRoot)))
     .filter((path) => proof.extensions.some((extension) => path.endsWith(extension)))
-    .sort(byCodeUnit);
+    .toSorted(byCodeUnit);
   const declarations = new Map<string, readonly string[]>();
   for (const path of files) {
     for (const rule of cssRuleSurface(readFileSync(path, "utf8"))) {
@@ -101,14 +101,14 @@ function compareOne(proof: AssetEmissionProofConfig, baseline: CssSurface | stri
       failure: "configured asset-emission roots produced no matching files",
     };
   }
-  const missingSelectors = [...baseline.declarations.keys()].filter((selector) => !candidate.declarations.has(selector)).sort(byCodeUnit);
+  const missingSelectors = [...baseline.declarations.keys()].filter((selector) => !candidate.declarations.has(selector)).toSorted(byCodeUnit);
   const changedDeclarationOrder = [...baseline.declarations]
     .filter(([selector, properties]) => {
       const observed = candidate.declarations.get(selector);
       return observed !== undefined && observed.join("\n") !== properties.join("\n");
     })
     .map(([selector]) => selector)
-    .sort(byCodeUnit);
+    .toSorted(byCodeUnit);
   return {
     id: proof.id,
     passed: missingSelectors.length === 0 && changedDeclarationOrder.length === 0,

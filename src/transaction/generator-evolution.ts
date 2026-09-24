@@ -44,8 +44,8 @@ export function currentGeneratorManifest(options: {
       continue;
     }
     const command = configured.command;
-    const oldOutputs = records.map((item) => item.path).sort();
-    const newOutputs = [...configured.outputs].sort();
+    const oldOutputs = records.map((item) => item.path).toSorted();
+    const newOutputs = [...configured.outputs].toSorted();
     const commandMatches = records.every((item) => item.regenerate === configured.command && item.verify === configured.verify);
     if (commandMatches && same(oldOutputs, newOutputs)) continue;
     const evolution = findEvolution({
@@ -112,7 +112,7 @@ function findEvolution(options: {
       )
         continue;
       if (hashText(readFileSync(workspacePath(options.rootDir, configPath), "utf8")) !== manifest.bootstrapConfig.resultHash) continue;
-      const expectedApprovalPaths = [repositoryPath, `${repositoryPrefix(options.rootDir)}${configPath}`].sort();
+      const expectedApprovalPaths = [repositoryPath, `${repositoryPrefix(options.rootDir)}${configPath}`].toSorted();
       if (!same(changed.sort(), expectedApprovalPaths)) continue;
       const outputCommit = commits[index + 1];
       if (
@@ -122,7 +122,7 @@ function findEvolution(options: {
       )
         continue;
       const effective = manifest.mutations.filter((item) => item.preconditionHash !== item.resultHash || item.preconditionMode !== item.resultMode);
-      const outputPaths = effective.map((item) => `${repositoryPrefix(options.rootDir)}${item.path}`).sort();
+      const outputPaths = effective.map((item) => `${repositoryPrefix(options.rootDir)}${item.path}`).toSorted();
       const committedPaths = lines(git({ cwd: options.rootDir }, "diff-tree", "--no-commit-id", "--name-only", "-r", outputCommit)).sort();
       if (!same(outputPaths, committedPaths) || !options.outputs.every((path) => manifest.mutations.some((item) => item.path === path))) continue;
       if (

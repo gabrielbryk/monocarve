@@ -117,7 +117,7 @@ describe("scanPathReferenceRewrites / rewritePathReferenceText", () => {
     const scan = scanPathReferenceRewrites(text, FILE, moves, settings({ onAmbiguousMatch: "skip" }));
     expect(scan.rewrites).toEqual([]);
     expect(scan.skipped).toHaveLength(2);
-    expect(scan.skipped.map((s) => s.token).sort()).toEqual(["apps/api/src/c.ts", "apps/api/src/d.ts"]);
+    expect(scan.skipped.map((s) => s.token).toSorted()).toEqual(["apps/api/src/c.ts", "apps/api/src/d.ts"]);
     for (const ambiguity of scan.skipped) {
       expect(ambiguity.donors).toEqual(["apps/api/src/c.ts", "apps/api/src/d.ts"]);
       expect(ambiguity.reason).toBe("would produce the same replacement token as another moved source in this file");

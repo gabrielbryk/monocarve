@@ -207,7 +207,7 @@ async function rollbackAndThrow(
 ): Promise<never> {
   const gitRecovery = await rollback(rootDir, recovery);
   const fileRecovery = rollbackCompletedPreparationJournal(journalRecovery);
-  const residue = [...new Set([...gitRecovery.residue, ...fileRecovery.residue])].sort();
+  const residue = [...new Set([...gitRecovery.residue, ...fileRecovery.residue])].toSorted();
   const recoveryMessage = [
     gitRecovery.message,
     fileRecovery.failures.length === 0
@@ -218,7 +218,7 @@ async function rollbackAndThrow(
 }
 
 function sameSet(left: readonly string[], right: readonly string[]): boolean {
-  const first = [...new Set(left)].sort();
-  const second = [...new Set(right)].sort();
+  const first = [...new Set(left)].toSorted();
+  const second = [...new Set(right)].toSorted();
   return first.length === second.length && first.every((entry, index) => entry === second[index]);
 }

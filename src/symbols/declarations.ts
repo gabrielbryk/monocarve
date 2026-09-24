@@ -67,7 +67,7 @@ export function buildGroups(sourcePath: string, declarations: readonly SymbolDec
     byName.set(declaration.name, existing);
   }
   return [...byName.entries()]
-    .sort(([left], [right]) => byCodeUnit(left, right))
+    .toSorted(([left], [right]) => byCodeUnit(left, right))
     .map(([name, members]) => {
       const declarationIds = members.map((member) => member.id);
       return {

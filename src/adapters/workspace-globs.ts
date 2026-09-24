@@ -125,7 +125,7 @@ function walkPattern(rootDir: string, pattern: readonly string[], index: number,
   return readdirSync(absolute, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
-    .sort(byCodeUnit)
+    .toSorted(byCodeUnit)
     .flatMap((name) => walkPattern(rootDir, pattern, index + 1, join(current, name)));
 }
 

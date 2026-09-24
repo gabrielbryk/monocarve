@@ -15,7 +15,7 @@ export interface RepositoryPostconditionReport {
 
 export async function repositoryPostconditionPaths(rootDir: string, adapter: PackageManagerAdapter): Promise<string[]> {
   const packages = await adapter.listPackages(rootDir);
-  return ["package.json", adapter.lockfileName, ...packages.map(({ dir }) => `${dir}/package.json`)].sort();
+  return ["package.json", adapter.lockfileName, ...packages.map(({ dir }) => `${dir}/package.json`)].toSorted();
 }
 
 export async function auditRepositoryPostconditions(input: {
@@ -39,7 +39,7 @@ export async function auditRepositoryPostconditions(input: {
       duplicateNames.push(`workspace package name ${pkg.name} is declared by both ${previous} and ${pkg.dir}`);
     packageOwners.set(pkg.name, pkg.dir);
   }
-  const roots = input.packageRoots === undefined ? packages.map(({ dir }) => dir).sort() : [...new Set(input.packageRoots)].sort();
+  const roots = input.packageRoots === undefined ? packages.map(({ dir }) => dir).toSorted() : [...new Set(input.packageRoots)].toSorted();
   const checkedPackages = packages.filter(({ dir }) => roots.includes(dir));
   const names = new Set(packages.map(({ name }) => name));
   const failures: string[] = [...duplicateNames];
@@ -63,7 +63,7 @@ export async function auditRepositoryPostconditions(input: {
   }
   const importerVerification = await verifyPackageImporters(input.rootDir, input.adapter, roots);
   failures.push(...importerVerification.differences.map(({ packageRoot, message }) => `${packageRoot}: ${message}`));
-  return { passed: failures.length === 0, checkedPackages: roots, importerVerification, failures: [...new Set(failures)].sort() };
+  return { passed: failures.length === 0, checkedPackages: roots, importerVerification, failures: [...new Set(failures)].toSorted() };
 }
 
 function rootPackageName(path: string): string {

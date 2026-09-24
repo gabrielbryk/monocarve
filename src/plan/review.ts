@@ -78,7 +78,7 @@ const OPERATION_KINDS: readonly PlanOperationKind[] = [
 
 function sortedEntries(values: Readonly<Record<string, string>>): { name: string; version: string }[] {
   return Object.entries(values)
-    .sort(([left], [right]) => left.localeCompare(right))
+    .toSorted(([left], [right]) => left.localeCompare(right))
     .map(([name, version]) => ({ name, version }));
 }
 
@@ -110,11 +110,11 @@ function collectRewrittenDocuments(manifest: ExtractionManifest): RewrittenDocum
     }
   }
   return Array.from(byPath.entries())
-    .sort(([pathA], [pathB]) => byCodeUnit(pathA, pathB))
+    .toSorted(([pathA], [pathB]) => byCodeUnit(pathA, pathB))
     .map(([path, rewriteSet]) => ({
       path,
       rewrites: Array.from(rewriteSet)
-        .sort()
+        .toSorted()
         .map((pair) => {
           const separator = pair.indexOf("\x00");
           return { from: pair.slice(0, separator), to: pair.slice(separator + 1) };
@@ -159,7 +159,7 @@ export function summarizePlanReview(manifest: ExtractionManifest, context: PlanR
   const scaffoldOutputs = manifest.operations
     .filter((operation): operation is WriteFileOperation => operation.kind === "write-file" && operation.generator?.startsWith("scaffold:") === true)
     .map((operation) => ({ path: operation.path, generator: operation.generator! }))
-    .sort((left, right) => left.path.localeCompare(right.path) || left.generator.localeCompare(right.generator));
+    .toSorted((left, right) => left.path.localeCompare(right.path) || left.generator.localeCompare(right.generator));
 
   return {
     schemaVersion: 1,
@@ -185,14 +185,14 @@ export function summarizePlanReview(manifest: ExtractionManifest, context: PlanR
     dependencyAdditions: {
       runtime: sortedEntries(manifest.dependencies.runtime),
       dev: sortedEntries(manifest.dependencies.dev),
-      packageReferences: [...manifest.dependencies.packageReferences].sort(),
+      packageReferences: [...manifest.dependencies.packageReferences].toSorted(),
     },
-    consumerRewrites: [...manifest.consumers].sort((a, b) => a.file.localeCompare(b.file) || a.owner.localeCompare(b.owner)),
+    consumerRewrites: [...manifest.consumers].toSorted((a, b) => a.file.localeCompare(b.file) || a.owner.localeCompare(b.owner)),
     exports: {
       entrypoint: [...manifest.target.requiredExports],
-      publicModules: [...(manifest.target.publicModules ?? [])].sort((a, b) => a.exportKey.localeCompare(b.exportKey)),
+      publicModules: [...(manifest.target.publicModules ?? [])].toSorted((a, b) => a.exportKey.localeCompare(b.exportKey)),
     },
-    generatedOutputs: [...manifest.generatedFiles].sort((a, b) => a.path.localeCompare(b.path)),
+    generatedOutputs: [...manifest.generatedFiles].toSorted((a, b) => a.path.localeCompare(b.path)),
     scaffoldOutputs,
     gates: { package: [...manifest.gates.package], project: [...manifest.gates.project], workspace: [...manifest.gates.workspace] },
     warnings: warnings(manifest, context),

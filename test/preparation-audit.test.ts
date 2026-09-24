@@ -408,7 +408,7 @@ function privateClosureManifest(root: string): PreparationManifest {
       targetExtractionHash: hashText(target.text.slice(statement.getFullStart(), statement.end)),
       synthesizedExport: index === 1,
     }))
-    .sort((left, right) => (left.selectorId < right.selectorId ? -1 : left.selectorId > right.selectorId ? 1 : 0));
+    .toSorted((left, right) => (left.selectorId < right.selectorId ? -1 : left.selectorId > right.selectorId ? 1 : 0));
   const groups = selectors.map((selector) => ({
     groupId: hashJson({ sourcePath: DONOR, name: selector.name, declarationIds: [selector.declarationId] }),
     sourcePath: DONOR,

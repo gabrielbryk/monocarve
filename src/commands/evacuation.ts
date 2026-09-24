@@ -61,7 +61,7 @@ async function evacuate(args: ParsedArgs): Promise<void> {
     evacuationProvenance: {
       id: assessed.evacuation.id,
       requested: assessed.evacuation.requested,
-      retainedComposition: assessed.evacuation.retainedComposition.flatMap((scc) => scc.members).sort(),
+      retainedComposition: assessed.evacuation.retainedComposition.flatMap((scc) => scc.members).toSorted(),
       authorizedProtectedRoots: assessed.authorizedProtectedRoots,
       includedCompositionRoots: assessed.includedCompositionRoots,
     },

@@ -43,7 +43,7 @@ await mock.module("node:fs", () => ({
   readdirSync: (...args: unknown[]) => {
     const entries = (realReaddir as (...a: unknown[]) => unknown[])(...args);
     if (listingOrder === "filesystem" || !Array.isArray(entries)) return entries;
-    return [...entries].sort((left, right) => {
+    return [...entries].toSorted((left, right) => {
       const a = entryName(left);
       const b = entryName(right);
       return a < b ? 1 : a > b ? -1 : 0;

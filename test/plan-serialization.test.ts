@@ -73,7 +73,7 @@ function manifest(): ExtractionManifest {
     ],
     consumers: [],
     generatedFiles: [],
-    changedFiles: [ASSET, ASSET_TARGET, DONOR, TARGET].sort(),
+    changedFiles: [ASSET, ASSET_TARGET, DONOR, TARGET].toSorted(),
     expectedDynamicImportDelta: { added: [], removed: [] },
     evaluationEffects: [
       { subject: "module", reach: "moved", path: TARGET, kinds: ["side-effect-import"] },
@@ -128,7 +128,7 @@ describe("manifest serialization", () => {
     // Sorted, not insertion order: `application` leads and `schemaVersion` does
     // not. Losing the leading `schemaVersion` is the price of the guarantee.
     const keys = Object.keys(JSON.parse(text) as Record<string, unknown>);
-    expect(keys).toEqual([...keys].sort());
+    expect(keys).toEqual([...keys].toSorted());
     expect(keys[0]).toBe("application");
   });
 });

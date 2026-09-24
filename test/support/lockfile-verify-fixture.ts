@@ -237,7 +237,7 @@ function simulationManifest(root: string, shape: WorkspaceShape, options: Simula
       },
     ],
     generatedFiles: [],
-    changedFiles: [DONOR, TARGET, CONSUMER, ENTRYPOINT, LOCKFILE, `${APP}/package.json`, `${PACKAGE_ROOT}/package.json`].sort(),
+    changedFiles: [DONOR, TARGET, CONSUMER, ENTRYPOINT, LOCKFILE, `${APP}/package.json`, `${PACKAGE_ROOT}/package.json`].toSorted(),
     lockfileImporter: { packageRoot: PACKAGE_ROOT, hash: hashText(block) },
     expectedDynamicImportDelta: { added: [], removed: [] },
     evaluationEffects: [],

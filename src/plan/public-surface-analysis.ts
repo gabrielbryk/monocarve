@@ -99,5 +99,5 @@ export function resolveExportSurface(checker: ts.TypeChecker, sourceFile: ts.Sou
     .getExportsOfModule(moduleSymbol)
     .filter((symbol) => metadata.hasExportStar || metadata.explicitlyExported.has(symbol.getName()))
     .map((symbol) => ({ name: symbol.getName(), typeOnly: metadata.explicitTypeOnly.get(symbol.getName()) ?? symbolIsTypeOnly(symbol) }))
-    .sort((left, right) => byCodeUnit(left.name, right.name));
+    .toSorted((left, right) => byCodeUnit(left.name, right.name));
 }

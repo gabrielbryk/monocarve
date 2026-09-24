@@ -106,7 +106,7 @@ export function analyzeContainment(context: WorkspaceContext, graph: DependencyG
     }
   }
 
-  return { assets: [...assets].sort(), unmovableAssets: [...unmovableAssets].sort(), escapes, external };
+  return { assets: [...assets].toSorted(), unmovableAssets: [...unmovableAssets].toSorted(), escapes, external };
 }
 
 /**

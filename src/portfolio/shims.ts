@@ -10,14 +10,14 @@ import type { CompatibilityShim } from "./types.ts";
  * never permission to rewrite or delete the module.
  */
 export function detectCompatibilityShims(context: WorkspaceContext, graph: DependencyGraph): readonly CompatibilityShim[] {
-  const packageNames = [...graph.workspace.packageNames.keys()].sort();
+  const packageNames = [...graph.workspace.packageNames.keys()].toSorted();
   const result: CompatibilityShim[] = [];
   for (const path of graph.paths) {
     const parsed = context.parsedSource(path);
     if (!parsed) continue;
     const described = describePureReexport(parsed, packageNames);
     if (!described) continue;
-    const productionConsumers = [...(graph.incoming.get(path) ?? [])].sort();
+    const productionConsumers = [...(graph.incoming.get(path) ?? [])].toSorted();
     if (productionConsumers.length < context.config.portfolio.compatibilityShimMinInbound) continue;
     result.push({
       path,
@@ -25,7 +25,7 @@ export function detectCompatibilityShims(context: WorkspaceContext, graph: Depen
       replacementSpecifier: described.specifier,
       symbols: described.symbols,
       productionConsumers,
-      testConsumers: [...(graph.testImporters.get(path) ?? [])].sort(),
+      testConsumers: [...(graph.testImporters.get(path) ?? [])].toSorted(),
       lineCount: graph.nodes.get(path)?.lineCount ?? 0,
     });
   }
@@ -76,5 +76,5 @@ export function describePureReexport(
       }
     } else return undefined;
   }
-  return { packageName, specifier, symbols: [...new Set(symbols)].sort() };
+  return { packageName, specifier, symbols: [...new Set(symbols)].toSorted() };
 }

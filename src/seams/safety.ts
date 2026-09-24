@@ -111,8 +111,8 @@ function groupMembers(graph: SymbolGraph, group: DeclarationGroup): SymbolDeclar
 
 function selectionEvidence(group: DeclarationGroup, selected: readonly Sha256[] | undefined): TypeOnlyExtractionEvidence[] {
   if (!selected) return [];
-  const expected = [...group.declarationIds].sort(byCodeUnit);
-  const actual = [...new Set(selected)].sort(byCodeUnit);
+  const expected = [...group.declarationIds].toSorted(byCodeUnit);
+  const actual = [...new Set(selected)].toSorted(byCodeUnit);
   return sameSet(new Set(expected), new Set(actual))
     ? []
     : [{ code: "incomplete-declaration-group", message: `selection must include every declaration in merged group ${group.name}` }];
@@ -189,7 +189,7 @@ function bindingNames(name: ts.BindingName): string[] {
 }
 
 function refused(groupId: Sha256, declarationIds: readonly Sha256[], evidence: readonly TypeOnlyExtractionEvidence[]): TypeOnlyExtractionSafety {
-  const sorted = [...evidence].sort(compareEvidence);
+  const sorted = [...evidence].toSorted(compareEvidence);
   return { groupId, declarationIds: [...declarationIds], eligible: sorted.length === 0, evidence: sorted };
 }
 

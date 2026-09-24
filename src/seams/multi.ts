@@ -45,7 +45,7 @@ function planResult(
 
 function canonicalPaths(root: string, paths: readonly string[]): string[] {
   try {
-    return [...new Set(paths.map((path) => relativeWorkspacePath(root, path)))].sort(byCodeUnit);
+    return [...new Set(paths.map((path) => relativeWorkspacePath(root, path)))].toSorted(byCodeUnit);
   } catch {
     throw new SeamPlanningError("multi-file seam sources must be safe repository-relative paths");
   }
@@ -54,7 +54,7 @@ function canonicalPaths(root: string, paths: readonly string[]): string[] {
 function staleBlockers(actual: Readonly<Record<string, Sha256>>, expected?: Readonly<Record<string, Sha256>>): SeamBlocker[] {
   if (!expected) return [];
   const blockers: SeamBlocker[] = [];
-  for (const path of Object.keys(actual).sort(byCodeUnit)) {
+  for (const path of Object.keys(actual).toSorted(byCodeUnit)) {
     if (expected[path] !== actual[path])
       blockers.push({ code: "stale-source", message: `${path} changed since its source hash was observed`, confidence: "exact" });
   }
@@ -76,7 +76,7 @@ function crossFileEdges(root: string, program: ts.Program, analyses: readonly Wo
     };
     visit(file);
   }
-  return [...aggregates.values()].map(({ edge, count }) => ({ ...edge, referenceCount: count })).sort(compareEdges);
+  return [...aggregates.values()].map(({ edge, count }) => ({ ...edge, referenceCount: count })).toSorted(compareEdges);
 }
 
 function addReference(
@@ -115,7 +115,7 @@ function addReference(
 }
 
 function components(analyses: readonly WorkspaceSymbolAnalysis[], cross: readonly MultiFileSymbolEdge[], merged: readonly MultiFileMergedSymbol[]): Sha256[][] {
-  const ids = analyses.flatMap((item) => item.source.groups.map((group) => group.id)).sort(byCodeUnit);
+  const ids = analyses.flatMap((item) => item.source.groups.map((group) => group.id)).toSorted(byCodeUnit);
   const adjacency = new Map(ids.map((id) => [id, new Set<Sha256>()]));
   for (const analysis of analyses) for (const edge of analysis.source.edges) adjacency.get(edge.source)?.add(edge.target);
   for (const edge of cross) adjacency.get(edge.sourceGroupId)?.add(edge.targetGroupId);
@@ -136,7 +136,7 @@ function tarjan(ids: readonly Sha256[], adjacency: ReadonlyMap<Sha256, ReadonlyS
     next += 1;
     stack.push(id);
     onStack.add(id);
-    for (const target of [...(adjacency.get(id) ?? [])].sort(byCodeUnit)) {
+    for (const target of [...(adjacency.get(id) ?? [])].toSorted(byCodeUnit)) {
       if (!index.has(target)) {
         visit(target);
         low.set(id, Math.min(low.get(id)!, low.get(target)!));
@@ -165,8 +165,8 @@ function candidateFor(
 ): MultiFileSeamCandidate {
   const selected = new Set(ids);
   const records = groupRecords(analyses).filter((entry) => selected.has(entry.group.id));
-  const groups = records.map((entry) => entry.group).sort((a, b) => byCodeUnit(a.id, b.id));
-  const sourcePaths = [...new Set(groups.map((group) => group.sourcePath))].sort(byCodeUnit);
+  const groups = records.map((entry) => entry.group).toSorted((a, b) => byCodeUnit(a.id, b.id));
+  const sourcePaths = [...new Set(groups.map((group) => group.sourcePath))].toSorted(byCodeUnit);
   const outsideFiles = records.flatMap(({ group, analysis }) =>
     analysis.consumers.filter((item) => item.groupId === group.id && !sourcePaths.includes(item.consumerPath)),
   );
@@ -188,7 +188,7 @@ function candidateFor(
         .filter((path): path is string => path !== undefined)
         .map((path) => normalizedTarget(path)),
     ),
-  ].sort(byCodeUnit);
+  ].toSorted(byCodeUnit);
   const blockers: SeamBlocker[] = [];
   if (selectedTargets.length > 1)
     blockers.push({ code: "target-collision", message: "groups in one atomic component have conflicting target paths", confidence: "exact" });
@@ -251,11 +251,11 @@ function mergedSymbolGroups(root: string, program: ts.Program, analyses: readonl
             return groupByLocation.get(`${path}\0${declaration.getStart(declaration.getSourceFile())}`);
           })
           .filter((group): group is DeclarationGroup => group !== undefined) ?? [];
-      const ids = [...new Set(groups.map((group) => group.id))].sort(byCodeUnit);
+      const ids = [...new Set(groups.map((group) => group.id))].toSorted(byCodeUnit);
       if (ids.length > 1)
         result.push({
           groupIds: ids,
-          sourcePaths: [...new Set(groups.map((group) => group.sourcePath))].sort(byCodeUnit),
+          sourcePaths: [...new Set(groups.map((group) => group.sourcePath))].toSorted(byCodeUnit),
           name: name.text,
           confidence: "exact",
         });

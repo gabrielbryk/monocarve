@@ -83,7 +83,7 @@ async function inspectOne(
       diagnosticsDirectory: `${worktree.path}.diagnostics`,
     });
     const result = run.results[0]!;
-    const changedPaths = [...new Set(statusEntries(worktree.workspacePath).flatMap((entry) => entry.paths))].sort(byCodeUnit);
+    const changedPaths = [...new Set(statusEntries(worktree.workspacePath).flatMap((entry) => entry.paths))].toSorted(byCodeUnit);
     const undeclaredPaths = changedPaths.filter((path) => !declared.has(path));
     return {
       tier,

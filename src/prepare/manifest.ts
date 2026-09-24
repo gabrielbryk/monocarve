@@ -137,7 +137,7 @@ function validateGroups(manifest: PreparationManifest, add: AddIssue): void {
     }
   }
   for (const [path, declarations] of spansByPath) {
-    const ordered = [...declarations].sort(
+    const ordered = [...declarations].toSorted(
       (left, right) => left.span.start - right.span.start || left.span.end - right.span.end || byCodeUnit(left.declarationId, right.declarationId),
     );
     for (let index = 1; index < ordered.length; index += 1) {
@@ -147,7 +147,7 @@ function validateGroups(manifest: PreparationManifest, add: AddIssue): void {
     }
   }
   for (const [path, declarations] of extractionRegionsByPath) {
-    const ordered = [...declarations].sort(
+    const ordered = [...declarations].toSorted(
       (left, right) =>
         left.extractionStart - right.extractionStart || left.extractionEnd - right.extractionEnd || byCodeUnit(left.selectorId, right.selectorId),
     );
@@ -361,7 +361,7 @@ function validateTargetDeclarationProofs(operation: ExtractTypeDeclarationsOpera
   }
   for (const selector of selectors)
     if (!proofs.has(selector.selectorId)) add("target-declaration-proof", `missing target declaration proof for ${selector.name}`, operation.target.path);
-  const ordered = [...regions].sort(
+  const ordered = [...regions].toSorted(
     (left, right) =>
       left.targetExtractionStart - right.targetExtractionStart ||
       left.targetExtractionEnd - right.targetExtractionEnd ||
@@ -442,7 +442,7 @@ function validateCompatibility(manifest: PreparationManifest, add: AddIssue): vo
     const expected = extraction.declarations
       .filter((group) => group.declarations.some((declaration) => declaration.originallyExported))
       .map((group) => group.name)
-      .sort(byCodeUnit);
+      .toSorted(byCodeUnit);
     if (expected.length === 0 && intents.length > 0)
       add("compatibility-exports", "private-only extraction must not declare a compatibility re-export", extraction.donor.path);
     if (expected.length > 0 && intents.length !== 1) {
@@ -472,7 +472,7 @@ function validateScope(manifest: PreparationManifest, add: AddIssue): void {
       ...artifacts.map((item) => item.path),
       ...(manifest.postJournalPreparers ?? []).flatMap((item) => item.outputs),
     ]),
-  ].sort(byCodeUnit);
+  ].toSorted(byCodeUnit);
   validateSortedStrings(manifest.changedFiles, "changed-files", "changedFiles", add);
   if (paths.length !== manifest.changedFiles.length || paths.some((path, index) => path !== manifest.changedFiles[index]))
     add("changed-files", "changedFiles must exactly equal the sorted union of operation, generated-artifact, and post-journal mutation paths");

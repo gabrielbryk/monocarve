@@ -92,7 +92,7 @@ describe("audit negative cases", () => {
     const tsconfig = `${JSON.stringify({ include: ["src"], references: [] }, null, 2)}\n`;
     const manifest: ExtractionManifest = {
       ...base,
-      changedFiles: [...base.changedFiles, scaffolded].sort(),
+      changedFiles: [...base.changedFiles, scaffolded].toSorted(),
       operations: [
         ...base.operations,
         {

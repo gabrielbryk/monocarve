@@ -72,7 +72,7 @@ function manifest(root: string, operations: readonly PlanOperation[]): Extractio
           return [];
         }),
       ),
-    ].sort(),
+    ].toSorted(),
     expectedDynamicImportDelta: { added: [], removed: [] },
     evaluationEffects: [],
     metrics: { movedFiles: 2, movedLines: 2, applicationLinesBefore: 5, applicationLinesAfter: 3, consumers: 1 },

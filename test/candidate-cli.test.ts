@@ -26,7 +26,7 @@ describe("candidate CLI", () => {
     const representative = portfolio.top[0];
     if (!representative) throw new Error("fixture produced no portfolio group");
     const details = await runJson<CandidateDetail[]>("candidates", "--equivalence-group", representative.id, "--json");
-    expect(details.map(({ id }) => id).sort()).toEqual([...representative.equivalenceGroup.candidateIds].sort());
+    expect(details.map(({ id }) => id).toSorted()).toEqual([...representative.equivalenceGroup.candidateIds].toSorted());
   }, 240_000);
 
   test("filters by a claimed path and emits stable detailed JSON", async () => {

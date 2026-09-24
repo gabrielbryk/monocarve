@@ -370,8 +370,8 @@ describe("evaluation closure", () => {
     const twice = evaluationClosure({ config: first.config, context: second, graph: first.graph, seeds: [...seeds].reverse() });
 
     expect(JSON.stringify(twice)).toBe(JSON.stringify(once));
-    expect(once.reached).toEqual([...once.reached].sort());
-    expect(once.packages.map((entry) => entry.name)).toEqual([...once.packages.map((entry) => entry.name)].sort());
+    expect(once.reached).toEqual([...once.reached].toSorted());
+    expect(once.packages.map((entry) => entry.name)).toEqual([...once.packages.map((entry) => entry.name)].toSorted());
   });
 
   test("draws no evaluation warning when the whole closure is inert", () => {

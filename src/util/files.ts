@@ -40,7 +40,7 @@ export function sourceFiles(
       if (entry.isDirectory()) return skip.has(entry.name) ? [] : sourceFiles(path, skip, extensions);
       return isSourceModulePath(entry.name, extensions) ? [path] : [];
     })
-    .sort();
+    .toSorted();
 }
 
 /** Physical line count, matching what a reviewer sees. Missing files count zero. */

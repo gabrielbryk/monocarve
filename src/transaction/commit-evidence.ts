@@ -168,8 +168,8 @@ function repoPath(root: string, path: string): string {
   return `${repositoryPrefix(root)}${path}`;
 }
 function same(left: readonly string[], right: readonly string[]): boolean {
-  const a = [...left].sort();
-  const b = [...right].sort();
+  const a = [...left].toSorted();
+  const b = [...right].toSorted();
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 function sameRequiredScope(actual: readonly string[], required: readonly string[], optional: readonly string[]): boolean {

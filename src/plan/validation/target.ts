@@ -207,7 +207,7 @@ export function validateTargetProfile(manifest: ExtractionManifest, options: Val
     ) {
       issues.add("target-profile", "target does not match its configured extraction profile");
     }
-    const consumerOwners = [...new Set((manifest.consumers ?? []).map((consumer) => consumer.owner))].sort();
+    const consumerOwners = [...new Set((manifest.consumers ?? []).map((consumer) => consumer.owner))].toSorted();
     const expectedGates = renderGates(options.config, resolved.gates, {
       package: rendered.packageName,
       packageRoot: rendered.packageRoot,

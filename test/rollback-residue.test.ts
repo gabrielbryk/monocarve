@@ -168,7 +168,7 @@ describe("rollback reports residue loudly when it cannot restore", () => {
             exemptReason: "the fixture's generator writes a fixed line and then refuses",
           },
         ],
-        changedFiles: [...base.changedFiles, artifact].sort(),
+        changedFiles: [...base.changedFiles, artifact].toSorted(),
       }),
       { generatedArtifacts: { artifacts: [{ path: artifact, source: PACKAGE_ROOT, regenerate }] } },
     );

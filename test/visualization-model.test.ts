@@ -63,7 +63,7 @@ function edge(from: string, to: string, kind: ModuleEdge["kind"]): ModuleEdge {
 }
 
 function graph(nodes: readonly ModuleNode[], inputEdges: readonly ModuleEdge[]): DependencyGraph {
-  const sortedNodes = [...nodes].sort((left, right) => left.path.localeCompare(right.path));
+  const sortedNodes = [...nodes].toSorted((left, right) => left.path.localeCompare(right.path));
   const paths = sortedNodes.map((entry) => entry.path);
   const outgoing = new Map(
     paths.map((path) => [
@@ -71,7 +71,7 @@ function graph(nodes: readonly ModuleNode[], inputEdges: readonly ModuleEdge[]):
       inputEdges
         .filter((edge) => edge.from === path)
         .map((edge) => edge.to)
-        .sort(),
+        .toSorted(),
     ]),
   );
   const incoming = new Map(
@@ -80,7 +80,7 @@ function graph(nodes: readonly ModuleNode[], inputEdges: readonly ModuleEdge[]):
       inputEdges
         .filter((edge) => edge.to === path)
         .map((edge) => edge.from)
-        .sort(),
+        .toSorted(),
     ]),
   );
   return {

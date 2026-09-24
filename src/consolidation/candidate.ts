@@ -75,17 +75,17 @@ export function buildConsolidationCandidate(options: ConsolidationCandidateOptio
   }
 
   // Deduplicate and sort.
-  const files = [...new Set(allFiles)].sort(byCodeUnit);
-  const tests = [...new Set(allTests)].sort(byCodeUnit);
-  const assets = [...new Set(allAssets)].sort(byCodeUnit);
+  const files = [...new Set(allFiles)].toSorted(byCodeUnit);
+  const tests = [...new Set(allTests)].toSorted(byCodeUnit);
+  const assets = [...new Set(allAssets)].toSorted(byCodeUnit);
 
   // Build SCCs from the production files using the application graph.
   const appGraph = buildApplicationGraph(graph, undefined);
   const fileSet = new Set(files);
   const sccs = toSccs(appGraph.condensed)
-    .map((scc) => ({ id: scc.id, members: scc.members.filter((m) => fileSet.has(m)).sort(byCodeUnit) }))
+    .map((scc) => ({ id: scc.id, members: scc.members.filter((m) => fileSet.has(m)).toSorted(byCodeUnit) }))
     .filter((scc) => scc.members.length > 0)
-    .sort((a, b) => byCodeUnit(a.id, b.id));
+    .toSorted((a, b) => byCodeUnit(a.id, b.id));
 
   // Collect dependencies (external workspace packages the moved union depends on).
   const dependencies = new Set<string>();
@@ -112,7 +112,7 @@ export function buildConsolidationCandidate(options: ConsolidationCandidateOptio
     tests,
     assets,
     sccs,
-    dependencies: [...dependencies].sort(byCodeUnit),
+    dependencies: [...dependencies].toSorted(byCodeUnit),
     consumers,
     lineCount,
   };
@@ -136,8 +136,8 @@ function collectConsumers(graph: DependencyGraph, fileSet: Set<string>, donors: 
   }
 
   return [...byFile.entries()]
-    .map(([file, specifiers]) => ({ file, owner: graph.nodes.get(file)?.owner ?? "", specifiers: [...specifiers].sort(byCodeUnit), external: false }))
-    .sort((a, b) => byCodeUnit(a.file, b.file));
+    .map(([file, specifiers]) => ({ file, owner: graph.nodes.get(file)?.owner ?? "", specifiers: [...specifiers].toSorted(byCodeUnit), external: false }))
+    .toSorted((a, b) => byCodeUnit(a.file, b.file));
 }
 
 function consolidationId(
@@ -145,6 +145,6 @@ function consolidationId(
   donors: readonly { readonly name: string; readonly root: string }[],
   files: readonly string[],
 ): string {
-  const identity = ["consolidation", target.name, ...donors.map((d) => d.name).sort(), "--files--", ...[...files].sort(byCodeUnit)].join("\n");
+  const identity = ["consolidation", target.name, ...donors.map((d) => d.name).toSorted(), "--files--", ...[...files].toSorted(byCodeUnit)].join("\n");
   return `c-${hashText(identity).slice(0, 12)}`;
 }

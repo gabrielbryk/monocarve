@@ -116,7 +116,7 @@ function manifest(root: string, operation: MigratePathKeysOperation): Extraction
     operations,
     consumers: [],
     generatedFiles: [],
-    changedFiles: [BASELINE, FIRST, FIRST_TARGET].sort(),
+    changedFiles: [BASELINE, FIRST, FIRST_TARGET].toSorted(),
     expectedDynamicImportDelta: { added: [], removed: [] },
     evaluationEffects: [],
     metrics: { movedFiles: 1, movedLines: 1, applicationLinesBefore: 1, applicationLinesAfter: 0, consumers: 0 },
@@ -178,7 +178,7 @@ describe("path-keyed artifact migrations", () => {
       resultHash: hashText("changed"),
     };
     const base = manifest(root, placeholder);
-    const plan = { ...base, operations: [base.operations[0]!], pathMigrationNoops: proofs, changedFiles: [FIRST, FIRST_TARGET].sort() };
+    const plan = { ...base, operations: [base.operations[0]!], pathMigrationNoops: proofs, changedFiles: [FIRST, FIRST_TARGET].toSorted() };
     expect(validatePlan(plan, { config, rootDir: root }).issues).toEqual([]);
   });
 
@@ -203,7 +203,7 @@ describe("path-keyed artifact migrations", () => {
     const base = manifest(root, { ...operation, moves: [{ source: FIRST, target: FIRST_TARGET }] });
     const drifted = { ...base, operations: [base.operations[0]!, { ...base.operations[1]!, command: "different" }] };
     expect(validatePlan(drifted, { config, rootDir: root }).issues.map((issue) => issue.rule)).toContain("path-migration-config");
-    const omitted = { ...base, operations: [base.operations[0]!], changedFiles: [FIRST, FIRST_TARGET].sort() };
+    const omitted = { ...base, operations: [base.operations[0]!], changedFiles: [FIRST, FIRST_TARGET].toSorted() };
     expect(validatePlan(omitted, { config, rootDir: root }).issues.map((issue) => issue.rule)).toContain("path-migration-config");
   });
 

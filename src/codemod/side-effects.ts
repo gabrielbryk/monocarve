@@ -378,5 +378,5 @@ export function evaluationEffects(source: string, path: string): EvaluationEffec
  * module does at evaluation. Sorted explicitly because callers serialize it.
  */
 export function evaluationEffectKinds(source: string, path: string): EvaluationEffectKind[] {
-  return [...new Set(evaluationEffects(source, path).map((effect) => effect.kind))].sort();
+  return [...new Set(evaluationEffects(source, path).map((effect) => effect.kind))].toSorted();
 }

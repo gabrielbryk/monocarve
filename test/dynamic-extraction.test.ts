@@ -380,7 +380,7 @@ test("simulates a declared JSON runtime registry rewrite before external package
     ),
   ).toBe(false);
   expect(manifest.consumers.some((consumer) => consumer.file === "apps/web/src/routes.ts")).toBe(false);
-  expect(manifest.generatedFiles.map((file) => file.path)).toEqual([...manifest.generatedFiles.map((file) => file.path)].sort());
+  expect(manifest.generatedFiles.map((file) => file.path)).toEqual([...manifest.generatedFiles.map((file) => file.path)].toSorted());
   const missingGeneratorRecord = {
     ...manifest,
     generatedFiles: manifest.generatedFiles.filter((file) => file.path !== "apps/web/src/routes.ts"),

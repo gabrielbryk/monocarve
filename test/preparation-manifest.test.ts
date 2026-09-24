@@ -86,7 +86,7 @@ function manifest(): PreparationManifest {
     compatibilityReexports: [
       { fromPath: DONOR, toPath: TARGET, moduleSpecifier: "../../../libs/contracts/src/contract.js", exports: [{ name: "Contract", typeOnly: true }] },
     ],
-    changedFiles: [DONOR, TARGET].sort(),
+    changedFiles: [DONOR, TARGET].toSorted(),
     commits: { prepare: { subject: "refactor: prepare type contract seam" } },
     gates: { package: [], project: [], workspace: [] },
   };

@@ -39,7 +39,7 @@ export function repositorySources(config: MonocarveConfig, root: string): string
   ]
     .flatMap((directory) => sourceFiles(resolve(root, directory), undefined, [...config.sourceExtensions, ...config.assetExtensions]))
     .map((file) => relativePosix(root, file))
-    .sort();
+    .toSorted();
 }
 
 export function relativeCandidates(config: MonocarveConfig, importer: string, specifier: string): string[] {

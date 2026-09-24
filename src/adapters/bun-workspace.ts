@@ -70,7 +70,7 @@ function inlineEdit(lines: readonly string[], keyIndex: number, packageRoot: str
   const open = line.indexOf("[");
   const close = line.lastIndexOf("]");
   const current = JSON.parse(line.slice(open, close + 1)) as string[];
-  const next = [...current, packageRoot].sort();
+  const next = [...current, packageRoot].toSorted();
   const rendered = `[${next.map((entry) => JSON.stringify(entry)).join(", ")}]`;
   const replaced = [...lines];
   replaced[keyIndex] = `${line.slice(0, open)}${rendered}${line.slice(close + 1)}`;

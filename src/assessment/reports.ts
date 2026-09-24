@@ -132,13 +132,13 @@ export function deriveAssessmentReports(
     candidates: candidateTotals,
   };
   const portfolioRecords =
-    portfolio === undefined ? [] : [...portfolio.candidates].sort((left, right) => right.score - left.score || byCodeUnit(left.id, right.id));
+    portfolio === undefined ? [] : [...portfolio.candidates].toSorted((left, right) => right.score - left.score || byCodeUnit(left.id, right.id));
   const backlogRecords =
     portfolio === undefined
       ? []
       : blockedCandidates(portfolio)
           .slice()
-          .sort((left, right) => right.lineCount - left.lineCount || byCodeUnit(left.id, right.id));
+          .toSorted((left, right) => right.lineCount - left.lineCount || byCodeUnit(left.id, right.id));
   const portfolioReport =
     portfolio === undefined
       ? unavailable<BoundedReport<PortfolioCandidate>>(candidateDiagnostics)
@@ -238,7 +238,7 @@ function renderFindings(
     "",
     ...layers.domains
       .slice()
-      .sort((left, right) => byCodeUnit(left.domain, right.domain))
+      .toSorted((left, right) => byCodeUnit(left.domain, right.domain))
       .map((domain) => `- ${domain.domain}: ${domain.files} files, ${domain.lines} lines, ${domain.crossDomainEdges.length} outgoing cross-domain edges`),
     ...domainFallback(layers),
     ...cycleLines(layers),
@@ -265,7 +265,7 @@ function renderFindings(
         (entry) =>
           `- ${entry.id}: ${entry.rejectionReasons
             .map((reason) => reason.code)
-            .sort(byCodeUnit)
+            .toSorted(byCodeUnit)
             .join(", ")}`,
       ),
     ),
@@ -301,7 +301,7 @@ function cycleLines(layers: LayerReport): string[] {
   const cycles = layers.components
     .filter((component) => component.cyclic)
     .slice()
-    .sort((left, right) => byCodeUnit(left.nodes.join("\0"), right.nodes.join("\0")));
+    .toSorted((left, right) => byCodeUnit(left.nodes.join("\0"), right.nodes.join("\0")));
   return cycles.length === 0
     ? ["- No cycles were observed in the selected application."]
     : cycles.map((component) => `- SCC ${component.id}: ${component.nodes.join(", ")} (${component.lines} lines)`);

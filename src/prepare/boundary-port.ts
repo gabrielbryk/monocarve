@@ -245,10 +245,10 @@ function portImportBindings(consumer: PortConsumerInput, promoted: readonly stri
     );
   }
   return {
-    promoted: [...moved].sort(byCodeUnit),
-    promotedLocals: [...movedLocals].sort(byCodeUnit),
-    retained: [...retained].sort(byCodeUnit),
-    retainedLocals: [...retainedLocals].sort(byCodeUnit),
+    promoted: [...moved].toSorted(byCodeUnit),
+    promotedLocals: [...movedLocals].toSorted(byCodeUnit),
+    retained: [...retained].toSorted(byCodeUnit),
+    retainedLocals: [...retainedLocals].toSorted(byCodeUnit),
     selections,
   };
 }
@@ -257,7 +257,7 @@ function rewriteSelectedPortImports(consumer: PortConsumerInput, packageImport: 
   if (bindings.selections.length === 0) throw new BoundaryPortError(`${consumer.path} has no selected import declaration from ${consumer.specifier}`);
   const edits = bindings.selections
     .map((selection) => selectedImportEdit(consumer, packageImport, selection))
-    .sort((left, right) => right.start - left.start || right.end - left.end);
+    .toSorted((left, right) => right.start - left.start || right.end - left.end);
   let contents = consumer.text;
   for (const edit of edits) contents = `${contents.slice(0, edit.start)}${edit.text}${contents.slice(edit.end)}`;
   return contents;
