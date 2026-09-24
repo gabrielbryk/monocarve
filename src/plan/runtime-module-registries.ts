@@ -66,8 +66,8 @@ export function scanRuntimeModuleRegistry(
   let document: unknown;
   try {
     document = JSON.parse(text);
-  } catch {
-    throw new PlanningError(`runtime module registry is not valid JSON: ${declaration.file}`);
+  } catch (error) {
+    throw new PlanningError(`runtime module registry is not valid JSON: ${declaration.file}`, { cause: error });
   }
   const pattern = declaration.pointer.slice(1).split("/");
   const selected = selectedValues(document, pattern);

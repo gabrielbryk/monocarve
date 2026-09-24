@@ -18,11 +18,12 @@ import { PlanningError, WorkspaceContext } from "../plan/context.ts";
 import { inferDependencies, type InferredDependencies } from "../plan/dependencies.ts";
 import type { PlanOperation, PublicModule } from "../plan/manifest.ts";
 import { sourceExportsFromFile } from "../plan/public-surface.ts";
-import { parseJsonFile, stringifyJson, writeOperation } from "../plan/scaffold-shared.ts";
 import { consumerWiringOperations, packageOperations } from "../plan/scaffold.ts";
 import { resolveCommit } from "../util/git.ts";
-import { hashText, type Sha256 } from "../util/hash.ts";
+import type { Sha256 } from "../util/hash.ts";
 import type { ConsolidationCandidate } from "./candidate.ts";
+
+export { applyConsolidationDonorRetirement } from "./donor-retirement.ts";
 
 type PackageManagerAdapter = ReturnType<typeof createPackageManagerAdapter>;
 type TaskRunnerAdapter = ReturnType<typeof createTaskRunnerAdapter>;
@@ -362,42 +363,6 @@ export function buildConsolidationWiringOperations(input: {
   operations.push(...packageOps);
 }
 
-/** Push donor-retirement operations (manifest deletion, lockfile importer removal) onto `operations`. */
-export function applyConsolidationDonorRetirement(input: {
-  readonly context: WorkspaceContext;
-  readonly packageManager: PackageManagerAdapter;
-  readonly candidate: ConsolidationCandidate;
-  readonly packageRoot: string;
-  readonly operations: PlanOperation[];
-}): void {
-  const { context, packageManager, candidate, packageRoot, operations } = input;
-  const retirementFiles = ["package.json", "tsconfig.json", "moon.yml", "README.md"];
-  for (const donor of candidate.donors) {
-    for (const name of retirementFiles) {
-      const path = `${donor.root}/${name}`;
-      const preconditionHash = context.state(path);
-      if (preconditionHash === "missing") continue;
-      operations.push({ kind: "delete-file", path, file: path, source: path, target: path, preconditionHash, resultHash: "missing" });
-    }
-    const lockfile = packageManager.lockfileName;
-    const block = context.exists(lockfile) ? packageManager.importerBlock(context.text(lockfile), donor.root) : undefined;
-    if (block !== undefined) {
-      operations.push({
-        kind: "lockfile-importer",
-        lockfile,
-        packageRoot: donor.root,
-        block,
-        mode: "delete",
-        preconditionHash: context.state(lockfile),
-        resultHash: hashText(""),
-      });
-    }
-  }
-  operations.push(
-    ...retirementDependencyOperations({ context, packageManager, donorNames: candidate.donors.map((donor) => donor.name), owners: [".", packageRoot] }),
-  );
-}
-
 /**
  * Consumer rewrites must run while donor paths still exist: the codemod
  * resolves each donor's baseline module to identify the exact declaration
@@ -411,79 +376,6 @@ export function reorderConsolidationOperations(operations: PlanOperation[]): voi
     (operation) => operation.kind !== "rewrite-import" && operation.kind !== "move" && operation.kind !== "move-with-rewrite",
   );
   operations.splice(0, operations.length, ...rewrites, ...moves, ...remainder);
-}
-
-/** Remove donor-package entries from one manifest's dependency sections. */
-function pruneManifestDependencies(manifest: Record<string, unknown>, donorNames: readonly string[]): { next: Record<string, unknown>; changed: boolean } {
-  let changed = false;
-  const next = { ...manifest };
-  for (const section of ["dependencies", "devDependencies", "optionalDependencies"] as const) {
-    const values = next[section] as Record<string, string> | undefined;
-    if (!values) continue;
-    const retained = Object.fromEntries(Object.entries(values).filter(([name]) => !donorNames.includes(name)));
-    if (Object.keys(retained).length !== Object.keys(values).length) changed = true;
-    if (Object.keys(retained).length === 0) delete next[section];
-    else next[section] = retained;
-  }
-  return { next, changed };
-}
-
-/** Strip donor entries from one owner's lockfile importer block, if it has any. */
-function retireLockfileImporterBlock(input: {
-  readonly packageManager: PackageManagerAdapter;
-  readonly context: WorkspaceContext;
-  readonly lockfile: string;
-  readonly lockfileText: string;
-  readonly owner: string;
-  readonly donorNames: readonly string[];
-}): { operation?: PlanOperation; lockfileText: string } {
-  const { packageManager, context, lockfile, lockfileText, owner, donorNames } = input;
-  const block = packageManager.importerBlock(lockfileText, owner);
-  if (block === undefined) return { lockfileText };
-  let nextBlock = block;
-  for (const name of donorNames) nextBlock = packageManager.removeBlockDependency(nextBlock, name);
-  if (nextBlock === block) return { lockfileText };
-  const operation: PlanOperation = {
-    kind: "lockfile-importer",
-    lockfile,
-    packageRoot: owner,
-    block: nextBlock,
-    mode: "replace",
-    preconditionHash: context.state(lockfile),
-    resultHash: hashText(nextBlock),
-  };
-  return { operation, lockfileText: packageManager.applyImporter(lockfileText, owner, nextBlock, "replace") };
-}
-
-function retirementDependencyOperations(input: {
-  readonly context: WorkspaceContext;
-  readonly packageManager: PackageManagerAdapter;
-  readonly donorNames: readonly string[];
-  readonly owners: readonly string[];
-}): PlanOperation[] {
-  const operations: PlanOperation[] = [];
-  const lockfile = input.packageManager.lockfileName;
-  let lockfileText = input.context.exists(lockfile) ? input.context.text(lockfile) : "";
-  for (const owner of [...new Set(input.owners)].toSorted()) {
-    const manifestPath = owner === "." ? "package.json" : `${owner}/package.json`;
-    if (!input.context.exists(manifestPath)) continue;
-    const manifest = parseJsonFile(input.context.text(manifestPath), manifestPath) as Record<string, unknown>;
-    const { next, changed } = pruneManifestDependencies(manifest, input.donorNames);
-    if (!changed) continue;
-    const contents = stringifyJson(next);
-    operations.push(writeOperation(input.context, manifestPath, contents, "consolidation:retire-donor-dependency"));
-    const retired = retireLockfileImporterBlock({
-      packageManager: input.packageManager,
-      context: input.context,
-      lockfile,
-      lockfileText,
-      owner,
-      donorNames: input.donorNames,
-    });
-    lockfileText = retired.lockfileText;
-    if (retired.operation) operations.push(retired.operation);
-  }
-  return operations;
 }
 
 export function operationPathsOf(operation: PlanOperation): string[] {

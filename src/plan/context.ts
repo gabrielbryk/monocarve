@@ -258,32 +258,8 @@ export class WorkspaceContext {
     if (cached) return cached;
     const surface: BindingSurface = { star: false, names: new Set<string>() };
     const parsed = this.parsedSource(file);
-
     const visit = (node: ts.Node): void => {
-      if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === specifier) {
-        const clause = node.importClause;
-        if (clause?.name) surface.names.add("default");
-        if (clause?.namedBindings && ts.isNamespaceImport(clause.namedBindings)) surface.star = true;
-        if (clause?.namedBindings && ts.isNamedImports(clause.namedBindings)) {
-          for (const element of clause.namedBindings.elements) surface.names.add((element.propertyName ?? element.name).text);
-        }
-      }
-      if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === specifier) {
-        if (!node.exportClause) surface.star = true;
-        else if (ts.isNamedExports(node.exportClause)) {
-          for (const element of node.exportClause.elements) surface.names.add((element.propertyName ?? element.name).text);
-        } else surface.star = true;
-      }
-      if (
-        ts.isImportTypeNode(node) &&
-        ts.isLiteralTypeNode(node.argument) &&
-        ts.isStringLiteral(node.argument.literal) &&
-        node.argument.literal.text === specifier
-      ) {
-        const qualifier = node.qualifier;
-        if (qualifier === undefined) surface.star = true;
-        else surface.names.add(ts.isIdentifier(qualifier) ? qualifier.text : (qualifier.getText(parsed).split(".")[0] ?? ""));
-      }
+      addReferencedBindings(node, specifier, surface, parsed);
       ts.forEachChild(node, visit);
     };
 
@@ -457,4 +433,38 @@ export class WorkspaceContext {
     this.sourceListCache = undefined;
     this.consumerIndexCache = undefined;
   }
+}
+
+function stringLiteralText(node: ts.Node | undefined): string | undefined {
+  return node !== undefined && ts.isStringLiteral(node) ? node.text : undefined;
+}
+
+/** Record the bindings one node takes from `specifier` — an import, a re-export, or an `import("…")` type. */
+function addReferencedBindings(node: ts.Node, specifier: string, surface: BindingSurface, parsed: ts.SourceFile | undefined): void {
+  if (ts.isImportDeclaration(node) && stringLiteralText(node.moduleSpecifier) === specifier) addImportClauseBindings(node.importClause, surface);
+  if (ts.isExportDeclaration(node) && stringLiteralText(node.moduleSpecifier) === specifier) addExportClauseBindings(node.exportClause, surface);
+  if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && stringLiteralText(node.argument.literal) === specifier) {
+    addImportTypeBinding(node.qualifier, surface, parsed);
+  }
+}
+
+function addImportClauseBindings(clause: ts.ImportClause | undefined, surface: BindingSurface): void {
+  if (clause?.name) surface.names.add("default");
+  if (clause?.namedBindings && ts.isNamespaceImport(clause.namedBindings)) surface.star = true;
+  if (clause?.namedBindings && ts.isNamedImports(clause.namedBindings)) {
+    for (const element of clause.namedBindings.elements) surface.names.add((element.propertyName ?? element.name).text);
+  }
+}
+
+function addExportClauseBindings(exportClause: ts.NamedExportBindings | undefined, surface: BindingSurface): void {
+  if (!exportClause || !ts.isNamedExports(exportClause)) {
+    surface.star = true;
+    return;
+  }
+  for (const element of exportClause.elements) surface.names.add((element.propertyName ?? element.name).text);
+}
+
+function addImportTypeBinding(qualifier: ts.EntityName | undefined, surface: BindingSurface, parsed: ts.SourceFile | undefined): void {
+  if (qualifier === undefined) surface.star = true;
+  else surface.names.add(ts.isIdentifier(qualifier) ? qualifier.text : (qualifier.getText(parsed).split(".")[0] ?? ""));
 }

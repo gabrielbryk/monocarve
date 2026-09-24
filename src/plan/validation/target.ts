@@ -8,6 +8,7 @@ import {
   resolveExtractionProfile,
   scaffoldFor,
 } from "../../config.ts";
+import { PlanValidationError } from "../../errors.ts";
 import { showBaseline } from "../../util/git.ts";
 import { hashText } from "../../util/hash.ts";
 import { renderGates } from "../build.ts";
@@ -97,17 +98,7 @@ function validatePublicModules(manifest: ExtractionManifest, options: ValidatePl
     const actual = manifest.target.publicModules ?? [];
     const publicSurface = manifest.target.publicSurface ?? templates.publicSurface;
     const existingEntrypoint = new WorkspaceContext(options.config, options.rootDir).exists(`${manifest.target.packageRoot}/${manifest.target.entrypoint}`);
-    if (publicSurface.mode === "barrel" && manifest.modulePromotion === undefined && !existingEntrypoint) {
-      // An explicit planner surface override may intentionally select
-      // subpaths for a new package whose repository default is a barrel.
-      // Shape validation already enforces unique, package-relative mappings.
-      return;
-    }
-    // An existing package may be extended with an explicit, namespaced
-    // subpath surface even when the application defaults to a barrel. The
-    // consolidation planner owns that surface and package.json records it;
-    // there is no extraction template to re-render here.
-    if (publicSurface.mode === "barrel" && existingEntrypoint && actual.length > 0 && manifest.modulePromotion === undefined) return;
+    if (barrelNeedsNoRederivation(manifest, publicSurface, existingEntrypoint, actual.length)) return;
     const context = new WorkspaceContext(options.config, options.rootDir);
     const moves = new Map(manifest.operations.filter(isAnyMove).map((operation) => [operation.source, operation.target]));
     const moduleSources = [...manifest.source.files, ...(manifest.source.assets ?? [])];
@@ -118,44 +109,9 @@ function validatePublicModules(manifest: ExtractionManifest, options: ValidatePl
     const expected = moduleSources.flatMap((source, index) => {
       const paths = rendered[index];
       if (paths === undefined) return [];
-      const baseline = showBaseline(options.rootDir, manifest.baselineCommit, source);
-      if (baseline === null) throw new Error(`baseline source does not exist: ${source}`);
-      if (hashText(baseline) !== manifest.sourceBlobs[source]) {
-        throw new Error(`baseline source does not match recorded source blob: ${source}`);
-      }
-      return [
-        {
-          source,
-          target: moves.get(source),
-          specifier: `${manifest.target.packageName}/${paths.exportKey.slice(2)}`,
-          exportKey: paths.exportKey,
-          exportTarget: paths.exportTarget,
-          requiredExports: index < manifest.source.files.length ? sourceExportsFromBaseline(options.rootDir, manifest.baselineCommit, source) : [],
-        },
-      ];
+      return [expectedPublicModule(manifest, options, moves, source, paths, index < manifest.source.files.length)];
     });
-    if (manifest.modulePromotion !== undefined) {
-      const promotion = manifest.modulePromotion;
-      const sourceIndex = moduleSources.indexOf(promotion.source);
-      if (sourceIndex < 0) throw new Error(`promoted source is absent from source files: ${promotion.source}`);
-      const requiredExports = sourceExportsFromBaseline(options.rootDir, manifest.baselineCommit, promotion.source);
-      const key = promotion.targetModule === "index" ? "." : `./${promotion.targetModule.replace(/^\.\//, "")}`;
-      const expectedIndex = expected.findIndex((item) => item.source === promotion.source);
-      const configured = expectedIndex < 0 ? undefined : expected[expectedIndex];
-      if (promotion.targetModule !== "index" && configured === undefined) {
-        throw new Error(`promoted subpath has no configured public-module target: ${promotion.targetModule}`);
-      }
-      const promoted = {
-        source: promotion.source,
-        target: moves.get(promotion.source),
-        specifier: key === "." ? manifest.target.packageName : `${manifest.target.packageName}/${key.slice(2)}`,
-        exportKey: key,
-        exportTarget: key === "." ? `./${manifest.target.entrypoint}` : configured!.exportTarget,
-        requiredExports,
-      };
-      if (configured === undefined) expected.unshift(promoted);
-      else expected[expectedIndex] = promoted;
-    }
+    if (manifest.modulePromotion !== undefined) applyModulePromotion(manifest, options, moves, moduleSources, expected, manifest.modulePromotion);
     const comparable = actual.map(({ source, target, specifier, exportKey, exportTarget, requiredExports }) => ({
       source,
       target,
@@ -170,6 +126,85 @@ function validatePublicModules(manifest: ExtractionManifest, options: ValidatePl
   } catch (error) {
     issues.add("target-subpaths", `cannot validate public module map: ${(error as Error).message}`);
   }
+}
+
+type PublicSurface = NonNullable<ExtractionManifest["target"]["publicSurface"]>;
+type RenderedPublicModulePath = ReturnType<typeof renderPublicModulePaths>[number];
+type ModulePromotion = NonNullable<ExtractionManifest["modulePromotion"]>;
+
+interface ExpectedPublicModule {
+  readonly source: string;
+  readonly target: string | undefined;
+  readonly specifier: string;
+  readonly exportKey: string;
+  readonly exportTarget: string;
+  readonly requiredExports: ReturnType<typeof sourceExportsFromBaseline>;
+}
+
+function barrelNeedsNoRederivation(manifest: ExtractionManifest, publicSurface: PublicSurface, existingEntrypoint: boolean, actualCount: number): boolean {
+  if (publicSurface.mode === "barrel" && manifest.modulePromotion === undefined && !existingEntrypoint) {
+    // An explicit planner surface override may intentionally select
+    // subpaths for a new package whose repository default is a barrel.
+    // Shape validation already enforces unique, package-relative mappings.
+    return true;
+  }
+  // An existing package may be extended with an explicit, namespaced
+  // subpath surface even when the application defaults to a barrel. The
+  // consolidation planner owns that surface and package.json records it;
+  // there is no extraction template to re-render here.
+  return publicSurface.mode === "barrel" && existingEntrypoint && actualCount > 0 && manifest.modulePromotion === undefined;
+}
+
+function expectedPublicModule(
+  manifest: ExtractionManifest,
+  options: ValidatePlanOptions,
+  moves: ReadonlyMap<string, string>,
+  source: string,
+  paths: RenderedPublicModulePath,
+  isProduction: boolean,
+): ExpectedPublicModule {
+  const baseline = showBaseline(options.rootDir, manifest.baselineCommit, source);
+  if (baseline === null) throw new PlanValidationError(`baseline source does not exist: ${source}`);
+  if (hashText(baseline) !== manifest.sourceBlobs[source]) {
+    throw new PlanValidationError(`baseline source does not match recorded source blob: ${source}`);
+  }
+  return {
+    source,
+    target: moves.get(source),
+    specifier: `${manifest.target.packageName}/${paths.exportKey.slice(2)}`,
+    exportKey: paths.exportKey,
+    exportTarget: paths.exportTarget,
+    requiredExports: isProduction ? sourceExportsFromBaseline(options.rootDir, manifest.baselineCommit, source) : [],
+  };
+}
+
+function applyModulePromotion(
+  manifest: ExtractionManifest,
+  options: ValidatePlanOptions,
+  moves: ReadonlyMap<string, string>,
+  moduleSources: readonly string[],
+  expected: ExpectedPublicModule[],
+  promotion: ModulePromotion,
+): void {
+  const sourceIndex = moduleSources.indexOf(promotion.source);
+  if (sourceIndex < 0) throw new PlanValidationError(`promoted source is absent from source files: ${promotion.source}`);
+  const requiredExports = sourceExportsFromBaseline(options.rootDir, manifest.baselineCommit, promotion.source);
+  const key = promotion.targetModule === "index" ? "." : `./${promotion.targetModule.replace(/^\.\//, "")}`;
+  const expectedIndex = expected.findIndex((item) => item.source === promotion.source);
+  const configured = expectedIndex < 0 ? undefined : expected[expectedIndex];
+  if (promotion.targetModule !== "index" && configured === undefined) {
+    throw new PlanValidationError(`promoted subpath has no configured public-module target: ${promotion.targetModule}`);
+  }
+  const promoted = {
+    source: promotion.source,
+    target: moves.get(promotion.source),
+    specifier: key === "." ? manifest.target.packageName : `${manifest.target.packageName}/${key.slice(2)}`,
+    exportKey: key,
+    exportTarget: key === "." ? `./${manifest.target.entrypoint}` : configured!.exportTarget,
+    requiredExports,
+  };
+  if (configured === undefined) expected.unshift(promoted);
+  else expected[expectedIndex] = promoted;
 }
 
 /**

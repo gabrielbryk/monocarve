@@ -27,6 +27,7 @@ import ts from "typescript";
 
 import { applyReplacements, fitsInLiteral } from "../codemod/imports.ts";
 import { relativePosix } from "../util/paths.ts";
+import { ReferenceRewriteError } from "./errors.ts";
 
 /** One `resolve(import.meta.dir, "literal")`-shaped reference in a file. */
 export interface StaticFsReferenceMatch {
@@ -57,17 +58,17 @@ function isNodePathModuleSpecifier(text: string): boolean {
   return text === "node:path" || text === "path";
 }
 
-/** Node whose direct child statements/parameters can declare a lexical binding. */
-function isFunctionLikeScope(
-  node: ts.Node,
-): node is
+type FunctionLikeScope =
   | ts.FunctionDeclaration
   | ts.FunctionExpression
   | ts.ArrowFunction
   | ts.MethodDeclaration
   | ts.ConstructorDeclaration
   | ts.GetAccessorDeclaration
-  | ts.SetAccessorDeclaration {
+  | ts.SetAccessorDeclaration;
+
+/** Node whose direct child statements/parameters can declare a lexical binding. */
+function isFunctionLikeScope(node: ts.Node): node is FunctionLikeScope {
   return (
     ts.isFunctionDeclaration(node) ||
     ts.isFunctionExpression(node) ||
@@ -85,39 +86,41 @@ function isScopeNode(node: ts.Node): boolean {
 
 /** The declaration a `name` binding resolves to if introduced directly by `scope` (not a nested scope). */
 function declarationInScope(scope: ts.Node, name: string): ts.Node | undefined {
-  if (ts.isCatchClause(scope)) {
-    const decl = scope.variableDeclaration;
-    return decl && ts.isIdentifier(decl.name) && decl.name.text === name ? decl : undefined;
-  }
-  if (isFunctionLikeScope(scope)) {
-    if ((ts.isFunctionDeclaration(scope) || ts.isFunctionExpression(scope)) && scope.name?.text === name) return scope;
-    for (const parameter of scope.parameters) {
-      if (ts.isIdentifier(parameter.name) && parameter.name.text === name) return parameter;
-    }
-    return undefined;
-  }
+  if (ts.isCatchClause(scope)) return catchClauseDeclaration(scope, name);
+  if (isFunctionLikeScope(scope)) return functionScopeDeclaration(scope, name);
   if (!ts.isBlock(scope) && !ts.isSourceFile(scope)) return undefined;
   for (const statement of scope.statements) {
-    if (ts.isVariableStatement(statement)) {
-      for (const decl of statement.declarationList.declarations) {
-        if (ts.isIdentifier(decl.name) && decl.name.text === name) return decl;
-      }
-    } else if (ts.isFunctionDeclaration(statement) && statement.name?.text === name) {
-      return statement;
-    } else if (ts.isClassDeclaration(statement) && statement.name?.text === name) {
-      return statement;
-    } else if (ts.isImportDeclaration(statement) && statement.importClause) {
-      const clause = statement.importClause;
-      if (clause.name?.text === name) return clause;
-      const bindings = clause.namedBindings;
-      if (bindings && ts.isNamespaceImport(bindings) && bindings.name.text === name) return bindings;
-      if (bindings && ts.isNamedImports(bindings)) {
-        for (const specifier of bindings.elements) {
-          if (specifier.name.text === name) return specifier;
-        }
-      }
-    }
+    const decl = statementDeclaration(statement, name);
+    if (decl) return decl;
   }
+  return undefined;
+}
+
+function catchClauseDeclaration(scope: ts.CatchClause, name: string): ts.Node | undefined {
+  const decl = scope.variableDeclaration;
+  return decl && ts.isIdentifier(decl.name) && decl.name.text === name ? decl : undefined;
+}
+
+function functionScopeDeclaration(scope: FunctionLikeScope, name: string): ts.Node | undefined {
+  if ((ts.isFunctionDeclaration(scope) || ts.isFunctionExpression(scope)) && scope.name?.text === name) return scope;
+  return scope.parameters.find((parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === name);
+}
+
+/** The declaration of `name` a single block-level statement introduces, if any. */
+function statementDeclaration(statement: ts.Statement, name: string): ts.Node | undefined {
+  if (ts.isVariableStatement(statement)) {
+    return statement.declarationList.declarations.find((decl) => ts.isIdentifier(decl.name) && decl.name.text === name);
+  }
+  if (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) return statement.name?.text === name ? statement : undefined;
+  if (ts.isImportDeclaration(statement) && statement.importClause) return importClauseDeclaration(statement.importClause, name);
+  return undefined;
+}
+
+function importClauseDeclaration(clause: ts.ImportClause, name: string): ts.Node | undefined {
+  if (clause.name?.text === name) return clause;
+  const bindings = clause.namedBindings;
+  if (bindings && ts.isNamespaceImport(bindings)) return bindings.name.text === name ? bindings : undefined;
+  if (bindings && ts.isNamedImports(bindings)) return bindings.elements.find((specifier) => specifier.name.text === name);
   return undefined;
 }
 
@@ -245,6 +248,21 @@ function callsResolveWithParameter(body: ts.Node, parameterName: string): boolea
 }
 
 /**
+ * The path argument of a static filesystem reference call: the second argument
+ * of `resolve(import.meta.dir, …)`, or the sole argument of a call to one of
+ * the file's `resolve` helper declarations. `undefined` for any other call.
+ */
+function staticFsArgument(node: ts.CallExpression, helpers: ReadonlySet<ts.VariableDeclaration>): ts.Expression | undefined {
+  if (isResolveCallee(node.expression) && node.arguments.length >= 2) {
+    const [first, second] = node.arguments;
+    return first && second && isImportMetaDir(first) ? second : undefined;
+  }
+  if (!ts.isIdentifier(node.expression) || node.arguments.length !== 1) return undefined;
+  const declaration = resolveLexicalDeclaration(node.expression, node.expression.text);
+  return declaration && ts.isVariableDeclaration(declaration) && helpers.has(declaration) ? node.arguments[0] : undefined;
+}
+
+/**
  * Every static filesystem reference in `source`. `filePath` fixes the base:
  * an absolute path, or one resolvable against the process's own cwd — a
  * workspace-relative path is not by itself enough, so callers pass an
@@ -263,24 +281,8 @@ export function findStaticFsReferences(source: string, filePath: string): Static
   };
 
   const visit = (node: ts.Node): void => {
-    if (ts.isCallExpression(node)) {
-      if (isResolveCallee(node.expression) && node.arguments.length >= 2) {
-        const [first, second] = node.arguments;
-        if (first && second && isImportMetaDir(first)) {
-          const literals = forOfLiteralBinding(second);
-          if (literals) literals.forEach(record);
-          else record(second);
-        }
-      } else if (ts.isIdentifier(node.expression) && node.arguments.length === 1) {
-        const declaration = resolveLexicalDeclaration(node.expression, node.expression.text);
-        if (declaration && ts.isVariableDeclaration(declaration) && helpers.has(declaration)) {
-          const argument = node.arguments[0]!;
-          const literals = forOfLiteralBinding(argument);
-          if (literals) literals.forEach(record);
-          else record(argument);
-        }
-      }
-    }
+    const argument = ts.isCallExpression(node) ? staticFsArgument(node, helpers) : undefined;
+    if (argument) (forOfLiteralBinding(argument) ?? [argument]).forEach(record);
     ts.forEachChild(node, visit);
   };
   visit(file);
@@ -301,9 +303,10 @@ export function rewriteStaticFsReference(source: string, filePath: string, donor
     .map((match) => {
       const delimiter = source.slice(match.span.start, match.span.start + 1);
       if (!fitsInLiteral(newLiteral, delimiter)) {
-        throw new Error(
+        throw new ReferenceRewriteError(
           `cannot rewrite ${filePath}: the literal ${JSON.stringify(newLiteral)} cannot be written inside ` +
             `${JSON.stringify(source.slice(match.span.start, match.span.end))}`,
+          { hint: "choose a target path without quote, backslash, or template characters, or rewrite this reference by hand before planning" },
         );
       }
       return { start: match.span.start + 1, end: match.span.end - 1, text: newLiteral };

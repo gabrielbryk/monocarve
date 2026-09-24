@@ -37,6 +37,7 @@ export function baselineOf(options: BuildPlanOptions): ResolvedCommit {
   } catch (error) {
     throw new PlanningError(
       `cannot compile a plan against ${JSON.stringify(options.baselineCommit)}: a plan records the commit its blobs came from, so the revision has to exist — ${(error as Error).message}`,
+      { cause: error },
     );
   }
 }
@@ -116,10 +117,7 @@ export function pathMigrationOperations(
   operations: readonly PlanOperation[],
   onNoop?: (proof: { path: string; command: string; moves: readonly PathMove[]; artifactHash: Sha256 }) => void,
 ): MigratePathKeysOperation[] {
-  const moves: PathMove[] = operations
-    .filter((operation) => operation.kind === "move" || operation.kind === "move-with-rewrite")
-    .map((operation) => ({ source: operation.source, target: operation.target }))
-    .toSorted((left, right) => byCodeUnit(left.source, right.source) || byCodeUnit(left.target, right.target));
+  const moves = plannedMoves(operations);
   return triggeredPathMigrations(
     config,
     moves.map((move) => move.source),
@@ -156,6 +154,15 @@ function pathReferenceRewriteFiles(directory: string, extensions: readonly strin
   });
 }
 
+type RewritesByFile = Map<string, { readonly text: string; readonly rewrites: PathReferenceRewriteMatch[] }>;
+
+function plannedMoves(operations: readonly PlanOperation[]): PathMove[] {
+  return operations
+    .filter((operation) => operation.kind === "move" || operation.kind === "move-with-rewrite")
+    .map((operation) => ({ source: operation.source, target: operation.target }))
+    .toSorted((left, right) => byCodeUnit(left.source, right.source) || byCodeUnit(left.target, right.target));
+}
+
 export function pathReferenceRewriteOperations(
   config: MonocarveConfig,
   context: WorkspaceContext,
@@ -164,14 +171,25 @@ export function pathReferenceRewriteOperations(
   const settings = config.pathReferenceRewrites;
   if ((!settings.enabled || settings.roots.length === 0) && config.runtimeModuleRegistries.length === 0) return [];
 
-  const moves: PathMove[] = operations
-    .filter((operation) => operation.kind === "move" || operation.kind === "move-with-rewrite")
-    .map((operation) => ({ source: operation.source, target: operation.target }))
-    .toSorted((left, right) => byCodeUnit(left.source, right.source) || byCodeUnit(left.target, right.target));
+  const moves = plannedMoves(operations);
   if (moves.length === 0) return [];
 
+  const byFile: RewritesByFile = new Map();
+  collectDocumentRewrites(config, context, moves, byFile);
+  collectRegistryRewrites(config, context, moves, byFile);
+  collectEmittedSpecifierRewrites(config, context, moves, byFile);
+  return [...byFile.entries()]
+    .map(([file, entry]) => rewritePathReferenceOperation(context, file, entry))
+    .toSorted((left, right) => byCodeUnit(left.file, right.file));
+}
+
+function appendRewrites(byFile: RewritesByFile, file: string, text: string, rewrites: readonly PathReferenceRewriteMatch[]): void {
+  if (rewrites.length > 0) byFile.set(file, { text, rewrites: [...(byFile.get(file)?.rewrites ?? []), ...rewrites] });
+}
+
+function collectDocumentRewrites(config: MonocarveConfig, context: WorkspaceContext, moves: readonly PathMove[], byFile: RewritesByFile): void {
+  const settings = config.pathReferenceRewrites;
   const scanSettings = { onAmbiguousMatch: settings.onAmbiguousMatch, matchExtensionless: settings.matchExtensionless, minSegments: settings.minSegments };
-  const byFile = new Map<string, { readonly text: string; readonly rewrites: PathReferenceRewriteMatch[] }>();
   for (const scanRoot of settings.enabled ? settings.roots : []) {
     for (const absolute of pathReferenceRewriteFiles(resolve(context.rootDir, scanRoot.root), scanRoot.extensions).sort()) {
       if ((statSync(absolute, { throwIfNoEntry: false })?.size ?? 0) > settings.maxBytes) continue;
@@ -184,10 +202,12 @@ export function pathReferenceRewriteOperations(
         workspaceRoot: context.rootDir,
         ...(scanRoot.referenceBase === undefined ? {} : { referenceBase: scanRoot.referenceBase }),
       });
-      if (scan.rewrites.length === 0) continue;
-      byFile.set(file, { text, rewrites: [...(byFile.get(file)?.rewrites ?? []), ...scan.rewrites] });
+      appendRewrites(byFile, file, text, scan.rewrites);
     }
   }
+}
+
+function collectRegistryRewrites(config: MonocarveConfig, context: WorkspaceContext, moves: readonly PathMove[], byFile: RewritesByFile): void {
   for (const registry of config.runtimeModuleRegistries) {
     const text = context.text(registry.file);
     const rewrites = scanRuntimeModuleRegistry(
@@ -200,41 +220,44 @@ export function pathReferenceRewriteOperations(
       },
       moves,
     );
-    if (rewrites.length > 0) byFile.set(registry.file, { text, rewrites: [...(byFile.get(registry.file)?.rewrites ?? []), ...rewrites] });
+    appendRewrites(byFile, registry.file, text, rewrites);
   }
+}
+
+function collectEmittedSpecifierRewrites(config: MonocarveConfig, context: WorkspaceContext, moves: readonly PathMove[], byFile: RewritesByFile): void {
   const changedPaths = [...moves.map((move) => move.source), ...byFile.keys()];
   for (const preparer of triggeredPostJournalPreparers(config, changedPaths)) {
     for (const declaration of preparer.emittedModuleSpecifiers) {
       const text = context.text(declaration.source);
-      const rewrites = scanEmittedModuleSpecifiers(text, declaration, moves);
-      if (rewrites.length > 0) byFile.set(declaration.source, { text, rewrites: [...(byFile.get(declaration.source)?.rewrites ?? []), ...rewrites] });
+      appendRewrites(byFile, declaration.source, text, scanEmittedModuleSpecifiers(text, declaration, moves));
     }
   }
-  return [...byFile.entries()]
-    .map(([file, entry]) => {
-      const rewrites = [...entry.rewrites].toSorted(
-        (left, right) => left.line - right.line || left.column - right.column || byCodeUnit(left.donor, right.donor),
-      );
-      const positions = new Set<string>();
-      for (const rewrite of rewrites) {
-        const position = `${rewrite.line}:${rewrite.column}`;
-        if (positions.has(position))
-          throw new PlanningError(`ambiguous path reference in ${file}:${position} — multiple configured resolution bases match the same token`);
-        positions.add(position);
-      }
-      const preconditionHash = context.state(file);
-      const resultHash = hashText(rewritePathReferenceText(entry.text, rewrites));
-      if (resultHash === preconditionHash) throw new PlanningError(`path reference rewrite for ${file} did not change the document`);
-      return {
-        kind: "rewrite-path-reference" as const,
-        file,
-        documentKind: documentKindFor(file),
-        rewrites: rewrites.map(({ span: _span, ...rewrite }) => rewrite),
-        preconditionHash,
-        resultHash,
-      };
-    })
-    .toSorted((left, right) => byCodeUnit(left.file, right.file));
+}
+
+function rewritePathReferenceOperation(
+  context: WorkspaceContext,
+  file: string,
+  entry: { readonly text: string; readonly rewrites: readonly PathReferenceRewriteMatch[] },
+): RewritePathReferenceOperation {
+  const rewrites = [...entry.rewrites].toSorted((left, right) => left.line - right.line || left.column - right.column || byCodeUnit(left.donor, right.donor));
+  const positions = new Set<string>();
+  for (const rewrite of rewrites) {
+    const position = `${rewrite.line}:${rewrite.column}`;
+    if (positions.has(position))
+      throw new PlanningError(`ambiguous path reference in ${file}:${position} — multiple configured resolution bases match the same token`);
+    positions.add(position);
+  }
+  const preconditionHash = context.state(file);
+  const resultHash = hashText(rewritePathReferenceText(entry.text, rewrites));
+  if (resultHash === preconditionHash) throw new PlanningError(`path reference rewrite for ${file} did not change the document`);
+  return {
+    kind: "rewrite-path-reference" as const,
+    file,
+    documentKind: documentKindFor(file),
+    rewrites: rewrites.map(({ span: _span, ...rewrite }) => rewrite),
+    preconditionHash,
+    resultHash,
+  };
 }
 
 export function graphDigest(graph: DependencyGraph): Sha256 {

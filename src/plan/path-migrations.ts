@@ -6,6 +6,7 @@ import { PATH_MIGRATION_TMP_PREFIX } from "../branding.ts";
 import { scrubbedGitEnv } from "../util/git.ts";
 import { stableStringify } from "../util/hash.ts";
 import { ensureScratchDir } from "../util/scratch-root.ts";
+import { PathMigrationError } from "./errors.ts";
 import type { MigratePathKeysOperation, PathMove } from "./manifest.ts";
 
 const OUTPUT_TAIL = 4000;
@@ -50,9 +51,11 @@ export function runPathMigrationCommand(
   if (exitCode !== 0) {
     const signal = result.signalCode ? `killed by ${result.signalCode} after ${timeoutMs}ms\n` : "";
     const output = `${signal}${result.stderr?.toString() ?? ""}`.trimEnd().slice(-OUTPUT_TAIL);
-    throw new Error(`path migration ${operation.path} failed (exit ${exitCode}): ${operation.command}` + (output === "" ? "" : `\n${output}`));
+    throw new PathMigrationError(`path migration ${operation.path} failed (exit ${exitCode}): ${operation.command}` + (output === "" ? "" : `\n${output}`), {
+      hint: "run the configured pathMigrations command by hand on the artifact, or raise pathMigrations.timeoutMs if it was killed",
+    });
   }
-  if (result.stdout === undefined) throw new Error(`path migration ${operation.path} produced no captured stdout`);
+  if (result.stdout === undefined) throw new Error(`invariant: path migration ${operation.path} ran with stdout piped but produced no captured stdout`);
   return decodeUtf8(result.stdout, `path migration output for ${operation.path}`);
 }
 
@@ -66,7 +69,7 @@ function decodeUtf8(bytes: Uint8Array, subject: string): string {
     // `ignoreBOM: true` means the decoder does not consume the leading BOM as
     // metadata; it returns U+FEFF, so UTF-8 re-encoding preserves the bytes.
     return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
-  } catch {
-    throw new Error(`${subject} is not valid UTF-8 text`);
+  } catch (error) {
+    throw new PathMigrationError(`${subject} is not valid UTF-8 text`, { cause: error });
   }
 }
