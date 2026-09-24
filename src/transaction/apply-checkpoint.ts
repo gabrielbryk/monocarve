@@ -100,7 +100,7 @@ function isPersistedCheckpoint(value: unknown): value is PersistedCheckpoint {
 }
 
 /** True when `value` is JSON recording `ownerToken` as its owner. */
-export function ownedBy(value: unknown, ownerToken: string): boolean {
+function ownedBy(value: unknown, ownerToken: string): boolean {
   return typeof value === "object" && value !== null && "ownerToken" in value && value.ownerToken === ownerToken;
 }
 

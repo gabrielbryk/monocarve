@@ -67,9 +67,6 @@ export interface BuildPlanOptions {
   readonly targetSubpath?: string;
   readonly evacuationProvenance?: NonNullable<NonNullable<ExtractionManifest["provenance"]>["evacuation"]>;
 }
-export async function buildPlan(options: BuildPlanOptions): Promise<ExtractionManifest> {
-  return buildPlanSync(options);
-}
 
 export function buildPlanSync(options: BuildPlanOptions): ExtractionManifest {
   const state = prepareBuild(options);
@@ -675,7 +672,6 @@ function profileCandidateName(config: MonocarveConfig, suggested: string): strin
 function profilePlanId(candidateId: string, profile: string | undefined): string {
   return profile === undefined ? candidateId : `${candidateId}--${profile}`;
 }
-export { derivePackageRoot, donorOwner } from "./build-support.ts";
 export { generatedFilesFor, graphDigest, moveOperation, pathMigrationOperations, renderGates } from "./build-support.ts";
 export function serializeManifest(manifest: ExtractionManifest): string {
   return `${stableStringify(manifest, 2)}\n`;

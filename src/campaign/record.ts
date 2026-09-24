@@ -10,7 +10,7 @@ import {
   type GraphMetricSnapshot,
 } from "./ledger.ts";
 
-export class CampaignRecordError extends MonocarveError {
+class CampaignRecordError extends MonocarveError {
   override readonly name = "CampaignRecordError";
 }
 

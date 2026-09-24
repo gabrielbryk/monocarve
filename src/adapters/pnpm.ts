@@ -1,23 +1,19 @@
 /** pnpm adapter facade. Lockfile grammar lives in focused sibling modules. */
 
-import { existsSync, readFileSync } from "node:fs";
-import { relative, resolve } from "node:path";
-
-import type { LockfileImporterMode } from "../plan/manifest.ts";
-import { hashText, type Sha256 } from "../util/hash.ts";
+import { PACKAGE_MANAGER_FILES } from "../config/workspace-files.ts";
 import { relativePosix } from "../util/paths.ts";
+import { importerHasher } from "./importer-hash.ts";
 import { declaredPackageManagerVersion } from "./package-manager-version.ts";
 import { deleteImporter, importerBlock, insertImporter, replaceImporter } from "./pnpm-importers.ts";
 import { addBlockDependencies, addBlockDependency, removeBlockDependency, renderImporterBlock } from "./pnpm-render.ts";
 import { missingResolutions } from "./pnpm-resolutions.ts";
 import { inspectWorkspace, listPackages, workspaceManifestEdit } from "./pnpm-workspace.ts";
-import type { PackageManagerAdapter } from "./types.ts";
+import type { LockfileImporterMode, PackageManagerAdapter } from "./types.ts";
 
 export { LockfileError } from "./pnpm-error.ts";
-export { parseImporters } from "./pnpm-importers.ts";
 
-const LOCKFILE_NAME = "pnpm-lock.yaml";
-const WORKSPACE_MANIFEST = "pnpm-workspace.yaml";
+const LOCKFILE_NAME = PACKAGE_MANAGER_FILES.pnpm.lockfile;
+const WORKSPACE_MANIFEST = PACKAGE_MANAGER_FILES.pnpm.workspaceManifest;
 
 export const pnpmAdapter: PackageManagerAdapter = {
   id: "pnpm",
@@ -34,7 +30,7 @@ export const pnpmAdapter: PackageManagerAdapter = {
   replaceImporter,
   applyImporter: (text, root, block, mode) => applyImporter(text, root, block, mode),
   missingResolutions,
-  lockfileImporterHash: (text, root) => importerHash(text, root),
+  lockfileImporterHash: importerHasher(importerBlock),
   addBlockDependency,
   addBlockDependencies: (block, input) => addBlockDependencies(block, input, (fromRoot, toRoot) => pnpmAdapter.linkVersion(fromRoot, toRoot)),
   removeBlockDependency,
@@ -47,25 +43,4 @@ export const pnpmAdapter: PackageManagerAdapter = {
 function applyImporter(text: string, root: string, block: string, mode?: LockfileImporterMode): string {
   if (mode === "delete") return deleteImporter(text, root);
   return mode === "replace" ? replaceImporter(text, root, block) : insertImporter(text, root, block);
-}
-
-function importerHash(text: string, root: string): Sha256 | undefined {
-  const block = importerBlock(text, root);
-  return block === undefined ? undefined : hashText(block);
-}
-
-/** Workspace-relative lockfile location for operation declarations. */
-export function lockfilePath(adapter: PackageManagerAdapter): string {
-  return adapter.lockfileName;
-}
-
-/** Read an adapter-owned lockfile when it exists. */
-export function readLockfile(rootDir: string, adapter: PackageManagerAdapter): string | undefined {
-  const path = resolve(rootDir, adapter.lockfileName);
-  return existsSync(path) ? readFileSync(path, "utf8") : undefined;
-}
-
-/** `relative()` normalized for manifest paths and lockfile links. */
-export function posixRelative(from: string, to: string): string {
-  return relative(from, to).replaceAll("\\", "/");
 }

@@ -78,7 +78,7 @@ export interface PackageShape {
   readonly unrenderedDependencies?: Readonly<Record<string, string>>;
 }
 
-export type ShapeExpectation = "match" | "diverge" | "throw";
+type ShapeExpectation = "match" | "diverge" | "throw";
 
 export interface WorkspaceShape {
   readonly id: string;
@@ -188,7 +188,7 @@ function baselineFiles(shape: WorkspaceShape): Record<string, string> {
  * the new package's block inserted at its sorted position, then one
  * `addBlockDependency` + `replaceImporter` per consuming application.
  */
-export function spliceLockfile(baseline: string, shape: WorkspaceShape): string {
+function spliceLockfile(baseline: string, shape: WorkspaceShape): string {
   const block = `${pnpmAdapter.renderImporterBlock({
     packageRoot: shape.target.root,
     dependencies: shape.target.dependencies ?? {},
@@ -213,7 +213,7 @@ export function spliceLockfile(baseline: string, shape: WorkspaceShape): string 
   return text;
 }
 
-export function runLockfileOnly(cwd: string): void {
+function runLockfileOnly(cwd: string): void {
   const [binary, ...args] = pnpmAdapter.lockfileOnlyCommand();
   const result = Bun.spawnSync([binary!, ...args], { cwd, stdout: "pipe", stderr: "pipe" });
   if ((result.exitCode ?? 1) !== 0) {

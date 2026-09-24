@@ -90,7 +90,9 @@ export const application = z.strictObject({
   description: z.string().optional(),
 });
 
+/** One configured donor application: its name, source root, owner, and per-application overrides. */
 export type ApplicationConfig = z.output<typeof application>;
+/** A declared first-party package outside `packageRoots`, attributable by bare specifier. */
 export type FirstPartyPackageConfig = z.output<typeof firstPartyPackage>;
 
 /* -------------------------------------------------------------------------- */
@@ -130,6 +132,7 @@ export const gates = z.strictObject({
   maxConcurrency: z.number().int().positive().default(1),
 });
 
+/** Gate command templates run after an extraction, per package, workspace, and consuming project. */
 export type GatesConfig = z.output<typeof gates>;
 
 /* -------------------------------------------------------------------------- */
@@ -148,14 +151,14 @@ export type GatesConfig = z.output<typeof gates>;
  * `{moduleSpecifier}`. They are rendered only after the donor and target are
  * known, then copied verbatim into the preparation manifest.
  */
-export const preparationGates = z.strictObject({
+const preparationGates = z.strictObject({
   package: z.array(z.string().min(1)).optional(),
   project: z.array(z.string().min(1)).optional(),
   workspace: z.array(z.string().min(1)).optional(),
 });
 
 /** Commit metadata for the one exact-scope source preparation commit. */
-export const preparationCommitTemplate = z.strictObject({
+const preparationCommitTemplate = z.strictObject({
   /** Conventional-commit subject; it must be supplied by the repository. */
   subject: singleLine(),
   /** Optional body, rendered with the same preparation placeholders. */
@@ -169,8 +172,11 @@ export const preparationCommitTemplate = z.strictObject({
  */
 export const preparationPolicy = z.strictObject({ gates: preparationGates.optional(), commit: preparationCommitTemplate.optional() }).prefault({});
 
+/** Gate command templates run for a single source-preparation move. */
 export type PreparationGateTemplatesConfig = z.output<typeof preparationGates>;
+/** Commit subject/body templates for the one source-preparation commit. */
 export type PreparationCommitTemplateConfig = z.output<typeof preparationCommitTemplate>;
+/** Source-preparation policy: optional gate and commit templates. */
 export type PreparationPolicyConfig = z.output<typeof preparationPolicy>;
 
 /* -------------------------------------------------------------------------- */
@@ -186,7 +192,7 @@ export type PreparationPolicyConfig = z.output<typeof preparationPolicy>;
  * Templates receive `{app}`, `{package}`, `{packageRoot}`, `{planId}`,
  * `{sourcePath}`, and `{targetPath}` from one reviewed move operation.
  */
-export const preparer = z
+const preparer = z
   .strictObject({
     id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "must be a lowercase kebab-case identifier"),
     phase: z.literal("pre-extraction"),
@@ -240,6 +246,7 @@ export const preparers = z
     }
   });
 
+/** One configured preparer: a reviewed transform run before the extraction journal. */
 export type PreparerConfig = z.output<typeof preparer>;
 
 /* -------------------------------------------------------------------------- */
@@ -273,6 +280,7 @@ function singleLine() {
     .min(1)
     .refine((value) => !value.includes("\n"), { message: "commit subject must be a single line" });
 }
+/** Commit subject/body templates for extraction commits; subjects must be single-line. */
 export type CommitTemplatesConfig = z.output<typeof commitTemplates>;
 
 /* -------------------------------------------------------------------------- */
@@ -318,6 +326,7 @@ export const scaffoldTemplates = z.strictObject({
   publicSurface,
 });
 
+/** Templates for the files scaffolded into a new workspace package (package.json, tsconfig, task file, extras). */
 export type ScaffoldTemplatesConfig = z.output<typeof scaffoldTemplates>;
 
 /* -------------------------------------------------------------------------- */
@@ -330,7 +339,7 @@ export type ScaffoldTemplatesConfig = z.output<typeof scaffoldTemplates>;
  * It is intentionally only configuration in this phase: selecting a profile
  * does not yet add a new planning operation.
  */
-export const extractionProfile = z.strictObject({
+const extractionProfile = z.strictObject({
   /** Library profiles publish a barrel; leaf-test profiles are private test packages. */
   kind: z.enum(["library", "leaf-test"]).default("library"),
   /** One of `packageRoots`; generated packages are direct children of it. */
@@ -361,8 +370,10 @@ export const extractionProfiles = z
   })
   .prefault({});
 
+/** A named package-kind profile: destination root, naming templates, scaffold and gate overrides. */
 export type ExtractionProfileConfig = z.output<typeof extractionProfile>;
 
+/** An extraction profile with every default resolved; the legacy synthetic profile when none is selected. */
 export interface ResolvedExtractionProfile {
   /** Undefined denotes the synthetic legacy profile used by existing configs. */
   readonly name: string | undefined;
@@ -375,6 +386,7 @@ export interface ResolvedExtractionProfile {
   readonly gates: GatesConfig;
 }
 
+/** Concrete package name, root, and project id rendered from a resolved profile. */
 export interface RenderedExtractionProfile {
   readonly packageName: string;
   readonly packageRoot: string;

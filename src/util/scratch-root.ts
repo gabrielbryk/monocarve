@@ -36,12 +36,12 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { mkdirSync, realpathSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, isAbsolute, join, resolve } from "node:path";
 
 import { SCRATCH_ROOT_ENV, TOOL_NAME } from "../branding.ts";
+import { hashText } from "./hash.ts";
 
 /**
  * The parent directory for this tool's disposable state.
@@ -110,7 +110,7 @@ export function checkoutSuffix(): string {
   if (cachedCheckoutSuffix !== undefined) return cachedCheckoutSuffix;
   const identity = checkoutIdentity();
   const name = basename(identity).replace(/[^a-zA-Z0-9._-]+/g, "-") || TOOL_NAME;
-  const hash = createHash("sha256").update(identity).digest("hex").slice(0, 12);
+  const hash = hashText(identity).slice(0, 12);
   cachedCheckoutSuffix = `${name}-${hash}`;
   return cachedCheckoutSuffix;
 }

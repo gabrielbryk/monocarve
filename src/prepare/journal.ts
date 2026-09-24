@@ -35,7 +35,7 @@ import {
   type PreparationSnapshot as Snapshot,
 } from "./journal-state-types.ts";
 
-export interface PreparationWrite {
+interface PreparationWrite {
   readonly kind: "write";
   readonly path: string;
   /** Rendered UTF-8 bytes. Preparation plans never normalize them on apply. */
@@ -46,7 +46,7 @@ export interface PreparationWrite {
   readonly resultMode: number;
 }
 
-export interface PreparationDelete {
+interface PreparationDelete {
   readonly kind: "delete";
   readonly path: string;
   readonly preconditionHash: FileState;
@@ -70,7 +70,7 @@ export interface PreparationJournalResult {
   readonly recovery: PreparationJournalRecovery;
 }
 
-export interface PreparationRestoreFailure {
+interface PreparationRestoreFailure {
   readonly path: string;
   readonly message: string;
 }

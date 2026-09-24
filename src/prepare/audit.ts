@@ -26,7 +26,7 @@ import type {
   PreparationDeclarationSelector,
   PreparationReplayOperation,
 } from "./manifest-types.ts";
-export type { PreparationAuditOptions, PreparationAuditReport, PreparationProofResult } from "./audit-types.ts";
+export type { PreparationAuditOptions, PreparationAuditReport } from "./audit-types.ts";
 export async function auditPreparation(options: PreparationAuditOptions): Promise<PreparationAuditReport> {
   return auditPreparationSync(options);
 }

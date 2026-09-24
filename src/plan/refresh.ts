@@ -7,6 +7,7 @@ import type { DependencyGraph } from "../graph/model.ts";
 import type { PortfolioCandidate } from "../portfolio/types.ts";
 import { headCommit, statusShort } from "../util/git.ts";
 import { stableStringify } from "../util/hash.ts";
+import { isJsonObject } from "../util/json.ts";
 import { buildPlanSync, parseManifest } from "./build.ts";
 import { PlanningError } from "./context.ts";
 import type { ExtractionManifest } from "./manifest.ts";
@@ -20,7 +21,7 @@ export interface RefreshPlanOptions {
   readonly resolveCandidate: (existing: ExtractionManifest) => PortfolioCandidate | undefined;
 }
 
-export interface ManifestChange {
+interface ManifestChange {
   readonly path: string;
   readonly before?: unknown;
   readonly after?: unknown;
@@ -113,7 +114,7 @@ function assertSame(label: string, before: unknown, after: unknown): void {
   }
 }
 
-export function manifestDiff(before: ExtractionManifest, after: ExtractionManifest): ManifestChange[] {
+function manifestDiff(before: ExtractionManifest, after: ExtractionManifest): ManifestChange[] {
   const changes: ManifestChange[] = [];
   diffValue(before, after, "", changes);
   return changes;
@@ -121,7 +122,7 @@ export function manifestDiff(before: ExtractionManifest, after: ExtractionManife
 
 function diffValue(before: unknown, after: unknown, path: string, changes: ManifestChange[]): void {
   if (stableStringify(before) === stableStringify(after)) return;
-  if (isRecord(before) && isRecord(after)) {
+  if (isJsonObject(before) && isJsonObject(after)) {
     const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])].toSorted();
     for (const key of keys) {
       if (path === "" && PROVENANCE_FIELDS.has(key)) continue;
@@ -130,8 +131,4 @@ function diffValue(before: unknown, after: unknown, path: string, changes: Manif
     return;
   }
   changes.push({ path, ...(before === undefined ? {} : { before }), ...(after === undefined ? {} : { after }) });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }

@@ -1,0 +1,6 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["src/monocarve.ts", "src/config.ts", "scripts/*.ts", "scripts/quality/*.ts", "test/**/*.test.ts", "test/support/evidence-publisher-child.ts"],
+  "project": ["src/**/*.{ts,js}", "scripts/**/*.ts", "test/**/*.ts"],
+  "ignoreExportsUsedInFile": false
+}

@@ -22,7 +22,7 @@ export interface ExportSurface {
   readonly typeOnly: boolean;
 }
 
-export class PublicSurfaceError extends MonocarveError {
+class PublicSurfaceError extends MonocarveError {
   override readonly name = "PublicSurfaceError";
 }
 

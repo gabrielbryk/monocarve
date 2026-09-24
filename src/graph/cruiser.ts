@@ -19,7 +19,7 @@
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
-import { isAbsolute, relative, resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { compilerBuildIdentity } from "../build-identity.ts";
@@ -27,9 +27,9 @@ import { getApplication, type MonocarveConfig } from "../config.ts";
 import { MonocarveError } from "../errors.ts";
 import { headCommit } from "../util/git.ts";
 import { byCodeUnit, hashBytes, hashJson, hashText } from "../util/hash.ts";
+import { isPathInside } from "../util/paths.ts";
 import { buildDependencyGraph, type ScanReport } from "./build.ts";
-import { buildApplicationGraph, toSccs } from "./components.ts";
-import type { DependencyGraph, Scc } from "./model.ts";
+import type { DependencyGraph } from "./model.ts";
 import { SCANNER_READ_SYMBOL, scannerReadPlugin } from "./scanner-read-plugin.ts";
 import { resetSyntaxCaches } from "./syntax.ts";
 import { resetWorkspaceCaches } from "./workspace.ts";
@@ -156,8 +156,7 @@ function retainObservedRead(rootDir: string, path: string): boolean {
   if (!isAbsolute(path)) return true;
   const absoluteRoot = resolve(rootDir);
   const absolutePath = resolve(path);
-  const rel = relative(absoluteRoot, absolutePath);
-  if (rel === "" || (rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel))) return true;
+  if (isPathInside(absoluteRoot, absolutePath)) return true;
   return !lstatSync(absolutePath, { throwIfNoEntry: false })?.isDirectory();
 }
 
@@ -251,11 +250,6 @@ function readRuleSet(rootDir: string, path: string): unknown {
   } catch (error) {
     throw new ScanError(`could not read graph.cruiserConfig ${path}: ${(error as Error).message}`);
   }
-}
-
-/** Components of the application subgraph — the seeds the portfolio enumerates. */
-export function computeSccs(graph: DependencyGraph, application?: string): Scc[] {
-  return toSccs(buildApplicationGraph(graph, application).condensed);
 }
 
 /** Drop every cache the scanner and its AST probes keep. Tests call this between fixtures. */

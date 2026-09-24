@@ -11,7 +11,7 @@ import { hashText } from "../../src/util/hash.ts";
 import { fixtureConfig, fixtureGit, fixtureRepo, read, scratchDirectory, write } from "./fixture-repo.ts";
 
 export const LOCKFILE = pnpmAdapter.lockfileName;
-export const PACKAGE = "@acme/analytics";
+const PACKAGE = "@acme/analytics";
 export const PACKAGE_ROOT = "libs/analytics";
 export const APP = "apps/api";
 const DONOR = "apps/api/src/widget/widget.ts";

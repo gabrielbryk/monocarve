@@ -26,7 +26,7 @@ export function buildPlanProvenance(input: PlanProvenanceInput): PlanProvenance 
   };
 }
 
-export function policyDigest(input: Pick<PlanProvenanceInput, "config" | "profileGates" | "scaffoldTemplates">): Sha256 {
+function policyDigest(input: Pick<PlanProvenanceInput, "config" | "profileGates" | "scaffoldTemplates">): Sha256 {
   return hashJson({
     commitTemplates: input.config.commitTemplates,
     gates: input.config.gates,

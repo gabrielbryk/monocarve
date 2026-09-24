@@ -10,7 +10,8 @@ import { currentBranch, git, headCommit, repositoryPrefix, scrubbedGitEnv, statu
 import { byCodeUnit } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";
 import { ensureScratchDir } from "../util/scratch-root.ts";
-import { assertApprovedPreparerManifest, assertPreparerManifest, PreparerError, simulatePreparerManifest } from "./core.ts";
+import { assertPreparerManifest } from "./core-validate.ts";
+import { assertApprovedPreparerManifest, PreparerError, simulatePreparerManifest } from "./core.ts";
 import type { PreparerManifest } from "./manifest.ts";
 
 /** Commit a new preparer configuration and its approval while hooks observe its reviewed outputs. */

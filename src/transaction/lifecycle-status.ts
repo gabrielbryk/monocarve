@@ -2,7 +2,7 @@
 import { TOOL_NAME } from "../branding.ts";
 import type { CommitChainEvidence } from "./commit-evidence.ts";
 
-export type LifecycleState =
+type LifecycleState =
   | "baseline"
   | "uncommitted-plan"
   | "approved"
@@ -12,11 +12,11 @@ export type LifecycleState =
   | "applied-and-audited"
   | "drifted"
   | "unknown";
-export interface LifecycleRecordEvidence {
+interface LifecycleRecordEvidence {
   readonly valid: boolean;
   readonly failures?: readonly string[];
 }
-export interface LifecycleAuditEvidence {
+interface LifecycleAuditEvidence {
   readonly passed: boolean;
   readonly reconcilable: boolean;
   readonly failures: readonly string[];

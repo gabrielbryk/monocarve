@@ -149,19 +149,3 @@ export function summarizeGraph(graph: DependencyGraph): GraphSummary {
     byZone,
   };
 }
-
-/** Nodes owned by one application, or by every application when unfiltered. */
-export function applicationNodes(graph: DependencyGraph, application?: string): string[] {
-  return graph.paths.filter((path) => {
-    const node = graph.nodes.get(path);
-    if (!node || node.zone !== "application") return false;
-    return application === undefined || node.application === application;
-  });
-}
-
-/** Line count of a set of paths, for candidate sizing. */
-export function totalLines(graph: DependencyGraph, paths: Iterable<string>): number {
-  let total = 0;
-  for (const path of paths) total += graph.nodes.get(path)?.lineCount ?? 0;
-  return total;
-}

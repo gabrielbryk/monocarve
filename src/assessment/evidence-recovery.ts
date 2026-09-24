@@ -6,7 +6,7 @@ import { entryExists } from "./evidence-fs.ts";
 import { validateBundle } from "./evidence-manifest.ts";
 import type { PublicationPaths, PublicationPhase } from "./evidence-types.ts";
 
-export interface RecoveryRecord {
+interface RecoveryRecord {
   readonly schemaVersion: 1;
   readonly phase: PublicationPhase;
   readonly target: string;
@@ -44,7 +44,7 @@ export function recoveryError(paths: PublicationPaths): EvidenceError {
   );
 }
 
-export function recoveryResidue(paths: PublicationPaths): string[] {
+function recoveryResidue(paths: PublicationPaths): string[] {
   return [paths.recovery, paths.stage, paths.backup].filter(entryExists);
 }
 

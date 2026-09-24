@@ -15,17 +15,7 @@ import { compareConflicts, conflictsBetween } from "./conflict-resolution.ts";
 import type { CampaignPlan, PlanConflict, PlanConflictAnalysis, Subject } from "./conflict-types.ts";
 import { buildWaves } from "./conflict-waves.ts";
 
-export type {
-  CampaignPlan,
-  CampaignWave,
-  ConflictCategory,
-  ConflictDisposition,
-  OperationPathAccess,
-  PathAccessMode,
-  PathAccessRole,
-  PlanConflict,
-  PlanConflictAnalysis,
-} from "./conflict-types.ts";
+export type { CampaignPlan, ConflictCategory, PlanConflictAnalysis } from "./conflict-types.ts";
 
 export class CampaignConflictAnalysisError extends MonocarveError {
   override readonly name = "CampaignConflictAnalysisError";

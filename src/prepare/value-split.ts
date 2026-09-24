@@ -11,7 +11,7 @@ import { PlanningError } from "../plan/context.ts";
 import { analyzeTypeScriptSource } from "../symbols/analyze.ts";
 import { resolveCommit, showBaseline } from "../util/git.ts";
 import { byCodeUnit, hashText, MISSING, type Sha256 } from "../util/hash.ts";
-import { baselineFileMode, type PreparationManifestRendering } from "./build.ts";
+import { baselineFileMode, type PreparationManifestRendering } from "./build-shared.ts";
 import { preparationCompilerOptions } from "./compiler-policy.ts";
 import type { PreparationManifest, PreparationReplayOperation, PreparationWriteFileOperation } from "./manifest-types.ts";
 import { assertPreparationManifestValid, createPreparationManifest, preparationOperationPaths } from "./manifest.ts";

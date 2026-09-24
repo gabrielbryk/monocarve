@@ -16,7 +16,7 @@ export interface Snapshot {
   readonly absentAncestors: readonly string[];
 }
 
-export interface RestoreFailure {
+interface RestoreFailure {
   readonly path: string;
   readonly message: string;
 }

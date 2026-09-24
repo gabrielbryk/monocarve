@@ -32,11 +32,11 @@ export function isExtractionManifestLike(value: unknown): value is ExtractionMan
   return isSupportedExtractionManifestVersion(candidate.schemaVersion) || "baselineCommit" in candidate;
 }
 
-export interface CommitSpec {
+interface CommitSpec {
   readonly subject: string;
   readonly body?: string;
 }
-export interface ConsumerRewrite {
+interface ConsumerRewrite {
   readonly file: string;
   readonly owner: string;
   readonly expectedImporter: string;
@@ -84,18 +84,18 @@ export interface PlanTarget {
   /** Explicit planner override for the package's public module surface. */
   readonly publicSurface?: PublicSurfaceConfig;
 }
-export interface PlanSource {
+interface PlanSource {
   readonly files: readonly string[];
   readonly tests: readonly string[];
   readonly assets?: readonly string[];
   readonly sccs: Readonly<Record<string, readonly string[]>>;
 }
-export interface PlanDependencies {
+interface PlanDependencies {
   readonly runtime: Readonly<Record<string, string>>;
   readonly dev: Readonly<Record<string, string>>;
   readonly packageReferences: readonly string[];
 }
-export interface DependencyDecisionEvidence {
+interface DependencyDecisionEvidence {
   readonly name: string;
   readonly decision: "target-runtime" | "target-dev" | "donor-review" | "donor-remove";
   readonly sources: readonly string[];
@@ -106,7 +106,7 @@ export interface ProjectedArtifactEvidence {
   readonly kind: "json" | "lockfile" | "structured";
   readonly resultHash: Sha256;
 }
-export interface IntegrationTestSuiteRecord {
+interface IntegrationTestSuiteRecord {
   readonly name: string;
   readonly sourceRoot: string;
   readonly donorApplication: string;
@@ -148,7 +148,7 @@ export interface DynamicImportDelta {
   readonly added: readonly string[];
   readonly removed: readonly string[];
 }
-export interface PlanAdapterProvenance {
+interface PlanAdapterProvenance {
   readonly id: string;
   readonly contractVersion: number;
   readonly declaredVersion?: string;

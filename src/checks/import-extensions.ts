@@ -24,7 +24,7 @@ import type { MonocarveConfig } from "../config.ts";
 import { byCodeUnit } from "../util/hash.ts";
 import { relativePosix } from "../util/paths.ts";
 
-export interface ExtensionViolation {
+interface ExtensionViolation {
   readonly file: string;
   readonly line: number;
   readonly specifier: string;

@@ -31,10 +31,6 @@ export function authorizeProtectedRoots(
   return roots;
 }
 
-export function isAuthorizedProtectedPath(path: string, roots: readonly string[]): boolean {
-  return roots.some((root) => path === root || path.startsWith(`${root}/`));
-}
-
 function normalizeAuthorization(value: string): string {
   if (isAbsolute(value)) throw new EvacuationSelectorError(`protected-path authorization must be workspace-relative: ${value}`);
   const normalized = normalizePath(value).replace(/\/+$/, "");

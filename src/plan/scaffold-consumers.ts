@@ -9,8 +9,7 @@ import { relativePosix } from "../util/paths.ts";
 import type { ConsumerDependencyOwner } from "./consumers.ts";
 import { PlanningError, type WorkspaceContext } from "./context.ts";
 import type { PlanOperation } from "./manifest.ts";
-import { insertSorted, parseJsonFile, stringifyJson, writeOperation } from "./scaffold-shared.ts";
-import type { ScaffoldInput } from "./scaffold.ts";
+import { insertSorted, parseJsonFile, stringifyJson, writeOperation, type ScaffoldInput } from "./scaffold-shared.ts";
 
 export interface ConsumerWiringInput extends ScaffoldInput {
   readonly consumerOwners: readonly (string | ConsumerDependencyOwner)[];

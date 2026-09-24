@@ -15,7 +15,7 @@ export interface CommunityAnalysisOptions {
   readonly maximumPasses?: number;
 }
 
-export interface Community {
+interface Community {
   /** Stable content-derived identifier, never a candidate or package name. */
   readonly id: string;
   readonly members: readonly string[];

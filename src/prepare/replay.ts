@@ -12,7 +12,7 @@ import ts from "typescript";
 import { MonocarveError } from "../errors.ts";
 import { byCodeUnit, hashJson, hashText, type Sha256 } from "../util/hash.ts";
 
-export type TypeOnlyDeclarationKind = "interface" | "type-alias";
+type TypeOnlyDeclarationKind = "interface" | "type-alias";
 
 /** An exact, full declaration span. Leading JSDoc belongs in this span. */
 export interface TypeOnlyExtractionSpan {
@@ -42,7 +42,7 @@ export interface CheckerProvenTypeImport {
   readonly proofBaselineHash: Sha256;
 }
 
-export interface TypeOnlyCompatibilityPolicy {
+interface TypeOnlyCompatibilityPolicy {
   /** Exact original public names preserved through `export type { ... }`. */
   readonly reExportNames: readonly string[];
   /** Type references retained by the donor, proven by its TypeScript check. */
@@ -62,7 +62,7 @@ export interface RenderTypeOnlyExtractionInput {
   readonly compatibility: TypeOnlyCompatibilityPolicy;
 }
 
-export interface InlineImportTypeRewriteProof {
+interface InlineImportTypeRewriteProof {
   readonly originalSpecifier: string;
   readonly targetSpecifier: string;
   readonly start: number;
@@ -71,7 +71,7 @@ export interface InlineImportTypeRewriteProof {
   readonly proofBaselineHash: Sha256;
 }
 
-export interface RenderedPreparationFile {
+interface RenderedPreparationFile {
   readonly text: string;
   readonly hash: Sha256;
 }
@@ -86,7 +86,7 @@ export interface TypeOnlyExtractionReplay {
   readonly declarations: readonly TypeOnlyDeclarationReplayProof[];
 }
 
-export interface TypeOnlyDeclarationReplayProof {
+interface TypeOnlyDeclarationReplayProof {
   readonly name: string;
   readonly kind: TypeOnlyDeclarationKind;
   readonly source: { readonly start: number; readonly end: number; readonly hash: Sha256 };

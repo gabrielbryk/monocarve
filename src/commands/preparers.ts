@@ -18,6 +18,7 @@ import {
   type PreparerManifest,
 } from "../preparer/index.ts";
 import { currentBranch } from "../util/git.ts";
+import { isJsonObject } from "../util/json.ts";
 import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
 import { load, loadManifest, outputPath, print, systemReason, writeOutput } from "./shared.ts";
 import type { CommandSpec } from "./types.ts";
@@ -98,7 +99,7 @@ function loadPreparerManifest(args: ParsedArgs, rootDir: string, config: Monocar
   } catch (error) {
     throw new IoError(`could not read preparer manifest ${path}: ${systemReason(error)}`);
   }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) throw new UsageError(`preparer manifest ${path} is not a JSON object`);
+  if (!isJsonObject(parsed)) throw new UsageError(`preparer manifest ${path} is not a JSON object`);
   assertPreparerManifest(config, parsed);
   return { path, manifest: parsed };
 }

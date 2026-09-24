@@ -119,7 +119,7 @@ export function analyzeContainment(context: WorkspaceContext, graph: DependencyG
  * surface must cover every binding the importer actually uses — including the
  * namespace import, which `export *` satisfies but a named re-export does not.
  */
-export function exportingPackageFor(config: MonocarveConfig, context: WorkspaceContext, graph: DependencyGraph, escape: Escape): string | undefined {
+function exportingPackageFor(config: MonocarveConfig, context: WorkspaceContext, graph: DependencyGraph, escape: Escape): string | undefined {
   const target = escape.resolved;
   if (target === undefined) return undefined;
   const owner = context.ownerOf(target);

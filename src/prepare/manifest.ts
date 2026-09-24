@@ -22,7 +22,7 @@ const COMMIT_HASH = /^[0-9a-f]{7,64}$/;
 const COMMIT_SUBJECT = /^(?:refactor|fix|feat|chore|test|docs|ci|build|perf|style)(?:\([^)\n]+\))?!?: [^\n]+$/;
 
 /** Builds the deterministic identity from every manifest field except planId. */
-export function preparationPlanId(draft: PreparationManifestDraft): string {
+function preparationPlanId(draft: PreparationManifestDraft): string {
   return `prepare-${hashJson(draft)}`;
 }
 

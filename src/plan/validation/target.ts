@@ -88,7 +88,7 @@ function validatePublicModuleShape(
 }
 
 /** Re-derive configured subpaths and the source export evidence they carry. */
-export function validatePublicModules(manifest: ExtractionManifest, options: ValidatePlanOptions, issues: Issues): void {
+function validatePublicModules(manifest: ExtractionManifest, options: ValidatePlanOptions, issues: Issues): void {
   try {
     const application = getApplication(options.config, manifest.application);
     const templates = manifest.target.profile
@@ -178,7 +178,7 @@ export function validatePublicModules(manifest: ExtractionManifest, options: Val
  * profile while writing a target, project id, scaffold destination, or gates
  * selected by some other configuration.
  */
-export function validateTargetProfile(manifest: ExtractionManifest, options: ValidatePlanOptions, issues: Issues): void {
+function validateTargetProfile(manifest: ExtractionManifest, options: ValidatePlanOptions, issues: Issues): void {
   const profile = manifest.target?.profile;
   if (!profile) return;
   if (typeof profile.name !== "string" || profile.name.length === 0 || typeof profile.candidateName !== "string" || profile.candidateName.length === 0) {

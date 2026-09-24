@@ -26,12 +26,12 @@ import { fileFacts } from "./syntax.ts";
 import { workspaceInventory, workspaceSubpathResolves, type WorkspaceInventory } from "./workspace.ts";
 
 /** One module as a scanner reports it. The only scanner-shaped type we accept. */
-export interface ScannedModule {
+interface ScannedModule {
   readonly source: string;
   readonly dependencies: readonly ScannedDependency[];
 }
 
-export interface ScannedDependency {
+interface ScannedDependency {
   readonly module: string;
   readonly resolved?: string;
   readonly dynamic?: boolean;

@@ -5,8 +5,6 @@ import type { FileState, Sha256 } from "../util/hash.ts";
 export const RECONCILIATION_SCHEMA_VERSION = 1 as const;
 export const APPLIED_PLAN_RECEIPT_SCHEMA_VERSION = 1 as const;
 
-export type { PlanProvenance } from "../plan/manifest.ts";
-
 export interface ReconciledDiscrepancy {
   readonly path: string;
   readonly ownership: "operation" | "generated-artifact";

@@ -41,7 +41,7 @@ export function print(value: unknown, args: ParsedArgs): void {
   process.stdout.write(renderOutput(value, args));
 }
 
-export function renderOutput(value: unknown, args: ParsedArgs): string {
+function renderOutput(value: unknown, args: ParsedArgs): string {
   return flagBool(args, "json") || typeof value !== "string" ? `${JSON.stringify(value, null, 2)}\n` : `${value}\n`;
 }
 

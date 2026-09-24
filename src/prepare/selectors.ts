@@ -23,7 +23,7 @@ export interface SelectTypeOnlyDeclarationsInput {
   readonly compilerOptions: ts.CompilerOptions;
 }
 
-export interface PreparationSourceSpan {
+interface PreparationSourceSpan {
   readonly start: number;
   readonly end: number;
   readonly hash: Sha256;
@@ -54,21 +54,21 @@ export interface RequiredImportBinding {
   readonly requiredAs: "type";
 }
 
-export interface CompatibilityTypeExport {
+interface CompatibilityTypeExport {
   readonly name: string;
   readonly groupId: Sha256;
   /** The source module must preserve this public name with `export type`. */
   readonly reexportAs: "type";
 }
 
-export interface RetainedTypeConsumer {
+interface RetainedTypeConsumer {
   readonly groupId: Sha256;
   readonly name: string;
   /** A local declaration that will need a type-only import after extraction. */
   readonly consumedByGroupIds: readonly Sha256[];
 }
 
-export interface RelativeInlineImportType {
+interface RelativeInlineImportType {
   readonly originalSpecifier: string;
   readonly start: number;
   readonly end: number;

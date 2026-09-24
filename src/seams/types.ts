@@ -3,10 +3,10 @@ import type { Sha256 } from "../util/hash.ts";
 import type { TypeOnlyExtractionRefusalCode, TypeOnlyExtractionSafety } from "./safety.ts";
 
 /** A declaration partition is named by its role, never by a guessed module path. */
-export type SeamPartition = "moved" | "retained";
+type SeamPartition = "moved" | "retained";
 
 /** Whether a conclusion follows from the symbol graph or is only a placement hint. */
-export type SeamConfidence = "exact" | "heuristic";
+type SeamConfidence = "exact" | "heuristic";
 
 export interface PlanSeamInput {
   /** The workspace-aware analysis for exactly one source file. */
@@ -48,7 +48,7 @@ export interface RetainedSeamCycle {
   readonly confidence: "exact";
 }
 
-export type SeamBlockerCode =
+type SeamBlockerCode =
   | "target-path-is-source"
   | "target-path-not-provided"
   | "cyclic-component"
@@ -71,7 +71,7 @@ export interface SeamBlocker {
 }
 
 /** The provenance of each part of the recommendation. */
-export interface SeamPlanConfidence {
+interface SeamPlanConfidence {
   readonly partition: "exact";
   readonly imports: "exact";
   readonly consumers: "exact";

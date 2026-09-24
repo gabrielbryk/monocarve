@@ -4,8 +4,8 @@
  * owns nothing about the ordinary declaration-seam preparation path — only
  * compiling one declared `compositionBoundaries`/`portPromotions` entry
  * (`resolveBoundaries` output) into a replayable preparation manifest.
- * `build.ts` still owns `compilePreparationManifest`, `PreparationManifestRendering`,
- * and `baselineFileMode`, which this module borrows for boundary compilation.
+ * `PreparationManifestRendering` and `baselineFileMode` come from
+ * `build-shared.ts`, which both compilers import.
  */
 import { readdirSync, statSync } from "node:fs";
 import { extname, posix, relative, resolve } from "node:path";
@@ -24,7 +24,7 @@ import type { TemplateVars } from "../util/template.ts";
 import { planExistingPackageBoundary, type RetainedImporterInput } from "./boundary-imports.ts";
 import { planPortBoundary, type PortConsumerInput } from "./boundary-port.ts";
 import { resolveBoundaries, type ResolvedBoundary } from "./boundary-resolve.ts";
-import { baselineFileMode, type PreparationManifestRendering } from "./build.ts";
+import { baselineFileMode, type PreparationManifestRendering } from "./build-shared.ts";
 import { preparationCompilerOptions } from "./compiler-policy.ts";
 import type { PreparationManifest, PreparationReplayOperation } from "./manifest-types.ts";
 import { createPreparationManifest, assertPreparationManifestValid, preparationOperationPaths } from "./manifest.ts";

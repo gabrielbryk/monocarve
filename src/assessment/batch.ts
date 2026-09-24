@@ -15,7 +15,7 @@ import { byCodeUnit, hashText } from "../util/hash.ts";
 import { relativeWorkspacePath } from "../util/paths.ts";
 import type { AssessmentSnapshot } from "./snapshot.ts";
 
-export interface DeclarationBatchEntry {
+interface DeclarationBatchEntry {
   readonly sourcePath: string;
   readonly reportPath: string;
   readonly sourceHash: string;
@@ -59,7 +59,7 @@ export class BatchAnalysisError extends MonocarveError {
   }
 }
 
-export function selectHotspotTargets(snapshot: AssessmentSnapshot, count: number): string[] {
+function selectHotspotTargets(snapshot: AssessmentSnapshot, count: number): string[] {
   if (!Number.isSafeInteger(count) || count <= 0) throw new Error("--split-hotspots must be a positive integer");
   snapshot.verify();
   if (snapshot.qualification.status === "degraded") return [];
@@ -265,7 +265,7 @@ function unsupportedProgramRelationships(workspace: {
   return diagnostics;
 }
 
-export function reportPathFor(sourcePath: string): string {
+function reportPathFor(sourcePath: string): string {
   const slug = sourcePath.replace(/[^A-Za-z0-9._-]/gu, "_");
   return `splits/${slug}-${hashText(sourcePath).slice(0, 12)}.json`;
 }

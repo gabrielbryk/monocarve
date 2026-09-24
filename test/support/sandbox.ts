@@ -5,7 +5,7 @@
  * Positive-path executable-config tests need a real sandbox run to prove
  * anything; without one, `loadSnapshotConfig` fails closed on the missing
  * binaries before it ever reaches the behavior under test
- * (`src/assessment/config-snapshot.ts` throws `ASSESSMENT_CONFIG_UNBOUND:
+ * (`src/config/snapshot-loader.ts` throws `ASSESSMENT_CONFIG_UNBOUND:
  * executable config requires bwrap` / `...requires syscall read tracing`).
  * That is indistinguishable, from the outside, from a passing negative test —
  * so a host without the sandbox must SKIP the positive tests rather than let

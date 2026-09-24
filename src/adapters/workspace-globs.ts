@@ -42,11 +42,6 @@ export interface WorkspaceEnumeration {
   readonly unmatched: readonly string[];
 }
 
-/** Every package the positive globs enumerate and the negated globs keep. */
-export function enumerateWorkspacePackages(rootDir: string, globs: readonly string[]): WorkspacePackage[] {
-  return [...resolveWorkspacePackages(rootDir, globs).packages];
-}
-
 /** Workspace packages plus qualification evidence about unmatched declarations. */
 export function resolveWorkspacePackages(rootDir: string, globs: readonly string[]): WorkspaceEnumeration {
   const positiveGlobs = globs.filter((glob) => !glob.startsWith("!"));

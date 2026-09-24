@@ -34,7 +34,7 @@ import { type PublicationPhase } from "./evidence-types.ts";
 
 export { readEvidenceManifest, validateBundle } from "./evidence-manifest.ts";
 export { EvidenceError } from "./evidence-error.ts";
-export type { EvidenceArtifactRecord, EvidenceManifestBase, PublicationPhase } from "./evidence-types.ts";
+export type { EvidenceArtifactRecord, EvidenceManifestBase } from "./evidence-types.ts";
 
 type PublicationTestPhase =
   | PublicationPhase

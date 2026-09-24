@@ -5,24 +5,20 @@
  * failure it restores the complete pre-journal snapshot before rethrowing; a
  * journal therefore has no partial-success mode.
  */
-import { rmSync } from "node:fs";
-
 import { createPackageManagerAdapter } from "../adapters/registry.ts";
 import { FAIL_OPERATION_ENV } from "../branding.ts";
 import type { MonocarveConfig } from "../config.ts";
 import { isAnyMove, manifestPaths, operationPaths, type ExtractionManifest, type PathMove, type PlanOperation } from "../plan/manifest.ts";
 import { git } from "../util/git.ts";
-import { MISSING, type FileState } from "../util/hash.ts";
+import type { FileState } from "../util/hash.ts";
 import { JournalError } from "./journal-error.ts";
 import { applyOperation } from "./journal-operation.ts";
 import { restoreSnapshot, snapshotPaths, type RestoreReport } from "./journal-snapshot.ts";
 import { isAtPrecondition, isCompleted, stateAt } from "./journal-state.ts";
+export { restoreSnapshot, snapshotMismatch, snapshotPaths, type Snapshot } from "./journal-snapshot.ts";
+export { preflightJournal } from "./journal-state.ts";
 
-export { JournalError } from "./journal-error.ts";
-export { restoreSnapshot, snapshotMismatch, snapshotPaths, type RestoreFailure, type RestoreReport, type Snapshot } from "./journal-snapshot.ts";
-export { isAtPrecondition, isCompleted, preflightJournal } from "./journal-state.ts";
-
-export interface JournalEntry {
+interface JournalEntry {
   readonly index: number;
   readonly operation: PlanOperation;
   readonly before: Readonly<Record<string, FileState>>;
@@ -145,11 +141,4 @@ function withRestoreOutcome(error: unknown, report: RestoreReport, total: number
     return error;
   }
   return new JournalError(`journal operation failed: ${String(error)}${suffix}`, { cause: error });
-}
-
-/** Undo only paths that did not exist before their recorded operation. */
-export async function revertJournal(treeRoot: string, entries: readonly JournalEntry[]): Promise<void> {
-  for (const entry of [...entries].reverse()) {
-    for (const [path, state] of Object.entries(entry.before)) if (state === MISSING) rmSync(`${treeRoot}/${path}`, { force: true });
-  }
 }

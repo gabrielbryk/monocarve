@@ -21,7 +21,7 @@ import { relative, resolve } from "node:path";
 
 import { MonocarveError } from "../errors.ts";
 
-export class GitError extends MonocarveError {
+class GitError extends MonocarveError {
   override readonly name = "GitError";
 }
 
@@ -90,7 +90,7 @@ export function tryGit(options: GitOptions, ...args: string[]): string | null {
 }
 
 /** Absolute repository root containing `dir`. */
-export function repositoryRoot(dir: string): string {
+function repositoryRoot(dir: string): string {
   return resolve(git({ cwd: dir }, "rev-parse", "--show-toplevel"));
 }
 

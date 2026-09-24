@@ -118,7 +118,7 @@ export function expandGeneratedArtifacts(config: MonocarveConfig, triggerPaths: 
     .toSorted((left, right) => byCodeUnit(left.path, right.path));
 }
 
-export function canonicalMode(mode: number): 0o644 | 0o755 {
+function canonicalMode(mode: number): 0o644 | 0o755 {
   return (mode & 0o111) === 0 ? 0o644 : 0o755;
 }
 

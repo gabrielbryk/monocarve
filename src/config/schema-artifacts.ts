@@ -63,6 +63,7 @@ export const generatedArtifacts = z.strictObject({
     .default([]),
 });
 
+/** Generated-file detection (provenance header markers) and declared generated artifacts with their regeneration commands. */
 export type GeneratedArtifactsConfig = z.output<typeof generatedArtifacts>;
 
 /** One configured artifact: the generated file, its source, and its command. */
@@ -128,6 +129,7 @@ export const pathMigrations = z.strictObject({
     .default([]),
 });
 
+/** Path-migration commands that rewrite path-bearing artifacts after files move. */
 export type PathMigrationsConfig = z.output<typeof pathMigrations>;
 
 /** Optional repository build proofs for emitted, tree-shaken assets. */
@@ -150,6 +152,7 @@ export const assetEmissionProofs = z
     });
   });
 
+/** One asset-emission proof: an analyzer that must keep emitting the same assets across a move. */
 export type AssetEmissionProofConfig = z.output<typeof assetEmissionProofs>[number];
 
 /** Declared-output commands which require the journal's moved tree. */
@@ -255,6 +258,7 @@ export const postJournalPreparers = z
     });
   });
 
+/** One declared-output command that runs against the journal's moved tree. */
 export type PostJournalPreparerConfig = z.output<typeof postJournalPreparers>[number];
 
 /** Configured post-journal generators invalidated by moved or rewritten paths. */
@@ -263,8 +267,10 @@ export function triggeredPostJournalPreparers(config: MonocarveConfig, changedPa
     (preparer) => preparer.triggers.length === 0 || changedPaths.some((path) => preparer.triggers.some((pattern) => new RegExp(pattern).test(path))),
   );
 }
+/** One path-migration artifact entry from `pathMigrations.artifacts`. */
 export type PathMigrationConfig = PathMigrationsConfig["artifacts"][number];
 
+/** Configured path migrations whose triggers match any of the moved paths. */
 export function triggeredPathMigrations(config: MonocarveConfig, movedPaths: readonly string[]): readonly PathMigrationConfig[] {
   return config.pathMigrations.artifacts.filter((artifact) =>
     artifact.triggers.length === 0 ? true : movedPaths.some((path) => artifact.triggers.some((pattern) => new RegExp(pattern).test(path))),
@@ -310,4 +316,5 @@ export const transaction = z.strictObject({
   gateRetries: z.number().int().min(0).max(3).default(0),
 });
 
+/** Transaction settings: simulation worktree root, node_modules strategy, cleanup, and gate retries. */
 export type TransactionConfig = z.output<typeof transaction>;

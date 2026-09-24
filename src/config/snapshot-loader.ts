@@ -1,12 +1,12 @@
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
-import { bunAdapter } from "../adapters/bun.ts";
-import { pnpmAdapter } from "../adapters/pnpm.ts";
 import { ConfigError } from "../errors.ts";
 import { byCodeUnit, hashBytes, type Sha256 } from "../util/hash.ts";
+import { isPathInside } from "../util/paths.ts";
 import { ensureScratchDir } from "../util/scratch-root.ts";
-import { collectLocalConfigDependencies } from "./input-inventory.ts";
+import { collectLocalConfigDependencies } from "./config-dependencies.ts";
+import { PACKAGE_MANAGER_FILES } from "./workspace-files.ts";
 
 export interface ConfigSnapshotFile {
   readonly path: string;
@@ -218,8 +218,9 @@ function configInputPaths(configPath: string): string[] {
   });
   // These adapter-owned names are resolver inputs even before config has told
   // us which package manager applies.
-  for (const name of ["package.json", bunAdapter.lockfileName, pnpmAdapter.lockfileName, bunAdapter.workspaceManifestName, pnpmAdapter.workspaceManifestName]) {
-    if (name && existsSync(join(root, name))) paths.add(join(root, name));
+  const { bun, pnpm } = PACKAGE_MANAGER_FILES;
+  for (const name of ["package.json", bun.lockfile, pnpm.lockfile, bun.workspaceManifest, pnpm.workspaceManifest]) {
+    if (existsSync(join(root, name))) paths.add(join(root, name));
   }
   for (const path of [...paths]) {
     let current = dirname(path);
@@ -236,20 +237,15 @@ function configInputPaths(configPath: string): string[] {
 
 function authorizedInput(workspace: string, path: string): boolean {
   const absolute = resolve(path);
-  if (within(workspace, absolute)) return within(workspace, realpathSync(absolute));
+  if (isPathInside(workspace, absolute)) return isPathInside(workspace, realpathSync(absolute));
   let current = workspace;
   while (true) {
     const installed = join(current, "node_modules");
-    if (within(installed, absolute)) return within(installed, realpathSync(absolute));
+    if (isPathInside(installed, absolute)) return isPathInside(installed, realpathSync(absolute));
     const parent = dirname(current);
     if (parent === current) return false;
     current = parent;
   }
-}
-
-function within(root: string, path: string): boolean {
-  const rel = relative(root, path);
-  return rel === "" || (rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel));
 }
 
 function copyInput(image: string, path: string): ConfigSnapshotFile {

@@ -5,7 +5,8 @@ import { checkImportExtensions, formatExtensionReport } from "../checks/import-e
 import { flagBool, flagString, type ParsedArgs } from "../cli/args.ts";
 import { UsageError } from "../errors.ts";
 import { validatePlan } from "../plan/validate.ts";
-import { assertPreparerManifest, type PreparerManifest } from "../preparer/index.ts";
+import { assertPreparerManifest } from "../preparer/core-validate.ts";
+import type { PreparerManifest } from "../preparer/manifest.ts";
 import { applyTransactionStatus, FORCE_CORRUPT_LOCK_FLAG, recoverApplyTransaction } from "../transaction/apply-state.ts";
 import { applyPlan, preflight } from "../transaction/apply.ts";
 import { auditPlanSync } from "../transaction/audit.ts";

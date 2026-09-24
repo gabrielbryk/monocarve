@@ -40,7 +40,7 @@
     "maxCognitive": 43,
     "maxCyclo": 26,
     "maxNest": 9,
-    "structuralScore": 143.3
+    "structuralScore": 143.2
   },
   "src/evacuation/assessment.ts": {
     "maxMethodLoc": 83
@@ -54,18 +54,18 @@
   "src/graph/syntax.ts": {
     "maxCognitive": 30,
     "maxCyclo": 24,
-    "structuralScore": 100.7
+    "structuralScore": 101.9
   },
   "src/plan/build-support.ts": {
     "maxCognitive": 41,
     "maxCyclo": 25,
-    "structuralScore": 123
+    "structuralScore": 123.2
   },
   "src/plan/build.ts": {
     "maxCognitive": 36,
     "maxCyclo": 20,
     "maxMethodLoc": 183,
-    "structuralScore": 119.8
+    "structuralScore": 119.9
   },
   "src/plan/context.ts": {
     "maxCognitive": 43,
@@ -161,7 +161,7 @@
     "maxCognitive": 32,
     "maxCyclo": 34,
     "maxMethodLoc": 261,
-    "structuralScore": 109.5
+    "structuralScore": 109.3
   },
   "src/prepare/generated-source-adoption.ts": {
     "maxCognitive": 30,

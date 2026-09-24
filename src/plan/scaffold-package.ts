@@ -11,8 +11,7 @@ import { renderTemplate } from "../util/template.ts";
 import { PlanningError } from "./context.ts";
 import type { PlanOperation } from "./manifest.ts";
 import { sourceExportsFromFile } from "./public-surface.ts";
-import { parseJsonFile, render, stringifyJson, templateVars, templatesFor, writeOperation } from "./scaffold-shared.ts";
-import { barrelSpecifier, type ScaffoldInput } from "./scaffold.ts";
+import { barrelSpecifier, parseJsonFile, render, stringifyJson, templateVars, templatesFor, writeOperation, type ScaffoldInput } from "./scaffold-shared.ts";
 import { packageModulePath } from "./target-layout.ts";
 
 /** Operations creating (or extending) the target package. */

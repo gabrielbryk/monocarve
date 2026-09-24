@@ -3,7 +3,7 @@
 import { LockfileError } from "./pnpm-error.ts";
 import type { ConsumerDependencySection } from "./types.ts";
 
-export interface ImporterEntry {
+interface ImporterEntry {
   readonly root: string;
   readonly start: number;
   /** One past the owned lines, including the separating blank line. */

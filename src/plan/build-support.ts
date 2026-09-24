@@ -12,7 +12,6 @@ import {
 } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import { generatedProvenance } from "../graph/workspace.ts";
-import { readUtf8Artifact, runPathMigrationCommand } from "../transaction/path-migrations.ts";
 import { resolveCommit, type ResolvedCommit } from "../util/git.ts";
 import { byCodeUnit, hashJson, hashText, type Sha256 } from "../util/hash.ts";
 import { renderTemplate } from "../util/template.ts";
@@ -28,6 +27,7 @@ import type {
   PlanOperation,
   RewritePathReferenceOperation,
 } from "./manifest.ts";
+import { readUtf8Artifact, runPathMigrationCommand } from "./path-migrations.ts";
 import { documentKindFor, rewritePathReferenceText, scanPathReferenceRewrites, type PathReferenceRewriteMatch } from "./path-reference-rewrites.ts";
 import { scanRuntimeModuleRegistry } from "./runtime-module-registries.ts";
 
@@ -285,7 +285,4 @@ export function derivePackageRoot(config: MonocarveConfig, graph: DependencyGrap
   if (existing) return existing;
   const bare = config.packageScope && packageName.startsWith(config.packageScope) ? packageName.slice(config.packageScope.length) : packageName;
   return `${config.packageRoots[0]}/${bare}`;
-}
-export function donorOwner(config: MonocarveConfig, application: string): string {
-  return applicationOwner(getApplication(config, application));
 }

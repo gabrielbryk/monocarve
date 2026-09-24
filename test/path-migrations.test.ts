@@ -14,11 +14,11 @@ import { parseConfig, type MonocarveUserConfig } from "../src/config.ts";
 import { pathMigrationOperations } from "../src/plan/build.ts";
 import { WorkspaceContext } from "../src/plan/context.ts";
 import type { ExtractionManifest, MigratePathKeysOperation, PlanOperation } from "../src/plan/manifest.ts";
+import { readUtf8Artifact, runPathMigrationCommand } from "../src/plan/path-migrations.ts";
 import { validatePlan } from "../src/plan/validate.ts";
 import { applyPlan } from "../src/transaction/apply.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
 import { executeJournal } from "../src/transaction/journal.ts";
-import { readUtf8Artifact, runPathMigrationCommand } from "../src/transaction/path-migrations.ts";
 import { hashText } from "../src/util/hash.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, read, write } from "./support/fixture-repo.ts";
 

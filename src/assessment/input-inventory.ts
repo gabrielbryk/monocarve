@@ -4,13 +4,13 @@ import { basename, dirname, isAbsolute, resolve } from "node:path";
 import type { ScanReport } from "../graph/build.ts";
 import { headCommit, statusEntries } from "../util/git.ts";
 import { byCodeUnit, hashJson, type Sha256 } from "../util/hash.ts";
+import { isPathInside } from "../util/paths.ts";
 import { discoverValidatedEvidenceRoots } from "./evidence-discovery.ts";
 import { addDirectoryAncestors, collectInputPaths, nearestInstalledManifest, packageRootFor } from "./input-inventory-collect.ts";
-import { compareDirectories, compareEntries, directoryMembership, inside, inventoryEntry, inventoryName } from "./input-inventory-paths.ts";
+import { compareDirectories, compareEntries, directoryMembership, inventoryEntry, inventoryName } from "./input-inventory-paths.ts";
 import { InputInventoryError, type CaptureInventoryOptions } from "./input-inventory-types.ts";
 
 export { canonicalInputPath } from "./input-inventory-paths.ts";
-export { collectLocalConfigDependencies } from "./input-inventory-collect.ts";
 export { InputInventoryError, type CaptureInventoryOptions } from "./input-inventory-types.ts";
 
 export type InventoryNamespace = "repository" | "installed" | "external";
@@ -59,7 +59,10 @@ export function captureInputInventory(options: CaptureInventoryOptions): Assessm
     ...options.config.firstPartyPackages.map((pkg) => resolve(rootDir, pkg.root)),
   ];
   const excluded = [
-    ...new Set([...(options.excludedRoots ?? []).map((path) => resolve(rootDir, path)), ...discoverValidatedEvidenceRoots(rootDir, analyticalRoots, inside)]),
+    ...new Set([
+      ...(options.excludedRoots ?? []).map((path) => resolve(rootDir, path)),
+      ...discoverValidatedEvidenceRoots(rootDir, analyticalRoots, isPathInside),
+    ]),
   ];
   const { paths, directoryRoots } = collectInputPaths(options, rootDir, excluded);
 
@@ -89,7 +92,7 @@ export function captureInputInventory(options: CaptureInventoryOptions): Assessm
   // files remain covered by the directory-membership records above.
   const inputKeys = new Set(completeEntries.map((entry) => `${entry.namespace}:${entry.path}`));
   const dirtyPaths = [...new Set(statusEntries(rootDir).flatMap((entry) => entry.paths))]
-    .filter((path) => !excluded.some((root) => inside(root, resolve(rootDir, path))))
+    .filter((path) => !excluded.some((root) => isPathInside(root, resolve(rootDir, path))))
     .filter((path) => {
       const named = inventoryName(rootDir, resolve(rootDir, path));
       return inputKeys.has(`${named.namespace}:${named.path}`);

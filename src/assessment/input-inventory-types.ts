@@ -1,16 +1,5 @@
 import type { LoadedConfig } from "../config.ts";
-import { MonocarveError } from "../errors.ts";
-
-export class InputInventoryError extends MonocarveError {
-  override readonly name = "InputInventoryError";
-  constructor(
-    readonly code: "ASSESSMENT_INPUT_DRIFT" | "ASSESSMENT_INPUT_UNBOUND",
-    message: string,
-    readonly paths: readonly string[],
-  ) {
-    super(message);
-  }
-}
+export { InputInventoryError } from "../errors.ts";
 
 export interface CaptureInventoryOptions extends Pick<LoadedConfig, "config" | "configPath" | "rootDir"> {
   /** Validated operational paths excluded only after overlap checks. */

@@ -3,15 +3,14 @@ import { GENERATOR } from "../branding.ts";
 import { configDigest, assertPreparationPolicyMatches, type MonocarveConfig } from "../config.ts";
 import { PlanningError } from "../plan/context.ts";
 import type { SeamPlan } from "../seams/types.ts";
-import { git, repositoryPrefix, resolveCommit, showBaseline } from "../util/git.ts";
+import { resolveCommit, showBaseline } from "../util/git.ts";
 import { byCodeUnit, hashJson, hashText, MISSING, type Sha256 } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";
+import { baselineFileMode, type PreparationManifestRendering } from "./build-shared.ts";
 import { preparationCompilerOptions } from "./compiler-policy.ts";
 import type {
-  PreparationCommitSpec,
   PreparationDeclarationSelector,
   PreparationDeclarationGroupSelector,
-  PreparationGates,
   PreparationManifest,
   PreparationInlineImportTypeProof,
   PreparationTargetImportProof,
@@ -20,14 +19,7 @@ import { createPreparationManifest, assertPreparationManifestValid } from "./man
 import { renderTypeOnlyExtraction } from "./replay.ts";
 import { selectTypeOnlyDeclarations } from "./selectors.ts";
 
-export interface PreparationManifestRendering {
-  /** Fully rendered repository gates. The compiler never invents commands. */
-  readonly gates: PreparationGates;
-  /** Fully rendered commit metadata. `{planId}` is refused to prevent an ID cycle. */
-  readonly commit: PreparationCommitSpec;
-}
-
-export interface RelativeTypeImportRewrite {
+interface RelativeTypeImportRewrite {
   readonly targetSpecifier: string;
   readonly resolvedSourcePath: string;
 }
@@ -327,18 +319,3 @@ export function compilePreparationManifest(input: CompilePreparationManifestInpu
 }
 
 /** Git tree modes carry type bits; preparation journals own only POSIX permissions. */
-export function baselineFileMode(rootDir: string, commit: string, path: string): number {
-  const output = git({ cwd: rootDir }, "ls-tree", commit, "--", `${repositoryPrefix(rootDir)}${path}`);
-  const match = /^(\d{6})\s+\w+\s+[0-9a-f]+\t/.exec(output);
-  if (!match?.[1]) throw new PlanningError(`could not read baseline file mode for ${path}`);
-  const treeMode = Number.parseInt(match[1], 8);
-  if (!Number.isSafeInteger(treeMode) || (treeMode & 0o170000) !== 0o100000) {
-    throw new PlanningError(`preparation donor ${path} is not a regular baseline file`);
-  }
-  return treeMode & 0o777;
-}
-
-// `compileBoundaryPreparationManifest` and its private helpers live in their
-// own module purely to keep this file under the line-count gate; re-exported
-// here so every existing importer keeps working unchanged.
-export { compileBoundaryPreparationManifest, type CompileBoundaryPreparationManifestInput } from "./build-boundary.ts";

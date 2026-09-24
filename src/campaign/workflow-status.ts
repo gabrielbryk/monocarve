@@ -1,7 +1,7 @@
 import type { CampaignLedger, CampaignStatus } from "./ledger-types.ts";
 import { assertCampaignLedgerValid } from "./ledger-validation.ts";
 
-export type CampaignPhase =
+type CampaignPhase =
   | "needs-preparation-review"
   | "needs-preparation-application"
   | "needs-paired-extraction-review"

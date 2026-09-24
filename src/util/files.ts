@@ -3,11 +3,11 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { DEFAULT_SOURCE_EXTENSIONS } from "../config/source-policy.ts";
 import { hashBytes, MISSING, type FileState } from "./hash.ts";
+import { DEFAULT_SOURCE_EXTENSIONS } from "./source-policy.ts";
 
 /** Extensions the engine treats as TypeScript/JavaScript modules. */
-export const SOURCE_EXTENSIONS = DEFAULT_SOURCE_EXTENSIONS;
+const SOURCE_EXTENSIONS = DEFAULT_SOURCE_EXTENSIONS;
 
 /** True for anything the module graph can contain as a node. */
 export function isSourceModulePath(path: string, extensions: readonly string[] = SOURCE_EXTENSIONS): boolean {

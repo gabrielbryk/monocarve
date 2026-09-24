@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 
 import { buildDependencyGraph, type ScanReport } from "../src/graph/build.ts";
-import { compileBoundaryPreparationManifest } from "../src/prepare/build.ts";
+import { compileBoundaryPreparationManifest } from "../src/prepare/build-boundary.ts";
 import { assertPreparationManifestValid, createPreparationManifest } from "../src/prepare/manifest.ts";
 import { simulatePreparation } from "../src/prepare/simulate.ts";
 import { resolveCommit } from "../src/util/git.ts";

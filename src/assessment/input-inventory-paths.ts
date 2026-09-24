@@ -2,6 +2,7 @@ import { lstatSync, readFileSync, readlinkSync, readdirSync, realpathSync, type 
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 
 import { byCodeUnit, hashBytes } from "../util/hash.ts";
+import { isPathInside } from "../util/paths.ts";
 import type { DirectoryMembership, InventoryEntry, InventoryNamespace } from "./input-inventory.ts";
 
 export function inventoryEntry(rootDir: string, path: string): InventoryEntry {
@@ -21,9 +22,9 @@ export function inventoryEntry(rootDir: string, path: string): InventoryEntry {
 export function directoryMembership(rootDir: string, path: string, excluded: readonly string[]): DirectoryMembership {
   const named = inventoryName(rootDir, path);
   const stat = lstatSync(path, { throwIfNoEntry: false });
-  if (!stat?.isDirectory() || excluded.some((root) => inside(root, path))) return { ...named, entries: [] };
+  if (!stat?.isDirectory() || excluded.some((root) => isPathInside(root, path))) return { ...named, entries: [] };
   const entries = readdirSync(path, { withFileTypes: true })
-    .filter((entry) => entry.name !== ".git" && !excluded.some((root) => inside(root, resolve(path, entry.name))))
+    .filter((entry) => entry.name !== ".git" && !excluded.some((root) => isPathInside(root, resolve(path, entry.name))))
     .map((entry) => ({ name: entry.name, kind: directoryEntryKind(entry) }))
     .toSorted((a, b) => byCodeUnit(a.name, b.name));
   return { ...named, entries };
@@ -95,9 +96,4 @@ export function compareEntries(left: InventoryEntry, right: InventoryEntry): num
 
 export function compareDirectories(left: DirectoryMembership, right: DirectoryMembership): number {
   return byCodeUnit(left.namespace, right.namespace) || byCodeUnit(left.path, right.path);
-}
-
-export function inside(root: string, path: string): boolean {
-  const rel = relative(resolve(root), resolve(path));
-  return rel === "" || (rel !== ".." && !rel.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) && !isAbsolute(rel));
 }

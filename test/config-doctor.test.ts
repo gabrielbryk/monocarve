@@ -63,13 +63,22 @@ describe("config doctor", () => {
     mkdirSync(join(root, "apps/consumer/src"), { recursive: true });
     writeFileSync(join(root, "apps/consumer/tsconfig.json"), "{}\n");
     fixtureGit(root, "init", "-q");
-    const config = parseConfig({
+    const unsupported = {
       applications: [{ name: "consumer", sourceRoot: "apps/consumer/src", tsconfig: "apps/consumer/tsconfig.json" }],
       packageRoots: ["packages"],
       packageManager: "npm",
       taskRunner: "nx",
       scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
-    });
+    };
+    // Validation refuses unported adapters, so a config file can never select
+    // one. The doctor still reports the registry seam honestly for a config
+    // object built in code, which is the only way to reach it.
+    expect(() => parseConfig(unsupported)).toThrow("packageManager: npm is not supported yet; supported package managers: pnpm, bun");
+    const config = {
+      ...parseConfig({ ...unsupported, packageManager: "pnpm", taskRunner: "none" }),
+      packageManager: "npm" as const,
+      taskRunner: "nx" as const,
+    };
     const report = await inspectConfig({ config, configPath: join(root, "config.ts"), rootDir: root });
 
     expect(report.adapters.packageManager).toMatchObject({ configured: "npm", status: "not-yet-ported" });
@@ -80,7 +89,6 @@ describe("config doctor", () => {
       applications: [{ name: "consumer", sourceRoot: "apps/consumer/src", tsconfig: "apps/consumer/tsconfig.json" }],
       packageRoots: ["packages"],
       packageManager: "bun",
-      taskRunner: "nx",
       scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
     };
     const ported = await inspectConfig({ config: parseConfig(portedSource), configPath: join(root, "config.ts"), rootDir: root });

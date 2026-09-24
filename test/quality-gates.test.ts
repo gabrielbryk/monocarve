@@ -45,10 +45,10 @@ test("runtime branding literals remain confined to branding.ts", () => {
   expect(offenders).toEqual([]);
 });
 
-test("source extension lists remain centralized in config policy", () => {
+test("source extension lists remain centralized in the source policy module", () => {
   const src = join(import.meta.dir, "../src");
   const offenders = walk(src)
-    .filter((path) => !path.endsWith("/config/source-policy.ts"))
+    .filter((path) => !path.endsWith("/util/source-policy.ts"))
     .filter((path) => /const\s+[A-Z_]*(?:EXTENSIONS|SUFFIXES)\s*=\s*\[/u.test(readFileSync(path, "utf8")));
   expect(offenders).toEqual([]);
 });

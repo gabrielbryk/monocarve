@@ -208,6 +208,6 @@ function assertRecord(value: unknown, label: string): asserts value is Record<st
   }
 }
 
-export function sameGraph(left: GraphMetricSnapshot, right: GraphMetricSnapshot): boolean {
+function sameGraph(left: GraphMetricSnapshot, right: GraphMetricSnapshot): boolean {
   return left.digest === right.digest && stableStringify(left.metrics) === stableStringify(right.metrics);
 }

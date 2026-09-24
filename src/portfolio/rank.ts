@@ -218,9 +218,3 @@ export function pickNext(portfolio: Portfolio, alreadyExtracted: readonly string
       .toSorted((left, right) => right.score - left.score || left.id.localeCompare(right.id))[0] ?? null
   );
 }
-
-export function candidateById(portfolio: Portfolio, id: string): PortfolioCandidate {
-  const candidate = portfolio.candidates.find((entry) => entry.id === id);
-  if (!candidate) throw new Error(`candidate ${id} was not produced by the portfolio`);
-  return candidate;
-}

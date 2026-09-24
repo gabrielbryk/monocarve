@@ -15,7 +15,7 @@ import { assembleReport, externalConsumerProof, type AuditProofs } from "./audit
 import { entrypointSurfaceFailures, publicSubpathFailures } from "./audit-target-surface.ts";
 import { proof, type AuditOptions, type AuditReport } from "./audit-types.ts";
 
-export type { AuditOptions, AuditReport, GraphEvidence, ProofResult } from "./audit-types.ts";
+export type { AuditOptions, AuditReport } from "./audit-types.ts";
 
 export async function auditPlan(options: AuditOptions): Promise<AuditReport> {
   return auditPlanSync(options);

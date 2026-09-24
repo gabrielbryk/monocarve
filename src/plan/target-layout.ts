@@ -34,7 +34,7 @@ import { PlanningError } from "./context.ts";
  * are written against it. Named once so a subpath is validated against the
  * same string the target paths are built from.
  */
-export const PACKAGE_SOURCE_DIR = "src";
+const PACKAGE_SOURCE_DIR = "src";
 
 /** Minimal view of `WorkspaceContext` this module needs, so validation can share it. */
 export interface TargetRelativeResolver {

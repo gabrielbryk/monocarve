@@ -555,19 +555,19 @@ test/
 
 Honest accounting:
 
-| area                                                                                         | state                              |
-| -------------------------------------------------------------------------------------------- | ---------------------------------- |
-| config schema, loader, helpers                                                               | implemented                        |
-| scan (dependency-cruiser + AST union), components, layers report                             | implemented                        |
-| portfolio: closures, containment, assets, rewritable escapes, ranking                        | implemented                        |
-| plan: manifest compilation, scaffolding, consumer + lockfile wiring                          | implemented                        |
-| plan validation (structure, coverage, semantics, ordering, boundary)                         | implemented                        |
-| transaction: journal, disposable-worktree simulation, apply, rollback                        | implemented                        |
-| audit: byte fidelity, consumers, boundary, compile proof, codemod replay, entrypoint closure | implemented                        |
-| pnpm package-manager adapter (lockfile importers); moon and `none` task-runner adapters      | implemented                        |
-| bun package-manager adapter (composite `bun.lock` importers, `workspaces` membership)        | implemented                        |
-| `check import-extensions`                                                                    | implemented                        |
-| nx, turbo, npm, yarn adapters                                                                | **not started** (interfaces exist) |
+| area                                                                                         | state                                           |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| config schema, loader, helpers                                                               | implemented                                     |
+| scan (dependency-cruiser + AST union), components, layers report                             | implemented                                     |
+| portfolio: closures, containment, assets, rewritable escapes, ranking                        | implemented                                     |
+| plan: manifest compilation, scaffolding, consumer + lockfile wiring                          | implemented                                     |
+| plan validation (structure, coverage, semantics, ordering, boundary)                         | implemented                                     |
+| transaction: journal, disposable-worktree simulation, apply, rollback                        | implemented                                     |
+| audit: byte fidelity, consumers, boundary, compile proof, codemod replay, entrypoint closure | implemented                                     |
+| pnpm package-manager adapter (lockfile importers); moon and `none` task-runner adapters      | implemented                                     |
+| bun package-manager adapter (composite `bun.lock` importers, `workspaces` membership)        | implemented                                     |
+| `check import-extensions`                                                                    | implemented                                     |
+| nx, turbo, npm, yarn adapters                                                                | **not started** (rejected by config validation) |
 
 An unimplemented adapter exits 3 with the seam it hit. Nothing pretends to
 succeed.

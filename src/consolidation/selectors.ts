@@ -13,7 +13,7 @@ import type { DependencyGraph } from "../graph/model.ts";
 import { byCodeUnit } from "../util/hash.ts";
 
 /** A donor or target package is not a workspace package. */
-export class ConsolidationSelectorError extends MonocarveError {
+class ConsolidationSelectorError extends MonocarveError {
   override readonly name = "ConsolidationSelectorError";
 }
 

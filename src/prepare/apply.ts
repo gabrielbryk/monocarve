@@ -41,7 +41,7 @@ export interface ApplyPreparationOptions {
   readonly testHooks?: PreparationApplyTestHooks;
 }
 
-export interface PreparationApplyTestHooks {
+interface PreparationApplyTestHooks {
   readonly beforeJournalOperation?: (index: number) => void;
   readonly beforeCommit?: () => void;
   /** Runs only after the exact preparation scope has entered the index. */

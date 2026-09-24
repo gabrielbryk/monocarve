@@ -1,8 +1,8 @@
 import { byCodeUnit } from "../util/hash.ts";
 
-export type AssessmentDiagnosticSeverity = "info" | "warning" | "error";
+type AssessmentDiagnosticSeverity = "info" | "warning" | "error";
 
-export type AssessmentDiagnosticCode =
+type AssessmentDiagnosticCode =
   | "WORKSPACE_PATTERN_UNMATCHED"
   | "WORKSPACE_GLOB_UNSUPPORTED"
   | "WORKSPACE_PATH_UNSAFE"

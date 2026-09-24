@@ -17,13 +17,13 @@ export interface CandidateQuery {
   readonly eligibility?: CandidateEligibility;
 }
 
-export interface CandidateBlockerDetail {
+interface CandidateBlockerDetail {
   readonly code: RejectionCode;
   readonly detail: string;
   readonly edges: readonly string[];
 }
 
-export interface CandidateTargetSuggestion {
+interface CandidateTargetSuggestion {
   readonly packageName: string;
   readonly packageRoot: string;
 }

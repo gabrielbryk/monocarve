@@ -33,7 +33,7 @@ import {
 import { analyzeCapabilityPartitions, analyzeTypeScriptSource, analyzeWorkspaceSymbols } from "../symbols/index.ts";
 import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
 import { isDeclarationBatchArgs, runDeclarationBatch } from "./declaration-batch.ts";
-import { loadPreparationManifest } from "./preparation.ts";
+import { loadPreparationManifest } from "./preparation-io.ts";
 import { graphDigest, load, loadGraph, print, printReport, suppliedReports, systemReason, writeOutput, type LoadedGraph } from "./shared.ts";
 import type { CommandSpec } from "./types.ts";
 

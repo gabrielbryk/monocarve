@@ -24,6 +24,28 @@ const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = resolve(here, "../fixtures/basic-monorepo");
 
 describe("config loading", () => {
+  test("config validation rejects adapters that are not ported, before any registry lookup", () => {
+    const base = {
+      applications: [{ name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json" }],
+      packageRoots: ["libs"],
+      scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
+    };
+    for (const packageManager of ["npm", "yarn"]) {
+      expect(() => parseConfig({ ...base, packageManager }, "monocarve.config.json")).toThrow(
+        `packageManager: ${packageManager} is not supported yet; supported package managers: pnpm, bun`,
+      );
+    }
+    for (const taskRunner of ["nx", "turbo"]) {
+      expect(() => parseConfig({ ...base, taskRunner }, "monocarve.config.json")).toThrow(
+        `taskRunner: ${taskRunner} is not supported yet; supported task runners: moon, none`,
+      );
+    }
+    expect(parseConfig({ ...base, packageManager: "bun", taskRunner: "moon" }, "monocarve.config.json")).toMatchObject({
+      packageManager: "bun",
+      taskRunner: "moon",
+    });
+  });
+
   test("discovers the config by walking up from a nested source file", () => {
     expect(findConfigFile(join(FIXTURE, "apps/web/src/widgets"))).toBe(join(FIXTURE, `${TOOL_NAME}.config.json`));
     expect(CONFIG_FILENAMES).toContain(`${TOOL_NAME}.config.json`);

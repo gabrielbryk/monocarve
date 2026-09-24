@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import type { PackageManagerAdapter } from "../adapters/types.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
 
-export interface ProjectedImporterDifference {
+interface ProjectedImporterDifference {
   readonly packageRoot: string;
   readonly message: string;
 }

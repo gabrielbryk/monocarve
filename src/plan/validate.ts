@@ -14,7 +14,6 @@ import {
   PREVIOUS_PLAN_SCHEMA_VERSION,
   PLAN_SCHEMA_VERSION,
   isSupportedExtractionManifestVersion,
-  operationPaths,
   type ExtractionManifest,
 } from "./manifest.ts";
 import { validateAssessment } from "./validation/assessment.ts";
@@ -28,7 +27,7 @@ import { Issues, validationResult, type ValidatePlanOptions, type ValidationResu
 import { validateSource } from "./validation/source.ts";
 import { validateTarget } from "./validation/target.ts";
 
-export type { ValidatePlanOptions, ValidationIssue, ValidationResult, ValidationSeverity } from "./validation/shared.ts";
+export type { ValidatePlanOptions, ValidationResult } from "./validation/shared.ts";
 
 const COMMIT_HASH = /^[0-9a-f]{7,64}$/;
 
@@ -95,4 +94,3 @@ export function assertPlanValid(manifest: ExtractionManifest, options: ValidateP
 }
 
 /** Every path an operation touches — re-exported for callers of the validator. */
-export { operationPaths };

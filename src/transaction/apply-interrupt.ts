@@ -16,7 +16,7 @@ import { errorText } from "./apply-owner.ts";
 import type { ApplyTransactionHandle } from "./apply-state.ts";
 import type { RollbackPoint } from "./rollback.ts";
 
-export type GuardedSignal = "SIGINT" | "SIGTERM";
+type GuardedSignal = "SIGINT" | "SIGTERM";
 
 const SIGNAL_NUMBERS: Readonly<Record<GuardedSignal, number>> = { SIGINT: 2, SIGTERM: 15 };
 const GUARDED_SIGNALS: readonly GuardedSignal[] = ["SIGINT", "SIGTERM"];

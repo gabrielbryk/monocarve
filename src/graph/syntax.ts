@@ -91,15 +91,6 @@ function exportsAnything(parsed: ts.SourceFile | undefined): boolean {
   );
 }
 
-/** Whether a file exports anything at all. Cheap enough to ask per graph node. */
-export function fileExportsAnything(absolute: string, displayPath = absolute): boolean {
-  const cached = exportProbeCache.get(absolute);
-  if (cached !== undefined) return cached;
-  const exported = exportsAnything(parse(absolute, displayPath));
-  exportProbeCache.set(absolute, exported);
-  return exported;
-}
-
 /**
  * Both facts from a single parse. The graph build asks for both of every node,
  * and parsing each file twice is the difference between a scan that is pleasant

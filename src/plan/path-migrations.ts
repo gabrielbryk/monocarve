@@ -3,10 +3,10 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 
 import { PATH_MIGRATION_TMP_PREFIX } from "../branding.ts";
-import type { MigratePathKeysOperation, PathMove } from "../plan/manifest.ts";
 import { scrubbedGitEnv } from "../util/git.ts";
 import { stableStringify } from "../util/hash.ts";
 import { ensureScratchDir } from "../util/scratch-root.ts";
+import type { MigratePathKeysOperation, PathMove } from "./manifest.ts";
 
 const OUTPUT_TAIL = 4000;
 

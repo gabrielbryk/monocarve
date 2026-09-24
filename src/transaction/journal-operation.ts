@@ -8,6 +8,7 @@ import type { MonocarveConfig } from "../config.ts";
 import { HashMismatchError } from "../errors.ts";
 import { scanEmittedModuleSpecifiers } from "../plan/emitted-module-specifiers.ts";
 import { isAnyMove, type PathMove, type PlanOperation } from "../plan/manifest.ts";
+import { readUtf8Artifact, runPathMigrationCommand } from "../plan/path-migrations.ts";
 import { rewritePathReferenceText, scanPathReferenceRewrites, type PathReferenceRewriteMatch } from "../plan/path-reference-rewrites.ts";
 import { normalizeToken } from "../plan/path-tokens.ts";
 import { scanRuntimeModuleRegistry } from "../plan/runtime-module-registries.ts";
@@ -15,7 +16,6 @@ import { rewriteStaticFsReference } from "../plan/static-fs-references.ts";
 import { git } from "../util/git.ts";
 import { hashText } from "../util/hash.ts";
 import { JournalError } from "./journal-error.ts";
-import { readUtf8Artifact, runPathMigrationCommand } from "./path-migrations.ts";
 
 export function applyOperation(
   config: MonocarveConfig,

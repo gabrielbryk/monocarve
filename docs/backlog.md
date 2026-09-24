@@ -26,4 +26,6 @@ sandbox equivalent to `bwrap` there.
 ## Adapters
 
 The npm and yarn package-manager adapters and the nx and turbo task-runner
-adapters refuse with `not yet ported`. See the README's Status table.
+adapters are not implemented; config validation rejects those values (the
+registry keeps an unreachable `not yet ported` seam for them). See the README's
+Status table.
