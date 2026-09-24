@@ -29,6 +29,7 @@ const WORKER = [
 
 const SANDBOX_TMP = ".monocarve-config-tmp";
 const UNFINISHED = " <unfinished ...>";
+const SANDBOX_PRIVATE_ROOTS = ["/proc", "/dev", "/sys", `/${SANDBOX_TMP}`] as const;
 
 type RuntimeLibrary = { readonly source: string; readonly target: string };
 
@@ -160,7 +161,9 @@ function assertNoFailedConfigReads(trace: string, stderr: string): void {
   const lines = joinedTraceLines(output);
   const start = lines.findIndex((line) => line.includes("ASSESSMENT_CONFIG_EXEC_START"));
   if (start < 0) throw new ConfigError(`ASSESSMENT_CONFIG_UNBOUND: config execution trace is incomplete${stderr ? `: ${stderr}` : ""}`);
-  if (lines.slice(start).some(isFailedFileAccess)) throw new ConfigError("ASSESSMENT_CONFIG_UNBOUND: config attempted a read outside captured inputs");
+  const failed = lines.slice(start).find(isFailedFileAccess);
+  if (failed !== undefined)
+    throw new ConfigError(`ASSESSMENT_CONFIG_UNBOUND: config attempted a read outside captured inputs: ${failed.replace(/^\d+\s+/u, "")}`);
 }
 
 /**
@@ -189,11 +192,18 @@ function joinedTraceLines(output: string): string[] {
   return lines;
 }
 
-/** Any traced file-class call that failed, except the write-only opens Bun's runtime probes. */
+/**
+ * Any traced file-class call that failed, except write-only opens and probes of
+ * sandbox-private runtime paths. `/proc` and `/dev` are the sandbox's own, `/sys`
+ * is never mounted, and the scratch directory starts empty, so a failure there
+ * cannot reveal a host or workspace file (Bun probes NUMA topology under `/sys`).
+ */
 function isFailedFileAccess(line: string): boolean {
   const call = /^\d+\s+(\w+)\(/u.exec(line)?.[1];
   if (call === undefined || call === "write") return false;
   if (/\bO_WRONLY\b/u.test(line)) return false;
+  const path = /"([^"]*)"/u.exec(line)?.[1];
+  if (path !== undefined && SANDBOX_PRIVATE_ROOTS.some((root) => path === root || path.startsWith(`${root}/`))) return false;
   return /= -1 (?:ENOENT|EACCES|EPERM|ENOTDIR|ELOOP|EROFS|ENAMETOOLONG)\b/u.test(line);
 }
 
