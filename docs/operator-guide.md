@@ -752,13 +752,17 @@ changed plan or to ignore preflight failures.
 A committing apply also holds a Git-common-dir ownership lock, records its
 durable phase, and writes a rollback checkpoint before its first mutation.
 `SIGINT`/`SIGTERM` roll back in-process, release the lock, and exit 130/143.
+An apply that stops without a verified rollback keeps its lock, state, and
+checkpoint, and every later apply refuses until `apply-recover` runs.
 After `SIGKILL`, a lost terminal, or a shell timeout, run `apply-status`; once
 the owner is provably stopped, run `apply-recover --plan <path>`. For an owner
 stopped mid-journal (phase `applying`) it restores HEAD, the index, and every
 journal path from the checkpoint and verifies them, releasing nothing if that
 verification fails; otherwise it changes no Git state. Either way it prints the
 exact apply argv to run next, adding `--resume` only at the move-commit
-boundary. An unparseable lock needs `--force-corrupt-lock`, and only after you
+boundary. It refuses to restore over paths changed or staged after the
+interruption and lists them; `--discard-changes` overwrites them deliberately.
+An unparseable lock needs `--force-corrupt-lock`, and only after you
 have confirmed no apply is running. Never reset the branch while the owner is
 alive. The full state machine is in
 [Concepts](concepts.md#apply-checkpoint-and-recovery), and every recovery

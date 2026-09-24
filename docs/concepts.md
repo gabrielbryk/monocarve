@@ -300,9 +300,27 @@ target of every snapshotted path.
 - **`SIGINT` or `SIGTERM`.** During the mutating window, the handler restores
   the rollback point, releases the lock, and exits with 130 or 143. The
   journal yields after each operation so the signal is handled between
-  operations. Outside that window the handler only releases the lock. If the
-  in-process restore fails, the state is kept marked `applying` so that
-  `apply-recover` can retry it.
+  operations. Before that window (phase `simulating`) the handler only
+  releases the lock. If the in-process restore fails, the lock, state, and
+  checkpoint are all kept, with the state marked `applying` and `released`, so
+  that `apply-recover` can retry it.
+- **Unrecovered transactions block new applies.** An apply that stops without
+  completing — a failed in-process restore, a rollback that left residue, or an
+  interrupt past the mutating window — never releases its lock. A later
+  `apply --commit` (with or without `--resume`) refuses instead of overwriting
+  the state and checkpoint, and so does any apply that finds a state or
+  checkpoint file without a lock. `apply-recover` is the only way forward. A
+  `released` owner has declared it will not touch the checkout again, so
+  recovery does not wait for its process to exit.
+- **Changes made after the interruption.** Before restoring, `apply-recover`
+  compares every checkpointed path, and every index entry that differs from
+  the pre-apply index, with the states the transaction can explain: the
+  pre-apply bytes, each operation's declared result, declared generated and
+  preparer outputs, and the states the apply recorded in the checkpoint after
+  its journal and after regeneration. Anything else, including staged paths
+  outside the plan, is a post-interruption edit, and the restore is refused
+  with the list of paths. `--discard-changes` restores over them anyway and
+  reports what it discarded.
 - **`SIGKILL`, a lost terminal, or a crash.** Nothing runs in-process, so the
   lock and checkpoint remain. `apply-status` is read-only and reports the plan,
   the phase, the owner process, and the recovery command. `apply-recover --plan <path>` refuses while the owner is alive or cannot be proven stopped.

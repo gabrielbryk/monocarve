@@ -151,3 +151,25 @@ describe("evidence lock without procfs", () => {
     expect(readFileSync(join(paths.lock, "owner.json"), "utf8")).toBe(owner);
   });
 });
+
+describe("transaction file temporaries", () => {
+  test("a stale temporary from a reused PID cannot block a write, and a dead writer's temporaries are removed", () => {
+    const root = repo();
+    const gitDir = join(root, ".git");
+    const reusedPid = join(gitDir, `${APPLY_STATE_FILENAME}.${process.pid}.tmp`);
+    const deadState = join(gitDir, `${APPLY_STATE_FILENAME}.2000000000.tmp`);
+    const deadCheckpoint = join(gitDir, "monocarve-apply-checkpoint.json.2000000000.0f3c.tmp");
+    for (const path of [reusedPid, deadState, deadCheckpoint]) writeFileSync(path, "stale");
+
+    const active = beginApplyTransaction(root, manifest(root), ".plans/p-test.json");
+    active.update("applying");
+    expect(applyTransactionStatus(root)).toMatchObject({ state: { phase: "applying" } });
+    expect(existsSync(deadState)).toBeFalse();
+    expect(existsSync(deadCheckpoint)).toBeFalse();
+    // Indistinguishable from this process's own in-flight write, so it is kept; unique names make it harmless.
+    expect(existsSync(reusedPid)).toBeTrue();
+    active.complete();
+    active.release();
+    expect(applyTransactionStatus(root)).toEqual({ active: false, ownerAlive: false });
+  });
+});

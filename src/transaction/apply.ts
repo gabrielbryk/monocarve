@@ -34,9 +34,13 @@ export async function applyPlan(options: ApplyOptions): Promise<ApplyResult> {
     return result;
   } catch (error) {
     if (!(error instanceof ApplyError) || error.residue.length === 0) transaction.complete();
-    // Rollback left residue: keep the state and durable checkpoint, marked as an
-    // interrupted journal, so apply-recover can retry the verified restore.
-    else transaction.update("applying");
+    else {
+      // Rollback left residue: keep the lock, state, and durable checkpoint,
+      // marked as an interrupted journal, so apply-recover — and nothing
+      // else, not even a retried apply — can retry the verified restore.
+      transaction.update("applying");
+      error.message = `${error.message}; transaction kept for recovery: run ${TOOL_NAME} apply-recover --plan ${JSON.stringify(options.manifestPath)}`;
+    }
     throw error;
   } finally {
     interrupts.dispose();
@@ -50,13 +54,11 @@ interface CommittingTransaction {
 }
 
 async function applyWithoutTransaction(options: ApplyOptions, committing?: CommittingTransaction): Promise<ApplyResult> {
-  const transaction = committing?.handle;
   assertPlanValid(options.manifest, { config: options.config, rootDir: options.rootDir });
   const state = verifyApplyStart(options);
   const simulated = await simulateBeforeApply(options);
   if (simulated !== undefined) return simulated;
   if (!options.commit) return { ok: true, planId: options.manifest.planId, rolledBack: false };
-  transaction?.update("applying");
   return applyCommittedPlan(options, state, committing);
 }
 
@@ -123,8 +125,12 @@ async function applyCommittedPlan(options: ApplyOptions, state: ApplyState, comm
     ...(indexTree === null ? {} : { indexTree }),
   };
   // Durable before the first mutation: a killed process leaves apply-recover
-  // everything the in-memory rollback below would have used.
+  // everything the in-memory rollback below would have used. Checkpoint,
+  // phase, and arm happen without yielding, so an interrupt is handled either
+  // before any of them (phase simulating: nothing mutated, lock released) or
+  // after all three (armed: the in-memory restore runs).
   transaction?.checkpoint(recoveryPoint);
+  transaction?.update("applying");
   committing?.interrupts.arm(recoveryPoint);
   try {
     await executeJournal({
@@ -134,10 +140,14 @@ async function applyCommittedPlan(options: ApplyOptions, state: ApplyState, comm
       useGitMv: true,
       ...(committing === undefined ? {} : { afterOperation: (index: number) => journalBoundary(options, index) }),
     });
+    // Record what the journal and, below, regeneration produced, so recovery
+    // can tell them from edits made after an interruption.
+    transaction?.observe();
     const dependencyRefresh = refreshCommittedDependencies(config, rootDir);
     if (config.transaction.nodeModules === "symlink") linkPlannedPackage(rootDir, manifest);
     const regeneration = regenerateArtifacts({ config, treeRoot: rootDir, manifest });
     if (!regeneration.ok) throw new ApplyError(regeneration.failure ?? "regeneration failed");
+    transaction?.observe();
     const commits = commitAppliedPlan(rootDir, manifest, state, (commit) => transaction?.update("move-committed", commit));
     if (commits.wiringCommit !== undefined) transaction?.update("wiring-committed");
     options.testHooks?.beforeRepositoryPostconditions?.();
