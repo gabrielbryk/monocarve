@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing (OIDC) and provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Require npm with trusted publishing support
+        run: npm install -g npm@^11.5.1
+      - name: Tag, package.json, and TOOL_VERSION must agree
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          tool="$(sed -n 's/^export const TOOL_VERSION = "\(.*\)" as const;$/\1/p' src/branding.ts)"
+          echo "tag=$tag package.json=$pkg TOOL_VERSION=$tool"
+          test "$tag" = "$pkg" && test "$pkg" = "$tool"
+      - name: Install assessment sandbox tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap strace
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          bwrap --unshare-all --ro-bind / / true
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+      - run: bun run build:bundle
+      - run: bun run verify-package
+      - run: npm publish --provenance --access public
