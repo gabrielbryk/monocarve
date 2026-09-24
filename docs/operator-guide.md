@@ -739,9 +739,20 @@ changed plan or to ignore preflight failures.
 
 A committing apply also holds a Git-common-dir ownership lock and records its
 durable phase. After an interrupted client or shell timeout, run `apply-status`.
-If the owner is stopped, run `apply-recover --plan <path>`; recovery changes no
-Git state and prints the exact normal apply argv, adding `--resume` only at the
-recorded move-commit boundary. Never reset the branch while the owner is alive.
+If the owner is stopped, run `apply-recover --plan <path>`. An owner stopped
+mid-journal (phase `applying`, e.g. after `SIGKILL`) is first rolled back from
+the durable checkpoint written before the first mutation: HEAD, the index, and
+every journal path are restored and verified, and nothing is released if that
+verification fails. Otherwise recovery changes no Git state. Either way it
+prints the exact normal apply argv, adding `--resume` only at the recorded
+move-commit boundary. An owner is "stopped" only when its PID is gone or now
+belongs to a process with a different start time; an owner whose liveness cannot
+be determined is treated as running. `SIGINT`/`SIGTERM` during a committing
+apply roll back in-process, release the lock, and exit 130/143. If the lock
+itself is unparseable, `apply-status` and `apply-recover` say so; after
+confirming no apply is running, `apply-recover --plan <path> --force-corrupt-lock`
+moves the unreadable files aside and restores this plan's checkpoint if one
+exists. Never reset the branch while the owner is alive.
 
 When in doubt, stop after a refusal or failed simulation, inspect `git status`
 and the reported plan/worktree, correct the cause, and repeat the safe loop from

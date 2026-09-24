@@ -6,7 +6,7 @@ import { flagBool, flagString, type ParsedArgs } from "../cli/args.ts";
 import { UsageError } from "../errors.ts";
 import { validatePlan } from "../plan/validate.ts";
 import { assertPreparerManifest, type PreparerManifest } from "../preparer/index.ts";
-import { applyTransactionStatus, recoverApplyTransaction } from "../transaction/apply-state.ts";
+import { applyTransactionStatus, FORCE_CORRUPT_LOCK_FLAG, recoverApplyTransaction } from "../transaction/apply-state.ts";
 import { applyPlan, preflight } from "../transaction/apply.ts";
 import { auditPlanSync } from "../transaction/audit.ts";
 import { inspectGateEffects } from "../transaction/gate-inspection.ts";
@@ -49,7 +49,7 @@ async function applyStatus(args: ParsedArgs): Promise<void> {
 async function applyRecover(args: ParsedArgs): Promise<void> {
   const { rootDir } = await load(args);
   const { manifest } = await loadManifest(args, rootDir);
-  print(recoverApplyTransaction(rootDir, manifest), args);
+  print(recoverApplyTransaction(rootDir, manifest, flagBool(args, FORCE_CORRUPT_LOCK_FLAG) ? { forceCorruptLock: true } : {}), args);
 }
 
 async function approve(args: ParsedArgs): Promise<void> {
@@ -184,9 +184,9 @@ export const transactionCommands: Record<string, CommandSpec> = {
   },
   "apply-recover": {
     summary: "release a stopped apply owner for verified resume",
-    usage: "apply-recover --plan <path>",
+    usage: "apply-recover --plan <path> [--force-corrupt-lock]",
     details:
-      "Refuses a live owner or a different plan. It never changes Git state; it releases only the stopped owner's lock and prints the exact apply or --resume command whose normal preflight proves the repository boundary.",
+      "Refuses a live or unverifiable owner or a different plan. An owner stopped mid-journal (phase applying) is first rolled back from its durable checkpoint: HEAD, index, and every journal path are restored and verified, and nothing is released if verification fails. Otherwise it never changes Git state; it releases only the stopped owner's lock and prints the exact apply or --resume command whose normal preflight proves the repository boundary. --force-corrupt-lock is accepted only when the lock is unparseable: it asserts no apply is running, moves the unreadable lock/state aside, and restores this plan's checkpoint if one exists.",
     run: applyRecover,
   },
   doctor: {

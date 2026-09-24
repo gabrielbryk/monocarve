@@ -42,6 +42,12 @@ export interface ExecuteJournalOptions {
   readonly manifest: ExtractionManifest;
   readonly dryRun?: boolean;
   readonly useGitMv?: boolean;
+  /**
+   * Awaited after each applied or skipped operation. A committing apply uses it
+   * to yield to the event loop so an interrupt is handled between operations
+   * rather than after the whole journal; simulation leaves it unset.
+   */
+  readonly afterOperation?: (index: number) => void | Promise<void>;
 }
 
 export async function executeJournal(options: ExecuteJournalOptions): Promise<JournalResult> {
@@ -62,6 +68,9 @@ export async function executeJournal(options: ExecuteJournalOptions): Promise<Jo
   try {
     for (const [index, operation] of options.manifest.operations.entries()) {
       applyJournalEntry({ options, adapter, index, operation, result, moves });
+      // Sequential by design: each operation must finish before the next starts.
+      // oxlint-disable-next-line no-await-in-loop
+      if (options.afterOperation !== undefined) await options.afterOperation(index);
     }
   } catch (error) {
     resetGitMoves(options);
@@ -120,15 +129,22 @@ function resetGitMoves(options: ExecuteJournalOptions): void {
   }
 }
 
-function withRestoreOutcome(error: unknown, report: RestoreReport, total: number): unknown {
+function withRestoreOutcome(error: unknown, report: RestoreReport, total: number): Error {
   const notes = [
     report.restored.length > 0 ? `journal restored ${report.restored.length} of ${total} path(s) to their pre-journal state` : undefined,
     report.failures.length > 0
       ? `JOURNAL RESTORE INCOMPLETE - ${report.failures.length} path(s) NOT restored: ${report.failures.map((failure) => `${failure.path} (${failure.message})`).join("; ")}`
       : undefined,
   ].filter((note): note is string => note !== undefined);
-  if (notes.length > 0 && error instanceof Error) error.message = `${error.message} [${notes.join("; ")}]`;
-  return error;
+  // An Error keeps its own class (callers inspect JournalError, HashMismatchError,
+  // …) and gains the restore notes; a non-Error throw is wrapped so the journal
+  // only ever throws Errors, with the original value kept as the cause.
+  const suffix = notes.length > 0 ? ` [${notes.join("; ")}]` : "";
+  if (error instanceof Error) {
+    if (suffix !== "") error.message = `${error.message}${suffix}`;
+    return error;
+  }
+  return new JournalError(`journal operation failed: ${String(error)}${suffix}`, { cause: error });
 }
 
 /** Undo only paths that did not exist before their recorded operation. */
