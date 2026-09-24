@@ -4,11 +4,16 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { LockfileError } from "./pnpm-error.ts";
-import type { AdapterEditResult, WorkspacePackage } from "./types.ts";
-import { assertEnumerableGlobs, enumerateWorkspacePackages, globCoversPackage } from "./workspace-globs.ts";
+import type { AdapterEditResult, WorkspaceInspection, WorkspacePackage } from "./types.ts";
+import { assertEnumerableGlobs, globsCoverPackage, resolveWorkspacePackages } from "./workspace-globs.ts";
 
 export async function listPackages(rootDir: string, manifestName: string): Promise<WorkspacePackage[]> {
-  return enumerateWorkspacePackages(rootDir, workspaceGlobs(rootDir, manifestName));
+  return [...(await inspectWorkspace(rootDir, manifestName)).packages];
+}
+
+export async function inspectWorkspace(rootDir: string, manifestName: string): Promise<WorkspaceInspection> {
+  const result = resolveWorkspacePackages(rootDir, workspaceGlobs(rootDir, manifestName));
+  return { packages: result.packages, unmatchedPatterns: result.unmatched };
 }
 
 function workspaceGlobs(rootDir: string, manifestName: string): string[] {
@@ -30,7 +35,9 @@ function workspaceGlob(line: string): string[] {
 }
 
 export function workspaceManifestEdit(manifestText: string, packageRoot: string): AdapterEditResult {
-  if (workspaceGlobsText(manifestText).some((glob) => globCoversPackage(glob, packageRoot))) return { kind: "already-satisfied" };
+  const globs = workspaceGlobsText(manifestText);
+  assertEnumerableGlobs(globs, "pnpm");
+  if (globsCoverPackage(globs, packageRoot)) return { kind: "already-satisfied" };
   const lines = manifestText.split("\n");
   const packagesLine = lines.findIndex((line) => /^packages:\s*$/.test(line));
   if (packagesLine < 0) return { kind: "changed", contents: `${manifestText.replace(/\n*$/, "")}\npackages:\n  - ${packageRoot}\n` };

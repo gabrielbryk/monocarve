@@ -11,7 +11,10 @@ async function configDoctor(args: ParsedArgs): Promise<void> {
   const loaded = await load(args);
   const userConfig = loaded.configPath.endsWith(".json") ? readJsonConfig(loaded.configPath) : undefined;
   const report = await inspectConfig({ ...loaded, ...(userConfig === undefined ? {} : { userConfig }) });
-  print({ schema: "config-doctor", ...report }, args);
+  print({ schema: "config-doctor", schemaVersion: 1, ...report }, args);
+  // Qualification is additive diagnosis on this legacy surface. Preserve its
+  // historical exit mapping: only the pre-existing semantic doctor failures
+  // change the exit code; assess/batch own the 0/1/2 qualification matrix.
   if (report.semanticIssues.some((issue) => issue.severity === "error")) process.exitCode = 1;
 }
 

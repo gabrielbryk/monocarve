@@ -17,10 +17,10 @@
     "maxMethodLoc": 94
   },
   "src/commands/preparation.ts": {
-    "maxCognitive": 36,
-    "maxCyclo": 28,
-    "maxMethodLoc": 114,
-    "structuralScore": 118.6
+    "maxCognitive": 28,
+    "maxCyclo": 17,
+    "maxMethodLoc": 104,
+    "structuralScore": 101.6
   },
   "src/commands/reconciliation.ts": {
     "maxCyclo": 22
@@ -41,7 +41,7 @@
     "maxCognitive": 43,
     "maxCyclo": 26,
     "maxNest": 9,
-    "structuralScore": 143.6
+    "structuralScore": 143.3
   },
   "src/evacuation/assessment.ts": {
     "maxMethodLoc": 83
@@ -220,9 +220,6 @@
   },
   "src/symbols/declarations.ts": {
     "maxNest": 9
-  },
-  "src/symbols/workspace.ts": {
-    "maxCyclo": 16
   },
   "src/transaction/audit-helpers.ts": {
     "maxCognitive": 49,

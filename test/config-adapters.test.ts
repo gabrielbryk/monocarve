@@ -438,6 +438,19 @@ describe("adapters", () => {
     const nested = fixtureRepo({ "pnpm-workspace.yaml": "packages:\n  - 'packages/**'\n" });
     await expect(pnpmAdapter.listPackages(nested)).rejects.toThrow("workspace glob is not yet ported");
 
+    const supportedNested = fixtureRepo({ "pnpm-workspace.yaml": "packages:\n  - 'apps/*/ui'\n" });
+    for (const [dir, name] of [
+      ["apps/one/ui", "@acme/one-ui"],
+      ["apps/two/ui", "@acme/two-ui"],
+    ] as const) {
+      mkdirSync(join(supportedNested, dir), { recursive: true });
+      writeFileSync(join(supportedNested, dir, "package.json"), JSON.stringify({ name }));
+    }
+    await expect(pnpmAdapter.listPackages(supportedNested)).resolves.toEqual([
+      { name: "@acme/one-ui", dir: "apps/one/ui" },
+      { name: "@acme/two-ui", dir: "apps/two/ui" },
+    ]);
+
     const excluded = fixtureRepo({ "pnpm-workspace.yaml": "packages:\n  - 'libs/*'\n  - '!**/dist/**'\n" });
     const excludedPackages: Array<[string, string]> = [
       ["libs/kept", "@acme/kept"],

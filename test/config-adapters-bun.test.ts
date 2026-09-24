@@ -356,6 +356,19 @@ describe("the bun adapter", () => {
       { name: "@acme/two", dir: "libs/two" },
     ]);
 
+    const nested = fixtureRepo({ "package.json": '{"name":"fixture","workspaces":["apps/*/ui"]}\n' });
+    for (const [dir, name] of [
+      ["apps/one/ui", "@acme/one-ui"],
+      ["apps/two/ui", "@acme/two-ui"],
+    ] as const) {
+      mkdirSync(join(nested, dir), { recursive: true });
+      writeFileSync(join(nested, dir, "package.json"), JSON.stringify({ name }));
+    }
+    await expect(bunAdapter.listPackages(nested)).resolves.toEqual([
+      { name: "@acme/one-ui", dir: "apps/one/ui" },
+      { name: "@acme/two-ui", dir: "apps/two/ui" },
+    ]);
+
     const object = fixtureRepo({ "package.json": '{"name":"fixture","workspaces":{"packages":["libs/deep/**"]}}\n' });
     await expect(bunAdapter.listPackages(object)).rejects.toThrow("bun workspace glob is not yet ported: libs/deep/**");
 

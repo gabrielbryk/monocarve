@@ -12,6 +12,7 @@
 import { basename } from "node:path";
 
 import { isFirstPartyPackageOwner, isPackageOwner, type MonocarveConfig } from "../config.ts";
+import { byCodeUnit } from "../util/hash.ts";
 import { buildApplicationGraph, stronglyConnectedComponents, transitive, type ApplicationGraph } from "./components.ts";
 import type { DependencyGraph, ModuleEdge } from "./model.ts";
 import { generatedProvenance } from "./workspace.ts";
@@ -186,7 +187,7 @@ export function domainReports(graph: DependencyGraph, application: ApplicationGr
     const crossDomainEdges = graph.edges
       .filter((edge) => nodeSet.has(edge.from) && application.nodeSet.has(edge.to) && domainOf(edge.to) !== domain)
       .map((edge) => ({ from: edge.from, to: edge.to, typeOnly: edge.typeOnly }))
-      .sort((left, right) => left.from.localeCompare(right.from) || left.to.localeCompare(right.to));
+      .sort((left, right) => byCodeUnit(left.from, right.from) || byCodeUnit(left.to, right.to));
 
     return {
       domain,
@@ -271,7 +272,7 @@ export function domainComponentReports(domains: readonly DomainReport[], graph: 
         dependencies: [...(componentOutgoing.get(id) ?? [])].sort((left, right) => left - right),
       };
     })
-    .sort((left, right) => left.layer - right.layer || (left.domains[0] ?? "").localeCompare(right.domains[0] ?? ""));
+    .sort((left, right) => left.layer - right.layer || byCodeUnit(left.domains[0] ?? "", right.domains[0] ?? ""));
 }
 
 export interface LayerReport {
@@ -320,9 +321,9 @@ export function analyzeLayers(config: MonocarveConfig, graph: DependencyGraph, a
     unresolvedRelativeImports: graph.unresolved,
     externalPackages: [...graph.externalPackages.entries()]
       .map(([name, count]) => ({ name, count }))
-      .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name)),
+      .sort((left, right) => right.count - left.count || byCodeUnit(left.name, right.name)),
     domains,
     domainComponents: domainComponentReports(domains, graph, applicationGraph),
-    components: components.slice().sort((left, right) => left.layer - right.layer || (left.nodes[0] ?? "").localeCompare(right.nodes[0] ?? "")),
+    components: components.slice().sort((left, right) => left.layer - right.layer || byCodeUnit(left.nodes[0] ?? "", right.nodes[0] ?? "")),
   };
 }

@@ -26,6 +26,11 @@ export interface WorkspacePackage {
   readonly private?: boolean;
 }
 
+export interface WorkspaceInspection {
+  readonly packages: readonly WorkspacePackage[];
+  readonly unmatchedPatterns: readonly string[];
+}
+
 export interface RenderImporterInput {
   /** Directory the block describes, workspace-relative. */
   readonly packageRoot: string;
@@ -100,6 +105,9 @@ export interface PackageManagerAdapter {
 
   /** Enumerate current workspace packages. Answers "is this already a package?". */
   listPackages(rootDir: string): Promise<WorkspacePackage[]>;
+
+  /** Enumerate packages and retain adapter-owned workspace qualification evidence. */
+  inspectWorkspace(rootDir: string): Promise<WorkspaceInspection>;
 
   /**
    * Render the lockfile importer block for a package. Pure over the dependency

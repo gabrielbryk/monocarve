@@ -40,6 +40,10 @@ export interface ScannedDependency {
 
 export interface ScanReport {
   readonly modules: readonly ScannedModule[];
+  /** Optional adapter observation of resolver/config reads not represented as modules. */
+  readonly observedReads?: readonly string[];
+  /** Actual values returned to dependency-cruiser by successful file reads. */
+  readonly observedFileReads?: readonly { readonly path: string; readonly sha256: string }[];
 }
 
 export interface BuildGraphOptions {

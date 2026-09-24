@@ -2,6 +2,7 @@
 /** Executable boundary: parse, dispatch, and classify failures. */
 
 import { TOOL_NAME, TOOL_VERSION } from "./branding.ts";
+import { executableBuildIdentity } from "./build-identity.ts";
 import { parseArgs } from "./cli/args.ts";
 import { resetCodemodCaches } from "./codemod/imports.ts";
 import { COMMANDS, USAGE, commandHelp } from "./commands/index.ts";
@@ -12,7 +13,7 @@ export { parseArgs, type ParsedArgs } from "./cli/args.ts";
 export async function main(argv: readonly string[]): Promise<number> {
   const args = parseArgs(argv);
   if (args.flags.has("version")) {
-    process.stdout.write(`${TOOL_NAME} ${TOOL_VERSION}\n`);
+    process.stdout.write(args.flags.has("verbose") ? `${JSON.stringify(executableBuildIdentity(), null, 2)}\n` : `${TOOL_NAME} ${TOOL_VERSION}\n`);
     return 0;
   }
   if (args.command === undefined || args.flags.has("help")) {

@@ -81,7 +81,10 @@ function sortKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortKeys);
   if (value === null || typeof value !== "object") return value;
   const source = value as Record<string, unknown>;
-  const out: Record<string, unknown> = {};
+  // A configured key may legally be named "__proto__".  Using an ordinary
+  // object here would invoke its legacy setter and silently drop that key
+  // from canonical JSON, breaking deterministic identity and replay.
+  const out: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
   for (const key of Object.keys(source).sort(byCodeUnit)) {
     out[key] = sortKeys(source[key]);
   }

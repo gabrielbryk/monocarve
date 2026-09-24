@@ -1,6 +1,7 @@
 /** Command registry and executable help text. */
 
 import { TOOL_NAME, TOOL_VERSION } from "../branding.ts";
+import { assessmentCommands } from "./assessment.ts";
 import { configDoctorCommands } from "./config-doctor.ts";
 import { consolidationCommands } from "./consolidation.ts";
 import { discoveryCommands } from "./discovery.ts";
@@ -21,6 +22,7 @@ function qualify(spec: CommandSpec): CommandSpec {
 export const COMMANDS: Record<string, CommandSpec> = Object.fromEntries(
   Object.entries({
     ...discoveryCommands,
+    ...assessmentCommands,
     ...evacuationCommands,
     ...consolidationCommands,
     ...configDoctorCommands,
@@ -40,7 +42,7 @@ export const GLOBAL_OPTIONS = `global options:
   --graph <app>=<file>  replay a captured scanner report (repeatable)
   --json, -j            machine-readable output
   --help, -h            show help
-  --version, -v         print version`;
+  --version, -v         print version (--verbose includes executable identity)`;
 
 const commandLines = Object.entries(COMMANDS)
   .map(([name, spec]) => `  ${name.padEnd(16)} ${spec.summary}`)

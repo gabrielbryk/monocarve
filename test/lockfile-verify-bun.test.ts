@@ -162,7 +162,7 @@ describe("lockfile verification against real bun", () => {
   );
 
   test.skipIf(BUN === null)(
-    "--frozen-lockfile does not make --lockfile-only refuse a divergent lockfile",
+    "--frozen-lockfile behavior for --lockfile-only is version-aware",
     () => {
       // Measured, and recorded because the adapter's command depends on it: a
       // reader could reasonably assume the two flags together are a check, and

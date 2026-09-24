@@ -498,10 +498,10 @@ function validateLockfileImporter(
   mutated.add(operation.lockfile);
 }
 
-function readFileSyncSafe(path: string): string | undefined {
+const readFileSyncSafe = (path: string): string | undefined => {
   try {
     return readFileSync(path, "utf8");
   } catch {
     return undefined;
   }
-}
+};

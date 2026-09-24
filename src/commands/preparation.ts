@@ -8,12 +8,10 @@ import {
   recordCampaignApplication,
   type CampaignAuditEvidence,
   type CampaignChildPlan,
-  type GraphMetricSnapshot,
 } from "../campaign/index.ts";
 import { flagBool, flagNumber, flagString, flagStrings, type ParsedArgs } from "../cli/args.ts";
 import { domainFor, getApplication, renderPreparationPolicy } from "../config.ts";
 import { IoError, UsageError } from "../errors.ts";
-import { summarizeGraph } from "../graph/index.ts";
 import { parseManifest } from "../plan/build.ts";
 import { buildPlanSync, serializeManifest } from "../plan/build.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
@@ -36,6 +34,7 @@ export { writeCampaignLedgerAtomically } from "./campaign-ledger-file.ts";
 import { campaignOptimize } from "./campaign-optimize.ts";
 import { boundaryCommandSpec } from "./preparation-boundary.ts";
 import { preparationCommandSpecs } from "./preparation-command-specs.ts";
+import { graphSnapshot } from "./preparation-graph.ts";
 import { parseJsonObject, readWorkspaceText, relativeTypeSpecifier } from "./preparation-io.ts";
 export { readWorkspaceText } from "./preparation-io.ts";
 
@@ -92,17 +91,7 @@ async function campaignResolve(args: ParsedArgs): Promise<void> {
   } catch (error) {
     throw new UsageError(`could not parse campaign target list ${specPath}: ${systemReason(error)}`);
   }
-  if (!spec || typeof spec.application !== "string" || !Array.isArray(spec.targets) || spec.targets.length === 0) {
-    throw new UsageError("campaign target list requires application and a non-empty targets array");
-  }
-  const identities = new Set<string>();
-  for (const [index, target] of spec.targets.entries()) {
-    if (!target || typeof target.path !== "string" || typeof target.packageName !== "string" || !target.path || !target.packageName) {
-      throw new UsageError(`campaign target ${index} requires non-empty path and packageName`);
-    }
-    if (identities.has(target.path)) throw new UsageError(`duplicate campaign target path: ${target.path}`);
-    identities.add(target.path);
-  }
+  validateStableCampaignSpec(spec);
   const scanArgs: ParsedArgs = { ...args, flags: new Map(args.flags).set("app", spec.application).set("no-cache", true) };
   const loaded = await loadGraph(scanArgs);
   const portfolio = buildPortfolio({ config: loaded.config, graph: loaded.graph, context: loaded.context, application: spec.application });
@@ -194,6 +183,20 @@ async function campaignResolve(args: ParsedArgs): Promise<void> {
       manifestPath: out,
     });
     print(`${formatPlanReview(review).trimEnd()}\n\nNext: ${result.next}`, args);
+  }
+}
+
+function validateStableCampaignSpec(spec: StableCampaignSpec): void {
+  if (!spec || typeof spec.application !== "string" || !Array.isArray(spec.targets) || spec.targets.length === 0) {
+    throw new UsageError("campaign target list requires application and a non-empty targets array");
+  }
+  const identities = new Set<string>();
+  for (const [index, target] of spec.targets.entries()) {
+    if (!target || typeof target.path !== "string" || typeof target.packageName !== "string" || !target.path || !target.packageName) {
+      throw new UsageError(`campaign target ${index} requires non-empty path and packageName`);
+    }
+    if (identities.has(target.path)) throw new UsageError(`duplicate campaign target path: ${target.path}`);
+    identities.add(target.path);
   }
 }
 
@@ -560,21 +563,6 @@ function extractionCampaignChild(manifest: ExtractionManifest, pairId: string): 
     baselineCommit: manifest.baselineCommit,
     graphDigest: manifest.graphDigest,
   };
-}
-
-function graphSnapshot(loaded: LoadedGraph): GraphMetricSnapshot {
-  const summary = summarizeGraph(loaded.graph);
-  const metrics = {
-    moduleCount: summary.moduleCount,
-    edgeCount: summary.edgeCount,
-    unresolvedCount: summary.unresolvedCount,
-    dynamicImportCount: summary.dynamicImportCount,
-    applicationModuleCount: summary.byZone.application,
-    packageModuleCount: summary.byZone.package,
-    repositoryModuleCount: summary.byZone.repo,
-    externalModuleCount: summary.byZone.external,
-  };
-  return { digest: hashJson(metrics), metrics };
 }
 
 export const preparationCommands = preparationCommandSpecs({

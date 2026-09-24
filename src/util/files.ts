@@ -1,7 +1,7 @@
 /** Filesystem walking and source-file classification. */
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { extname, resolve } from "node:path";
+import { resolve } from "node:path";
 
 import { DEFAULT_SOURCE_EXTENSIONS } from "../config/source-policy.ts";
 import { hashBytes, MISSING, type FileState } from "./hash.ts";
@@ -38,7 +38,7 @@ export function sourceFiles(
     .flatMap((entry) => {
       const path = resolve(directory, entry.name);
       if (entry.isDirectory()) return skip.has(entry.name) ? [] : sourceFiles(path, skip, extensions);
-      return extensions.includes(extname(entry.name)) ? [path] : [];
+      return isSourceModulePath(entry.name, extensions) ? [path] : [];
     })
     .sort();
 }

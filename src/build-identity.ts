@@ -1,14 +1,26 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 
+import { TOOL_VERSION } from "./branding.ts";
 import { byCodeUnit, hashText, type Sha256 } from "./util/hash.ts";
 
 declare const __MONOCARVE_BUILD_INTEGRITY__: string | undefined;
 declare const __MONOCARVE_SOURCE_REVISION__: string | undefined;
+declare const __MONOCARVE_PACKAGING_MODE__: string | undefined;
 
 export interface CompilerBuildIdentity {
   readonly artifactIntegrity: Sha256;
   readonly sourceRevision?: string;
+}
+
+export type PackagingMode = "source" | "dist-source" | "standalone-bun";
+
+/** Rich executable provenance for assessment evidence; never plan authority. */
+export interface ExecutableBuildIdentity {
+  readonly schemaVersion: 1;
+  readonly semanticVersion: string;
+  readonly packagingMode: PackagingMode;
+  readonly compiler: CompilerBuildIdentity;
 }
 
 let developmentIdentity: CompilerBuildIdentity | undefined;
@@ -24,6 +36,15 @@ export function compilerBuildIdentity(): CompilerBuildIdentity {
   };
   if (stampedIntegrity === undefined && sourceRevision === undefined) developmentIdentity = identity;
   return identity;
+}
+
+export function executableBuildIdentity(): ExecutableBuildIdentity {
+  return executableBuildIdentityFor(packagingMode());
+}
+
+/** Explicit mode constructor keeps distribution identity testable without changing plan provenance. */
+export function executableBuildIdentityFor(mode: PackagingMode): ExecutableBuildIdentity {
+  return { schemaVersion: 1, semanticVersion: TOOL_VERSION, packagingMode: mode, compiler: compilerBuildIdentity() };
 }
 
 export function sourceTreeIntegrity(sourceRoot: string): Sha256 {
@@ -43,4 +64,9 @@ function sourceFiles(directory: string): string[] {
     const path = resolve(directory, entry.name);
     return entry.isDirectory() ? sourceFiles(path) : entry.isFile() && entry.name.endsWith(".ts") ? [path] : [];
   });
+}
+
+function packagingMode(): PackagingMode {
+  const stamped = typeof __MONOCARVE_PACKAGING_MODE__ === "string" ? __MONOCARVE_PACKAGING_MODE__ : undefined;
+  return stamped === "dist-source" || stamped === "standalone-bun" ? stamped : "source";
 }

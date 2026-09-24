@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapters/registry.ts";
 import type { WorkspacePackage } from "../adapters/types.ts";
+import type { AssessmentDiagnostic, QualificationStatus } from "../assessment/qualification.ts";
+import { qualifyWorkspace } from "../assessment/qualify-workspace.ts";
 import { resolveExtractionProfile, scaffoldFor, type LoadedConfig, type MonocarveConfig, type ScaffoldTemplatesConfig } from "../config.ts";
 import { NotYetPortedError } from "../errors.ts";
 import { statusEntries } from "../util/git.ts";
@@ -36,7 +38,21 @@ export interface ConfigDoctorReport {
   }[];
   readonly packageRoots: readonly { path: string; exists: boolean }[];
   readonly workspacePackages: readonly WorkspacePackage[];
+  /**
+   * Legacy field: a successful adapter inspection has historically reported
+   * `resolved`, even when the workspace matcher emitted a warning. The
+   * additive `qualification` record carries that degraded distinction.
+   */
   readonly workspaceResolution: { status: "resolved" | "unavailable"; detail?: string };
+  /** Additive shared qualification record; legacy doctor fields remain unchanged. */
+  readonly qualification: {
+    readonly schemaVersion: 1;
+    readonly status: QualificationStatus;
+    readonly exitCode: 0 | 1 | 2;
+    readonly mayPublish: boolean;
+    readonly diagnostics: readonly AssessmentDiagnostic[];
+    readonly overrides: readonly "allow-empty"[];
+  };
   readonly adapters: { packageManager: AdapterStatus; taskRunner: AdapterStatus };
   readonly generatedArtifacts: MonocarveConfig["generatedArtifacts"];
   readonly pathMigrations: MonocarveConfig["pathMigrations"];
@@ -101,20 +117,7 @@ export async function inspectConfig(input: ConfigDoctorInput): Promise<ConfigDoc
   const raw = objectValue(input.userConfig);
   const packageManager = adapterStatus(input.config.packageManager, () => createPackageManagerAdapter(input.config));
   const taskRunner = adapterStatus(input.config.taskRunner, () => createTaskRunnerAdapter(input.config));
-  let workspacePackages: readonly WorkspacePackage[] = [];
-  let workspaceResolution: ConfigDoctorReport["workspaceResolution"] =
-    packageManager.status === "available"
-      ? { status: "resolved" }
-      : { status: "unavailable", ...(packageManager.detail ? { detail: packageManager.detail } : {}) };
-  if (packageManager.status === "available") {
-    try {
-      workspacePackages = (await createPackageManagerAdapter(input.config).listPackages(input.rootDir))
-        .slice()
-        .sort((a, b) => a.dir.localeCompare(b.dir) || a.name.localeCompare(b.name));
-    } catch (error) {
-      workspaceResolution = { status: "unavailable", detail: errorMessage(error) };
-    }
-  }
+  const workspace = await inspectWorkspaceQualification(input, packageManager);
 
   const preparation = input.config.preparation;
   const gateTiers = preparation.gates ? (["package", "project", "workspace"] as const).filter((tier) => preparation.gates?.[tier] !== undefined) : [];
@@ -134,8 +137,9 @@ export async function inspectConfig(input: ConfigDoctorInput): Promise<ConfigDoc
       compilerProfile: application.compilerProfile,
     })),
     packageRoots: input.config.packageRoots.map((path) => ({ path, exists: existsSync(join(input.rootDir, path)) })),
-    workspacePackages,
-    workspaceResolution,
+    workspacePackages: workspace.packages,
+    workspaceResolution: workspace.resolution,
+    qualification: workspace.qualification,
     adapters: { packageManager, taskRunner },
     generatedArtifacts: input.config.generatedArtifacts,
     pathMigrations: input.config.pathMigrations,
@@ -152,6 +156,44 @@ export async function inspectConfig(input: ConfigDoctorInput): Promise<ConfigDoc
       gateTiersConfigured: gateTiers,
     },
     boundaries,
+  };
+}
+
+async function inspectWorkspaceQualification(
+  input: ConfigDoctorInput,
+  packageManager: AdapterStatus,
+): Promise<{
+  readonly packages: readonly WorkspacePackage[];
+  readonly resolution: ConfigDoctorReport["workspaceResolution"];
+  readonly qualification: ConfigDoctorReport["qualification"];
+}> {
+  const qualified = packageManager.status === "available" ? await qualifyWorkspace({ config: input.config, rootDir: input.rootDir }) : undefined;
+  if (qualified !== undefined)
+    return {
+      packages: qualified.packages.slice().sort((a, b) => a.dir.localeCompare(b.dir) || a.name.localeCompare(b.name)),
+      // Preserve the pre-assessment config-doctor contract. Unmatched workspace
+      // patterns are a qualification warning, not a change to legacy status.
+      resolution: { status: qualified.workspaceResolution === "unavailable" ? "unavailable" : "resolved" },
+      qualification: qualified.qualification,
+    };
+  return {
+    packages: [],
+    resolution: { status: "unavailable", ...(packageManager.detail ? { detail: packageManager.detail } : {}) },
+    qualification: {
+      schemaVersion: 1,
+      status: "fatal",
+      exitCode: 1,
+      mayPublish: false,
+      overrides: [],
+      diagnostics: [
+        {
+          code: "WORKSPACE_DISCOVERY_FAILED",
+          severity: "error",
+          message: packageManager.detail ?? "package manager adapter is unavailable",
+          impact: "Workspace resolution is unavailable.",
+        },
+      ],
+    },
   };
 }
 
@@ -369,8 +411,4 @@ function adapterStatus(configured: string, factory: () => unknown): AdapterStatu
 
 function objectValue(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

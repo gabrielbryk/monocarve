@@ -4,7 +4,7 @@ import type { LockfileImporterMode } from "../plan/manifest.ts";
 import { hashText, type Sha256 } from "../util/hash.ts";
 import { blockDeclaresImporter, deleteImporter, importerBlock, insertImporter, missingResolutions, replaceImporter } from "./bun-importers.ts";
 import { addBlockDependencies, addBlockDependency, removeBlockDependency, renderImporterBlock } from "./bun-render.ts";
-import { listPackages, workspaceManifestEdit } from "./bun-workspace.ts";
+import { inspectWorkspace, listPackages, workspaceManifestEdit } from "./bun-workspace.ts";
 import { declaredPackageManagerVersion } from "./package-manager-version.ts";
 import type { PackageManagerAdapter } from "./types.ts";
 
@@ -29,6 +29,7 @@ export const bunAdapter: PackageManagerAdapter = {
   lockfileName: LOCKFILE_NAME,
   workspaceManifestName: WORKSPACE_MANIFEST,
   listPackages: (rootDir) => listPackages(rootDir, WORKSPACE_MANIFEST),
+  inspectWorkspace: (rootDir) => inspectWorkspace(rootDir, WORKSPACE_MANIFEST),
   renderImporterBlock,
   importerBlock,
   blockDeclaresImporter,
