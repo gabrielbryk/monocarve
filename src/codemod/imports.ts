@@ -486,18 +486,5 @@ export function applyEscapeRewrites(
   resolutionExtensions: readonly string[] = [],
   cssImportExtensions: readonly string[] = [],
 ): string {
-  return rewrites.reduce(
-    (value, rewrite) =>
-      rewriteResolvedImportSpecifier(
-        value,
-        sourcePath,
-        resolve(dirname(sourcePath), rewrite.donorlessSpecifier),
-        rewrite.packageSpecifier,
-        boundary,
-        moduleSpecifierCalls,
-        resolutionExtensions,
-        cssImportExtensions,
-      ),
-    source,
-  );
+  return rewrites.reduce((value, rewrite) => rewriteResolvedImportSpecifier(value, sourcePath, resolve(dirname(sourcePath), rewrite.donorlessSpecifier), rewrite.packageSpecifier, boundary, moduleSpecifierCalls, resolutionExtensions, cssImportExtensions), source);
 }

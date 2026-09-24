@@ -5,6 +5,7 @@ import ts from "typescript";
 
 import { byCodeUnit, hashJson } from "../util/hash.ts";
 import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
+import { sourceFiles } from "../util/files.ts";
 import { analyzeProgramSource, referenceSpace, SymbolAnalysisError } from "./analyze.ts";
 import type {
   AnalyzeWorkspaceSymbolsInput,
@@ -24,16 +25,57 @@ interface MutableConsumer {
   referenceCount: number;
 }
 
+export interface ProgramCompletenessDiagnostic {
+  readonly phase: "configuration" | "options" | "global" | "syntactic" | "semantic";
+  readonly code: number;
+  readonly category: "error" | "warning" | "suggestion" | "message";
+  readonly message: string;
+  readonly path?: string;
+  readonly start?: number;
+  readonly length?: number;
+}
+
+export interface WorkspaceSymbolProgram {
+  readonly rootDir: string;
+  readonly tsconfigPath: string;
+  readonly program: ts.Program;
+  readonly diagnostics: readonly ProgramCompletenessDiagnostic[];
+}
+
+/** Program/configuration construction failed before a usable TypeScript program existed. */
+export class WorkspaceProgramError extends SymbolAnalysisError {
+  readonly completenessDiagnostics: readonly ProgramCompletenessDiagnostic[];
+
+  constructor(message: string, diagnostics: readonly ProgramCompletenessDiagnostic[]) {
+    super(message, diagnostics.map((entry) => ({
+      phase: entry.phase === "syntactic" ? "syntactic" as const : "semantic" as const,
+      code: entry.code, category: entry.category, message: entry.message,
+      ...(entry.start === undefined ? {} : { start: entry.start }),
+      ...(entry.length === undefined ? {} : { length: entry.length }),
+    })));
+    this.completenessDiagnostics = diagnostics;
+  }
+}
+
 /** Analyze cross-file consumers using the application's own TypeScript program. */
 export function analyzeWorkspaceSymbols(input: AnalyzeWorkspaceSymbolsInput): WorkspaceSymbolAnalysis {
-  const sourcePath = relativeWorkspacePath(input.rootDir, input.sourcePath);
-  const targetAbsolute = workspacePath(input.rootDir, sourcePath);
-  const sourceText = readFileSync(targetAbsolute, "utf8");
-  const program = workspaceProgram(input.rootDir, input.tsconfigPath);
+  return analyzeWorkspaceSymbolsWithProgram(createWorkspaceSymbolProgram(input.rootDir, input.tsconfigPath), input);
+}
+
+/** Analyze one file using a caller-owned program shared across a batch. */
+export function analyzeWorkspaceSymbolsWithProgram(
+  workspace: WorkspaceSymbolProgram,
+  input: Omit<AnalyzeWorkspaceSymbolsInput, "rootDir" | "tsconfigPath">,
+): WorkspaceSymbolAnalysis {
+  const rootDir = workspace.rootDir;
+  const sourcePath = relativeWorkspacePath(rootDir, input.sourcePath);
+  const targetAbsolute = workspacePath(rootDir, sourcePath);
+  const sourceText = workspace.program.getSourceFile(targetAbsolute)?.text ?? readFileSync(targetAbsolute, "utf8");
+  const program = workspace.program;
   const target = program.getSourceFile(targetAbsolute) ?? program.getSourceFiles().find(
     (file) => normalize(file.fileName) === normalize(targetAbsolute),
   );
-  if (!target) throw new SymbolAnalysisError(`${sourcePath} is not included by ${input.tsconfigPath}`, []);
+  if (!target) throw new SymbolAnalysisError(`${sourcePath} is not included by ${workspace.tsconfigPath}`, []);
 
   const checker = program.getTypeChecker();
   const source = analyzeProgramSource({
@@ -45,41 +87,7 @@ export function analyzeWorkspaceSymbols(input: AnalyzeWorkspaceSymbolsInput): Wo
     semanticDiagnostics: program.getSemanticDiagnostics(target),
   });
   const groupByName = new Map(source.groups.map((group) => [group.name, group]));
-  const consumers = new Map<string, MutableConsumer>();
-  for (const file of program.getSourceFiles()) {
-    const absolute = normalize(file.fileName);
-    if (file.isDeclarationFile || absolute === normalize(targetAbsolute) || !inside(input.rootDir, absolute)) continue;
-    const consumerPath = relativeWorkspacePath(input.rootDir, absolute);
-    const affinity = input.affinityForPath(consumerPath);
-    const visit = (node: ts.Node): void => {
-      if (ts.isIdentifier(node) && !isImportBinding(node)) {
-        let symbol = checker.getSymbolAtLocation(node);
-        if (symbol && (symbol.flags & ts.SymbolFlags.Alias) !== 0) symbol = checker.getAliasedSymbol(symbol);
-        const declaration = symbol?.declarations?.find(
-          (entry) => normalize(entry.getSourceFile().fileName) === normalize(targetAbsolute),
-        );
-        const name = declaration && declarationName(declaration);
-        const group = name ? groupByName.get(name) : undefined;
-        if (group) {
-          const key = `${group.id}\0${consumerPath}\0${affinity}`;
-          const current = consumers.get(key) ?? {
-            groupId: group.id,
-            groupName: group.name,
-            consumerPath,
-            affinity,
-            spaces: new Set<"type" | "value">(),
-            referenceCount: 0,
-          };
-          current.spaces.add(referenceSpace(node));
-          current.referenceCount += 1;
-          consumers.set(key, current);
-        }
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(file);
-  }
-
+  const consumers = collectConsumers(program, checker, targetAbsolute, rootDir, groupByName, input.affinityForPath);
   const records: ExternalSymbolConsumer[] = [...consumers.values()].map((entry) => ({
     groupId: entry.groupId,
     groupName: entry.groupName,
@@ -102,17 +110,97 @@ export function analyzeWorkspaceSymbols(input: AnalyzeWorkspaceSymbolsInput): Wo
   };
 }
 
+function collectConsumers(
+  program: ts.Program,
+  checker: ts.TypeChecker,
+  targetAbsolute: string,
+  rootDir: string,
+  groupByName: ReadonlyMap<string, SymbolGraph["groups"][number]>,
+  affinityForPath: (path: string) => string,
+): Map<string, MutableConsumer> {
+  const consumers = new Map<string, MutableConsumer>();
+  for (const file of program.getSourceFiles()) {
+    const absolute = normalize(file.fileName);
+    if (file.isDeclarationFile || absolute === normalize(targetAbsolute) || !inside(rootDir, absolute)) continue;
+    const consumerPath = relativeWorkspacePath(rootDir, absolute);
+    const affinity = affinityForPath(consumerPath);
+    const visit = (node: ts.Node): void => {
+      if (ts.isIdentifier(node) && !isImportBinding(node)) {
+        recordConsumer(node, checker, targetAbsolute, consumerPath, affinity, groupByName, consumers);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(file);
+  }
+  return consumers;
+}
+
+function recordConsumer(node: ts.Identifier, checker: ts.TypeChecker, targetAbsolute: string, consumerPath: string, affinity: string, groupByName: ReadonlyMap<string, SymbolGraph["groups"][number]>, consumers: Map<string, MutableConsumer>): void {
+  let symbol = checker.getSymbolAtLocation(node);
+  if (symbol && (symbol.flags & ts.SymbolFlags.Alias) !== 0) symbol = checker.getAliasedSymbol(symbol);
+  const declaration = symbol?.declarations?.find((entry) => normalize(entry.getSourceFile().fileName) === normalize(targetAbsolute));
+  const name = declaration && declarationName(declaration);
+  const group = name ? groupByName.get(name) : undefined;
+  if (!group) return;
+  const key = `${group.id}\0${consumerPath}\0${affinity}`;
+  const current = consumers.get(key) ?? {
+    groupId: group.id, groupName: group.name, consumerPath, affinity,
+    spaces: new Set<"type" | "value">(), referenceCount: 0,
+  };
+  current.spaces.add(referenceSpace(node));
+  current.referenceCount += 1;
+  consumers.set(key, current);
+}
+
 /** Build the real application program for higher-level workspace analyses. */
 export function workspaceProgram(rootDir: string, tsconfigPath: string): ts.Program {
+  return createWorkspaceSymbolProgram(rootDir, tsconfigPath).program;
+}
+
+export function createWorkspaceSymbolProgram(rootDir: string, tsconfigPath: string, additionalRoots: readonly string[] = [], readInput: (path: string) => string | undefined = (path) => ts.sys.readFile(path)): WorkspaceSymbolProgram {
   const configPath = workspacePath(rootDir, relativeWorkspacePath(rootDir, tsconfigPath));
-  const read = ts.readConfigFile(configPath, ts.sys.readFile);
-  if (read.error) throw new SymbolAnalysisError(`cannot read TypeScript config ${tsconfigPath}`, [diagnostic(read.error)]);
-  const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, dirname(configPath), undefined, configPath);
+  const system = { ...ts.sys, readFile: readInput };
+  const read = ts.readConfigFile(configPath, readInput);
+  if (!read.error && typeof read.config === "object" && read.config !== null) {
+    // `extends` files are loaded by parseJsonConfigFileContent through the supplied system.
+  }
+  if (read.error) throw new WorkspaceProgramError(`cannot read TypeScript config ${tsconfigPath}`, [completenessDiagnostic(rootDir, read.error, "configuration")]);
+  const parsed = ts.parseJsonConfigFileContent(read.config, system, dirname(configPath), undefined, configPath);
+  const configDiagnostics = parsed.errors.map((entry) => completenessDiagnostic(rootDir, entry, "configuration"));
   const fatal = parsed.errors.filter((entry) => entry.category === ts.DiagnosticCategory.Error);
   if (fatal.length > 0) {
-    throw new SymbolAnalysisError(`cannot build TypeScript program from ${tsconfigPath}`, fatal.map(diagnostic));
+    throw new WorkspaceProgramError(`cannot build TypeScript program from ${tsconfigPath}`, configDiagnostics);
   }
-  return ts.createProgram({ rootNames: parsed.fileNames, options: parsed.options });
+  const additionalFiles = additionalRoots.flatMap((root) => sourceFiles(resolve(rootDir, root)));
+  const rootNames = [...new Set([...parsed.fileNames, ...additionalFiles])].sort(byCodeUnit);
+  const host = ts.createCompilerHost(parsed.options);
+  host.readFile = readInput;
+  host.getSourceFile = (fileName, languageVersion, onError) => {
+    const text = readInput(fileName);
+    if (text === undefined) { onError?.(`File not found: ${fileName}`); return undefined; }
+    return ts.createSourceFile(fileName, text, languageVersion);
+  };
+  const program = ts.createProgram({ rootNames, options: parsed.options, host, ...(parsed.projectReferences === undefined ? {} : { projectReferences: parsed.projectReferences }) });
+  const diagnostics: ProgramCompletenessDiagnostic[] = [
+    ...configDiagnostics,
+    ...program.getConfigFileParsingDiagnostics().map((entry) => completenessDiagnostic(rootDir, entry, "configuration")),
+    ...program.getOptionsDiagnostics().map((entry) => completenessDiagnostic(rootDir, entry, "options")),
+    ...program.getGlobalDiagnostics().map((entry) => completenessDiagnostic(rootDir, entry, "global")),
+    ...program.getSyntacticDiagnostics().map((entry) => completenessDiagnostic(rootDir, entry, "syntactic")),
+    ...program.getSemanticDiagnostics().map((entry) => completenessDiagnostic(rootDir, entry, "semantic")),
+  ].sort((left, right) => byCodeUnit(left.path ?? "", right.path ?? "") || (left.start ?? -1) - (right.start ?? -1) || left.code - right.code);
+  return { rootDir, tsconfigPath, program, diagnostics };
+}
+
+function completenessDiagnostic(rootDir: string, entry: ts.Diagnostic, phase: ProgramCompletenessDiagnostic["phase"]): ProgramCompletenessDiagnostic {
+  const categories = ["warning", "error", "suggestion", "message"] as const;
+  const fileName = entry.file?.fileName;
+  return {
+    phase, code: entry.code, category: categories[entry.category] ?? "message",
+    message: ts.flattenDiagnosticMessageText(entry.messageText, "\n"),
+    ...(fileName === undefined ? {} : { path: inside(rootDir, fileName) ? relativeWorkspacePath(rootDir, fileName) : normalize(fileName) }),
+    ...(entry.start === undefined ? {} : { start: entry.start }), ...(entry.length === undefined ? {} : { length: entry.length }),
+  };
 }
 
 function splitCandidates(graph: SymbolGraph, consumers: readonly ExternalSymbolConsumer[]): SymbolSplitCandidate[] {
@@ -172,16 +260,4 @@ function normalize(path: string): string {
 function inside(rootDir: string, path: string): boolean {
   const root = `${normalize(rootDir).replace(/\/$/, "")}/`;
   return normalize(path).startsWith(root);
-}
-
-function diagnostic(entry: ts.Diagnostic): { phase: "semantic"; code: number; category: "error" | "warning" | "suggestion" | "message"; message: string; start?: number; length?: number } {
-  const categories = ["warning", "error", "suggestion", "message"] as const;
-  return {
-    phase: "semantic",
-    code: entry.code,
-    category: categories[entry.category] ?? "message",
-    message: ts.flattenDiagnosticMessageText(entry.messageText, "\n"),
-    ...(entry.start === undefined ? {} : { start: entry.start }),
-    ...(entry.length === undefined ? {} : { length: entry.length }),
-  };
 }
