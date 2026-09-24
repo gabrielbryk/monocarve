@@ -1,6 +1,6 @@
 {
   "src/commands/preparation.ts": {
-    "lines": 594
+    "lines": 582
   },
   "src/consolidation/plan-support.ts": {
     "lines": 511
@@ -20,7 +20,10 @@
   "src/prepare/manifest.ts": {
     "lines": 606
   },
-  "test/preparation-cli.test.ts": {
-    "lines": 630
+  "test/assessment-evidence-publication.test.ts": {
+    "lines": 574
+  },
+  "test/config-adapters.test.ts": {
+    "lines": 507
   }
 }
