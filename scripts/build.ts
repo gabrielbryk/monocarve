@@ -43,7 +43,7 @@ const dependencyCruiserReporterPlugin: BunPlugin = {
   },
 };
 
-await build({ entrypoints: ["src/index.ts", "src/config.ts"], outdir: "dist", naming: "[name].js" }, "dist-source");
+await build({ entrypoints: ["src/config.ts"], outdir: "dist", naming: "[name].js" }, "dist-source");
 await build(
   {
     entrypoints: ["src/monocarve.ts"],

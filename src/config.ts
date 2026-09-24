@@ -1,5 +1,6 @@
 /**
- * Public configuration API.
+ * Public configuration API: the only supported programmatic import. The
+ * package root export and `monocarve/config` both resolve here.
  *
  * The schema is intentionally split by responsibility. This facade preserves
  * the stable import path used by the engine and by workspace configuration.
@@ -57,15 +58,13 @@ export { findConfigFile, loadConfig, parseConfig } from "./config/loading.ts";
 export type { LoadedConfig, LoadConfigOptions } from "./config/loading.ts";
 export { renderExtractionProfile, resolveExtractionProfile, scaffoldFor } from "./config/profiles.ts";
 export type { PublicSurfaceConfig, TemplateSource } from "./config/primitives.ts";
+export type { GeneratedSourceAdoptionsConfig, GraphConfig, RuntimeModuleRegistriesConfig } from "./config/schema-extensions.ts";
 export type {
-  GraphConfig,
   IntegrationTestSuiteConfig,
-  GeneratedSourceAdoptionsConfig,
   ModulePromotionsConfig,
   ValueSplitsConfig,
   PathReferencesConfig,
   PathReferenceRewritesConfig,
-  RuntimeModuleRegistriesConfig,
   PortfolioConfig,
   TestKind,
   TestKindsConfig,
