@@ -37,20 +37,23 @@ function isValidRegex(source: string): boolean {
  * A template body, supplied either inline or as a file next to the config.
  * Both forms go through the same `{placeholder}` rendering.
  */
-export const templateSource = z.union([z.strictObject({ contents: z.string() }), z.strictObject({ file: relativePath })]);
+export const templateSource = z.union([
+  z.strictObject({ contents: z.string().describe("Inline template text.") }),
+  z.strictObject({ file: relativePath.describe("Repo-relative file holding the template text.") }),
+]);
 
 /** Template text given inline (`contents`) or as a repo-relative `file`. */
 export type TemplateSource = z.output<typeof templateSource>;
 
 const publicSurfaceSchema = z
   .discriminatedUnion("mode", [
-    z.strictObject({ mode: z.literal("barrel") }),
+    z.strictObject({ mode: z.literal("barrel").describe("Export everything through the single entrypoint barrel.") }),
     z.strictObject({
-      mode: z.literal("subpaths"),
+      mode: z.literal("subpaths").describe("Export each moved module as its own package subpath."),
       /** Package export key, e.g. `./{pathNoExtension}`. */
-      keyTemplate: z.string().min(1),
+      keyTemplate: z.string().min(1).describe("Package export key template, e.g. `./{pathNoExtension}`."),
       /** Package export target, e.g. `./src/{path}`. */
-      targetTemplate: z.string().min(1),
+      targetTemplate: z.string().min(1).describe("Package export target template, e.g. `./src/{path}`."),
     }),
   ])
   .superRefine((surface, ctx) => {
@@ -82,9 +85,9 @@ export type PublicSurfaceConfig = z.output<typeof publicSurface>;
 export const projectReferences = z
   .strictObject({
     /** Package-local tsconfig file that receives inferred workspace references. */
-    target: relativePath.default("tsconfig.json"),
+    target: relativePath.default("tsconfig.json").describe("Package-local tsconfig that receives inferred workspace project references."),
     /** tsconfig file to reference in each inferred workspace dependency. */
-    dependencyTarget: relativePath.default("tsconfig.json"),
+    dependencyTarget: relativePath.default("tsconfig.json").describe("tsconfig file referenced in each inferred workspace dependency."),
   })
   .prefault({});
 
@@ -94,14 +97,20 @@ export const projectReferences = z
  * root scaffold remains the generic baseline every profile inherits.
  */
 export const scaffoldTemplateOverrides = z.strictObject({
-  packageJson: templateSource.optional(),
-  tsconfig: templateSource.optional(),
-  taskFile: templateSource.optional(),
-  extraFiles: z.record(z.string().min(1), templateSource).optional(),
-  projectReferences: projectReferences.optional(),
-  devDependencies: z.record(z.string().min(1), z.string().min(1)).optional(),
-  devDependenciesByDependency: z.record(z.string().min(1), z.record(z.string().min(1), z.string().min(1))).optional(),
-  publicSurface: publicSurfaceSchema.optional(),
+  packageJson: templateSource.optional().describe("Replacement `package.json` template for generated packages."),
+  tsconfig: templateSource.optional().describe("Replacement `tsconfig` template for generated packages."),
+  taskFile: templateSource.optional().describe("Replacement task-runner project file template."),
+  extraFiles: z.record(z.string().min(1), templateSource).optional().describe("Additional files to scaffold, keyed by package-relative path."),
+  projectReferences: projectReferences.optional().describe("Replacement tsconfig project-reference targets."),
+  devDependencies: z.record(z.string().min(1), z.string().min(1)).optional().describe("Replacement devDependencies added to every generated package."),
+  devDependenciesByDependency: z
+    .record(z.string().min(1), z.record(z.string().min(1), z.string().min(1)))
+    .optional()
+    .describe("Replacement extra devDependencies keyed by an inferred dependency."),
+  publicSurface: publicSurfaceSchema.optional().describe("Replacement public-surface mode for generated packages."),
 });
 
 export type ScaffoldTemplateOverrides = z.output<typeof scaffoldTemplateOverrides>;
+
+/** A lowercase kebab-case identifier. */
+export const kebabId = z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "must be a lowercase kebab-case identifier");

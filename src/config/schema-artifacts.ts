@@ -8,14 +8,19 @@ export const generatedArtifacts = z.strictObject({
   provenance: z
     .strictObject({
       /** A file is generated when one of its first `headerLines` matches this. */
-      marker: regexSource.default("@generated|DO NOT EDIT"),
+      marker: regexSource
+        .default("@generated|DO NOT EDIT")
+        .describe("Regex that marks a file as generated when it matches one of the first `headerLines` lines."),
       /** Capture group 1 yields the generating source path. */
-      source: regexSource.default("^//\\s*Source(?:\\s+of\\s+truth)?\\s*:\\s*(.+)$"),
+      source: regexSource
+        .default("^//\\s*Source(?:\\s+of\\s+truth)?\\s*:\\s*(.+)$")
+        .describe("Header regex whose capture group 1 yields the generating source path."),
       /** Capture group 1 yields the regeneration command. */
-      regenerate: regexSource.default("^//\\s*Regenerate:\\s*(.+)$"),
-      headerLines: z.number().int().positive().default(12),
+      regenerate: regexSource.default("^//\\s*Regenerate:\\s*(.+)$").describe("Header regex whose capture group 1 yields the regeneration command."),
+      headerLines: z.number().int().positive().default(12).describe("Number of leading lines searched for provenance headers."),
     })
-    .prefault({}),
+    .prefault({})
+    .describe("Header conventions used to recognize generated files and read their source and regeneration command."),
   /**
    * Per-regeneration timeout, in milliseconds.
    *
@@ -30,14 +35,15 @@ export const generatedArtifacts = z.strictObject({
     .number()
     .int()
     .positive()
-    .default(5 * 60 * 1000),
+    .default(5 * 60 * 1000)
+    .describe("Timeout for one regeneration command, in milliseconds."),
   artifacts: z
     .array(
       z.strictObject({
         /** The generated file, repo-relative. */
-        path: relativePath,
+        path: relativePath.describe("Repo-relative path of the generated file."),
         /** What it is generated from, repo-relative. */
-        source: relativePath,
+        source: relativePath.describe("Repo-relative path the file is generated from."),
         /**
          * Shell command that regenerates it, run from the workspace root inside
          * the tree the plan is being applied to — the simulation worktree first,
@@ -46,21 +52,22 @@ export const generatedArtifacts = z.strictObject({
          * command that runs is one the repository declares rather than one a
          * manifest carries.
          */
-        regenerate: z.string().min(1),
+        regenerate: z.string().min(1).describe("Shell command, run from the workspace root, that regenerates the file."),
         /**
          * Regexes over moved paths. When any moved file matches, the artifact is
          * attached to the plan. Empty means "every extraction touches it".
          */
-        triggers: z.array(regexSource).default([]),
+        triggers: z.array(regexSource).default([]).describe("Regexes over moved paths that attach this artifact to a plan; empty means every extraction."),
         /**
          * Why the audit cannot hash-check it. Present means the artifact is
          * exempt from byte comparison and only its regeneration command is
          * carried; absent means the audit demands the recorded hash.
          */
-        exemptReason: z.string().min(1).optional(),
+        exemptReason: z.string().min(1).optional().describe("Why the audit cannot hash-check the file; when set, only the regeneration command is carried."),
       }),
     )
-    .default([]),
+    .default([])
+    .describe("Declared generated files with their sources and regeneration commands."),
 });
 
 /** Generated-file detection (provenance header markers) and declared generated artifacts with their regeneration commands. */
@@ -107,14 +114,15 @@ export const pathMigrations = z.strictObject({
     .number()
     .int()
     .positive()
-    .default(5 * 60 * 1000),
+    .default(5 * 60 * 1000)
+    .describe("Timeout for one path-migration command, in milliseconds."),
   artifacts: z
     .array(
       z.strictObject({
-        path: relativePath,
-        command: z.string().min(1),
+        path: relativePath.describe("Repo-relative path of the path-keyed artifact."),
+        command: z.string().min(1).describe("Text filter that reads `{ artifact, contents, moves }` JSON on stdin and prints the rewritten artifact."),
         /** Regexes over move sources. Empty means every extraction. */
-        triggers: z.array(regexSource).default([]),
+        triggers: z.array(regexSource).default([]).describe("Regexes over move sources that select this artifact; empty means every extraction."),
       }),
     )
     .superRefine((artifacts, context) => {
@@ -126,7 +134,8 @@ export const pathMigrations = z.strictObject({
         seen.add(artifact.path);
       });
     })
-    .default([]),
+    .default([])
+    .describe("Artifacts keyed by workspace paths whose keys are rewritten when files move."),
 });
 
 /** Path-migration commands that rewrite path-bearing artifacts after files move. */
@@ -136,11 +145,17 @@ export type PathMigrationsConfig = z.output<typeof pathMigrations>;
 export const assetEmissionProofs = z
   .array(
     z.strictObject({
-      id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
-      command: z.string().min(1),
-      roots: z.array(relativePath).min(1),
-      extensions: z.array(z.string().regex(/^\./, "extension must start with a dot")).min(1),
-      analyzer: z.literal("css-selectors"),
+      id: z
+        .string()
+        .regex(/^[a-z0-9][a-z0-9-]*$/)
+        .describe("Unique kebab-case identifier for this proof."),
+      command: z.string().min(1).describe("Build command whose emitted assets are compared before and after the move."),
+      roots: z.array(relativePath).min(1).describe("Repo-relative directories scanned for emitted assets after the command runs."),
+      extensions: z
+        .array(z.string().regex(/^\./, "extension must start with a dot"))
+        .min(1)
+        .describe("Extensions of emitted asset files to analyze, each starting with a dot."),
+      analyzer: z.literal("css-selectors").describe("Analyzer that compares the emitted assets; only `css-selectors` is supported."),
     }),
   )
   .default([])
@@ -160,18 +175,21 @@ export const postJournalPreparers = z
   .array(
     z
       .strictObject({
-        id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
-        phase: z.literal("after-journal-before-gates"),
-        command: z.string().min(1).optional(),
+        id: z
+          .string()
+          .regex(/^[a-z0-9][a-z0-9-]*$/)
+          .describe("Unique kebab-case identifier for this preparer."),
+        phase: z.literal("after-journal-before-gates").describe("Run phase; must be `after-journal-before-gates`."),
+        command: z.string().min(1).optional().describe("Optional command run in the moved tree after replacements and creates."),
         replacements: z
           .array(
             z
               .strictObject({
-                path: relativePath,
-                before: z.string().min(1),
-                after: z.string(),
-                prefix: z.string().min(1).optional(),
-                suffix: z.string().min(1).optional(),
+                path: relativePath.describe("Repo-relative file to edit; must also be listed in `outputs`."),
+                before: z.string().min(1).describe("Literal text to replace."),
+                after: z.string().describe("Literal replacement text."),
+                prefix: z.string().min(1).optional().describe("Literal text that must immediately precede `before`."),
+                suffix: z.string().min(1).optional().describe("Literal text that must immediately follow `before`."),
               })
               .superRefine((replacement, ctx) => {
                 if (replacement.prefix === undefined && replacement.suffix === undefined)
@@ -179,24 +197,36 @@ export const postJournalPreparers = z
               }),
           )
           .min(1)
-          .optional(),
+          .optional()
+          .describe("Ordered, anchored literal text replacements applied before creates and the command."),
         creates: z
-          .array(z.strictObject({ path: relativePath, contents: z.string(), mode: z.union([z.literal(0o644), z.literal(0o755)]).optional() }))
+          .array(
+            z.strictObject({
+              path: relativePath.describe("Repo-relative path of the new file; it is an output automatically."),
+              contents: z.string().describe("Literal UTF-8 file contents."),
+              mode: z
+                .union([z.literal(0o644), z.literal(0o755)])
+                .optional()
+                .describe("File mode, `0o644` (default) or `0o755`."),
+            }),
+          )
           .min(1)
-          .optional(),
-        outputs: z.array(relativePath).default([]),
-        triggers: z.array(regexSource).default([]),
-        verify: z.string().min(1).optional(),
+          .optional()
+          .describe("New files created with exact contents."),
+        outputs: z.array(relativePath).default([]).describe("Repo-relative paths the preparer may change; any other change is refused."),
+        triggers: z.array(regexSource).default([]).describe("Regexes over moved or rewritten paths that select this preparer; empty means every extraction."),
+        verify: z.string().min(1).optional().describe("Optional verification command run after the preparer."),
         emittedModuleSpecifiers: z
           .array(
             z.strictObject({
               /** Generator/template source containing module specifiers emitted verbatim. */
-              source: relativePath,
+              source: relativePath.describe("Generator or template source containing module specifiers emitted verbatim."),
               /** Generated module whose directory is the emitted specifiers' resolution base. */
-              resolutionBase: relativePath,
+              resolutionBase: relativePath.describe("Generated output whose directory is the resolution base for the emitted specifiers."),
             }),
           )
-          .default([]),
+          .default([])
+          .describe("Sources whose emitted module specifiers are rewritten relative to a generated output."),
       })
       .superRefine((item, context) => {
         if (item.command === undefined && item.replacements === undefined && item.creates === undefined)
@@ -286,7 +316,7 @@ export const transaction = z.strictObject({
    * describes.  The planner additionally rejects an allowed path when it
    * overlaps that baseline-sensitive set.
    */
-  allowDirtyPaths: z.array(relativePath).default([]),
+  allowDirtyPaths: z.array(relativePath).default([]).describe("Repo-relative paths whose uncommitted changes may coexist with planning."),
   /**
    * Where disposable simulation worktrees are created. Absolute, or
    * repo-relative — in which case it must be gitignored, since `apply` refuses
@@ -301,19 +331,25 @@ export const transaction = z.strictObject({
   worktreeRoot: z
     .string()
     .min(1)
-    .default(() => scratchPath("worktrees")),
+    .default(() => scratchPath("worktrees"))
+    .describe(
+      "Where disposable simulation worktrees are created; defaults to a checkout-derived cache directory under `MONOCARVE_SCRATCH_ROOT`, `XDG_CACHE_HOME`, or `~/.cache`.",
+    ),
   /**
    * How the simulation worktree gets `node_modules`. `symlink` is the default
    * because a full install per simulation is minutes of wall clock for no added
    * signal; `install` exists for workspaces where symlinked deps break.
    */
-  nodeModules: z.enum(["symlink", "install", "none"]).default("symlink"),
+  nodeModules: z
+    .enum(["symlink", "install", "none"])
+    .default("symlink")
+    .describe("How the simulation worktree gets `node_modules`: symlink, install, or none."),
   /** Delete the simulation worktree when the run succeeds. */
-  cleanup: z.boolean().default(true),
+  cleanup: z.boolean().default(true).describe("Delete the simulation worktree when the run succeeds."),
   /** Run the repository's gates inside the simulation before touching the real checkout. */
-  simulateGates: z.boolean().default(true),
+  simulateGates: z.boolean().default(true).describe("Run repository gates inside the simulation before touching the real checkout."),
   /** Explicit retry count for each failed repository gate; every attempt remains evidence. */
-  gateRetries: z.number().int().min(0).max(3).default(0),
+  gateRetries: z.number().int().min(0).max(3).default(0).describe("Retries for each failed repository gate, at most 3; every attempt is recorded."),
 });
 
 /** Transaction settings: simulation worktree root, node_modules strategy, cleanup, and gate retries. */

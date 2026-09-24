@@ -135,6 +135,7 @@ function replayDestinationFor(rootDir: string, replay: string | undefined, analy
 export const assessmentCommands: Record<string, CommandSpec> = {
   assess: {
     summary: "capture a reproducible architecture assessment",
+    category: "Architecture assessment evidence",
     usage:
       "assess --app <name> --evidence-dir <path> [--file <path> ... | --split-hotspots <n>] [--replay <bundle>] [--allow-empty] [--replace-generated] [--max-bytes <n>] [--limit <n>] [--full-portfolio]",
     details:

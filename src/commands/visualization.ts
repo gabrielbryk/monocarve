@@ -32,6 +32,7 @@ function withFlag(args: ParsedArgs, name: string): ParsedArgs {
 export const visualizationCommands: Record<string, CommandSpec> = {
   visualize: {
     summary: "explore the dependency graph in a local web UI",
+    category: "Discovery and diagnosis",
     usage: "visualize [--app <name>] [--port <number>] [--no-open] [--no-cache] [--include-extracted]",
     details:
       "Scans the configured workspace, serves an interactive SCC-level graph on 127.0.0.1, and opens it in the default browser. Search and edge filters run locally; Rescan refreshes the graph without changing the workspace.",

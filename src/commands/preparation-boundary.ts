@@ -223,8 +223,9 @@ function parseTemplateVars(args: ParsedArgs): Record<string, string> {
 
 export const boundaryCommandSpec: CommandSpec = {
   summary: "compile, review, simulate, or apply a declared architectural boundary",
+  category: "Architectural boundaries",
   usage:
-    "boundary review --id <boundaryId>\n       boundary compile --id <boundaryId> [--target <path>] [--template <id>] [--var key=value ...] [--out <path>] [--write]\n       boundary simulate --plan <manifest>\n       boundary apply --plan <manifest> [--commit]",
+    "boundary review --id <boundaryId> [--app <name>]\n       boundary compile --id <boundaryId> [--app <name>] [--target <path>] [--template <id>] [--var key=value ...] [--out <path>] [--write]\n       boundary simulate --plan <manifest>\n       boundary apply --plan <manifest> [--commit]",
   details:
     "review reports a declared composition boundary, port promotion, module promotion, value split, or generated-source adoption and its graph-derived evidence. compile derives importer sets and declaration SCCs itself, records SCC-cut or provenance proofs where applicable, and never accepts a hand-typed importer list. simulate replays the compiled manifest in a disposable worktree; apply simulates and, with --commit, lands it.",
   run: async (args) => {

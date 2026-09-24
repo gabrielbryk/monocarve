@@ -269,22 +269,25 @@ async function explainPlan(args: ParsedArgs): Promise<void> {
 export const planningCommands: Record<string, CommandSpec> = {
   plan: {
     summary: "compile a hash-journaled extraction plan",
+    category: "Extraction planning",
     usage:
-      "plan --candidate <id> [--source <path> ...] [--profile <name> | --package-name <name> [--package-root <path>]] [--target-subpath <dir>] [--public-surface subpaths] [--force] [--verify-lockfile] [--out <path>] [--write [--commit-approval]] [--json | --verbose]",
+      "plan --candidate <id> [--app <name>] [--source <path> ...] [--profile <name> | --package-name <name> [--package-root <path>]] [--target-subpath <dir>] [--public-surface subpaths] [--include-extracted] [--force] [--verify-lockfile] [--out <path>] [--write [--commit-approval]] [--json | --verbose]",
     details:
       "Prints the bounded operator review by default; --json or --verbose emits the full proof manifest. Repeat --source to intentionally narrow a multi-SCC candidate. --package-name resolves a known workspace package root automatically; --package-root is an explicit override. --target-subpath lands every moved file directly in that directory of an existing package, by basename, instead of preserving the path it had below the application source root; it must be src or a directory below it, and colliding basenames are refused. --public-surface subpaths selects deterministic per-module exports when a barrel would have ambiguous bindings. A root containing package.json is extended, otherwise a new package is scaffolded. Low-confidence recommendations require an explicit target. --write reports exact review, approval, and apply actions; --commit-approval explicitly creates only the manifest approval commit.",
     run: plan,
   },
   scope: {
     summary: "resolve a stable source path and review its current plan",
+    category: "Extraction planning",
     usage:
-      "scope --path <source> --package-name <name> [--app <name>] [--package-root <path>] [--target-subpath <dir>] [--verify-lockfile] [--out <path>] [--write] [--json]",
+      "scope --path <source> --package-name <name> [--app <name>] [--package-root <path>] [--target-subpath <dir>] [--include-extracted] [--verify-lockfile] [--out <path>] [--write] [--json]",
     details:
       "Resolves the current principal SCC candidate from a stable source path. It requires an intentional target, prints a concise review by default, and never writes unless --write is explicit. --target-subpath names the destination directory inside an existing package, overriding the structure-preserving default.",
     run: scope,
   },
   "plan-review": {
     summary: "render the deterministic operator review for a plan",
+    category: "Extraction planning",
     usage: "plan-review --plan <path> [--approval-subject <subject>] [--json]",
     details:
       "Reads the manifest and its Git baseline without changing the workspace. The review exposes exact move targets, wiring and public-surface changes, generated outputs, gates, warnings, and the subject/path inputs used for approval.",
@@ -292,25 +295,29 @@ export const planningCommands: Record<string, CommandSpec> = {
   },
   explain: {
     summary: "explain why a plan changes one dependency or artifact",
+    category: "Extraction planning",
     usage: "explain --plan <path> (--dependency <name> | --artifact <path>) [--json]",
     details: "Read-only. Reports persisted dependency source/reason evidence or the exact operation chain and projected final hash for an artifact.",
     run: explainPlan,
   },
   "relocate-tests": {
     summary: "compile a configured integration-test package",
-    usage: "relocate-tests --suite <name> [--out <path>] [--write]",
+    category: "Extraction planning",
+    usage: "relocate-tests --suite <name> [--app <name>] [--out <path>] [--write]",
     details: "The suite and all target/scaffold policy come from configuration.",
     run: relocateTests,
   },
   next: {
     summary: "pick and plan the highest-scoring candidate",
-    usage: "next [--app <name>] [--profile <name>] [--package-name <name>] [--write] [--apply] [--verify-lockfile]",
+    category: "Extraction planning",
+    usage: "next [--app <name>] [--profile <name>] [--package-name <name>] [--include-extracted] [--out <path>] [--write] [--apply] [--verify-lockfile]",
     details: "--apply runs simulation only; it does not commit. Use plan when you need an explicit candidate or package root.",
     run: next,
   },
   refresh: {
     summary: "safely recompile a stale extraction plan at HEAD",
-    usage: "refresh --plan <path> [--out <new-path> --write [--commit-approval]]",
+    category: "Extraction planning",
+    usage: "refresh --plan <path> [--app <name>] [--out <new-path> --write [--commit-approval]]",
     details:
       "Read-only by default. Refuses dirty workspaces and candidate, application, target/profile, closure, source-byte, or configured execution-policy drift. Written refreshes use a distinct exclusive path and require fresh review; the input manifest is immutable.",
     run: refresh,

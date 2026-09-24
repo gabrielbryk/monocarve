@@ -158,6 +158,7 @@ async function pruneWorktreesCommand(args: ParsedArgs): Promise<void> {
 export const transactionCommands: Record<string, CommandSpec> = {
   "inspect-gates": {
     summary: "attribute gate-created files in isolation",
+    category: "Extraction execution",
     usage: "inspect-gates --plan <path>",
     details:
       "Runs every declared repository gate separately against a landed plan in a disposable worktree, reports exact repository-visible changed and undeclared paths, and suggests generated-artifact declarations without editing the checkout or configuration.",
@@ -165,6 +166,7 @@ export const transactionCommands: Record<string, CommandSpec> = {
   },
   approve: {
     summary: "inspect or commit one reviewed plan manifest",
+    category: "Extraction execution",
     usage: "approve --plan <path> [--commit]",
     details:
       "Without --commit, validates the exact written bytes and baseline and reports the approval action without mutation. --commit explicitly creates a commit containing only that manifest and refuses guarded branches, wrong HEAD, staged paths, or any unrelated dirt.",
@@ -172,6 +174,7 @@ export const transactionCommands: Record<string, CommandSpec> = {
   },
   apply: {
     summary: "land a plan with one mandatory simulation",
+    category: "Extraction execution",
     usage: "apply --plan <path> [--commit] [--resume] [--skip-gates] [--verify-lockfile]",
     details:
       "Use --commit as the default landing path: it simulates once, then immediately applies the identical verified journal. Without --commit, apply is a standalone feasibility or review run; do not run it immediately before a committed apply because --commit must simulate again and no simulation evidence is cached. Refresh is a separate command that writes a distinct manifest for review; apply never replaces approved bytes. --resume continues only from a verified transaction boundary; --skip-simulation is refused.",
@@ -179,12 +182,14 @@ export const transactionCommands: Record<string, CommandSpec> = {
   },
   "apply-status": {
     summary: "inspect a durable committing-apply marker",
+    category: "Extraction execution",
     usage: "apply-status",
     details: "Read-only. Reports the exact plan, phase, owner process, and recovery command for an interrupted apply.",
     run: applyStatus,
   },
   "apply-recover": {
     summary: "release a stopped apply owner for verified resume",
+    category: "Extraction execution",
     usage: "apply-recover --plan <path> [--force-corrupt-lock]",
     details:
       "Refuses a live or unverifiable owner or a different plan. An owner stopped mid-journal (phase applying) is first rolled back from its durable checkpoint: HEAD, index, and every journal path are restored and verified, and nothing is released if verification fails. Otherwise it never changes Git state; it releases only the stopped owner's lock and prints the exact apply or --resume command whose normal preflight proves the repository boundary. --force-corrupt-lock is accepted only when the lock is unparseable: it asserts no apply is running, moves the unreadable lock/state aside, and restores this plan's checkpoint if one exists.",
@@ -192,12 +197,14 @@ export const transactionCommands: Record<string, CommandSpec> = {
   },
   doctor: {
     summary: "replay a manifest and its gates in isolation",
+    category: "Extraction execution",
     usage: "doctor --plan <path> [--verify-lockfile]",
     details: "Validates, journals, audits, and runs configured gates in a disposable worktree without changing the checkout.",
     run: doctor,
   },
   audit: {
     summary: "audit the tree produced by an applied plan",
+    category: "Extraction execution",
     usage: "audit --plan <path> [--skip-compile-proof]",
     details:
       "Checks declared bytes, boundaries, replay evidence, public surfaces, lockfile state, and generated artifacts. Audit immediately after apply, before another extraction changes owned paths.",
@@ -205,16 +212,24 @@ export const transactionCommands: Record<string, CommandSpec> = {
   },
   verify: {
     summary: "validate a plan and run apply preflight",
+    category: "Extraction execution",
     usage: "verify --plan <path>",
     details: "Read-only validation of manifest semantics, branch/checkout state, journal preconditions, and approved-plan provenance.",
     run: verify,
   },
   "prune-worktrees": {
     summary: "reclaim simulation worktrees left by interrupted runs",
+    category: "Extraction execution",
     usage: "prune-worktrees [--worktree-root <path>] [--older-than <n>[m|h|d]] [--all]",
     details:
       "A run disposes its own worktree, including on failure; nothing survives SIGKILL or a closed terminal, and those leftovers accumulate in transaction.worktreeRoot. The default worktreeRoot is checkout-derived, so two checkouts no longer share one root, but concurrent simulations FROM THIS CHECKOUT still do (and an explicit MONOCARVE_SCRATCH_ROOT or worktreeRoot override is shared with whatever else points at it). Defaults to --older-than 1h for that reason; --all removes every one regardless of age. --worktree-root <path> sweeps that directory instead and does not require a config.",
     run: pruneWorktreesCommand,
   },
-  check: { summary: "run repository policy checks", usage: "check import-extensions", details: "Currently supported check: import-extensions.", run: check },
+  check: {
+    summary: "run repository policy checks",
+    category: "Discovery and diagnosis",
+    usage: "check import-extensions",
+    details: "Currently supported check: import-extensions.",
+    run: check,
+  },
 };

@@ -11,7 +11,8 @@
  */
 
 import type { MonocarveConfig } from "../config.ts";
-import type { CompositionBoundariesConfig, PortPromotionsConfig } from "../config/schema-policy.ts";
+import type { CompositionBoundariesConfig } from "../config/schema-policy.ts";
+import type { PortPromotionsConfig } from "../config/schema-promotions.ts";
 import { byCodeUnit } from "../util/hash.ts";
 import type { RecipeStep, RetainedBlocker } from "./types.ts";
 

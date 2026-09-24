@@ -174,6 +174,7 @@ function assertClean(rootDir: string): void {
 export const reconciliationCommands: Record<string, CommandSpec> = {
   reconcile: {
     summary: "compile a linked post-apply reconciliation record",
+    category: "Extraction execution",
     usage: "reconcile --plan <path> --reason <text> --approval-subject <subject> [--out <path>] [--write]",
     details:
       "Preview by default. Records only declared byte drift after proving the original approval and exact application chain. --write exclusively creates a new linked record and never changes the approved plan.",
@@ -181,6 +182,7 @@ export const reconciliationCommands: Record<string, CommandSpec> = {
   },
   receipt: {
     summary: "compile an immutable applied-plan receipt",
+    category: "Extraction execution",
     usage: "receipt --plan <path> [--reconciliation <approved-record>] [--out <path>] [--write]",
     details:
       "Preview by default. Requires the exact application-result commit and a passing independent audit. --write exclusively creates a new receipt and never changes the approved plan.",
@@ -188,6 +190,7 @@ export const reconciliationCommands: Record<string, CommandSpec> = {
   },
   "reconcile-approve": {
     summary: "inspect or commit one reconciliation record approval",
+    category: "Extraction execution",
     usage: "reconcile-approve --record <path> [--commit]",
     details:
       "Without --commit, reports the reviewed record boundary. --commit creates an exact record-only approval directly atop the observed head and verifies hook output.",

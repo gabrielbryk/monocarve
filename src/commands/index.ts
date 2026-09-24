@@ -60,38 +60,8 @@ const MUTATION_ONLY_FLAGS = [
  */
 const FLAG_OVERRIDES: Readonly<Record<string, FlagOverrides>> = {
   assess: { refused: [...MUTATION_ONLY_FLAGS, "out"] },
-  "split-candidates": {
-    // Batch-mode inputs documented in the command details.
-    extra: [
-      { name: "replay", kind: "value" },
-      { name: "allow-empty", kind: "boolean" },
-      { name: "replace-generated", kind: "boolean" },
-      { name: "max-bytes", kind: "value" },
-    ],
-  },
-  evacuate: { repeatable: ["authorize-protected", "include-composition"], refused: ["plan", "apply", "approve", "manifest", "commit-approval", "force"] },
-  // Read through the shared graph/portfolio loaders but absent from the usage lines.
-  plan: {
-    extra: [
-      { name: "app", kind: "value" },
-      { name: "include-extracted", kind: "boolean" },
-    ],
-  },
-  scope: { extra: [{ name: "include-extracted", kind: "boolean" }] },
-  next: {
-    extra: [
-      { name: "out", kind: "value" },
-      { name: "include-extracted", kind: "boolean" },
-    ],
-  },
-  hotspots: { extra: [{ name: "include-extracted", kind: "boolean" }] },
-  "lazy-registry": { extra: [{ name: "include-extracted", kind: "boolean" }] },
-  // These load the graph, which reads --app, but their usage lines omit it.
-  capabilities: { extra: [{ name: "app", kind: "value" }] },
-  "relocate-tests": { extra: [{ name: "app", kind: "value" }] },
-  boundary: { extra: [{ name: "app", kind: "value" }] },
-  "prepare-plan": { extra: [{ name: "app", kind: "value" }] },
-  refresh: { refused: ["replace"], extra: [{ name: "app", kind: "value" }] },
+  evacuate: { refused: ["plan", "apply", "approve", "manifest", "commit-approval", "force"] },
+  refresh: { refused: ["replace"] },
   apply: { refused: ["skip-simulation", "refresh-if-baseline-only"] },
   doctor: { refused: ["skip-gates"] },
   // `check --check <name>` is the legacy spelling of `check <name>`.
@@ -177,4 +147,4 @@ function hiddenOptions(spec: CommandSpec & { readonly flags?: readonly FlagSpec[
   return `\n\nalso accepts: ${hidden.map((flag) => (flag.kind === "boolean" ? `--${flag.name}` : `--${flag.name} <value>`)).join(", ")}`;
 }
 
-export type { CommandSpec } from "./types.ts";
+export type { CommandCategory, CommandSpec } from "./types.ts";

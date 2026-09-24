@@ -87,6 +87,7 @@ async function consolidate(args: ParsedArgs): Promise<void> {
 export const consolidationCommands: Record<string, CommandSpec> = {
   consolidate: {
     summary: "merge multiple packages into a target domain package",
+    category: "Extraction execution",
     usage:
       "consolidate --target <package-name> --donor <package-name> [--donor <...>] [--retire-donors] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]",
     details:
