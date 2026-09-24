@@ -6,17 +6,19 @@ import type { SeamPlan } from "../seams/types.ts";
 import { resolveCommit, showBaseline } from "../util/git.ts";
 import { byCodeUnit, hashJson, hashText, MISSING, type Sha256 } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";
-import { baselineFileMode, type PreparationManifestRendering } from "./build-shared.ts";
+import { baselineFileMode, sortedGates, type PreparationManifestRendering } from "./build-shared.ts";
 import { preparationCompilerOptions } from "./compiler-policy.ts";
 import type {
+  ExtractTypeDeclarationsOperation,
   PreparationDeclarationSelector,
   PreparationDeclarationGroupSelector,
   PreparationManifest,
   PreparationInlineImportTypeProof,
+  PreparationTargetDeclarationProof,
   PreparationTargetImportProof,
 } from "./manifest-types.ts";
 import { createPreparationManifest, assertPreparationManifestValid } from "./manifest.ts";
-import { renderTypeOnlyExtraction } from "./replay.ts";
+import { renderTypeOnlyExtraction, type RenderTypeOnlyExtractionInput, type TypeOnlyExtractionReplay } from "./replay.ts";
 import { selectTypeOnlyDeclarations } from "./selectors.ts";
 
 interface RelativeTypeImportRewrite {
@@ -57,6 +59,87 @@ export interface CompilePreparationManifestInput {
  * every source span and precondition describes the same immutable revision.
  */
 export function compilePreparationManifest(input: CompilePreparationManifestInput): PreparationManifest {
+  const reviewed = assertCompileInput(input);
+  const baseline = resolveCommit(input.rootDir, input.baselineCommit);
+  const donorMode = baselineFileMode(input.rootDir, baseline.commit, input.seam.sourcePath);
+  const sourceText = readBaselineDonor(input, baseline.commit);
+  const selection = selectTypeOnlyDeclarations({
+    sourcePath: input.seam.sourcePath,
+    sourceText,
+    groupIds: reviewed,
+    compilerOptions: preparationCompilerOptions(input.rootDir, input.config, input.seam.sourcePath),
+  });
+  assertClosureMatchesReview(reviewed, selection.closureGroupIds);
+  const groups = declarationGroupSelectors(selection);
+  const rewriteRelative = relativeRewriter(input, selection.sourcePath, baseline.commit);
+  const { targetImports, targetImportProofs } = rewriteTargetImports(selection, rewriteRelative);
+  const inlineImportTypeProofs: PreparationInlineImportTypeProof[] = selection.relativeInlineImportTypes.map((item) => {
+    const rewrite = rewriteRelative(item.originalSpecifier);
+    return { ...item, targetSpecifier: rewrite.targetSpecifier, resolvedSourcePath: rewrite.resolvedSourcePath, proofBaselineHash: selection.sourceHash };
+  });
+  const donorImports = retainedDonorImports(selection, input.targetModuleSpecifier);
+  const reExportNames = selection.compatibilitySurface.map((item) => item.name).toSorted(byCodeUnit);
+  const replay = renderTypeOnlyExtraction({
+    baselineText: sourceText,
+    baselineHash: selection.sourceHash,
+    selected: selection.declarations.map((declaration) => ({
+      ...declaration.extraction,
+      name: declaration.name,
+      kind: declaration.kind,
+      originallyExported: declaration.originallyExported,
+    })),
+    targetPath: input.targetPath,
+    moduleSpecifier: input.targetModuleSpecifier,
+    targetImports,
+    inlineImportTypeProofs,
+    compatibility: { reExportNames, donorImports },
+  });
+  const operation: ExtractTypeDeclarationsOperation = {
+    kind: "extract-type-declarations",
+    donor: {
+      path: selection.sourcePath,
+      preconditionHash: selection.sourceHash,
+      preconditionMode: donorMode,
+      resultHash: replay.donor.hash,
+      resultMode: donorMode,
+    },
+    target: { path: input.targetPath, preconditionHash: MISSING, preconditionMode: "missing", resultHash: replay.target.hash, resultMode: 0o644 },
+    moduleSpecifier: input.targetModuleSpecifier,
+    declarations: groups,
+    targetImportProofs: sortTargetImportProofs(targetImportProofs),
+    inlineImportTypeProofs,
+    targetImports,
+    donorImports,
+    reExportNames,
+    targetDeclarationProofs: targetDeclarationProofs(groups, replay),
+    donorContents: replay.donor.text,
+    targetContents: replay.target.text,
+  };
+  const manifest = createPreparationManifest({
+    schemaVersion: 1,
+    createdAt: baseline.committedAt,
+    generator: { ...GENERATOR },
+    baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: configDigest(input.config) },
+    graphDigest: input.graphDigest,
+    declarations: groups,
+    operations: [operation],
+    compatibilityReexports: compatibilityReexports(selection, input),
+    changedFiles: [selection.sourcePath, input.targetPath].toSorted(byCodeUnit),
+    commits: { prepare: input.rendering.commit },
+    gates: sortedGates(input.rendering),
+  });
+  assertPreparationManifestValid(manifest);
+  return manifest;
+}
+
+type TypeOnlySelection = ReturnType<typeof selectTypeOnlyDeclarations>;
+type SelectedDeclaration = TypeOnlySelection["declarations"][number];
+type TargetImport = RenderTypeOnlyExtractionInput["targetImports"][number];
+type RelativeRewriter = (originalSpecifier: string) => RelativeTypeImportRewrite;
+type MutableGroup = Omit<PreparationDeclarationGroupSelector, "declarations"> & { declarations: PreparationDeclarationSelector[] };
+
+/** Refuse inputs that cannot describe one reviewed, type-only seam; returns the sorted reviewed selection. */
+function assertCompileInput(input: CompilePreparationManifestInput): Sha256[] {
   workspacePath(input.rootDir, input.seam.sourcePath);
   workspacePath(input.rootDir, input.targetPath);
   if (input.targetPath === input.seam.sourcePath) throw new PlanningError("preparation target path must differ from the donor source path");
@@ -73,8 +156,13 @@ export function compilePreparationManifest(input: CompilePreparationManifestInpu
   if (reviewed.length === 0 || reviewed.length !== input.reviewedGroupIds.length) {
     throw new PlanningError("preparation requires a non-empty, duplicate-free reviewed symbol selection");
   }
+  assertSeamMatchesReview(input, reviewed);
+  return reviewed;
+}
+
+function assertSeamMatchesReview(input: CompilePreparationManifestInput, reviewed: readonly Sha256[]): void {
   const proposed = input.seam.movedGroups.map((group) => group.id).toSorted(byCodeUnit);
-  if (reviewed.length !== proposed.length || reviewed.some((id, index) => id !== proposed[index])) {
+  if (!sameSequence(reviewed, proposed)) {
     throw new PlanningError("reviewed symbol selection must exactly match the seam's moved declaration groups");
   }
   if (input.seam.targetPath !== undefined && input.seam.targetPath !== input.targetPath) {
@@ -86,72 +174,44 @@ export function compilePreparationManifest(input: CompilePreparationManifestInpu
   if (input.seam.requiredImports.some((item) => item.space !== "type")) {
     throw new PlanningError("type-only preparation refuses a seam with a value-space boundary dependency");
   }
-  const baseline = resolveCommit(input.rootDir, input.baselineCommit);
-  const donorMode = baselineFileMode(input.rootDir, baseline.commit, input.seam.sourcePath);
-  const sourceText = showBaseline(input.rootDir, baseline.commit, input.seam.sourcePath);
+}
+
+function sameSequence(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
+}
+
+/** Read the donor at the resolved baseline and prove the target is new and the seam describes these bytes. */
+function readBaselineDonor(input: CompilePreparationManifestInput, commit: string): string {
+  const sourceText = showBaseline(input.rootDir, commit, input.seam.sourcePath);
   if (sourceText === null) throw new PlanningError(`preparation donor is absent from baseline: ${input.seam.sourcePath}`);
-  if (showBaseline(input.rootDir, baseline.commit, input.targetPath) !== null) {
+  if (showBaseline(input.rootDir, commit, input.targetPath) !== null) {
     throw new PlanningError(`preparation target already exists at baseline: ${input.targetPath}`);
   }
   if (hashText(sourceText) !== input.seam.sourceHash) throw new PlanningError("seam source hash does not match the resolved baseline donor");
-  const selection = selectTypeOnlyDeclarations({
-    sourcePath: input.seam.sourcePath,
-    sourceText,
-    groupIds: reviewed,
-    compilerOptions: preparationCompilerOptions(input.rootDir, input.config, input.seam.sourcePath),
-  });
-  const closure = selection.closureGroupIds;
-  if (reviewed.length !== closure.length || reviewed.some((id, index) => id !== closure[index])) {
+  return sourceText;
+}
+
+function assertClosureMatchesReview(reviewed: readonly Sha256[], closure: readonly Sha256[]): void {
+  if (!sameSequence(reviewed, closure)) {
     throw new PlanningError("type dependency closure expands beyond the operator-reviewed seam; review the expanded declaration groups before compiling");
   }
-  type MutableGroup = Omit<PreparationDeclarationGroupSelector, "declarations"> & { declarations: PreparationDeclarationSelector[] };
-  const declarations = selection.declarations.reduce<Map<Sha256, MutableGroup>>((groups, declaration) => {
-    const current = groups.get(declaration.groupId) ?? {
+}
+
+/** Group selected declarations by group id, ordered by source position. */
+function declarationGroupSelectors(selection: TypeOnlySelection): PreparationDeclarationGroupSelector[] {
+  const declarations = new Map<Sha256, MutableGroup>();
+  for (const declaration of selection.declarations) {
+    const current = declarations.get(declaration.groupId) ?? {
       groupId: declaration.groupId,
       sourcePath: selection.sourcePath,
       name: declaration.name,
       space: "type" as const,
       declarations: [],
     };
-    current.declarations.push({
-      declarationId: hashJson({
-        sourcePath: selection.sourcePath,
-        name: declaration.name,
-        kind: declaration.kind,
-        start: declaration.declaration.start,
-        end: declaration.declaration.end,
-        spanHash: declaration.declaration.hash,
-      }),
-      sourcePath: selection.sourcePath,
-      sourceHash: selection.sourceHash,
-      name: declaration.name,
-      kind: declaration.kind,
-      space: "type",
-      originallyExported: declaration.originallyExported,
-      span: declaration.declaration,
-      selectorId: hashJson({
-        declarationId: hashJson({
-          sourcePath: selection.sourcePath,
-          name: declaration.name,
-          kind: declaration.kind,
-          start: declaration.declaration.start,
-          end: declaration.declaration.end,
-          spanHash: declaration.declaration.hash,
-        }),
-        sourcePath: selection.sourcePath,
-        sourceHash: selection.sourceHash,
-        extractionStart: declaration.extraction.start,
-        extractionEnd: declaration.extraction.end,
-        extractionHash: declaration.extraction.hash,
-      }),
-      extractionStart: declaration.extraction.start,
-      extractionEnd: declaration.extraction.end,
-      extractionHash: declaration.extraction.hash,
-    });
-    groups.set(declaration.groupId, current);
-    return groups;
-  }, new Map());
-  const groups: PreparationDeclarationGroupSelector[] = [...declarations.values()]
+    current.declarations.push(declarationSelector(selection, declaration));
+    declarations.set(declaration.groupId, current);
+  }
+  return [...declarations.values()]
     .map((group) => ({
       ...group,
       declarations: [...group.declarations].toSorted(
@@ -159,27 +219,64 @@ export function compilePreparationManifest(input: CompilePreparationManifestInpu
       ),
     }))
     .toSorted((left, right) => left.declarations[0]!.span.start - right.declarations[0]!.span.start || byCodeUnit(left.groupId, right.groupId));
-  const targetImportProofs = new Map<string, PreparationTargetImportProof>();
-  const rewriteRelative = (originalSpecifier: string): RelativeTypeImportRewrite => {
-    const rewrite = input.rewriteRelativeTypeImport?.({
-      donorPath: selection.sourcePath,
-      targetPath: input.targetPath,
-      originalSpecifier,
-      baselineCommit: baseline.commit,
-    });
+}
+
+function declarationSelector(selection: TypeOnlySelection, declaration: SelectedDeclaration): PreparationDeclarationSelector {
+  const declarationId = hashJson({
+    sourcePath: selection.sourcePath,
+    name: declaration.name,
+    kind: declaration.kind,
+    start: declaration.declaration.start,
+    end: declaration.declaration.end,
+    spanHash: declaration.declaration.hash,
+  });
+  return {
+    declarationId,
+    sourcePath: selection.sourcePath,
+    sourceHash: selection.sourceHash,
+    name: declaration.name,
+    kind: declaration.kind,
+    space: "type",
+    originallyExported: declaration.originallyExported,
+    span: declaration.declaration,
+    selectorId: hashJson({
+      declarationId,
+      sourcePath: selection.sourcePath,
+      sourceHash: selection.sourceHash,
+      extractionStart: declaration.extraction.start,
+      extractionEnd: declaration.extraction.end,
+      extractionHash: declaration.extraction.hash,
+    }),
+    extractionStart: declaration.extraction.start,
+    extractionEnd: declaration.extraction.end,
+    extractionHash: declaration.extraction.hash,
+  };
+}
+
+/** Resolve one donor-relative specifier through the caller's configured proof, refusing unproven rewrites. */
+function relativeRewriter(input: CompilePreparationManifestInput, donorPath: string, baselineCommit: string): RelativeRewriter {
+  return (originalSpecifier) => {
+    const rewrite = input.rewriteRelativeTypeImport?.({ donorPath, targetPath: input.targetPath, originalSpecifier, baselineCommit });
     if (!rewrite) throw new PlanningError(`relative type import requires a configured rewrite proof: ${originalSpecifier}`);
     workspacePath(input.rootDir, rewrite.resolvedSourcePath);
-    if (showBaseline(input.rootDir, baseline.commit, rewrite.resolvedSourcePath) === null)
+    if (showBaseline(input.rootDir, baselineCommit, rewrite.resolvedSourcePath) === null)
       throw new PlanningError(`relative type import proof resolves no baseline source: ${rewrite.resolvedSourcePath}`);
     if (!rewrite.targetSpecifier.startsWith("."))
       throw new PlanningError(`relative type import proof must produce a relative target specifier for ${originalSpecifier}`);
     return rewrite;
   };
+}
+
+function rewriteTargetImports(
+  selection: TypeOnlySelection,
+  rewriteRelative: RelativeRewriter,
+): { targetImports: TargetImport[]; targetImportProofs: Map<string, PreparationTargetImportProof> } {
+  const targetImportProofs = new Map<string, PreparationTargetImportProof>();
   const targetImports = selection.imports
     .map((item) => {
       if (!item.moduleSpecifier.startsWith(".")) return { ...item, proofBaselineHash: selection.sourceHash };
       const rewrite = rewriteRelative(item.moduleSpecifier);
-      const proof = {
+      const proof: PreparationTargetImportProof = {
         originalSpecifier: item.moduleSpecifier,
         targetSpecifier: rewrite.targetSpecifier,
         resolvedSourcePath: rewrite.resolvedSourcePath,
@@ -200,37 +297,40 @@ export function compilePreparationManifest(input: CompilePreparationManifestInpu
         byCodeUnit(left.kind, right.kind) ||
         byCodeUnit(left.importedName, right.importedName),
     );
-  const inlineImportTypeProofs: PreparationInlineImportTypeProof[] = selection.relativeInlineImportTypes.map((item) => {
-    const rewrite = rewriteRelative(item.originalSpecifier);
-    return { ...item, targetSpecifier: rewrite.targetSpecifier, resolvedSourcePath: rewrite.resolvedSourcePath, proofBaselineHash: selection.sourceHash };
-  });
-  const donorImports = selection.retainedConsumers
+  return { targetImports, targetImportProofs };
+}
+
+function sortTargetImportProofs(proofs: ReadonlyMap<string, PreparationTargetImportProof>): PreparationTargetImportProof[] {
+  return [...proofs.values()].toSorted(
+    (left, right) =>
+      byCodeUnit(left.targetSpecifier, right.targetSpecifier) ||
+      byCodeUnit(left.localName, right.localName) ||
+      byCodeUnit(left.kind, right.kind) ||
+      byCodeUnit(left.importedName, right.importedName) ||
+      byCodeUnit(left.originalSpecifier, right.originalSpecifier) ||
+      byCodeUnit(left.resolvedSourcePath, right.resolvedSourcePath),
+  );
+}
+
+function retainedDonorImports(selection: TypeOnlySelection, targetModuleSpecifier: string): TargetImport[] {
+  return selection.retainedConsumers
     .map((item) => ({
       localName: item.name,
       importedName: item.name,
-      moduleSpecifier: input.targetModuleSpecifier,
+      moduleSpecifier: targetModuleSpecifier,
       kind: "named" as const,
       originallyTypeOnly: true,
       requiredAs: "type" as const,
       proofBaselineHash: selection.sourceHash,
     }))
     .toSorted((left, right) => byCodeUnit(left.moduleSpecifier, right.moduleSpecifier) || byCodeUnit(left.localName, right.localName));
-  const reExportNames = selection.compatibilitySurface.map((item) => item.name).toSorted(byCodeUnit);
-  const replay = renderTypeOnlyExtraction({
-    baselineText: sourceText,
-    baselineHash: selection.sourceHash,
-    selected: selection.declarations.map((declaration) => ({
-      ...declaration.extraction,
-      name: declaration.name,
-      kind: declaration.kind,
-      originallyExported: declaration.originallyExported,
-    })),
-    targetPath: input.targetPath,
-    moduleSpecifier: input.targetModuleSpecifier,
-    targetImports,
-    inlineImportTypeProofs,
-    compatibility: { reExportNames, donorImports },
-  });
+}
+
+/** Pair every rendered target declaration with the donor selector whose extraction produced it. */
+function targetDeclarationProofs(
+  groups: readonly PreparationDeclarationGroupSelector[],
+  replay: TypeOnlyExtractionReplay,
+): PreparationTargetDeclarationProof[] {
   const selectorByExtraction = new Map(
     groups.flatMap((group) =>
       group.declarations.map((declaration) => [
@@ -239,7 +339,7 @@ export function compilePreparationManifest(input: CompilePreparationManifestInpu
       ]),
     ),
   );
-  const targetDeclarationProofs = replay.declarations
+  return replay.declarations
     .map((proof) => {
       const selectorId = selectorByExtraction.get(`${proof.source.start}\0${proof.source.end}\0${proof.source.hash}`);
       if (!selectorId) throw new PlanningError(`replay proof has no matching declaration selector: ${proof.name}`);
@@ -255,67 +355,20 @@ export function compilePreparationManifest(input: CompilePreparationManifestInpu
       };
     })
     .toSorted((left, right) => byCodeUnit(left.selectorId, right.selectorId));
-  const manifest = createPreparationManifest({
-    schemaVersion: 1,
-    createdAt: baseline.committedAt,
-    generator: { ...GENERATOR },
-    baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: configDigest(input.config) },
-    graphDigest: input.graphDigest,
-    declarations: groups,
-    operations: [
-      {
-        kind: "extract-type-declarations",
-        donor: {
-          path: selection.sourcePath,
-          preconditionHash: selection.sourceHash,
-          preconditionMode: donorMode,
-          resultHash: replay.donor.hash,
-          resultMode: donorMode,
-        },
-        target: { path: input.targetPath, preconditionHash: MISSING, preconditionMode: "missing", resultHash: replay.target.hash, resultMode: 0o644 },
-        moduleSpecifier: input.targetModuleSpecifier,
-        declarations: groups,
-        targetImportProofs: [...targetImportProofs.values()].toSorted(
-          (left, right) =>
-            byCodeUnit(left.targetSpecifier, right.targetSpecifier) ||
-            byCodeUnit(left.localName, right.localName) ||
-            byCodeUnit(left.kind, right.kind) ||
-            byCodeUnit(left.importedName, right.importedName) ||
-            byCodeUnit(left.originalSpecifier, right.originalSpecifier) ||
-            byCodeUnit(left.resolvedSourcePath, right.resolvedSourcePath),
-        ),
-        inlineImportTypeProofs,
-        targetImports,
-        donorImports,
-        reExportNames,
-        targetDeclarationProofs,
-        donorContents: replay.donor.text,
-        targetContents: replay.target.text,
-      },
-    ],
-    compatibilityReexports:
-      selection.compatibilitySurface.length === 0
-        ? []
-        : [
-            {
-              fromPath: selection.sourcePath,
-              toPath: input.targetPath,
-              moduleSpecifier: input.targetModuleSpecifier,
-              exports: selection.compatibilitySurface
-                .map((item) => ({ name: item.name, typeOnly: true as const }))
-                .toSorted((left, right) => byCodeUnit(left.name, right.name)),
-            },
-          ],
-    changedFiles: [selection.sourcePath, input.targetPath].toSorted(byCodeUnit),
-    commits: { prepare: input.rendering.commit },
-    gates: {
-      package: [...input.rendering.gates.package].toSorted(byCodeUnit),
-      project: [...input.rendering.gates.project].toSorted(byCodeUnit),
-      workspace: [...input.rendering.gates.workspace].toSorted(byCodeUnit),
+}
+
+function compatibilityReexports(selection: TypeOnlySelection, input: CompilePreparationManifestInput): PreparationManifest["compatibilityReexports"] {
+  if (selection.compatibilitySurface.length === 0) return [];
+  return [
+    {
+      fromPath: selection.sourcePath,
+      toPath: input.targetPath,
+      moduleSpecifier: input.targetModuleSpecifier,
+      exports: selection.compatibilitySurface
+        .map((item) => ({ name: item.name, typeOnly: true as const }))
+        .toSorted((left, right) => byCodeUnit(left.name, right.name)),
     },
-  });
-  assertPreparationManifestValid(manifest);
-  return manifest;
+  ];
 }
 
 /** Git tree modes carry type bits; preparation journals own only POSIX permissions. */

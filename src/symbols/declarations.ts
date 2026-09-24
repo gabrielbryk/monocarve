@@ -14,11 +14,7 @@ export function collectDeclarations(sourceFile: ts.SourceFile, checker: ts.TypeC
   const result: PhysicalDeclaration[] = [];
   for (const statement of sourceFile.statements) {
     if (ts.isVariableStatement(statement)) {
-      for (const declaration of statement.declarationList.declarations) {
-        for (const identifier of bindingIdentifiers(declaration.name)) {
-          result.push(makeDeclaration(sourcePath, sourceText, declaration, identifier.text, "variable", checker, identifier));
-        }
-      }
+      result.push(...variableDeclarations(statement, checker, sourcePath, sourceText));
       continue;
     }
 
@@ -39,6 +35,14 @@ export function collectDeclarations(sourceFile: ts.SourceFile, checker: ts.TypeC
     result.push(makeDeclaration(sourcePath, sourceText, declaration, name, kind, checker, nameNode));
   }
   return result;
+}
+
+function variableDeclarations(statement: ts.VariableStatement, checker: ts.TypeChecker, sourcePath: string, sourceText: string): PhysicalDeclaration[] {
+  return statement.declarationList.declarations.flatMap((declaration) =>
+    bindingIdentifiers(declaration.name).map((identifier) =>
+      makeDeclaration(sourcePath, sourceText, declaration, identifier.text, "variable", checker, identifier),
+    ),
+  );
 }
 
 export function collectExportedSymbols(sourceFile: ts.SourceFile, checker: ts.TypeChecker): Set<ts.Symbol> {

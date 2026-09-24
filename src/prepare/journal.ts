@@ -346,7 +346,7 @@ function createMissingDirectories(rootDir: string, absentAncestors: readonly str
       created.add(directory);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-        throw new PreparationJournalError(`preparation compare-and-swap failed for directory ${directory}`);
+        throw new PreparationJournalError(`preparation compare-and-swap failed for directory ${directory}`, [], error);
       }
       throw error;
     }

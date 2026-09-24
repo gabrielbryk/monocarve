@@ -175,7 +175,7 @@ async function applyCommittedPreparation(
     }).recovery;
   } catch (error) {
     const residue = error instanceof PreparationJournalError ? error.residue : [];
-    throw new PreparationApplyError(`preparation journal failed: ${(error as Error).message}`, residue);
+    throw new PreparationApplyError(`preparation journal failed: ${(error as Error).message}`, residue, error);
   }
   try {
     const preparation = runPreparationPostJournalPreparers(options.config, rootDir, manifest);
@@ -214,7 +214,7 @@ async function rollbackAndThrow(
       ? `preparation journal rollback restored ${fileRecovery.restored.length} path(s)`
       : `PREPARATION JOURNAL ROLLBACK INCOMPLETE: ${fileRecovery.failures.map((failure) => `${failure.path} (${failure.message})`).join("; ")}`,
   ].join("; ");
-  throw new PreparationApplyError(`preparation apply failed: ${(error as Error).message} [${recoveryMessage}]`, residue);
+  throw new PreparationApplyError(`preparation apply failed: ${(error as Error).message} [${recoveryMessage}]`, residue, error);
 }
 
 function sameSet(left: readonly string[], right: readonly string[]): boolean {

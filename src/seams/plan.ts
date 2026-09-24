@@ -1,5 +1,6 @@
 import { isAbsolute } from "node:path";
 
+import { MonocarveError } from "../errors.ts";
 import type { DeclarationGroup, SymbolEdge, SymbolSplitCandidate, WorkspaceSymbolAnalysis } from "../symbols/types.ts";
 import { byCodeUnit, hashJson, type Sha256 } from "../util/hash.ts";
 import { normalizePath } from "../util/paths.ts";
@@ -7,7 +8,7 @@ import { classifyTypeOnlyExtraction, type TypeOnlyExtractionSafety } from "./saf
 import type { AffectedSeamConsumer, PlanSeamInput, RequiredSeamImport, RetainedSeamCycle, SeamBlocker, SeamPlan } from "./types.ts";
 
 /** The requested candidate is not an atomic component of this source analysis. */
-export class SeamPlanningError extends Error {
+export class SeamPlanningError extends MonocarveError {
   override readonly name = "SeamPlanningError";
 }
 

@@ -2,7 +2,7 @@
 
 import { byCodeUnit, hashJson } from "../util/hash.ts";
 import type { ExtractTypeDeclarationsOperation, PreparationDeclarationSelector } from "./manifest-types.ts";
-import { renderTypeOnlyExtraction } from "./replay.ts";
+import { PreparationReplayError, renderTypeOnlyExtraction } from "./replay.ts";
 
 export function verifyRenderedReplay(operation: ExtractTypeDeclarationsOperation, baseline: Uint8Array | undefined, failures: string[]): void {
   if (baseline === undefined) return;
@@ -61,5 +61,5 @@ export function verifyRenderedReplay(operation: ExtractTypeDeclarationsOperation
 
 function replayKind(selector: PreparationDeclarationSelector): "interface" | "type-alias" {
   if (selector.kind === "interface" || selector.kind === "type-alias") return selector.kind;
-  throw new Error(`selector ${selector.name} is not a type-only declaration`);
+  throw new PreparationReplayError(`selector ${selector.name} is not a type-only declaration`);
 }

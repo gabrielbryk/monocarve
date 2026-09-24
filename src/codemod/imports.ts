@@ -18,6 +18,7 @@ import { dirname, extname, resolve } from "node:path";
 
 import ts from "typescript";
 import { JAVASCRIPT_SOURCE_EXTENSIONS, TYPESCRIPT_RESOLUTION_EXTENSIONS } from "../util/source-policy.ts";
+import { CodemodRewriteError } from "./errors.ts";
 
 type ModuleReferenceKind =
   | "static-import"
@@ -434,9 +435,10 @@ export function rewriteResolvedImportSpecifier(
     if (!matchesDonor(importerPath, reference.specifier, donorPath, boundary, resolutionExtensions)) continue;
     const delimiter = source.slice(span.start, span.start + 1);
     if (!fitsInLiteral(packageSpecifier, delimiter)) {
-      throw new Error(
+      throw new CodemodRewriteError(
         `cannot rewrite ${importerPath}: the specifier ${JSON.stringify(packageSpecifier)} ` +
           `cannot be written inside ${JSON.stringify(source.slice(span.start, span.end))}`,
+        { hint: "choose a package name without quotes, backslashes, newlines, or `${`, or rewrite that import by hand before planning" },
       );
     }
     replacements.push({ start: span.start + 1, end: span.end - 1, text: packageSpecifier });
