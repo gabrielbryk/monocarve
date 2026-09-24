@@ -1,6 +1,6 @@
 import ts from "typescript";
 import { domainFor, getApplication } from "../config.ts";
-import { MonocarveError } from "../errors.ts";
+import { MonocarveError, UsageError } from "../errors.ts";
 import { analyzeCouplingHotspots, buildPortfolio } from "../portfolio/index.ts";
 import {
   analyzeWorkspaceSymbolsWithProgram,
@@ -60,7 +60,7 @@ export class BatchAnalysisError extends MonocarveError {
 }
 
 function selectHotspotTargets(snapshot: AssessmentSnapshot, count: number): string[] {
-  if (!Number.isSafeInteger(count) || count <= 0) throw new Error("--split-hotspots must be a positive integer");
+  if (!Number.isSafeInteger(count) || count <= 0) throw new UsageError("--split-hotspots must be a positive integer");
   snapshot.verify();
   if (snapshot.qualification.status === "degraded") return [];
   const portfolio = buildPortfolio({ config: snapshot.config, graph: snapshot.graph, context: snapshot.context, application: snapshot.application });

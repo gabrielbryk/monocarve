@@ -126,7 +126,7 @@ export const COMMANDS: Record<string, RegisteredCommand> = Object.fromEntries(
 );
 
 for (const name of Object.keys(FLAG_OVERRIDES)) {
-  if (!(name in COMMANDS)) throw new Error(`flag overrides name an unregistered command: ${name}`);
+  if (!(name in COMMANDS)) throw new Error(`invariant: flag overrides name an unregistered command: ${name}`);
 }
 
 /** The parser's view of the registry. */

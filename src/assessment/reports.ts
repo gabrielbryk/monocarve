@@ -1,4 +1,5 @@
 import type { MonocarveConfig } from "../config.ts";
+import { UsageError } from "../errors.ts";
 import { analyzeLayers, type LayerReport } from "../graph/layers.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import {
@@ -199,7 +200,7 @@ function bound<T>(records: readonly T[], limit: number, deeperCommand: string): 
 }
 
 function positiveLimit(value: number): number {
-  if (!Number.isSafeInteger(value) || value <= 0) throw new Error("assessment report limit must be a positive integer");
+  if (!Number.isSafeInteger(value) || value <= 0) throw new UsageError("--limit must be a positive integer");
   return value;
 }
 

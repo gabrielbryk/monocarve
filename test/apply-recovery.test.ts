@@ -107,10 +107,8 @@ async function parkedChild({ root, manifestPath }: Prepared, pauseAfter = 1): Pr
   while (!existsSync(ready)) {
     if (child.exitCode !== null || Date.now() > deadline) {
       child.kill("SIGKILL");
-      // oxlint-disable-next-line no-await-in-loop
       throw new Error(`child never parked (exit ${child.exitCode}): ${await new Response(child.stderr).text()}`);
     }
-    // oxlint-disable-next-line no-await-in-loop
     await Bun.sleep(50);
   }
   return child;

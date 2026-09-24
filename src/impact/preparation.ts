@@ -1,6 +1,7 @@
 import { createPackageManagerAdapter } from "../adapters/registry.ts";
 import type { MonocarveConfig } from "../config.ts";
 import { packageContainerRoots } from "../config.ts";
+import { MonocarveError } from "../errors.ts";
 import { scanDependencyGraph } from "../graph/cruiser.ts";
 import { WorkspaceContext } from "../plan/context.ts";
 import { buildPortfolio } from "../portfolio/rank.ts";
@@ -10,6 +11,11 @@ import type { PreparationManifest } from "../prepare/manifest-types.ts";
 import { runPreparationPostJournalPreparers } from "../prepare/post-journal.ts";
 import { preparationFilesystemOperations, simulatePreparation } from "../prepare/simulate.ts";
 import { createWorktree } from "../transaction/worktree.ts";
+
+/** The preparation could not be measured because it does not run cleanly. */
+class PreparationImpactError extends MonocarveError {
+  override readonly name = "PreparationImpactError";
+}
 
 interface PortfolioImpactSnapshot {
   readonly applicationLines: number;
@@ -39,7 +45,10 @@ export async function analyzePreparationImpact(options: {
   readonly application?: string;
 }): Promise<PreparationImpactReport> {
   const simulation = await simulatePreparation({ ...options, runGates: true });
-  if (!simulation.ok) throw new Error(`preparation simulation failed: ${simulation.failure ?? "unknown failure"}`);
+  if (!simulation.ok)
+    throw new PreparationImpactError(`preparation simulation failed: ${simulation.failure ?? "unknown failure"}`, {
+      hint: "run `prepare-apply --plan <path>` (without --commit) on the same manifest to see the failing step",
+    });
   const packageManager = createPackageManagerAdapter(options.config);
   const worktree = await createWorktree({
     rootDir: options.rootDir,
@@ -62,7 +71,7 @@ export async function analyzePreparationImpact(options: {
     verifyPreparationOperations(worktree.workspacePath, operations);
     const journal = executePreparationJournal({ rootDir: worktree.workspacePath, operations });
     const preparers = runPreparationPostJournalPreparers(options.config, worktree.workspacePath, options.manifest);
-    if (!preparers.ok) throw new Error(preparers.failure ?? "post-journal preparer failed");
+    if (!preparers.ok) throw new PreparationImpactError(`post-journal preparer failed: ${preparers.failure ?? "no detail reported"}`);
     finalizeCompletedPreparationJournal(journal.recovery);
     const projectedGraph = await scanDependencyGraph({ config: options.config, rootDir: worktree.workspacePath, noCache: true });
     const after = buildPortfolio({

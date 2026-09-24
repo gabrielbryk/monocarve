@@ -9,12 +9,12 @@ function linkTypeScript(source: string, path: string): string {
   const load = /const typescript = await tryImport\(\s*"typescript",\s*meta\.supportedTranspilers\.typescript,\s*\);/u;
   const required =
     /\/extract\/(?:tsc\/(?:parse|extract-typescript-deps)|transpile\/typescript-wrap)\.mjs$/u.test(path) || path.endsWith("/config-utl/extract-ts-config.mjs");
-  if (required && !load.test(source)) throw new Error(`dependency-cruiser TypeScript integration changed: ${path}`);
+  if (required && !load.test(source)) throw new Error(`invariant: dependency-cruiser TypeScript integration changed: ${path}`);
   if (load.test(source)) return source.replace(load, 'import typescript from "typescript";');
   if (!path.endsWith("/extract/transpile/meta.mjs")) return source;
   // 16.x spells this `tryAvailable(...)` on one line; 18.x `tryImportAvailable(...)` across several.
   const availability = /typescript: try(?:Import)?Available\(\s*"typescript",\s*meta\.supportedTranspilers\.typescript,?\s*\),/u;
-  if (!availability.test(source)) throw new Error(`dependency-cruiser TypeScript availability changed: ${path}`);
+  if (!availability.test(source)) throw new Error(`invariant: dependency-cruiser TypeScript availability changed: ${path}`);
   return source.replace(availability, "typescript: true,");
 }
 

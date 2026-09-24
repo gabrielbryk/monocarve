@@ -14,12 +14,13 @@ type AssessmentDiagnosticCode =
   | "SCAN_TSCONFIG_EXCLUDES_PRODUCTION"
   | "SCAN_CONFIGURATION_EXCLUDES_PRODUCTION"
   | "SCAN_REPORT_MALFORMED"
-  | "ASSESSMENT_INPUT_UNBOUND"
-  | "ASSESSMENT_INPUT_UNREADABLE"
-  | "ASSESSMENT_INPUT_MISSING"
-  | "ASSESSMENT_INPUT_DRIFT"
-  | "ASSESSMENT_REPLAY_PROVENANCE_REQUIRED"
-  | "ASSESSMENT_REPLAY_INPUT_MISMATCH"
+  // Stable ASSESSMENT_* codes (full catalogue, including the config-sandbox codes, on InputInventoryError in src/errors.ts):
+  | "ASSESSMENT_INPUT_UNBOUND" // an input (e.g. a config import) cannot be inventoried or resolved
+  | "ASSESSMENT_INPUT_UNREADABLE" // an input, config, or output path could not be read
+  | "ASSESSMENT_INPUT_MISSING" // an input named by the inventory does not exist
+  | "ASSESSMENT_INPUT_DRIFT" // inputs changed between inventory capture and use
+  | "ASSESSMENT_REPLAY_PROVENANCE_REQUIRED" // --replay bundle lacks readable provenance; bare --graph is refused
+  | "ASSESSMENT_REPLAY_INPUT_MISMATCH" // --replay bundle was captured from different inputs
   | "SPLIT_ANALYSIS_INCOMPLETE"
   | "EVIDENCE_DESTINATION_BUSY"
   | "EVIDENCE_RECOVERY_REQUIRED"

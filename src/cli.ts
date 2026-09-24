@@ -6,7 +6,7 @@ import { executableBuildIdentity } from "./build-identity.ts";
 import { ArgumentError, parseArgs as parseWithSchema, type ParsedArgs } from "./cli/args.ts";
 import { resetCodemodCaches } from "./codemod/imports.ts";
 import { CLI_SCHEMA, COMMANDS, USAGE, commandHelp } from "./commands/index.ts";
-import { ConfigError, IoError, NotYetPortedError, MonocarveError, UsageError } from "./errors.ts";
+import { IoError, NotYetPortedError, MonocarveError, UsageError } from "./errors.ts";
 
 export type { ParsedArgs } from "./cli/args.ts";
 
@@ -16,13 +16,20 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 }
 
 /**
- * Exit codes:
+ * Exit codes (the error classes behind them are documented in src/errors.ts):
  *   0   success (also a bare invocation with no arguments, `--help`, `--version`)
- *   1   an expected failure or refusal (`MonocarveError`)
- *   2   degraded result (set by the assessment commands)
- *   3   the command reached a not-yet-ported seam
- *   64  malformed invocation (unknown command/flag, missing value, no command)
- *   70  internal defect: an error outside the taxonomy, reported with its stack
+ *   1   an expected failure or refusal (`MonocarveError`), or a command that ran
+ *       and reported a negative verdict itself (failed audit, blocked apply)
+ *   2   degraded assessment: the evidence was published but the workspace only
+ *       partially qualified (e.g. an unmatched workspace pattern). Set solely by
+ *       `setQualificationExitCode` in src/commands/assessment-outcome.ts, used by
+ *       `assess` and `batch split-candidates`; no error class maps to 2.
+ *   3   the command reached a not-yet-ported seam (`NotYetPortedError`)
+ *   64  malformed invocation (unknown command/flag, missing or invalid value, no command; `UsageError`)
+ *   70  internal defect: an error outside the taxonomy, reported with its stack and cause chain
+ *
+ * Commands signal 1 or 2 without throwing by setting `process.exitCode`; `main`
+ * returns whatever they set once the command resolves.
  */
 export async function main(argv: readonly string[]): Promise<number> {
   let args: ParsedArgs;
@@ -47,15 +54,18 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
   const spec = COMMANDS[args.command];
   // Unreachable: the parser rejects unregistered commands.
-  if (spec === undefined) throw new Error(`parser accepted unregistered command ${args.command}`);
+  if (spec === undefined) throw new Error(`invariant: parser accepted unregistered command ${args.command}`);
   if (args.flags.has("help")) {
     process.stdout.write(`${commandHelp(spec)}\n`);
     return 0;
   }
   try {
     resetCodemodCaches();
+    // Handlers signal non-error outcomes (e.g. a degraded assessment, exit 2)
+    // through process.exitCode; clear any value left by an earlier in-process run.
+    process.exitCode = undefined;
     await runWithCompleteStdout(() => spec.run(args));
-    return process.exitCode === undefined ? 0 : Number(process.exitCode);
+    return commandExitCode();
   } catch (error) {
     return reportCommandFailure(error, args.command);
   }
@@ -105,18 +115,9 @@ function reportUsageFailure(error: UsageError, command: string | undefined): num
   return 64;
 }
 
-/** `monocarve: <message>`, plus a `hint:` line when there is a next step to suggest. */
+/** `monocarve: <message>`, plus a `hint:` line whenever the error carries one (every `MonocarveError` may). */
 export function renderUserError(error: MonocarveError): string {
-  const hint = error.hint ?? fallbackHint(error);
-  return `${TOOL_NAME}: ${error.message}\n${hint === undefined ? "" : `hint: ${hint}\n`}`;
-}
-
-/** Hints for errors raised by modules that predate `MonocarveError#hint`. */
-function fallbackHint(error: MonocarveError): string | undefined {
-  if (error instanceof ConfigError && error.message.startsWith("no config found")) {
-    return `create monocarve.config.ts exporting \`defineConfig({ ... })\` from "${TOOL_NAME}/config" (or pass --config <path>), then run \`${TOOL_NAME} config-doctor\``;
-  }
-  return undefined;
+  return `${TOOL_NAME}: ${error.message}\n${error.hint === undefined ? "" : `hint: ${error.hint}\n`}`;
 }
 
 function reportInternalFailure(error: unknown, command: string): number {
@@ -144,3 +145,8 @@ function causeChain(error: unknown): string {
 }
 
 if (import.meta.main) process.exitCode = await main(process.argv.slice(2));
+
+/** The exit code a handler set, read fresh (the caller's narrowing is stale after awaiting the handler). */
+function commandExitCode(): number {
+  return process.exitCode === undefined ? 0 : Number(process.exitCode);
+}

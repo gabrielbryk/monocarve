@@ -1,14 +1,8 @@
 /** Commands that compile manifests without mutating the workspace. */
 
-import { existsSync, readFileSync } from "node:fs";
-
-import { commitManifestApproval, manifestApprovalEvidence } from "../approval/index.ts";
-import type { ManifestApprovalCommit, ManifestApprovalEvidence } from "../approval/index.ts";
-import { TOOL_NAME } from "../branding.ts";
 import { flagBool, flagString, type ParsedArgs } from "../cli/args.ts";
 import { UsageError } from "../errors.ts";
 import { buildPlanSync, serializeManifest } from "../plan/build.ts";
-import { PlanningError } from "../plan/context.ts";
 import { explainArtifact, explainDependency, formatPlanExplanation } from "../plan/explain.ts";
 import { buildIntegrationTestPlanSync } from "../plan/integration-tests.ts";
 import { refreshExtractionPlan } from "../plan/refresh.ts";
@@ -18,128 +12,88 @@ import { simulatePlan } from "../transaction/simulate.ts";
 import { showBaseline } from "../util/git.ts";
 import { relativeWorkspacePath } from "../util/paths.ts";
 import { portfolioFor } from "./discovery.ts";
+import {
+  approvalGuidance,
+  assertEligible,
+  candidatePlanId,
+  planOutput,
+  publicSurfaceOption,
+  recordApproval,
+  refreshFlags,
+  refuseExistingPlan,
+  requireWriteForApproval,
+  selectPlanCandidate,
+  targetMode,
+  targetOptions,
+  verifyLockfileRoundTrip,
+  writeManifestIfRequested,
+} from "./planning-support.ts";
 import { assertPlannableTree, load, loadGraph, loadManifest, outputPath, print, writeOutput, type LoadedGraph } from "./shared.ts";
 import type { CommandSpec } from "./types.ts";
 
+export { approvalGuidance, narrowCandidate } from "./planning-support.ts";
+
 async function plan(args: ParsedArgs): Promise<void> {
-  if (flagBool(args, "commit-approval") && !flagBool(args, "write")) {
-    throw new UsageError("--commit-approval requires --write");
-  }
+  requireWriteForApproval(args);
   const loaded = await loadGraph(args);
-  const candidateId = flagString(args, "candidate") ?? args.positionals[0];
-  if (candidateId === undefined) throw new UsageError("--candidate <id> is required");
-  const portfolio = portfolioFor(args, loaded);
-  const candidate = portfolio.candidates.find((entry) => entry.id === candidateId);
-  if (!candidate) throw new UsageError(`no candidate with id ${candidateId}`);
-  const sourceFlags = args.repeated.get("source") ?? [];
-  const selectedSources = sourceFlags.map((source) => relativeWorkspacePath(loaded.rootDir, source));
-  const narrowed = selectedSources.length === 0 ? candidate : narrowCandidate(candidate, selectedSources, loaded.graph);
-  if (!narrowed.eligible && !flagBool(args, "force")) {
-    throw new UsageError(`candidate ${candidateId} is not eligible: ${narrowed.rejectionReasons.map((reason) => reason.detail).join("; ")}`);
-  }
-  const packageName = flagString(args, "package-name");
-  if (candidate.recommendation?.requiresExplicitPackageName && packageName === undefined && flagString(args, "profile") === undefined) {
-    throw new UsageError(
-      `candidate ${candidate.id} requires an explicit --package-name because its architectural recommendation is ${candidate.recommendation.status}`,
-    );
-  }
-  const packageRoot = flagString(args, "package-root");
-  const profile = flagString(args, "profile");
-  const targetSubpath = flagString(args, "target-subpath");
-  const publicSurface = flagString(args, "public-surface");
-  if (publicSurface !== undefined && publicSurface !== "subpaths") throw new UsageError("--public-surface currently supports only subpaths");
+  const candidate = selectPlanCandidate(args, loaded, () => portfolioFor(args, loaded).candidates);
   const manifest = buildPlanSync({
-    config: loaded.config,
-    rootDir: loaded.rootDir,
-    graph: loaded.graph,
-    context: loaded.context,
-    candidate: narrowed,
-    baselineCommit: loaded.graph.commit ?? "HEAD",
-    ...(packageName === undefined ? {} : { packageName }),
-    ...(packageRoot === undefined ? {} : { packageRoot }),
-    ...(profile === undefined ? {} : { profile }),
-    ...(targetSubpath === undefined ? {} : { targetSubpath }),
-    ...(publicSurface === undefined
-      ? {}
-      : { publicSurface: { mode: "subpaths" as const, keyTemplate: "./{pathNoExtension}", targetTemplate: "./src/{path}" } }),
+    ...planBase(loaded),
+    candidate,
+    ...targetOptions(args, ["packageName", "packageRoot", "profile", "targetSubpath"]),
+    ...publicSurfaceOption(args),
   });
-  const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
+  const out = planOutput(args, loaded, manifest);
   const written = flagBool(args, "write");
   const managedPlan = out === loaded.config.planDir || out.startsWith(`${loaded.config.planDir}/`);
-  if (written && managedPlan && existsSync(`${loaded.rootDir}/${out}`)) {
-    throw existingPlanError(loaded.rootDir, out, manifest.baselineCommit);
-  }
+  if (written && managedPlan) refuseExistingPlan(loaded.rootDir, out, manifest.baselineCommit);
   assertPlannableTree(loaded, manifest, out, args);
-  const roundTrip = flagBool(args, "verify-lockfile")
-    ? await simulatePlan({ config: loaded.config, rootDir: loaded.rootDir, manifest, verifyLockfile: true, skipGates: true })
-    : undefined;
-  if (roundTrip && !roundTrip.ok) throw new PlanningError(`plan lockfile round-trip failed: ${roundTrip.failure ?? "unknown failure"}`);
-  if (written && existsSync(`${loaded.rootDir}/${out}`)) {
-    throw existingPlanError(loaded.rootDir, out, manifest.baselineCommit);
-  }
-  if (written) writeOutput(loaded.rootDir, out, serializeManifest(manifest), { exclusive: true });
-  const approval = written
-    ? flagBool(args, "commit-approval")
-      ? commitManifestApproval({ config: loaded.config, rootDir: loaded.rootDir, manifest, manifestPath: out })
-      : manifestApprovalEvidence({ config: loaded.config, rootDir: loaded.rootDir, manifest, manifestPath: out })
-    : undefined;
-  const full = {
-    ...manifest,
-    targetMode: targetMode(loaded, manifest.target.packageRoot),
-    targetPackageRoot: manifest.target.packageRoot,
-    output: out,
-    written,
-    ...(roundTrip?.lockfileVerification === undefined ? {} : { lockfileVerification: roundTrip.lockfileVerification }),
-    ...(approval === undefined ? {} : { approval: approvalGuidance(out, approval) }),
-  };
-  if (flagBool(args, "json") || flagBool(args, "verbose") || !process.stdout.isTTY) {
-    print(full, args);
-  } else {
-    const review = summarizePlanReview(manifest, {
-      baselinePaths: targetMode(loaded, manifest.target.packageRoot) === "existing" ? [`${manifest.target.packageRoot}/package.json`] : [],
-      manifestPath: out,
-    });
-    print(`${formatPlanReview(review).trimEnd()}\n\nOutput: ${out} (${written ? "written" : "dry run"})`, args);
-  }
+  const roundTrip = await verifyLockfileRoundTrip(args, loaded, manifest);
+  if (written) refuseExistingPlan(loaded.rootDir, out, manifest.baselineCommit);
+  writeManifestIfRequested(args, loaded, out, manifest);
+  const approval = written ? recordApproval(args, loaded, manifest, out) : undefined;
+  renderPlan(args, loaded, manifest, { out, written, roundTrip, approval });
 }
 
-export function narrowCandidate(
-  candidate: Awaited<ReturnType<typeof portfolioFor>>["candidates"][number],
-  sources: readonly string[],
-  graph: LoadedGraph["graph"],
-) {
-  const wanted = new Set(sources);
-  const files = candidate.files.filter((file) => wanted.has(file));
-  if (files.length !== sources.length) throw new UsageError(`--source must name candidate production files; requested ${sources.join(", ")}`);
-  const missing = [
-    ...new Set(files.flatMap((file) => (graph.outgoing.get(file) ?? []).filter((target) => candidate.files.includes(target) && !wanted.has(target)))),
-  ].toSorted();
-  if (missing.length > 0) throw new UsageError(`--source selection is not closed; also select required candidate files: ${missing.join(", ")}`);
-  const tests = candidate.tests.filter(
-    (test) => test.startsWith(`${files[0]?.replace(/\.tsx?$/, "") ?? ""}`) || files.some((file) => test.startsWith(file.replace(/\.tsx?$/, ""))),
-  );
-  const selected = new Set([...files, ...tests]);
-  const reachableAssets = new Set<string>();
-  const pending = [...files];
-  const visited = new Set<string>();
-  while (pending.length > 0) {
-    const source = pending.pop()!;
-    if (visited.has(source)) continue;
-    visited.add(source);
-    for (const target of graph.outgoing.get(source) ?? []) {
-      if (candidate.assets.includes(target)) reachableAssets.add(target);
-      else if (wanted.has(target)) pending.push(target);
-    }
+/** The bounded operator review on a terminal; the full proof manifest for --json, --verbose, or a pipe. */
+function renderPlan(
+  args: ParsedArgs,
+  loaded: LoadedGraph,
+  manifest: ReturnType<typeof buildPlanSync>,
+  outcome: {
+    readonly out: string;
+    readonly written: boolean;
+    readonly roundTrip: Awaited<ReturnType<typeof verifyLockfileRoundTrip>>;
+    readonly approval: ReturnType<typeof recordApproval> | undefined;
+  },
+): void {
+  const { out, written, roundTrip, approval } = outcome;
+  const mode = targetMode(loaded, manifest.target.packageRoot);
+  if (flagBool(args, "json") || flagBool(args, "verbose") || !process.stdout.isTTY) {
+    print(
+      {
+        ...manifest,
+        targetMode: mode,
+        targetPackageRoot: manifest.target.packageRoot,
+        output: out,
+        written,
+        ...(roundTrip?.lockfileVerification === undefined ? {} : { lockfileVerification: roundTrip.lockfileVerification }),
+        ...(approval === undefined ? {} : { approval: approvalGuidance(out, approval) }),
+      },
+      args,
+    );
+    return;
   }
-  const sccs = candidate.sccs.filter((scc) => scc.members.some((member) => wanted.has(member)));
-  return {
-    ...candidate,
-    files,
-    tests,
-    assets: candidate.assets.filter((asset) => reachableAssets.has(asset)),
-    rewriteEscapes: candidate.rewriteEscapes.filter((escape) => selected.has(escape.file)),
-    sccs,
-  };
+  const review = summarizePlanReview(manifest, {
+    baselinePaths: mode === "existing" ? [`${manifest.target.packageRoot}/package.json`] : [],
+    manifestPath: out,
+  });
+  print(`${formatPlanReview(review).trimEnd()}\n\nOutput: ${out} (${written ? "written" : "dry run"})`, args);
+}
+
+/** Inputs every extraction plan is compiled from. */
+function planBase(loaded: LoadedGraph) {
+  return { config: loaded.config, rootDir: loaded.rootDir, graph: loaded.graph, context: loaded.context, baselineCommit: loaded.graph.commit ?? "HEAD" };
 }
 
 async function scope(args: ParsedArgs): Promise<void> {
@@ -150,7 +104,8 @@ async function scope(args: ParsedArgs): Promise<void> {
   if (packageName === undefined) throw new UsageError("--package-name <name> is required; scope never infers architectural ownership");
   const path = relativeWorkspacePath(loaded.rootDir, input);
   const candidates = portfolioFor(args, loaded).candidates.filter((candidate) => candidate.seed.members.includes(path));
-  if (candidates.length === 0)
+  const [candidate] = candidates;
+  if (candidate === undefined)
     throw new UsageError(`no current principal candidate has seed path ${path}; it may already be extracted or outside the selected application`);
   if (candidates.length > 1)
     throw new UsageError(
@@ -159,31 +114,12 @@ async function scope(args: ParsedArgs): Promise<void> {
         .toSorted()
         .join(", ")}`,
     );
-  const candidate = candidates[0]!;
-  if (!candidate.eligible && !flagBool(args, "force")) {
-    throw new UsageError(`candidate ${candidate.id} is not eligible: ${candidate.rejectionReasons.map(({ detail }) => detail).join("; ")}`);
-  }
-  const packageRoot = flagString(args, "package-root");
-  const targetSubpath = flagString(args, "target-subpath");
-  const manifest = buildPlanSync({
-    config: loaded.config,
-    rootDir: loaded.rootDir,
-    graph: loaded.graph,
-    context: loaded.context,
-    candidate,
-    baselineCommit: loaded.graph.commit ?? "HEAD",
-    packageName,
-    ...(packageRoot === undefined ? {} : { packageRoot }),
-    ...(targetSubpath === undefined ? {} : { targetSubpath }),
-  });
-  const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
+  assertEligible(args, candidate);
+  const manifest = buildPlanSync({ ...planBase(loaded), candidate, packageName, ...targetOptions(args, ["packageRoot", "targetSubpath"]) });
+  const out = planOutput(args, loaded, manifest);
   assertPlannableTree(loaded, manifest, out, args);
-  const simulation = flagBool(args, "verify-lockfile")
-    ? await simulatePlan({ config: loaded.config, rootDir: loaded.rootDir, manifest, verifyLockfile: true, skipGates: true })
-    : undefined;
-  if (simulation && !simulation.ok) throw new PlanningError(`plan lockfile round-trip failed: ${simulation.failure ?? "unknown failure"}`);
-  const written = flagBool(args, "write");
-  if (written) writeOutput(loaded.rootDir, out, serializeManifest(manifest), { exclusive: true });
+  const simulation = await verifyLockfileRoundTrip(args, loaded, manifest);
+  const written = writeManifestIfRequested(args, loaded, out, manifest);
   const review = summarizePlanReview(manifest, {
     baselinePaths:
       showBaseline(loaded.rootDir, manifest.baselineCommit, `${manifest.target.packageRoot}/package.json`) === null
@@ -205,36 +141,14 @@ async function scope(args: ParsedArgs): Promise<void> {
   );
 }
 
-function existingPlanError(rootDir: string, path: string, currentBaseline: string): UsageError {
-  let existingBaseline = "unknown";
-  try {
-    const parsed = JSON.parse(readFileSync(`${rootDir}/${path}`, "utf8")) as { baselineCommit?: unknown };
-    if (typeof parsed.baselineCommit === "string") existingBaseline = parsed.baselineCommit;
-  } catch {
-    // A malformed existing file is still operator-owned and must not be overwritten.
-  }
-  return new UsageError(
-    `refusing to overwrite existing plan ${path}; existing baseline ${existingBaseline}, current baseline ${currentBaseline}. ` +
-      `The existing file was not changed. Refresh it explicitly with ${TOOL_NAME} refresh --plan ${JSON.stringify(path)} --out <new-path> --write`,
-  );
-}
-
 async function relocateTests(args: ParsedArgs): Promise<void> {
   const loaded = await loadGraph(args);
   const suite = flagString(args, "suite") ?? args.positionals[0];
   if (suite === undefined) throw new UsageError("--suite <name> is required");
-  const manifest = buildIntegrationTestPlanSync({
-    config: loaded.config,
-    rootDir: loaded.rootDir,
-    graph: loaded.graph,
-    context: loaded.context,
-    suite,
-    baselineCommit: loaded.graph.commit ?? "HEAD",
-  });
-  const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
+  const manifest = buildIntegrationTestPlanSync({ ...planBase(loaded), suite });
+  const out = planOutput(args, loaded, manifest);
   assertPlannableTree(loaded, manifest, out, args);
-  const written = flagBool(args, "write");
-  if (written) writeOutput(loaded.rootDir, out, serializeManifest(manifest), { exclusive: true });
+  const written = writeManifestIfRequested(args, loaded, out, manifest);
   print({ ...manifest, output: out, written }, args);
 }
 
@@ -246,22 +160,10 @@ async function next(args: ParsedArgs): Promise<void> {
     print("no eligible candidates remain", args);
     return;
   }
-  const packageName = flagString(args, "package-name");
-  const profile = flagString(args, "profile");
-  const manifest = buildPlanSync({
-    config: loaded.config,
-    rootDir: loaded.rootDir,
-    graph: loaded.graph,
-    context: loaded.context,
-    candidate,
-    baselineCommit: loaded.graph.commit ?? "HEAD",
-    ...(packageName === undefined ? {} : { packageName }),
-    ...(profile === undefined ? {} : { profile }),
-  });
-  const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
+  const manifest = buildPlanSync({ ...planBase(loaded), candidate, ...targetOptions(args, ["packageName", "profile"]) });
+  const out = planOutput(args, loaded, manifest);
   assertPlannableTree(loaded, manifest, out, args);
-  const written = flagBool(args, "write");
-  if (written) writeOutput(loaded.rootDir, out, serializeManifest(manifest), { exclusive: true });
+  const written = writeManifestIfRequested(args, loaded, out, manifest);
   const summary = {
     schema: "next",
     candidate: candidate.id,
@@ -302,13 +204,7 @@ async function next(args: ParsedArgs): Promise<void> {
 }
 
 async function refresh(args: ParsedArgs): Promise<void> {
-  const outFlag = flagString(args, "out");
-  const written = flagBool(args, "write");
-  if (flagBool(args, "commit-approval") && !written) throw new UsageError("--commit-approval requires --write");
-  if (flagBool(args, "replace")) throw new UsageError("--replace is no longer supported; refresh always writes a distinct manifest for review");
-  if (written && outFlag === undefined) {
-    throw new UsageError("--write requires an explicit --out <path>; refresh never overwrites its input implicitly");
-  }
+  const { outFlag, written } = refreshFlags(args);
   const loaded = await loadGraph(args);
   const { path, manifest } = await loadManifest(args, loaded.rootDir);
   const portfolio = buildPortfolio({
@@ -323,20 +219,13 @@ async function refresh(args: ParsedArgs): Promise<void> {
     config: loaded.config,
     rootDir: loaded.rootDir,
     graph: loaded.graph,
-    resolveCandidate: (existing) =>
-      portfolio.candidates.find((candidate) =>
-        existing.target.profile === undefined ? candidate.id === existing.planId : `${candidate.id}--${existing.target.profile.name}` === existing.planId,
-      ),
+    resolveCandidate: (existing) => portfolio.candidates.find((candidate) => candidatePlanId(candidate.id, existing.target.profile) === existing.planId),
   });
   const output = outFlag === undefined ? undefined : outputPath(loaded.rootDir, outFlag);
   if (output === path) throw new UsageError("refresh output must differ from the input manifest path");
-  if (written && output !== undefined) writeOutput(loaded.rootDir, output, serializeManifest(result.manifest), { exclusive: true });
-  const approval =
-    written && output !== undefined
-      ? flagBool(args, "commit-approval")
-        ? commitManifestApproval({ config: loaded.config, rootDir: loaded.rootDir, manifest: result.manifest, manifestPath: output })
-        : manifestApprovalEvidence({ config: loaded.config, rootDir: loaded.rootDir, manifest: result.manifest, manifestPath: output })
-      : undefined;
+  const destination = written ? output : undefined;
+  if (destination !== undefined) writeOutput(loaded.rootDir, destination, serializeManifest(result.manifest), { exclusive: true });
+  const approval = destination === undefined ? undefined : approvalGuidance(destination, recordApproval(args, loaded, result.manifest, destination));
   print(
     {
       schema: "plan-refresh",
@@ -348,15 +237,10 @@ async function refresh(args: ParsedArgs): Promise<void> {
       ...(output === undefined ? {} : { output }),
       written,
       replaced: false,
-      ...(approval === undefined ? {} : { approval: approvalGuidance(output!, approval) }),
+      ...(approval === undefined ? {} : { approval }),
     },
     args,
   );
-}
-
-/** Classify against the scanned baseline inventory, not files created by this plan. */
-function targetMode(loaded: Awaited<ReturnType<typeof loadGraph>>, packageRoot: string): "existing" | "new" {
-  return loaded.graph.workspace.owners.includes(packageRoot) ? "existing" : "new";
 }
 
 async function reviewPlan(args: ParsedArgs): Promise<void> {
@@ -378,22 +262,8 @@ async function explainPlan(args: ParsedArgs): Promise<void> {
   const dependency = flagString(args, "dependency");
   const artifact = flagString(args, "artifact");
   if ((dependency === undefined) === (artifact === undefined)) throw new UsageError("exactly one of --dependency <name> or --artifact <path> is required");
-  const explanation = dependency === undefined ? explainArtifact(manifest, artifact!) : explainDependency(manifest, dependency);
+  const explanation = dependency !== undefined ? explainDependency(manifest, dependency) : explainArtifact(manifest, artifact ?? "");
   print(flagBool(args, "json") ? explanation : formatPlanExplanation(explanation), args);
-}
-
-export function approvalGuidance(out: string, evidence: ManifestApprovalEvidence | ManifestApprovalCommit) {
-  const approve = [TOOL_NAME, "approve", "--plan", out, "--commit"] as const;
-  const apply = [TOOL_NAME, "apply", "--plan", out, "--commit"] as const;
-  return {
-    manifestPath: evidence.manifestPath,
-    subject: evidence.subject,
-    gitAdd: evidence.gitAdd,
-    ...("commit" in evidence ? {} : { approve }),
-    apply,
-    workflow: { failFast: true, steps: "commit" in evidence ? [apply] : [approve, apply] },
-    ...("commit" in evidence ? { commit: evidence.commit } : {}),
-  };
 }
 
 export const planningCommands: Record<string, CommandSpec> = {
