@@ -1,30 +1,17 @@
-import { lstatSync, readFileSync, readdirSync, realpathSync, type Dirent } from "node:fs";
+import { realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, resolve } from "node:path";
 
-import ts from "typescript";
-
-import { createPackageManagerAdapter } from "../adapters/registry.ts";
-import type { LoadedConfig } from "../config.ts";
-import { MonocarveError } from "../errors.ts";
 import type { ScanReport } from "../graph/build.ts";
-import { sourceFiles } from "../util/files.ts";
 import { headCommit, statusEntries } from "../util/git.ts";
 import { byCodeUnit, hashJson, type Sha256 } from "../util/hash.ts";
 import { discoverValidatedEvidenceRoots } from "./evidence-discovery.ts";
+import { addDirectoryAncestors, collectInputPaths, nearestInstalledManifest, packageRootFor } from "./input-inventory-collect.ts";
 import { compareDirectories, compareEntries, directoryMembership, inside, inventoryEntry, inventoryName } from "./input-inventory-paths.ts";
+import { InputInventoryError, type CaptureInventoryOptions } from "./input-inventory-types.ts";
 
 export { canonicalInputPath } from "./input-inventory-paths.ts";
-
-export class InputInventoryError extends MonocarveError {
-  override readonly name = "InputInventoryError";
-  constructor(
-    readonly code: "ASSESSMENT_INPUT_DRIFT" | "ASSESSMENT_INPUT_UNBOUND",
-    message: string,
-    readonly paths: readonly string[],
-  ) {
-    super(message);
-  }
-}
+export { collectLocalConfigDependencies } from "./input-inventory-collect.ts";
+export { InputInventoryError, type CaptureInventoryOptions } from "./input-inventory-types.ts";
 
 export type InventoryNamespace = "repository" | "installed" | "external";
 
@@ -60,13 +47,6 @@ export interface AssessmentInputInventory {
 export function inventoryBodyDigest(inventory: AssessmentInputInventory): Sha256 {
   const { digest: _digest, ...body } = inventory;
   return hashJson(body);
-}
-
-export interface CaptureInventoryOptions extends Pick<LoadedConfig, "config" | "configPath" | "rootDir"> {
-  /** Validated operational paths excluded only after overlap checks. */
-  readonly excludedRoots?: readonly string[];
-  /** Files exposed to executable config before its config-driven roots existed. */
-  readonly configSnapshotPaths?: readonly string[];
 }
 
 /** Capture a closed, content-addressed authority for scanner, graph, and symbol reads. */
@@ -117,61 +97,6 @@ export function captureInputInventory(options: CaptureInventoryOptions): Assessm
     .sort(byCodeUnit);
   const body = { schemaVersion: 1 as const, sourceCommit, dirtyPaths, configDigest: hashJson(options.config), entries: completeEntries, directories };
   return { ...body, digest: hashJson(body) };
-}
-
-function collectInputPaths(
-  options: CaptureInventoryOptions,
-  rootDir: string,
-  excluded: readonly string[],
-): { paths: Set<string>; directoryRoots: Set<string> } {
-  const paths = new Set<string>();
-  const directoryRoots = new Set<string>();
-  const add = (path: string): void => {
-    paths.add(resolve(path));
-  };
-  const addTree = (path: string): void => {
-    const absolute = resolve(path);
-    directoryRoots.add(absolute);
-    walkFiles(absolute, excluded, add, directoryRoots);
-  };
-  add(options.configPath);
-  collectLocalConfigDependencies(options.configPath, add);
-  for (const path of options.configSnapshotPaths ?? []) {
-    add(path);
-    if (inside(rootDir, path)) addDirectoryAncestors(path, directoryRoots, rootDir);
-    else directoryRoots.add(dirname(path));
-  }
-  for (const app of options.config.applications) {
-    for (const configuredRoot of [app.sourceRoot, ...app.consumerRoots]) {
-      const sourceRoot = resolve(rootDir, configuredRoot);
-      addTree(sourceRoot);
-      addDirectoryAncestors(sourceRoot, directoryRoots, rootDir);
-      collectAncestorManifests(rootDir, sourceRoot, add);
-      collectNodeModulesAncestors(sourceRoot, directoryRoots);
-    }
-    collectTsconfigClosure(resolve(rootDir, app.tsconfig), add);
-    collectProgramInputs(
-      rootDir,
-      app.tsconfig,
-      [...app.consumerRoots, ...options.config.firstPartyRoots, ...options.config.firstPartyPackages.map((pkg) => pkg.root)],
-      add,
-    );
-  }
-  for (const root of [...options.config.packageRoots, ...options.config.firstPartyRoots, ...options.config.firstPartyPackages.map((pkg) => pkg.root)]) {
-    const absolute = resolve(rootDir, root);
-    addTree(absolute);
-    addDirectoryAncestors(absolute, directoryRoots, rootDir);
-    collectAncestorManifests(rootDir, absolute, add);
-    collectNodeModulesAncestors(absolute, directoryRoots);
-  }
-  directoryRoots.add(rootDir);
-  collectInstalledResolutionInputs(rootDir, add, directoryRoots);
-  const adapter = createPackageManagerAdapter(options.config);
-  if (adapter.workspaceManifestName !== null) add(resolve(rootDir, adapter.workspaceManifestName));
-  add(resolve(rootDir, adapter.lockfileName));
-  add(resolve(rootDir, "package.json"));
-  if (options.config.graph.cruiserConfig) add(resolve(rootDir, options.config.graph.cruiserConfig));
-  return { paths, directoryRoots };
 }
 
 export function verifyInputInventory(options: CaptureInventoryOptions, expected: AssessmentInputInventory): void {
@@ -299,7 +224,7 @@ function absenceIsBound(rootDir: string, path: string, memberships: ReadonlyMap<
   while (true) {
     const named = inventoryName(root, parent);
     const membership = memberships.get(`${named.namespace}:${named.path}`);
-    if (membership !== undefined) return !membership.entries.some((entry) => entry.name === child);
+    if (membership !== undefined) return !hasNamedEntry(membership.entries, child);
     const next = dirname(parent);
     if (next === parent) return false;
     child = basename(parent);
@@ -307,225 +232,6 @@ function absenceIsBound(rootDir: string, path: string, memberships: ReadonlyMap<
   }
 }
 
-function walkFiles(path: string, excluded: readonly string[], add: (path: string) => void, directories: Set<string>): void {
-  const stat = lstatSync(path, { throwIfNoEntry: false });
-  if (!stat) {
-    add(path);
-    return;
-  }
-  if (stat.isSymbolicLink() || stat.isFile()) {
-    add(path);
-    return;
-  }
-  if (!stat.isDirectory() || excluded.some((root) => inside(root, path))) return;
-  directories.add(path);
-  for (const entry of readdirSync(path, { withFileTypes: true }).sort((a, b) => byCodeUnit(a.name, b.name))) {
-    if (entry.name === ".git" || entry.name === "node_modules") continue;
-    walkFiles(resolve(path, entry.name), excluded, add, directories);
-  }
-}
-
-function collectTsconfigClosure(path: string, add: (path: string) => void, seen = new Set<string>()): void {
-  const absolute = resolve(path);
-  if (seen.has(absolute)) return;
-  seen.add(absolute);
-  add(absolute);
-  const host: ts.ParseConfigFileHost = {
-    ...ts.sys,
-    readFile(fileName) {
-      add(fileName);
-      return ts.sys.readFile(fileName);
-    },
-    onUnRecoverableConfigFileDiagnostic() {},
-  };
-  const parsed = ts.getParsedCommandLineOfConfigFile(absolute, {}, host);
-  for (const reference of parsed?.projectReferences ?? []) {
-    collectTsconfigClosure(reference.path.endsWith(".json") ? reference.path : resolve(reference.path, "tsconfig.json"), add, seen);
-  }
-}
-
-/**
- * Capture the exact TypeScript closure used by declaration batches.  Batch
- * analysis adds configured consumers and first-party roots as program roots;
- * keeping those roots here is essential because their resolved declarations
- * and dependencies can affect diagnostics, symbol resolution, and affinities
- * without being included by the application's tsconfig.
- */
-function collectProgramInputs(rootDir: string, tsconfigPath: string, additionalRoots: readonly string[], add: (path: string) => void): void {
-  const configPath = resolve(rootDir, tsconfigPath);
-  const read = ts.readConfigFile(configPath, ts.sys.readFile);
-  if (read.error) return;
-  const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, dirname(configPath), undefined, configPath);
-  const additionalFiles = additionalRoots.flatMap((root) => sourceFiles(resolve(rootDir, root)));
-  const rootNames = [...new Set([...parsed.fileNames, ...additionalFiles])].sort(byCodeUnit);
-  const program = ts.createProgram({
-    rootNames,
-    options: parsed.options,
-    ...(parsed.projectReferences === undefined ? {} : { projectReferences: parsed.projectReferences }),
-  });
-  for (const file of program.getSourceFiles()) add(file.fileName);
-}
-
-/** Capture package metadata and declared resolver targets without hashing an entire install. */
-function collectInstalledResolutionInputs(rootDir: string, add: (path: string) => void, directories: Set<string>): void {
-  visitModulesDirectory(resolve(rootDir, "node_modules"), add, directories);
-}
-
-/** Resolver probes walk `node_modules` at each importer ancestor, not only at
- * the workspace root. Capture those existing directories so an absent bare
- * import is an observed, membership-bound absence. */
-function collectNodeModulesAncestors(path: string, directories: Set<string>): void {
-  let current = path;
-  while (true) {
-    const modules = resolve(current, "node_modules");
-    if (lstatSync(modules, { throwIfNoEntry: false })?.isDirectory()) directories.add(modules);
-    const parent = dirname(current);
-    if (parent === current) return;
-    current = parent;
-  }
-}
-
-function visitModulesDirectory(modules: string, add: (path: string) => void, directories: Set<string>): void {
-  const stat = lstatSync(modules, { throwIfNoEntry: false });
-  if (!stat?.isDirectory()) return;
-  directories.add(modules);
-  for (const entry of readdirSync(modules, { withFileTypes: true }).sort((left, right) => byCodeUnit(left.name, right.name))) {
-    inspectModulesEntry(modules, entry, add, directories);
-  }
-}
-
-function inspectModulesEntry(modules: string, entry: Dirent, add: (path: string) => void, directories: Set<string>): void {
-  const path = resolve(modules, entry.name);
-  if (entry.isDirectory() && entry.name === "node_modules") {
-    visitModulesDirectory(path, add, directories);
-    return;
-  }
-  if (!entry.isDirectory() && !entry.isSymbolicLink()) return;
-  if (entry.name.startsWith("@") && entry.isDirectory()) {
-    inspectInstalledScope(path, add, directories);
-    return;
-  }
-  inspectInstalledPackage(path, add, directories);
-}
-
-function inspectInstalledScope(path: string, add: (path: string) => void, directories: Set<string>): void {
-  for (const child of readdirSync(path, { withFileTypes: true }).sort((left, right) => byCodeUnit(left.name, right.name))) {
-    if (child.isDirectory() || child.isSymbolicLink()) inspectInstalledPackage(resolve(path, child.name), add, directories);
-  }
-}
-
-function inspectInstalledPackage(packageRoot: string, add: (path: string) => void, directories?: Set<string>): void {
-  const manifest = resolve(packageRoot, "package.json");
-  if (!lstatSync(manifest, { throwIfNoEntry: false })?.isFile()) return;
-  add(manifest);
-  let value: { types?: unknown; typings?: unknown; main?: unknown; module?: unknown; exports?: unknown };
-  try {
-    value = JSON.parse(readFileSync(manifest, "utf8")) as typeof value;
-  } catch {
-    return;
-  }
-  const targets = new Set<string>();
-  for (const field of [value.types, value.typings, value.main, value.module]) if (typeof field === "string") targets.add(field);
-  collectExportTargets(value.exports, targets);
-  for (const target of targets)
-    if (target.startsWith(".")) {
-      const resolved = resolve(packageRoot, target);
-      add(resolved);
-      if (directories) addDirectoryAncestors(resolved, directories, packageRoot);
-    }
-}
-
-function collectExportTargets(value: unknown, targets: Set<string>): void {
-  if (typeof value === "string") {
-    targets.add(value);
-    return;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) collectExportTargets(item, targets);
-    return;
-  }
-  if (typeof value !== "object" || value === null) return;
-  for (const item of Object.values(value)) collectExportTargets(item, targets);
-}
-
-function collectAncestorManifests(rootDir: string, path: string, add: (path: string) => void): void {
-  let current = lstatSync(path, { throwIfNoEntry: false })?.isDirectory() ? path : dirname(path);
-  const root = resolve(rootDir);
-  while (inside(root, current)) {
-    add(resolve(current, "package.json"));
-    if (current === root) return;
-    current = dirname(current);
-  }
-}
-
-function addDirectoryAncestors(path: string, directories: Set<string>, stopAt?: string): void {
-  let current = dirname(path);
-  const stop = stopAt === undefined ? undefined : resolve(stopAt);
-  while (true) {
-    directories.add(current);
-    if (stop !== undefined && current === stop) return;
-    const parent = dirname(current);
-    if (parent === current) return;
-    current = parent;
-  }
-}
-
-function packageRootFor(path: string): string | undefined {
-  let current = dirname(path);
-  while (true) {
-    if (lstatSync(resolve(current, "package.json"), { throwIfNoEntry: false })?.isFile()) return current;
-    const parent = dirname(current);
-    if (parent === current) return undefined;
-    current = parent;
-  }
-}
-
-export function collectLocalConfigDependencies(path: string, add: (path: string) => void, seen = new Set<string>()): void {
-  const absolute = resolve(path);
-  if (seen.has(absolute)) return;
-  seen.add(absolute);
-  add(absolute);
-  let text: string;
-  try {
-    text = readFileSync(absolute, "utf8");
-  } catch {
-    return;
-  }
-  const source = ts.createSourceFile(absolute, text, ts.ScriptTarget.Latest, true);
-  const visit = (node: ts.Node): void => {
-    const reference =
-      ts.isImportDeclaration(node) || ts.isExportDeclaration(node)
-        ? node.moduleSpecifier
-        : ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword || node.expression.getText(source) === "require")
-          ? node.arguments[0]
-          : undefined;
-    if (reference !== undefined) {
-      if (!ts.isStringLiteral(reference))
-        throw new InputInventoryError("ASSESSMENT_INPUT_UNBOUND", `config import cannot be inventoried: ${absolute}`, [absolute]);
-      if (!reference.text.startsWith("node:")) {
-        let target: string;
-        try {
-          target = Bun.resolveSync(reference.text, dirname(absolute));
-        } catch {
-          throw new InputInventoryError("ASSESSMENT_INPUT_UNBOUND", `config import cannot be resolved: ${reference.text}`, [reference.text]);
-        }
-        collectLocalConfigDependencies(target, add, seen);
-      }
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(source);
-}
-
-function nearestInstalledManifest(rootDir: string, path: string): string | undefined {
-  const boundary = resolve(rootDir, "node_modules");
-  let current = dirname(path);
-  while (true) {
-    const manifest = resolve(current, "package.json");
-    if (lstatSync(manifest, { throwIfNoEntry: false })?.isFile()) return manifest;
-    const parent = dirname(current);
-    if (parent === current || (!inside(boundary, current) && inside(rootDir, current))) break;
-    current = parent;
-  }
-  return undefined;
+function hasNamedEntry(entries: DirectoryMembership["entries"], name: string): boolean {
+  return entries.some((entry) => entry.name === name);
 }

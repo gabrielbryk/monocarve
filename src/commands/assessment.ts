@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { analyzeDeclarationBatch, BatchAnalysisError } from "../assessment/batch.ts";
-import { defaultAssessmentArguments, loadReplaySnapshot, publishAssessment, reportsForSnapshot } from "../assessment/bundle.ts";
+import { loadReplaySnapshot } from "../assessment/bundle-replay.ts";
+import { defaultAssessmentArguments, publishAssessment, reportsForSnapshot } from "../assessment/bundle.ts";
 import { assertEvidenceDestination, EvidenceError } from "../assessment/evidence.ts";
 import { captureAssessmentSnapshot, AssessmentQualificationError } from "../assessment/snapshot.ts";
 import { flagBool, flagNumber, flagString, flagStrings, type ParsedArgs } from "../cli/args.ts";
@@ -183,7 +184,8 @@ function handleAssessmentFailure(args: ParsedArgs, error: unknown): never | void
       { code: "ASSESSMENT_INPUT_UNREADABLE", severity: "error", message: error.message, impact: "No new authoritative assessment bundle was published." },
     ]);
   if (error instanceof UsageError || error instanceof NotYetPortedError) throw error;
-  throw error;
+  if (error instanceof Error) throw error;
+  throw new Error(String(error));
 }
 
 function printFatal(args: ParsedArgs, diagnostics: readonly unknown[], overrides: readonly string[] = []): void {

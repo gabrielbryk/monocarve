@@ -52,7 +52,8 @@ function fatal(code: AssessmentQualification["diagnostics"][number]["code"], mes
 
 function rethrowInput(error: unknown): never {
   if (error instanceof InputInventoryError) throw fatal(error.code, error.message, error.paths);
-  throw error;
+  if (error instanceof Error) throw error;
+  throw new Error(String(error));
 }
 
 function assertConfigSnapshotBound(input: LoadedConfig, inventory: AssessmentInputInventory): void {
@@ -192,31 +193,7 @@ export async function replayAssessmentSnapshot(
     }
   })();
   assertConfigSnapshotBound(input, current);
-  const executable = executableBuildIdentity();
-  const runtime = runtimeIdentity();
-  const mismatches = [
-    current.digest === input.inputInventory.digest ? undefined : "input inventory",
-    current.sourceCommit === input.baseline.sourceCommit ? undefined : "source commit",
-    hashJson(input.config) === input.baseline.configDigest ? undefined : "configuration",
-    hashJson(executable) === hashJson(input.baseline.executable) ? undefined : "executable identity",
-    hashJson(runtime) === hashJson(input.baseline.runtime) ? undefined : "runtime identity",
-  ].filter((entry): entry is string => entry !== undefined);
-  if (mismatches.length > 0)
-    throw new AssessmentQualificationError({
-      schemaVersion: 1,
-      status: "fatal",
-      exitCode: 1,
-      mayPublish: false,
-      overrides: [],
-      diagnostics: [
-        {
-          code: "ASSESSMENT_REPLAY_INPUT_MISMATCH",
-          severity: "error",
-          message: `replay authority does not match current ${mismatches.join(", ")}`,
-          impact: "Captured scanner output cannot be relabeled as current evidence.",
-        },
-      ],
-    });
+  assertReplayIdentity(input, current);
   const verify = (additionalExcludedRoots: readonly string[] = []): void => {
     try {
       verifyInputInventory({ ...authority, excludedRoots: [...(authority.excludedRoots ?? []), ...additionalExcludedRoots] }, input.inputInventory);
@@ -231,22 +208,7 @@ export async function replayAssessmentSnapshot(
   }
   verify();
   const graph = buildDependencyGraph({ config: input.config, rootDir: input.rootDir, reports: input.reports, commit: input.inputInventory.sourceCommit });
-  if (graphDigest(graph) !== input.baseline.graphDigest)
-    throw new AssessmentQualificationError({
-      schemaVersion: 1,
-      status: "fatal",
-      exitCode: 1,
-      mayPublish: false,
-      overrides: [],
-      diagnostics: [
-        {
-          code: "ASSESSMENT_REPLAY_INPUT_MISMATCH",
-          severity: "error",
-          message: "replayed graph digest does not match the captured graph",
-          impact: "Replay evidence is not authoritative for this graph.",
-        },
-      ],
-    });
+  assertReplayGraphDigest(graph, input.baseline);
   verify();
   await assertReplayQualification(input);
   verify();
@@ -260,6 +222,56 @@ export async function replayAssessmentSnapshot(
     verify,
     inventoryReader(input.rootDir, input.inputInventory),
   );
+}
+
+function assertReplayIdentity(
+  input: LoadedConfig & { readonly inputInventory: AssessmentInputInventory; readonly baseline: AssessmentBaselineIdentity },
+  current: AssessmentInputInventory,
+): void {
+  const executable = executableBuildIdentity();
+  const runtime = runtimeIdentity();
+  const mismatches = [
+    current.digest === input.inputInventory.digest ? undefined : "input inventory",
+    current.sourceCommit === input.baseline.sourceCommit ? undefined : "source commit",
+    hashJson(input.config) === input.baseline.configDigest ? undefined : "configuration",
+    hashJson(executable) === hashJson(input.baseline.executable) ? undefined : "executable identity",
+    hashJson(runtime) === hashJson(input.baseline.runtime) ? undefined : "runtime identity",
+  ].filter((entry): entry is string => entry !== undefined);
+  if (mismatches.length === 0) return;
+  throw new AssessmentQualificationError({
+    schemaVersion: 1,
+    status: "fatal",
+    exitCode: 1,
+    mayPublish: false,
+    overrides: [],
+    diagnostics: [
+      {
+        code: "ASSESSMENT_REPLAY_INPUT_MISMATCH",
+        severity: "error",
+        message: `replay authority does not match current ${mismatches.join(", ")}`,
+        impact: "Captured scanner output cannot be relabeled as current evidence.",
+      },
+    ],
+  });
+}
+
+function assertReplayGraphDigest(graph: DependencyGraph, baseline: AssessmentBaselineIdentity): void {
+  if (graphDigest(graph) === baseline.graphDigest) return;
+  throw new AssessmentQualificationError({
+    schemaVersion: 1,
+    status: "fatal",
+    exitCode: 1,
+    mayPublish: false,
+    overrides: [],
+    diagnostics: [
+      {
+        code: "ASSESSMENT_REPLAY_INPUT_MISMATCH",
+        severity: "error",
+        message: "replayed graph digest does not match the captured graph",
+        impact: "Replay evidence is not authoritative for this graph.",
+      },
+    ],
+  });
 }
 
 function inventoryReader(rootDir: string, inventory: AssessmentInputInventory): (path: string) => string | undefined {

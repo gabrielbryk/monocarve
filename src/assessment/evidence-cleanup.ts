@@ -1,7 +1,7 @@
 import { readdirSync, renameSync, rmdirSync, unlinkSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { byCodeUnit } from "../util/hash.ts";
-import type { EvidenceArtifactRecord, EvidenceManifestBase } from "./evidence.ts";
+import type { EvidenceArtifactRecord, EvidenceManifestBase } from "./evidence-types.ts";
 
 interface FileIdentity {
   readonly device: number;
@@ -108,6 +108,6 @@ function listEntries(root: string, current = root): string[] {
 }
 
 function relativeName(root: string, path: string): string {
-  const relative = path.slice(root.length + 1).replaceAll("\\", "/");
-  return relative;
+  const suffix = path.slice(root.length + 1).replaceAll("\\", "/");
+  return suffix;
 }

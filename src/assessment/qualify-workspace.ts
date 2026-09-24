@@ -317,7 +317,7 @@ function workspaceDiagnostic(error: unknown): AssessmentDiagnostic {
 function tsconfigFiles(rootDir: string, path: string): ReadonlySet<string> {
   const absolute = resolve(rootDir, path);
   try {
-    const read = ts.readConfigFile(absolute, ts.sys.readFile);
+    const read = ts.readConfigFile(absolute, (file) => ts.sys.readFile(file));
     if (read.error) return new Set();
     const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, dirname(absolute), undefined, absolute);
     return new Set(parsed.fileNames.map((entry) => normalizePath(resolve(entry))));

@@ -1,5 +1,6 @@
 import { analyzeDeclarationBatch, BatchAnalysisError } from "../assessment/batch.ts";
-import { defaultAssessmentArguments, loadReplaySnapshot, publishDeclarationBatch } from "../assessment/bundle.ts";
+import { loadReplaySnapshot } from "../assessment/bundle-replay.ts";
+import { defaultAssessmentArguments, publishDeclarationBatch } from "../assessment/bundle.ts";
 import { assertEvidenceDestination, EvidenceError } from "../assessment/evidence.ts";
 import { AssessmentQualificationError, captureAssessmentSnapshot } from "../assessment/snapshot.ts";
 import { flagBool, flagString, flagStrings, type ParsedArgs } from "../cli/args.ts";
@@ -170,7 +171,8 @@ function handleBatchFailure(args: ParsedArgs, error: unknown): never | void {
         impact: "No new authoritative declaration batch bundle was published.",
       },
     ]);
-  throw error;
+  if (error instanceof Error) throw error;
+  throw new Error(String(error));
 }
 
 function printFatal(args: ParsedArgs, diagnostics: readonly unknown[], overrides: readonly string[] = []): void {

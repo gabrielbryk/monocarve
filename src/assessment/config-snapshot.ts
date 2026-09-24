@@ -29,6 +29,8 @@ const WORKER = [
 
 const SANDBOX_TMP = ".monocarve-config-tmp";
 
+type RuntimeLibrary = { readonly source: string; readonly target: string };
+
 /** Run executable config against copied bytes, never the mutable checkout. */
 export function loadSnapshotConfig(configPath: string, afterCapture?: () => void): ConfigSnapshotResult {
   const bwrap = "/usr/bin/bwrap";
@@ -38,82 +40,112 @@ export function loadSnapshotConfig(configPath: string, afterCapture?: () => void
   const runtime = runtimeLibraries(binary);
   const snapshot = mkdtempSync(ensureScratchDir("config-snapshot-"));
   const image = join(snapshot, "image");
+  prepareSandboxImage(image);
+  try {
+    const paths = captureConfigInputPaths(configPath);
+    const files = paths.map((path) => copyInput(image, path));
+    afterCapture?.();
+    stageRuntimeBindTargets(image, runtime);
+    const command = buildBwrapCommand({ bwrap, image, binary, runtime, configPath });
+    const trace = join(snapshot, "reads.trace");
+    const child = runIsolatedConfig(command, trace);
+    return parseIsolatedConfigOutput(child, files);
+  } finally {
+    rmSync(snapshot, { recursive: true, force: true });
+  }
+}
+
+function prepareSandboxImage(image: string): void {
   mkdirSync(image, { mode: 0o700 });
   // Private scratch lives outside /tmp: captured inputs keep their absolute
   // paths, and a workspace under /tmp must not be hidden by a tmpfs mount.
   mkdirSync(join(image, SANDBOX_TMP));
   mkdirSync(join(image, "proc"));
   mkdirSync(join(image, "dev"));
+}
+
+function captureConfigInputPaths(configPath: string): string[] {
   try {
-    let paths: string[];
-    try {
-      paths = configInputPaths(configPath);
-    } catch (error) {
-      throw new ConfigError(`ASSESSMENT_CONFIG_UNBOUND: config inputs cannot be captured: ${error instanceof Error ? error.message : String(error)}`);
-    }
-    const files = paths.map((path) => copyInput(image, path));
-    afterCapture?.();
-    // Bind targets must exist in the otherwise empty image. Runtime binaries
-    // and libraries are trusted executable identity, not ambient host data.
-    for (const path of ["/runtime/bun", ...runtime.map((entry) => entry.target)]) {
-      const target = join(image, path);
-      mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, "");
-    }
-    const command = [
-      bwrap,
-      "--unshare-all",
-      "--die-with-parent",
-      "--clearenv",
-      "--setenv",
-      "HOME",
-      "/nonexistent",
-      "--setenv",
-      "TMPDIR",
-      `/${SANDBOX_TMP}`,
-      "--setenv",
-      "PATH",
-      "/runtime",
-      "--ro-bind",
-      image,
-      "/",
-      "--ro-bind",
-      binary,
-      "/runtime/bun",
-      ...runtime.flatMap((entry) => ["--ro-bind", entry.source, entry.target]),
-      "--tmpfs",
-      `/${SANDBOX_TMP}`,
-      "--proc",
-      "/proc",
-      "--dev",
-      "/dev",
-      "--chdir",
-      dirname(configPath),
-      "/runtime/bun",
-      "--no-install",
-      "-e",
-      WORKER,
-      configPath,
-    ];
-    const trace = join(snapshot, "reads.trace");
-    const child = Bun.spawnSync({
-      cmd: ["/usr/bin/strace", "-f", "-qq", "-e", "trace=%file,write", "-o", trace, ...command],
-      stdout: "pipe",
-      stderr: "pipe",
-      timeout: 30_000,
-    });
-    const detail = new TextDecoder().decode(child.stderr).trim();
-    assertNoFailedConfigReads(trace, detail);
-    if (child.exitCode !== 0) {
-      throw new ConfigError(`ASSESSMENT_CONFIG_UNBOUND: isolated config execution failed${detail ? `: ${detail}` : ""}`);
-    }
-    try {
-      return { value: JSON.parse(new TextDecoder().decode(child.stdout)) as unknown, files };
-    } catch {
-      throw new ConfigError("ASSESSMENT_CONFIG_UNBOUND: isolated config did not produce JSON");
-    }
-  } finally {
-    rmSync(snapshot, { recursive: true, force: true });
+    return configInputPaths(configPath);
+  } catch (error) {
+    throw new ConfigError(`ASSESSMENT_CONFIG_UNBOUND: config inputs cannot be captured: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/** Bind targets must exist in the otherwise empty image. Runtime binaries
+ * and libraries are trusted executable identity, not ambient host data. */
+function stageRuntimeBindTargets(image: string, runtime: readonly RuntimeLibrary[]): void {
+  for (const path of ["/runtime/bun", ...runtime.map((entry) => entry.target)]) {
+    const target = join(image, path);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, "");
+  }
+}
+
+function buildBwrapCommand(input: {
+  readonly bwrap: string;
+  readonly image: string;
+  readonly binary: string;
+  readonly runtime: readonly RuntimeLibrary[];
+  readonly configPath: string;
+}): string[] {
+  return [
+    input.bwrap,
+    "--unshare-all",
+    "--die-with-parent",
+    "--clearenv",
+    "--setenv",
+    "HOME",
+    "/nonexistent",
+    "--setenv",
+    "TMPDIR",
+    `/${SANDBOX_TMP}`,
+    "--setenv",
+    "PATH",
+    "/runtime",
+    "--ro-bind",
+    input.image,
+    "/",
+    "--ro-bind",
+    input.binary,
+    "/runtime/bun",
+    ...input.runtime.flatMap((entry) => ["--ro-bind", entry.source, entry.target]),
+    "--tmpfs",
+    `/${SANDBOX_TMP}`,
+    "--proc",
+    "/proc",
+    "--dev",
+    "/dev",
+    "--chdir",
+    dirname(input.configPath),
+    "/runtime/bun",
+    "--no-install",
+    "-e",
+    WORKER,
+    input.configPath,
+  ];
+}
+
+function runIsolatedConfig(command: readonly string[], trace: string): ReturnType<typeof Bun.spawnSync> {
+  const child = Bun.spawnSync({
+    cmd: ["/usr/bin/strace", "-f", "-qq", "-e", "trace=%file,write", "-o", trace, ...command],
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 30_000,
+  });
+  const detail = new TextDecoder().decode(child.stderr).trim();
+  assertNoFailedConfigReads(trace, detail);
+  if (child.exitCode !== 0) {
+    throw new ConfigError(`ASSESSMENT_CONFIG_UNBOUND: isolated config execution failed${detail ? `: ${detail}` : ""}`);
+  }
+  return child;
+}
+
+function parseIsolatedConfigOutput(child: ReturnType<typeof Bun.spawnSync>, files: readonly ConfigSnapshotFile[]): ConfigSnapshotResult {
+  try {
+    return { value: JSON.parse(new TextDecoder().decode(child.stdout)) as unknown, files };
+  } catch {
+    throw new ConfigError("ASSESSMENT_CONFIG_UNBOUND: isolated config did not produce JSON");
   }
 }
 
