@@ -1,28 +1,37 @@
-# Monocarve improvement scope
+# OpenSpec in this repository
 
-These changes turn observed agent usage friction into separable product work. They are proposals, not implemented CLI behavior.
+This directory holds monocarve's [OpenSpec](https://github.com/Fission-AI/OpenSpec)
+change proposals: a spec-driven workflow for proposing, reviewing, and
+archiving behavior changes before or alongside implementation.
 
-The user selected `streamline-extraction-workflow` as the first implementation target. Its first slice is read-only move guidance followed by review of the actual diff in the existing worktree; it does not require transaction setup.
+## How it works
 
-| Order | Change                             | User outcome                                                                                          | Dependency                                                               |
-| ----- | ---------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| 1     | `streamline-extraction-workflow`   | Move files in the current worktree with useful Monocarve guidance and honest diff review              | Existing graph and consumer analysis                                     |
-| 2     | `improve-extraction-readiness`     | Detect host/setup blockers early and see where transaction time went                                  | Existing transaction diagnostics                                         |
-| 3     | `improve-extraction-correctness`   | Plan an intentional multi-file boundary and reject bad target/consumer/package wiring before approval | Reconcile already landed planner fixes first                             |
-| 4     | `improve-cli-diagnostics`          | Understand wrong manifest, command, path, and candidate errors immediately                            | Coordinate identity and empty-scan behavior with architecture assessment |
-| 5     | `provide-monocarve-agent-guidance` | Install concise skills that select and execute the appropriate workflow                               | Ship against actual CLI capabilities; update as changes land             |
+- `openspec/specs/` holds the current, accepted specification for each area
+  of behavior — the source of truth for what monocarve does today.
+- `openspec/changes/<change-id>/` holds an in-progress proposal: `proposal.md`
+  (why, and what changes), `design.md` for decisions worth recording, and
+  `tasks.md` tracking implementation. A proposal is a plan, not implemented
+  CLI behavior, until its change lands.
+- Once a change ships, `openspec archive <change-id>` moves it under
+  `openspec/changes/archive/` and folds its deltas into `openspec/specs/`, so
+  the spec directory stays current and the archived change remains as a
+  record of the decision.
 
-## Existing parallel scope
+## Active changes
 
-`add-architecture-assessment` is already scoped in the separate `spec/architecture-assessment` worktree. It owns nested workspace-glob qualification, executable identity, unexpected empty scans, read-only architecture assessment, bounded evidence bundles, and batch declaration analysis. Its source and OpenSpec artifacts were uncommitted when this scope was prepared. Do not reimplement those features from this index or treat them as shipped.
+These are proposals, not implemented CLI behavior. Order reflects rough
+dependency, not commitment to build in this sequence.
 
-## Decision boundaries
+| Change                                                                                     | Outcome                                                                                                                                                                                            |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`streamline-extraction-workflow`](changes/streamline-extraction-workflow/proposal.md)     | Read-only move guidance and honest working-tree diff review for a user editing their own worktree, without requiring the full transactional path.                                                  |
+| [`improve-extraction-readiness`](changes/improve-extraction-readiness/proposal.md)         | Read-only transaction readiness reporting (worktree capability, scratch path, dependency strategy, gate inventory) and phase-level timing/failure attribution for simulation and apply.            |
+| [`improve-extraction-correctness`](changes/improve-extraction-correctness/proposal.md)     | An explicit move-set planning route for a reviewed multi-file boundary, plus pre-approval checks for target layout, imports, test consumers, package references, and lockfile importer changes.    |
+| [`improve-cli-diagnostics`](changes/improve-cli-diagnostics/proposal.md)                   | Discoverable build/command identity, typed usage errors instead of unhandled exceptions, and bounded, actionable output for large discovery reports.                                               |
+| [`provide-monocarve-agent-guidance`](changes/provide-monocarve-agent-guidance/proposal.md) | A distributable agent-skills plugin covering workspace setup, boundary assessment, in-place and transactional extraction, and diagnosis/recovery, version-aware and honest about proof boundaries. |
 
-- The in-place path is advisory in its first slice. Automated in-place mutation would need a separate decision about rollback and generator/gate side effects.
-- The existing transactional path retains deterministic plans, exact approval, no partial journal application, pure R100 move commits, repository-owned simulation gates, and guarded branch refusals.
-- Transcript findings are evidence of friction, not proof that every historical bug remains in the current code. Correctness work starts by reproducing remaining defects on the current checkout.
-- Workspace-specific values belong in workspace configuration. Specs and examples use synthetic identities only.
+## Archived changes
 
-## Completion criteria
-
-For each change: complete its tasks, add a negative case for every new proof, document the evidence limit, and validate the relevant OpenSpec change. Implementation verification follows the repository contract when implementation is requested.
+`openspec/changes/archive/` contains changes that have already shipped, kept
+for their design history. See `openspec/specs/` for the specification they
+produced.

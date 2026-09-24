@@ -1,11 +1,14 @@
 # Agent contract
 
-Read this before touching anything in this repository.
+Read this before touching anything in this repository. For a map of `src/`
+modules, their dependency direction, the quality ratchet, and test
+conventions, see `docs/architecture.md`.
 
 ## 1. Config-first — no hardcoded workspace assumptions, ever
 
 This is the rule that outranks the others. Every fact about a particular
-repository lives in `src/config.ts` and nowhere else. Before adding any
+repository lives in `src/config/*` (exposed through the `src/config.ts`
+facade, the only supported programmatic import) and nowhere else. Before adding any
 constant, ask whether it is a fact about _this tool_ or a fact about _some
 workspace_. The second kind is a config field.
 
