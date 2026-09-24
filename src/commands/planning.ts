@@ -280,7 +280,7 @@ export const planningCommands: Record<string, CommandSpec> = {
     summary: "resolve a stable source path and review its current plan",
     category: "Extraction planning",
     usage:
-      "scope --path <source> --package-name <name> [--app <name>] [--package-root <path>] [--target-subpath <dir>] [--include-extracted] [--verify-lockfile] [--out <path>] [--write] [--json]",
+      "scope --path <source> --package-name <name> [--app <name>] [--package-root <path>] [--target-subpath <dir>] [--include-extracted] [--force] [--verify-lockfile] [--out <path>] [--write] [--json]",
     details:
       "Resolves the current principal SCC candidate from a stable source path. It requires an intentional target, prints a concise review by default, and never writes unless --write is explicit. --target-subpath names the destination directory inside an existing package, overriding the structure-preserving default.",
     run: scope,
