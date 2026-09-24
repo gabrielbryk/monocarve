@@ -18,7 +18,8 @@
  * rather than deriving one from config).
  */
 
-import type { CompositionBoundariesConfig, PortPromotionsConfig } from "../config/schema-policy.ts";
+import type { CompositionBoundariesConfig } from "../config/schema-policy.ts";
+import type { PortPromotionsConfig } from "../config/schema-promotions.ts";
 import { MonocarveError } from "../errors.ts";
 import { byCodeUnit } from "../util/hash.ts";
 

@@ -119,6 +119,7 @@ function withPlan(args: ParsedArgs, path: string): ParsedArgs {
 export const preparerCommands: Record<string, CommandSpec> = {
   "preparer-plan": {
     summary: "compile a declared-output pre-extraction transaction",
+    category: "Configured preparers and ratchets",
     usage: "preparer-plan [--extraction <path>] --preparer <id> --source <path> [--bootstrap-config <path>] [--out <path>] [--write]",
     details:
       "Runs the configured preparer only in a disposable baseline worktree. With --extraction it binds templates to one exact move destination; without it, --source is a repository policy anchor exposed as both sourcePath and targetPath. Refuses undeclared repository-visible changes and optionally writes a separately reviewable manifest.",
@@ -126,6 +127,7 @@ export const preparerCommands: Record<string, CommandSpec> = {
   },
   "preparer-bootstrap-commit": {
     summary: "commit an introducing config and approval through normal hooks",
+    category: "Configured preparers and ratchets",
     usage: "preparer-bootstrap-commit --plan <path> --subject <conventional-commit-subject>",
     details:
       "Temporarily applies reviewed outputs so normal hooks can validate a newly introduced preparer config, commits only that config and its manifest, then rolls outputs back for the ordinary preparer apply lifecycle.",
@@ -133,12 +135,14 @@ export const preparerCommands: Record<string, CommandSpec> = {
   },
   "preparer-simulate": {
     summary: "replay a preparer manifest without changing the checkout",
+    category: "Configured preparers and ratchets",
     usage: "preparer-simulate --plan <path>",
     details: "Replays captured outputs and the configured verification command in a disposable worktree. The invoked checkout remains unchanged.",
     run: preparerSimulate,
   },
   "preparer-apply": {
     summary: "apply a reviewed preparer manifest without committing",
+    category: "Configured preparers and ratchets",
     usage: "preparer-apply --plan <path>",
     details:
       "Requires the exact manifest as the sole reviewed commit directly above its extraction baseline, simulates first, then journal-applies declared outputs with rollback. It prints the exact preparer-commit argv; committing remains a separate explicit step.",
@@ -146,6 +150,7 @@ export const preparerCommands: Record<string, CommandSpec> = {
   },
   "preparer-commit": {
     summary: "commit exact applied preparer outputs",
+    category: "Configured preparers and ratchets",
     usage: "preparer-commit --plan <path>",
     details:
       "Requires approved manifest provenance, exact output bytes and modes, and no other dirty paths; commits only declared outputs with the configured subject, then directs a fresh extraction plan.",

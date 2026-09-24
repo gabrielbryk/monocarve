@@ -29,6 +29,7 @@ function readJsonConfig(path: string): unknown {
 export const configDoctorCommands: Record<string, CommandSpec> = {
   "config-doctor": {
     summary: "diagnose effective configuration and workspace integration",
+    category: "Discovery and diagnosis",
     usage: "config-doctor",
     details:
       "Reports config provenance, roots, workspace packages, adapter support, compiler profiles, generated and path-keyed artifacts, configured module calls, protected and dirty paths, preparation coverage, and semantic scaffold/public-surface conflicts. Read-only; it runs no gates, generators, installers, or preparers.",

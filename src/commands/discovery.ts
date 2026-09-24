@@ -382,6 +382,7 @@ async function impact(args: ParsedArgs): Promise<void> {
 export const discoveryCommands: Record<string, CommandSpec> = {
   scan: {
     summary: "build the dependency model",
+    category: "Discovery and diagnosis",
     usage: "scan [--app <name>] [--no-cache] [--allow-empty] [--include-extracted] [--out <path>] [--report-out <path>]",
     details:
       "Reads configured applications without changing the workspace. --allow-empty permits only a verified existing source root with no configured production files. --include-extracted keeps already-extracted paths in the model. --report-out writes the raw scanner report for the selected --app so it can be replayed with --graph.",
@@ -389,25 +390,30 @@ export const discoveryCommands: Record<string, CommandSpec> = {
   },
   layers: {
     summary: "report domains, components, and dependency layers",
+    category: "Discovery and diagnosis",
     usage: "layers [--app <name>] [--out <path>]",
     details: "Read-only architecture report derived from the current or captured graph.",
     run: layers,
   },
   symbols: {
     summary: "analyze one file's declaration and symbol graph",
+    category: "Discovery and diagnosis",
     usage: "symbols --file <path> [--out <path>]",
     details: "Reports declarations, type/value spaces, exact references, merged groups, and SCCs; never edits the file.",
     run: symbols,
   },
   "split-candidates": {
     summary: "rank symbol split suggestions for one file or an explicit batch",
-    usage: "split-candidates --file <path> [--out <path>] | --app <name> --evidence-dir <path> (--file <path> ... | --split-hotspots <n>)",
+    category: "Discovery and diagnosis",
+    usage:
+      "split-candidates --file <path> [--out <path>]\n       split-candidates --app <name> --evidence-dir <path> (--file <path> ... | --split-hotspots <n>) [--replay <assessment-bundle>] [--replace-generated] [--max-bytes <n>] [--allow-empty]",
     details:
       "The legacy single-file form is unchanged. Repeated files, hotspot selection, or --evidence-dir selects a strict snapshot-bound batch with atomic evidence.",
     run: splitCandidates,
   },
   portfolio: {
     summary: "rank eligible extraction candidates",
+    category: "Discovery and diagnosis",
     usage:
       "portfolio [--app <name>] [--limit <n>] [--recommendation <status>] [--strategy <cohesive|max-loc|low-risk|campaign|preparation>] [--include-extracted] [--communities] [--hub-inbound-threshold <n>] [--out <path>]",
     details:
@@ -416,6 +422,7 @@ export const discoveryCommands: Record<string, CommandSpec> = {
   },
   candidates: {
     summary: "inspect and filter extraction candidates",
+    category: "Discovery and diagnosis",
     usage:
       "candidates [--candidate <id> | --equivalence-group <id>] [--path <path>] [--eligibility <all|eligible|blocked>] [--app <name>] [--include-extracted] [--out <path>]",
     details:
@@ -424,38 +431,44 @@ export const discoveryCommands: Record<string, CommandSpec> = {
   },
   conflicts: {
     summary: "compare same-baseline plan conflicts",
+    category: "Discovery and diagnosis",
     usage: "conflicts --plan <candidate>=<manifest> [--plan <candidate>=<manifest> ...]",
     details: "Classifies hard and replan-mergeable path conflicts. Reported waves still require rescan and replan between applied children.",
     run: conflicts,
   },
   backlog: {
     summary: "explain blocked candidates and edges",
+    category: "Discovery and diagnosis",
     usage: "backlog [--app <name>] [--limit <n>] [--include-extracted] [--marginal] [--out <path>]",
     details: "--marginal reports a conservative one-blocker lower bound; it does not claim a full unlock simulation.",
     run: backlog,
   },
   hotspots: {
     summary: "rank modules that inflate extraction closures",
-    usage: "hotspots [--app <name>] [--limit <n>] [--out <path>]",
+    category: "Discovery and diagnosis",
+    usage: "hotspots [--app <name>] [--limit <n>] [--include-extracted] [--out <path>]",
     details:
       "Ranks high-inbound, high-fan-out, and cross-domain modules by the candidate LOC pressure they propagate. Suggested actions are diagnostic, never mutation authority.",
     run: hotspots,
   },
   capabilities: {
     summary: "suggest context capability partitions",
-    usage: "capabilities --file <path> --type <interface> [--out <path>]",
+    category: "Discovery and diagnosis",
+    usage: "capabilities --file <path> --type <interface> [--app <name>] [--out <path>]",
     details:
       "Groups interface properties by the configured domain affinity of their real TypeScript consumers; read-only guidance for narrowing broad runtime contexts.",
     run: capabilities,
   },
   "lazy-registry": {
     summary: "map lazy feature entries to extraction targets",
-    usage: "lazy-registry --file <path> [--app <name>] [--out <path>]",
+    category: "Discovery and diagnosis",
+    usage: "lazy-registry --file <path> [--app <name>] [--include-extracted] [--out <path>]",
     details: "Maps compiler-resolved dynamic imports to their current domains and eligible candidate closures without rewriting registry behavior.",
     run: lazyRegistry,
   },
   impact: {
     summary: "measure a preparation plan's exact extraction unlock",
+    category: "Discovery and diagnosis",
     usage: "impact --plan <preparation-manifest> [--app <name>] [--out <path>]",
     details:
       "Runs the reviewed preparation and configured gates in isolation, rescans its disposable result, and compares before/after candidate and application-LOC metrics.",

@@ -61,8 +61,6 @@ export type { PublicSurfaceConfig, TemplateSource } from "./config/primitives.ts
 export type { GeneratedSourceAdoptionsConfig, GraphConfig, RuntimeModuleRegistriesConfig } from "./config/schema-extensions.ts";
 export type {
   IntegrationTestSuiteConfig,
-  ModulePromotionsConfig,
-  ValueSplitsConfig,
   PathReferencesConfig,
   PathReferenceRewritesConfig,
   PortfolioConfig,
@@ -70,6 +68,7 @@ export type {
   TestKindsConfig,
   TestRelocationConfig,
 } from "./config/schema-policy.ts";
+export type { ModulePromotionsConfig, ValueSplitsConfig } from "./config/schema-promotions.ts";
 export { defineConfig, monocarveConfigSchema } from "./config/schema.ts";
 export type { MonocarveConfig, MonocarveUserConfig } from "./config/schema.ts";
 export { configDigest } from "./config/digest.ts";

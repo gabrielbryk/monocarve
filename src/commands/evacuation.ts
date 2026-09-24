@@ -105,8 +105,9 @@ function formatCuts(report: {
 export const evacuationCommands: Record<string, CommandSpec> = {
   evacuate: {
     summary: "scope one bounded domain evacuation",
+    category: "Extraction planning",
     usage:
-      "evacuate --app <name> --source <file|directory|glob> [--source <...>] --package-name <name> [--authorize-protected <configured-root>] [--include-composition <selected-root>] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]",
+      "evacuate --app <name> --source <file|directory|glob> [--source <...>] --package-name <name> [--authorize-protected <configured-root> ...] [--include-composition <selected-root> ...] [--package-root <path>] [--verify-lockfile] [--out <path>] [--write] [--json]",
     details:
       "Read-only by default. Selectors are workspace-relative and production-only. --authorize-protected is repeatable, evacuation-only, and must exactly name a configured protected root inside the selected evacuation. --include-composition is repeatable and may include only an exact composition root already selected in the same application; its whole SCC moves. Compiles the ordinary immutable plan only after eligibility passes and every boundary cut names a configured remedy; --write exclusively creates that one manifest and never edits source files.",
     run: evacuate,

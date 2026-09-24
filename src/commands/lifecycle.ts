@@ -61,6 +61,7 @@ async function status(args: ParsedArgs): Promise<void> {
 export const lifecycleCommands: Record<string, CommandSpec> = {
   status: {
     summary: "report the lifecycle state and one safe next command",
+    category: "Extraction execution",
     usage: "status [--plan <path>] [--receipt <path>] [--reconciliation <path>]",
     details:
       "Read-only. Proves exact approval and application commit boundaries, audits an applied tree, validates optional immutable receipt and reconciliation records, reports durable transaction evidence, and emits exactly one next command.",

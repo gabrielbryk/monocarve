@@ -210,7 +210,8 @@ describe("help rendering", () => {
   });
 
   test("help names accepted flags the usage line omits", () => {
-    expect(commandHelp(registered("next"))).toContain("also accepts: --out <value>, --include-extracted");
+    expect(commandHelp(registered("check"))).toContain("also accepts: --check <value>");
+    expect(commandHelp(registered("next"))).not.toContain("also accepts");
     expect(commandHelp(registered("apply"))).not.toContain("also accepts");
     // Refused flags are not advertised.
     expect(commandHelp(registered("apply"))).not.toContain("--skip-simulation <");
