@@ -6,8 +6,10 @@ on:
   pull_request:
   workflow_call:
 
+# A static prefix: when release.yml calls this workflow, github.workflow is the
+# caller's name, and a group derived from it collides with the caller's own group.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -121,7 +123,12 @@ jobs:
     steps:
       - name: Check required jobs succeeded
         run: |
-          if [ "${{ contains(needs.*.result, 'failure') }}" = "true" ] || [ "${{ contains(needs.*.result, 'cancelled') }}" = "true" ]; then
-            echo "one or more required jobs did not succeed"
-            exit 1
-          fi
+          results='${{ join(needs.*.result, ' ') }}'
+          echo "required job results: $results"
+          for result in $results; do
+            # Anything but success (failure, cancelled, skipped) fails the gate.
+            if [ "$result" != "success" ]; then
+              echo "one or more required jobs did not succeed"
+              exit 1
+            fi
+          done

@@ -48,7 +48,7 @@ export function preparationCommandSpecs(handlers: PreparationHandlers): Record<s
     "prepare-multi-plan": {
       summary: "compile one atomic multi-file type preparation",
       category: "Declaration preparation",
-      usage: "prepare-multi-plan --spec <path> [--out <path>] [--write]",
+      usage: "prepare-multi-plan --spec <path> [--app <name>] [--out <path>] [--write]",
       details:
         "The JSON spec names one reviewed multi-file candidate plus per-donor candidate, groups, target, and module specifier. Compilation requires exact atomic coverage and emits one replayable manifest; it never edits source.",
       run: handlers.prepareMultiPlan,

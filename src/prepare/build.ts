@@ -370,5 +370,3 @@ function compatibilityReexports(selection: TypeOnlySelection, input: CompilePrep
     },
   ];
 }
-
-/** Git tree modes carry type bits; preparation journals own only POSIX permissions. */

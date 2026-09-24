@@ -16,6 +16,7 @@ export interface PreparationManifestRendering {
   readonly commit: PreparationCommitSpec;
 }
 
+/** Git tree modes carry type bits; preparation journals own only POSIX permissions. */
 export function baselineFileMode(rootDir: string, commit: string, path: string): number {
   const output = git({ cwd: rootDir }, "ls-tree", commit, "--", `${repositoryPrefix(rootDir)}${path}`);
   const match = /^(\d{6})\s+\w+\s+[0-9a-f]+\t/.exec(output);
