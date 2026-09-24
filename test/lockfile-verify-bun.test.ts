@@ -27,14 +27,6 @@ const LOCKFILE = bunAdapter.lockfileName;
 /** Absent means every case below reports as skipped, not as passed. */
 const BUN = Bun.which("bun");
 
-type FrozenLockfileOnlyBehavior = "rewrites" | "preserves";
-
-function frozenLockfileOnlyBehavior(version: string): FrozenLockfileOnlyBehavior {
-  if (version.startsWith("1.3.")) return "rewrites";
-  if (version.startsWith("1.4.")) return "preserves";
-  throw new Error(`unmeasured Bun version for frozen lockfile behavior: ${version}`);
-}
-
 /** A copy of the committed fixture, outside every repository. */
 function workspace(): string {
   const root = join(scratchDirectory(), "workspace");
@@ -172,28 +164,41 @@ describe("lockfile verification against real bun", () => {
   test.skipIf(BUN === null)(
     "--frozen-lockfile behavior for --lockfile-only is version-aware",
     () => {
-      // Measured because the adapter's command depends on it: a reader could
-      // reasonably assume the two flags together are a check, and build a
-      // verification on the exit code instead of on the bytes. They are not a
-      // check. Bun 1.3 rewrites a divergent lockfile and exits 0; Bun 1.4
-      // preserves it and still exits 0. Comparing bytes is the only behavior
-      // that answers whether the splice is canonical, which is what
-      // `verifyLockfile` does.
+      // Measured, and recorded because the adapter's command depends on it: a
+      // reader could reasonably assume the two flags together are a check, and
+      // build a verification on the exit code instead of on the bytes. They are
+      // not a check — the exit code is the same 0 for a lockfile missing a
+      // workspace link as for the lockfile bun itself would have written, so
+      // comparing the bytes is the only thing that answers the question, which
+      // is what `verifyLockfile` does.
+      //
+      // What bun does to the *file* under those two flags is version-dependent
+      // and deliberately not asserted here: 1.3.14 saved the regenerated
+      // lockfile over the divergent one, 1.4.2 leaves the divergent bytes in
+      // place. Either way the run reports success, which is the whole point.
+      const agreeing = Bun.spawnSync([BUN!, "install", "--lockfile-only", "--frozen-lockfile"], { cwd: workspace(), stdout: "pipe", stderr: "pipe" });
+
       const root = workspace();
       const baseline = readFileSync(join(root, LOCKFILE), "utf8");
       const divergent = baseline.replace('    "@acme/format": ["@acme/format@workspace:libs/format"],\n\n', "");
       expect(divergent).not.toBe(baseline);
       writeFileSync(join(root, LOCKFILE), divergent);
 
-      const run = Bun.spawnSync([BUN!, "install", "--lockfile-only", "--frozen-lockfile"], {
-        cwd: root,
-        stdout: "pipe",
-        stderr: "pipe",
-      });
+      const run = Bun.spawnSync([BUN!, "install", "--lockfile-only", "--frozen-lockfile"], { cwd: root, stdout: "pipe", stderr: "pipe" });
       expect(run.exitCode).toBe(0);
-      const after = readFileSync(join(root, LOCKFILE), "utf8");
-      if (frozenLockfileOnlyBehavior(Bun.version) === "rewrites") expect(after).not.toBe(divergent);
-      else expect(after).toBe(divergent);
+      // Indistinguishable from the agreeing lockfile: no refusal, nothing a
+      // caller could branch on.
+      expect(run.exitCode).toBe(agreeing.exitCode);
+
+      // And the divergence was real, so the pass above is a false one rather
+      // than a lockfile that happened to agree. The adapter's own command — the
+      // same run without `--frozen-lockfile` — rewrites these bytes, which is
+      // exactly the divergence `verifyLockfile`'s byte comparison reports.
+      writeFileSync(join(root, LOCKFILE), divergent);
+      const [, ...regenerate] = bunAdapter.lockfileOnlyCommand();
+      const rewritten = Bun.spawnSync([BUN!, ...regenerate], { cwd: root, stdout: "pipe", stderr: "pipe" });
+      expect(rewritten.exitCode).toBe(0);
+      expect(readFileSync(join(root, LOCKFILE), "utf8")).not.toBe(divergent);
     },
     120_000,
   );

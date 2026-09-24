@@ -10,16 +10,7 @@
  */
 
 import { parseBlock } from "./bun-block.ts";
-import {
-  entryName,
-  importerKey,
-  packageEntry,
-  packageInsertion,
-  parseBunLock,
-  type ParsedBunLock,
-  workspaceEntry,
-  workspaceInsertion,
-} from "./bun-lock.ts";
+import { entryName, importerKey, packageEntry, packageInsertion, parseBunLock, type ParsedBunLock, workspaceEntry, workspaceInsertion } from "./bun-lock.ts";
 import { LockfileError } from "./lockfile-error.ts";
 
 export function importerBlock(lockfileText: string, packageRoot: string): string | undefined {
@@ -28,10 +19,7 @@ export function importerBlock(lockfileText: string, packageRoot: string): string
   if (!workspace) return undefined;
   const name = entryName(parsed, workspace.start, workspace.end);
   const linked = name === undefined ? undefined : packageEntry(parsed, name);
-  const lines = [
-    ...parsed.lines.slice(workspace.start, workspace.end),
-    ...(linked ? [parsed.lines[linked.start]!] : []),
-  ];
+  const lines = [...parsed.lines.slice(workspace.start, workspace.end), ...(linked ? [parsed.lines[linked.start]!] : [])];
   return `${lines.join("\n")}\n\n`;
 }
 
@@ -86,8 +74,9 @@ export function deleteImporter(lockfileText: string, packageRoot: string): strin
   const linked = name === undefined ? undefined : packageEntry(parsed, name);
   let lines = [...parsed.lines];
   // Highest line first, so the second splice is not reading shifted indices.
-  const ranges = [{ start: workspace.start, end: workspace.end }, ...(linked ? [{ start: linked.start, end: linked.end }] : [])]
-    .sort((left, right) => right.start - left.start);
+  const ranges = [{ start: workspace.start, end: workspace.end }, ...(linked ? [{ start: linked.start, end: linked.end }] : [])].sort(
+    (left, right) => right.start - left.start,
+  );
   for (const range of ranges) lines = removeEntry(lines, range.start, range.end);
   return lines.join("\n");
 }

@@ -1,47 +1,195 @@
 import { afterAll, expect, test } from "bun:test";
+import { chmodSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join, resolve } from "node:path";
 
-import { moonAdapter } from "../src/adapters/moon.ts";
+import { moonAdapter, noneTaskRunner } from "../src/adapters/moon.ts";
 import { pnpmAdapter } from "../src/adapters/pnpm.ts";
-import { WorkspaceContext } from "../src/plan/context.ts";
-import { consumerWiringOperations } from "../src/plan/scaffold.ts";
-import { cleanupFixtures, fixtureConfig, fixtureRepo } from "./support/fixture-repo.ts";
+import { PlanningError, WorkspaceContext } from "../src/plan/context.ts";
+import { formatGeneratedText } from "../src/plan/format-generated.ts";
+import { ProjectedWorkspace } from "../src/plan/projected-workspace.ts";
+import { consumerWiringOperations, packageOperations } from "../src/plan/scaffold.ts";
+import { hashText } from "../src/util/hash.ts";
+import { cleanupFixtures, fixtureConfig, fixtureRepo, scratchDirectory, write } from "./support/fixture-repo.ts";
 
 afterAll(cleanupFixtures);
 
+function installFormatter(root: string): void {
+  write(root, "package.json", '{"name":"fixture-workspace"}\n');
+  write(root, "node_modules/prettier/package.json", '{"name":"prettier","version":"fixture"}\n');
+  write(
+    root,
+    "node_modules/prettier/bin/prettier.cjs",
+    [
+      'const { readFileSync } = require("node:fs");',
+      'const input = readFileSync(0, "utf8");',
+      'const flag = process.argv.indexOf("--stdin-filepath");',
+      'const path = flag < 0 ? "" : process.argv[flag + 1] ?? "";',
+      'const output = path.endsWith(".json") ? JSON.stringify(JSON.parse(input)) + "\\n" : input.trim().replace(/\\n{2,}/gu, "\\n") + (input.trim() === "" ? "" : "\\n");',
+      "process.stdout.write(output);",
+      "",
+    ].join("\n"),
+  );
+}
+
+test("launches a CJS formatter through a runtime when the current executable is compiled", () => {
+  const root = fixtureRepo({ "pnpm-lock.yaml": "lockfileVersion: '9.0'\n" });
+  installFormatter(root);
+  const compiledSelf = resolve(root, "monocarve");
+  write(root, "monocarve", "#!/bin/sh\nprintf '%s\\n' 'unknown command' >&2\nexit 64\n");
+  chmodSync(compiledSelf, 0o755);
+  const originalExecPath = process.execPath;
+  Object.defineProperty(process, "execPath", { configurable: true, value: compiledSelf });
+  try {
+    expect(formatGeneratedText(root, "package.json", '{\n  "name": "fixture"\n}\n')).toBe('{"name":"fixture"}\n');
+  } finally {
+    Object.defineProperty(process, "execPath", { configurable: true, value: originalExecPath });
+  }
+});
+
+test("formats generated JSON, MJS, and rewritten tsconfig bytes before hashing", () => {
+  const root = fixtureRepo({
+    "pnpm-workspace.yaml": "packages:\n  - libs/*\n  - apps/*\n",
+    "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\n  apps/api: {}\n",
+    "apps/api/package.json": '{"name":"@acme/api"}\n',
+    "apps/api/tsconfig.json": '{"compilerOptions":{"composite":true},"references":[]}\n',
+  });
+  installFormatter(root);
+  const config = fixtureConfig(root, {
+    scaffoldTemplates: {
+      packageJson: { contents: '{"name":"{package}","files":["src"]}\n' },
+      extraFiles: { "eslint.config.mjs": { contents: "const config = {\n\n  plugins: [],\n};\n" } },
+    },
+  });
+  const context = new WorkspaceContext(config, root);
+  expect(formatGeneratedText(root, "tsconfig.json", '{\n  "include": [\n    "src"\n  ]\n}\n')).toBe('{"include":["src"]}\n');
+  expect(formatGeneratedText(root, "eslint.config.mjs", "const config = {\n\n  plugins: [],\n};\n")).toBe("const config = {\n  plugins: [],\n};\n");
+
+  const packageWrites = packageOperations({
+    context,
+    config,
+    application: config.applications[0]!,
+    packageManager: pnpmAdapter,
+    taskRunner: noneTaskRunner,
+    packageName: "@acme/new-package",
+    packageRoot: "libs/new-package",
+    projectId: "new-package",
+    production: [],
+    dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+  }).filter((operation) => operation.kind === "write-file");
+  const packageJson = packageWrites.find((operation) => operation.path === "libs/new-package/package.json");
+  expect(packageJson).toMatchObject({ contents: '{"name":"@acme/new-package","files":["src"],"dependencies":{},"devDependencies":{}}\n' });
+  const eslint = packageWrites.find((operation) => operation.path === "libs/new-package/eslint.config.mjs");
+  expect(eslint).toMatchObject({ contents: "const config = {\n  plugins: [],\n};\n" });
+  for (const operation of [packageJson, eslint]) {
+    expect(operation?.kind === "write-file" ? operation.resultHash : undefined).toBe(
+      operation?.kind === "write-file" ? hashText(operation.contents) : undefined,
+    );
+  }
+  const projected = new ProjectedWorkspace(context, pnpmAdapter, packageWrites);
+  projected.transformJson("libs/new-package/package.json", "test:projection", (value) => ({ ...value, description: "formatted" }));
+  const projectedPackageJson = projected.finalize().find((operation) => operation.kind === "write-file" && operation.path === "libs/new-package/package.json");
+  expect(projectedPackageJson).toMatchObject({
+    contents: '{"name":"@acme/new-package","files":["src"],"dependencies":{},"devDependencies":{},"description":"formatted"}\n',
+  });
+  expect(projectedPackageJson?.kind === "write-file" ? projectedPackageJson.resultHash : undefined).toBe(
+    projectedPackageJson?.kind === "write-file" ? hashText(projectedPackageJson.contents) : undefined,
+  );
+
+  const wiring = consumerWiringOperations({
+    context,
+    config,
+    application: config.applications[0]!,
+    packageManager: pnpmAdapter,
+    taskRunner: noneTaskRunner,
+    packageName: "@acme/new-package",
+    packageRoot: "libs/new-package",
+    projectId: "new-package",
+    production: [],
+    dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+    consumerOwners: [{ owner: "apps/api", dependencySection: "runtime" }],
+    lockfileText: context.text("pnpm-lock.yaml"),
+  });
+  const tsconfig = wiring.find((operation) => operation.kind === "write-file" && operation.path === "apps/api/tsconfig.json");
+  expect(tsconfig).toMatchObject({ contents: '{"compilerOptions":{"composite":true},"references":[{"path":"../../libs/new-package/tsconfig.json"}]}\n' });
+  expect(tsconfig?.kind === "write-file" ? tsconfig.resultHash : undefined).toBe(tsconfig?.kind === "write-file" ? hashText(tsconfig.contents) : undefined);
+});
+
+test("normalizes generated barrel statements to one trailing newline", () => {
+  const root = fixtureRepo({
+    "apps/api/src/Widget.ts": "export const Widget = 1;\n",
+    "pnpm-workspace.yaml": "packages:\n  - apps/*\n  - libs/*\n",
+    "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n",
+  });
+  const config = fixtureConfig(root, {
+    scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' }, barrelExport: "export * from './{specifier}';\n\n" },
+  });
+  const operation = packageOperations({
+    context: new WorkspaceContext(config, root),
+    config,
+    application: config.applications[0]!,
+    packageManager: pnpmAdapter,
+    taskRunner: noneTaskRunner,
+    packageName: "@acme/new-package",
+    packageRoot: "libs/new-package",
+    projectId: "new-package",
+    production: ["apps/api/src/Widget.ts"],
+    dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+  }).find((entry) => entry.kind === "write-file" && entry.path === "libs/new-package/src/index.ts");
+
+  expect(operation).toMatchObject({ kind: "write-file", contents: "export * from './Widget.ts';\n" });
+  expect(operation?.kind === "write-file" ? operation.contents.endsWith("\n\n") : false).toBe(false);
+});
+
 test("wires retained-test consumers as dev dependencies and promotes a mixed owner to runtime", () => {
   const lockfile = "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\n  apps/api: {}\n";
-  const root = fixtureRepo({
-    "apps/api/package.json": '{"name":"@acme/api","private":true}\n',
-    "pnpm-lock.yaml": lockfile,
-  });
+  const root = fixtureRepo({ "apps/api/package.json": '{"name":"@acme/api","private":true}\n', "pnpm-lock.yaml": lockfile });
   const config = fixtureConfig(root);
   const context = new WorkspaceContext(config, root);
-  const input = (consumerOwners: readonly ({ owner: string; dependencySection: "runtime" | "dev" })[]) =>
+  const input = (consumerOwners: readonly { owner: string; dependencySection: "runtime" | "dev" }[]) =>
     consumerWiringOperations({
-      context, config, application: config.applications[0]!, packageManager: pnpmAdapter, taskRunner: moonAdapter,
-      packageName: "@acme/new-package", packageRoot: "libs/new-package", projectId: "new-package", production: [],
-      dependencies: { runtime: {}, dev: {}, packageReferences: [] }, consumerOwners, lockfileText: lockfile,
+      context,
+      config,
+      application: config.applications[0]!,
+      packageManager: pnpmAdapter,
+      taskRunner: moonAdapter,
+      packageName: "@acme/new-package",
+      packageRoot: "libs/new-package",
+      projectId: "new-package",
+      production: [],
+      dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+      consumerOwners,
+      lockfileText: lockfile,
     });
 
   const dev = input([{ owner: "apps/api", dependencySection: "dev" }]);
-  expect(dev.find((operation) => operation.kind === "write-file" && operation.path === "apps/api/package.json"))
-    .toMatchObject({ contents: expect.stringMatching(/"devDependencies"/) });
-  expect(dev.find((operation) => operation.kind === "lockfile-importer"))
-    .toMatchObject({ block: expect.stringContaining("    devDependencies:") });
+  expect(dev.find((operation) => operation.kind === "write-file" && operation.path === "apps/api/package.json")).toMatchObject({
+    contents: expect.stringMatching(/"devDependencies"/),
+  });
+  expect(dev.find((operation) => operation.kind === "lockfile-importer")).toMatchObject({ block: expect.stringContaining("    devDependencies:") });
 
   const mixed = input([
     { owner: "apps/api", dependencySection: "dev" },
     { owner: "apps/api", dependencySection: "runtime" },
   ]);
-  expect(mixed.find((operation) => operation.kind === "write-file" && operation.path === "apps/api/package.json"))
-    .toMatchObject({ contents: expect.stringMatching(/"dependencies"/) });
-  expect(mixed.find((operation) => operation.kind === "lockfile-importer"))
-    .toMatchObject({ block: expect.stringContaining("    dependencies:") });
+  expect(mixed.find((operation) => operation.kind === "write-file" && operation.path === "apps/api/package.json")).toMatchObject({
+    contents: expect.stringMatching(/"dependencies"/),
+  });
+  expect(mixed.find((operation) => operation.kind === "lockfile-importer")).toMatchObject({ block: expect.stringContaining("    dependencies:") });
 
   const promotionLockfile = [
-    "lockfileVersion: '9.0'", "", "importers:", "", "  .: {}", "", "  apps/api:",
-    "    devDependencies:", "      '@acme/new-package':", "        specifier: workspace:*",
-    "        version: link:../../libs/new-package", "",
+    "lockfileVersion: '9.0'",
+    "",
+    "importers:",
+    "",
+    "  .: {}",
+    "",
+    "  apps/api:",
+    "    devDependencies:",
+    "      '@acme/new-package':",
+    "        specifier: workspace:*",
+    "        version: link:../../libs/new-package",
+    "",
   ].join("\n");
   const promotionRoot = fixtureRepo({
     "apps/api/package.json": '{"name":"@acme/api","devDependencies":{"@acme/new-package":"workspace:*"}}\n',
@@ -49,11 +197,18 @@ test("wires retained-test consumers as dev dependencies and promotes a mixed own
   });
   const promotionConfig = fixtureConfig(promotionRoot);
   const promoted = consumerWiringOperations({
-    context: new WorkspaceContext(promotionConfig, promotionRoot), config: promotionConfig,
-    application: promotionConfig.applications[0]!, packageManager: pnpmAdapter, taskRunner: moonAdapter,
-    packageName: "@acme/new-package", packageRoot: "libs/new-package", projectId: "new-package", production: [],
+    context: new WorkspaceContext(promotionConfig, promotionRoot),
+    config: promotionConfig,
+    application: promotionConfig.applications[0]!,
+    packageManager: pnpmAdapter,
+    taskRunner: moonAdapter,
+    packageName: "@acme/new-package",
+    packageRoot: "libs/new-package",
+    projectId: "new-package",
+    production: [],
     dependencies: { runtime: {}, dev: {}, packageReferences: [] },
-    consumerOwners: [{ owner: "apps/api", dependencySection: "runtime" }], lockfileText: promotionLockfile,
+    consumerOwners: [{ owner: "apps/api", dependencySection: "runtime" }],
+    lockfileText: promotionLockfile,
   });
   const manifest = promoted.find((operation) => operation.kind === "write-file" && operation.path === "apps/api/package.json");
   const contents = manifest?.kind === "write-file" ? manifest.contents : undefined;
@@ -75,9 +230,15 @@ test("does not add a project reference to an ordinary noEmit application config"
   });
   const config = fixtureConfig(root);
   const operations = consumerWiringOperations({
-    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
-    packageManager: pnpmAdapter, taskRunner: moonAdapter, packageName: "@acme/new-package",
-    packageRoot: "libs/new-package", projectId: "new-package", production: [],
+    context: new WorkspaceContext(config, root),
+    config,
+    application: config.applications[0]!,
+    packageManager: pnpmAdapter,
+    taskRunner: moonAdapter,
+    packageName: "@acme/new-package",
+    packageRoot: "libs/new-package",
+    projectId: "new-package",
+    production: [],
     dependencies: { runtime: {}, dev: {}, packageReferences: [] },
     consumerOwners: [{ owner: ".", dependencySection: "runtime" }],
     lockfileText: "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n",
@@ -103,23 +264,78 @@ test("recognises an existing project reference written with a different but equi
     });
     const config = fixtureConfig(root);
     return consumerWiringOperations({
-      context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
-      packageManager: pnpmAdapter, taskRunner: moonAdapter, packageName: "@acme/new-package",
-      packageRoot: "libs/new-package", projectId: "new-package", production: [],
+      context: new WorkspaceContext(config, root),
+      config,
+      application: config.applications[0]!,
+      packageManager: pnpmAdapter,
+      taskRunner: moonAdapter,
+      packageName: "@acme/new-package",
+      packageRoot: "libs/new-package",
+      projectId: "new-package",
+      production: [],
       dependencies: { runtime: {}, dev: {}, packageReferences: [] },
-      consumerOwners: [{ owner: ".", dependencySection: "runtime" }], lockfileText: lockfile,
+      consumerOwners: [{ owner: ".", dependencySection: "runtime" }],
+      lockfileText: lockfile,
     });
   };
   const wroteTsconfig = (operations: ReturnType<typeof wiring>) =>
     operations.some((operation) => operation.kind === "write-file" && operation.path === "tsconfig.json");
 
-  for (const equivalent of ["./libs/new-package", "libs/new-package", "libs/new-package/", "./libs/../libs/new-package"]) {
+  for (const equivalent of [
+    "./libs/new-package/tsconfig.json",
+    "libs/new-package/tsconfig.json",
+    "libs/new-package/./tsconfig.json",
+    "./libs/../libs/new-package/tsconfig.json",
+  ]) {
     expect(wroteTsconfig(wiring(equivalent))).toBe(false);
   }
   // The negative: a different project is not this one, and is still inserted.
-  const inserted = wiring("./libs/other-package");
+  const inserted = wiring("./libs/other-package/tsconfig.json");
   expect(wroteTsconfig(inserted)).toBe(true);
   const operation = inserted.find((entry) => entry.kind === "write-file" && entry.path === "tsconfig.json");
   const references = JSON.parse(operation?.kind === "write-file" ? operation.contents : "{}") as { references: { path: string }[] };
-  expect(references.references.map((entry) => entry.path)).toEqual(["./libs/other-package", "libs/new-package"]);
+  expect(references.references.map((entry) => entry.path)).toEqual(["./libs/other-package/tsconfig.json", "libs/new-package/tsconfig.json"]);
+});
+
+/** A formatter stub with a chosen stdout, so the guard can be aimed exactly. */
+function installStubFormatter(root: string, body: string): void {
+  write(root, "node_modules/prettier/package.json", '{"name":"prettier","version":"fixture"}\n');
+  write(root, "node_modules/prettier/bin/prettier.cjs", `${body}\n`);
+}
+
+test("refuses a formatter that exits 0 without producing a document", () => {
+  const root = fixtureRepo({ "pnpm-lock.yaml": "lockfileVersion: '9.0'\n" });
+  write(root, "package.json", '{"name":"fixture-workspace"}\n');
+  // Exactly the bun 1.3.14 shape: Prettier never receives stdin, formats an
+  // empty document, prints nothing, and exits 0.
+  installStubFormatter(root, 'require("node:fs").readFileSync(0, "utf8");');
+
+  const input = '{\n  "name": "fixture"\n}\n';
+  expect(() => formatGeneratedText(root, "libs/new-package/package.json", input)).toThrow(PlanningError);
+  expect(() => formatGeneratedText(root, "libs/new-package/package.json", input)).toThrow(/libs\/new-package\/package\.json/u);
+
+  // Whitespace is not a document either: JSON.parse rejects it identically.
+  installStubFormatter(root, 'require("node:fs").readFileSync(0, "utf8");\nprocess.stdout.write("\\n \\n");');
+  expect(() => formatGeneratedText(root, "libs/new-package/package.json", input)).toThrow(PlanningError);
+
+  // A blank input has no content to lose, so it is still allowed through.
+  installStubFormatter(root, 'require("node:fs").readFileSync(0, "utf8");');
+  expect(formatGeneratedText(root, "libs/new-package/package.json", "")).toBe("");
+});
+
+test("ignores a formatter the planned workspace does not own", () => {
+  // Resolution is rooted at the workspace's `package.json`, but Node keeps
+  // walking `node_modules` upward, and Bun auto-installs into a global cache
+  // when it finds none. Neither is a formatter the workspace chose.
+  const container = scratchDirectory();
+  installStubFormatter(container, 'require("node:fs").readFileSync(0, "utf8");\nprocess.stdout.write("OUTSIDE\\n");');
+  const workspace = join(container, "workspace");
+  write(workspace, "package.json", '{"name":"planned-workspace"}\n');
+
+  // Ground truth: the outside formatter really is resolvable from here, so a
+  // pass below means it was rejected rather than never found.
+  expect(createRequire(join(workspace, "package.json")).resolve("prettier/bin/prettier.cjs")).toBe(join(container, "node_modules/prettier/bin/prettier.cjs"));
+
+  const input = '{\n  "name": "fixture"\n}\n';
+  expect(formatGeneratedText(workspace, "package.json", input)).toBe(input);
 });

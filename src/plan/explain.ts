@@ -34,7 +34,11 @@ export function explainDependency(manifest: ExtractionManifest, name: string): D
     throw new PlanningError(`plan ${manifest.planId} has no dependency evidence for ${name}`);
   }
   return {
-    kind: "dependency", planId: manifest.planId, name, declarations, decisions,
+    kind: "dependency",
+    planId: manifest.planId,
+    name,
+    declarations,
+    decisions,
     ...(candidate === undefined ? {} : { pruning: { mode: manifest.donorDependencyPruning!.mode, section: candidate.section } }),
   };
 }
@@ -42,7 +46,9 @@ export function explainDependency(manifest: ExtractionManifest, name: string): D
 export function explainArtifact(manifest: ExtractionManifest, path: string): ArtifactExplanation {
   const operations = manifest.operations.flatMap((operation, index) => {
     const paths = operationPaths(operation);
-    return paths.includes(path) ? [{ index, kind: operation.kind, ...(operation.kind === "write-file" && operation.generator ? { generator: operation.generator } : {}), paths }] : [];
+    return paths.includes(path)
+      ? [{ index, kind: operation.kind, ...(operation.kind === "write-file" && operation.generator ? { generator: operation.generator } : {}), paths }]
+      : [];
   });
   const projection = manifest.projectedArtifacts?.find((entry) => entry.path === path);
   if (operations.length === 0 && projection === undefined) throw new PlanningError(`plan ${manifest.planId} does not affect artifact ${path}`);
@@ -50,16 +56,26 @@ export function explainArtifact(manifest: ExtractionManifest, path: string): Art
 }
 
 export function formatPlanExplanation(explanation: PlanExplanation): string {
-  if (explanation.kind === "artifact") return [
-    `Artifact ${explanation.path}`,
-    explanation.projection ? `Final ${explanation.projection.kind} hash: ${explanation.projection.resultHash}` : "Final hash: carried by move/rewrite evidence",
-    ...explanation.operations.map((operation) => `  operation ${operation.index}: ${operation.kind}${operation.generator ? ` (${operation.generator})` : ""}`),
-  ].join("\n") + "\n";
-  return [
-    `Dependency ${explanation.name}`,
-    ...explanation.declarations.map(({ section, version }) => `  target ${section}: ${version}`),
-    ...[...explanation.decisions].sort((left, right) => byCodeUnit(left.decision, right.decision)).map((decision) =>
-      `  ${decision.decision}: ${decision.reasons.join(", ")}${decision.sources.length ? ` from ${decision.sources.join(", ")}` : ""}`),
-    ...(explanation.pruning ? [`  donor ${explanation.pruning.mode}: ${explanation.pruning.section}`] : []),
-  ].join("\n") + "\n";
+  if (explanation.kind === "artifact")
+    return (
+      [
+        `Artifact ${explanation.path}`,
+        explanation.projection
+          ? `Final ${explanation.projection.kind} hash: ${explanation.projection.resultHash}`
+          : "Final hash: carried by move/rewrite evidence",
+        ...explanation.operations.map(
+          (operation) => `  operation ${operation.index}: ${operation.kind}${operation.generator ? ` (${operation.generator})` : ""}`,
+        ),
+      ].join("\n") + "\n"
+    );
+  return (
+    [
+      `Dependency ${explanation.name}`,
+      ...explanation.declarations.map(({ section, version }) => `  target ${section}: ${version}`),
+      ...[...explanation.decisions]
+        .sort((left, right) => byCodeUnit(left.decision, right.decision))
+        .map((decision) => `  ${decision.decision}: ${decision.reasons.join(", ")}${decision.sources.length ? ` from ${decision.sources.join(", ")}` : ""}`),
+      ...(explanation.pruning ? [`  donor ${explanation.pruning.mode}: ${explanation.pruning.section}`] : []),
+    ].join("\n") + "\n"
+  );
 }

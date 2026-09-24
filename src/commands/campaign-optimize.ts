@@ -11,16 +11,27 @@ export async function campaignOptimize(args: ParsedArgs): Promise<void> {
   const portfolio = buildPortfolio({ config: loaded.config, graph: loaded.graph, context: loaded.context, application });
   const representatives = new Set(portfolio.equivalenceGroups?.map((group) => group.representativeId) ?? portfolio.candidates.map((candidate) => candidate.id));
   const limit = flagNumber(args, "limit", 20);
-  const ranked = portfolio.candidates.filter((candidate) =>
-    representatives.has(candidate.id) && candidate.eligible && candidate.recommendation?.status === "recommended" && candidate.classification !== "preparation"
-  ).sort((left, right) => (right.effort?.locPerReviewUnit ?? 0) - (left.effort?.locPerReviewUnit ?? 0) || right.lineCount - left.lineCount || left.id.localeCompare(right.id));
-  const targets = ranked.slice(0, limit).map((candidate) => ({
-    path: candidate.seed.members[0]!,
-    packageName: candidate.recommendation?.targetOptions[0]?.packageName ?? candidate.suggestedPackageName,
-    candidateId: candidate.id,
-    lineCount: candidate.lineCount,
-    effort: candidate.effort,
-  }));
+  const ranked = portfolio.candidates
+    .filter(
+      (candidate) =>
+        representatives.has(candidate.id) &&
+        candidate.eligible &&
+        candidate.recommendation?.status === "recommended" &&
+        candidate.classification !== "preparation",
+    )
+    .sort(
+      (left, right) =>
+        (right.effort?.locPerReviewUnit ?? 0) - (left.effort?.locPerReviewUnit ?? 0) || right.lineCount - left.lineCount || left.id.localeCompare(right.id),
+    );
+  const targets = ranked
+    .slice(0, limit)
+    .map((candidate) => ({
+      path: candidate.seed.members[0]!,
+      packageName: candidate.recommendation?.targetOptions[0]?.packageName ?? candidate.suggestedPackageName,
+      candidateId: candidate.id,
+      lineCount: candidate.lineCount,
+      effort: candidate.effort,
+    }));
   const preparationPriorities = analyzeCouplingHotspots(loaded.graph, portfolio, application).slice(0, limit);
   const report = { schema: "campaign-targets", application, baselineCommit: loaded.graph.commit ?? null, targets, preparationPriorities };
   const out = flagString(args, "out");

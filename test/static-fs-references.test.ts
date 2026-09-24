@@ -31,12 +31,9 @@ describe("findStaticFsReferences", () => {
   });
 
   test("finds a direct resolve(import.meta.dir, literal) call with no helper indirection", () => {
-    const source = [
-      'import { resolve } from "node:path";',
-      "",
-      'readFileSync(resolve(import.meta.dir, "../leaderboard/facts-routing.ts"), "utf8");',
-      "",
-    ].join("\n");
+    const source = ['import { resolve } from "node:path";', "", 'readFileSync(resolve(import.meta.dir, "../leaderboard/facts-routing.ts"), "utf8");', ""].join(
+      "\n",
+    );
     const matches = findStaticFsReferences(source, FILE);
     expect(matches).toHaveLength(1);
     expect(matches[0]?.literal).toBe("../leaderboard/facts-routing.ts");
@@ -46,7 +43,7 @@ describe("findStaticFsReferences", () => {
     const source = [
       'import { resolve } from "node:path";',
       "",
-      "const read = (path: string) => readFileSync(resolve(import.meta.dir, path), \"utf8\");",
+      'const read = (path: string) => readFileSync(resolve(import.meta.dir, path), "utf8");',
       "const name = suffix();",
       "const routingSource = read(`../leaderboard/${name}.ts`);",
       "",
@@ -65,11 +62,7 @@ describe("findStaticFsReferences", () => {
   });
 
   test("ignores a call to a same-shaped helper that never closes over import.meta.dir", () => {
-    const source = [
-      "const label = (path: string) => path.toUpperCase();",
-      'const routingSource = label("../leaderboard/facts-routing.ts");',
-      "",
-    ].join("\n");
+    const source = ["const label = (path: string) => path.toUpperCase();", 'const routingSource = label("../leaderboard/facts-routing.ts");', ""].join("\n");
     expect(findStaticFsReferences(source, FILE)).toHaveLength(0);
   });
 
@@ -89,7 +82,7 @@ describe("findStaticFsReferences", () => {
     const source = [
       'import { readFileSync } from "node:fs";',
       "",
-      'function resolve(base: string, target: string) { return target; }',
+      "function resolve(base: string, target: string) { return target; }",
       'readFileSync(resolve(import.meta.dir, "../leaderboard/facts-routing.ts"), "utf8");',
       "",
     ].join("\n");

@@ -68,6 +68,7 @@ describe("CLI documentation", () => {
       "conservative completeness rule",
       "It does not steal stale locks or perform",
       "does not alter plan identity",
-    ]) expect(normalizedReference).toContain(phrase);
+    ])
+      expect(normalizedReference).toContain(phrase);
   });
 });

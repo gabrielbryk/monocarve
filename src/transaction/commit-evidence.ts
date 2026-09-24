@@ -48,7 +48,8 @@ export function inspectCommitChain(options: CommitEvidenceOptions): CommitChainE
   let wiring: string | undefined;
   if (wiringPaths(manifest).length > 0) {
     wiring = commits[at];
-    if (wiring === undefined) return result(move === undefined ? "approved" : "post-move", failures, { approvalCommit: approval, ...(move ? { moveCommit: move } : {}) });
+    if (wiring === undefined)
+      return result(move === undefined ? "approved" : "post-move", failures, { approvalCommit: approval, ...(move ? { moveCommit: move } : {}) });
     if (!proveWiring(rootDir, manifest, move ?? approval, wiring, failures)) {
       return result(move === undefined ? "approved" : "post-move", failures, { approvalCommit: approval, ...(move ? { moveCommit: move } : {}) });
     }
@@ -56,8 +57,11 @@ export function inspectCommitChain(options: CommitEvidenceOptions): CommitChainE
   }
   const applied = wiring ?? move ?? approval;
   return result("applied", failures, {
-    approvalCommit: approval, ...(move ? { moveCommit: move } : {}), ...(wiring ? { wiringCommit: wiring } : {}),
-    appliedCommit: applied, laterCommitCount: commits.length - at,
+    approvalCommit: approval,
+    ...(move ? { moveCommit: move } : {}),
+    ...(wiring ? { wiringCommit: wiring } : {}),
+    appliedCommit: applied,
+    laterCommitCount: commits.length - at,
   });
 }
 
@@ -67,11 +71,17 @@ function proveApproval(root: string, manifest: ExtractionManifest, path: string,
   if (subject === undefined) failures.push("manifest has no approval subject");
   if (tryGit({ cwd: root }, "rev-parse", `${commit}^`) !== expectedParent) failures.push("approval is not directly atop the manifest baseline");
   if (tryGit({ cwd: root }, "log", "-1", "--format=%s", commit) !== subject) failures.push("approval subject does not match the manifest");
-  if (!same(lines(git({ cwd: root }, "diff-tree", "--no-commit-id", "--name-only", "-r", commit)), [repoPath(root, path)])) failures.push("approval does not change exactly the manifest path");
+  if (!same(lines(git({ cwd: root }, "diff-tree", "--no-commit-id", "--name-only", "-r", commit)), [repoPath(root, path)]))
+    failures.push("approval does not change exactly the manifest path");
   const bytes = showBaselineBytes(root, commit, path);
   let reviewed: Uint8Array | null = null;
-  try { reviewed = readFileSync(workspacePath(root, path)); } catch { /* Report the same bounded proof failure below. */ }
-  if (bytes === null || reviewed === null || hashBytes(bytes) !== hashBytes(reviewed)) failures.push("approved manifest bytes do not match the reviewed manifest");
+  try {
+    reviewed = readFileSync(workspacePath(root, path));
+  } catch {
+    /* Report the same bounded proof failure below. */
+  }
+  if (bytes === null || reviewed === null || hashBytes(bytes) !== hashBytes(reviewed))
+    failures.push("approved manifest bytes do not match the reviewed manifest");
   return failures.length === 0;
 }
 
@@ -81,9 +91,19 @@ function proveMove(root: string, manifest: ExtractionManifest, parent: string, c
   const records = lines(git({ cwd: root }, "diff-tree", "--no-commit-id", "--name-status", "-r", "--find-renames=100%", commit));
   const actual = records.map((line) => line.split("\t"));
   const moves = pureRenames(manifest);
-  if (actual.length !== moves.length || actual.some((entry) => entry[0] !== "R100") ||
-      !same(actual.map((entry) => entry[1] ?? ""), moves.map((move) => repoPath(root, move.source))) ||
-      !same(actual.map((entry) => entry[2] ?? ""), moves.map((move) => repoPath(root, move.target)))) failures.push("move commit is not exactly the declared R100 renames");
+  if (
+    actual.length !== moves.length ||
+    actual.some((entry) => entry[0] !== "R100") ||
+    !same(
+      actual.map((entry) => entry[1] ?? ""),
+      moves.map((move) => repoPath(root, move.source)),
+    ) ||
+    !same(
+      actual.map((entry) => entry[2] ?? ""),
+      moves.map((move) => repoPath(root, move.target)),
+    )
+  )
+    failures.push("move commit is not exactly the declared R100 renames");
   for (const move of moves) {
     const bytes = showBaselineBytes(root, commit, move.target);
     if (bytes === null || hashBytes(bytes) !== move.resultHash) failures.push(`move target bytes do not match the manifest: ${move.target}`);
@@ -93,7 +113,8 @@ function proveMove(root: string, manifest: ExtractionManifest, parent: string, c
 
 function proveWiring(root: string, manifest: ExtractionManifest, parent: string, commit: string, failures: string[]): boolean {
   if (tryGit({ cwd: root }, "rev-parse", `${commit}^`) !== parent) failures.push("wiring commit is not directly atop the preceding boundary");
-  if (tryGit({ cwd: root }, "log", "-1", "--format=%s", commit) !== manifest.commits.wiring.subject) failures.push("wiring subject does not match the manifest");
+  if (tryGit({ cwd: root }, "log", "-1", "--format=%s", commit) !== manifest.commits.wiring.subject)
+    failures.push("wiring subject does not match the manifest");
   const actualPaths = lines(git({ cwd: root }, "diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-r", commit));
   const generatedPaths = regeneratedArtifactPaths(manifest);
   const generated = new Set(generatedPaths);
@@ -121,21 +142,34 @@ function proveWiring(root: string, manifest: ExtractionManifest, parent: string,
 
 function operationTarget(operation: Exclude<ExtractionManifest["operations"][number], { readonly kind: "move" }>): string {
   switch (operation.kind) {
-    case "move-with-rewrite": return operation.target;
-    case "write-file": case "migrate-path-keys": return operation.path;
-    case "lockfile-importer": return operation.lockfile;
-    case "delete-file": return operation.path;
-    case "rewrite-import": case "rewrite-fs-reference": case "rewrite-path-reference": return operation.file;
+    case "move-with-rewrite":
+      return operation.target;
+    case "write-file":
+    case "migrate-path-keys":
+      return operation.path;
+    case "lockfile-importer":
+      return operation.lockfile;
+    case "delete-file":
+      return operation.path;
+    case "rewrite-import":
+    case "rewrite-fs-reference":
+    case "rewrite-path-reference":
+      return operation.file;
   }
 }
 
 function result(phase: CommitChainEvidence["phase"], failures: readonly string[], extra: Partial<CommitChainEvidence> = {}): CommitChainEvidence {
   return { valid: failures.length === 0, failures, laterCommitCount: 0, phase, ...extra };
 }
-function lines(value: string): string[] { return value.split("\n").filter(Boolean); }
-function repoPath(root: string, path: string): string { return `${repositoryPrefix(root)}${path}`; }
+function lines(value: string): string[] {
+  return value.split("\n").filter(Boolean);
+}
+function repoPath(root: string, path: string): string {
+  return `${repositoryPrefix(root)}${path}`;
+}
 function same(left: readonly string[], right: readonly string[]): boolean {
-  const a = [...left].sort(); const b = [...right].sort();
+  const a = [...left].sort();
+  const b = [...right].sort();
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 function sameRequiredScope(actual: readonly string[], required: readonly string[], optional: readonly string[]): boolean {

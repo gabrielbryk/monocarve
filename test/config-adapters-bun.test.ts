@@ -113,24 +113,34 @@ describe("the bun adapter", () => {
     // entry immediately before `apps/web`, and a parser that ran to the next
     // key would swallow it.
     expect(bunAdapter.importerBlock(lockfile, "apps/api")).toBe(
-      ['    "apps/api": {', '      "name": "@acme/api",', '      "version": "0.0.0",', "    },", '    "@acme/api": ["@acme/api@workspace:apps/api"],', "", ""].join("\n"),
+      [
+        '    "apps/api": {',
+        '      "name": "@acme/api",',
+        '      "version": "0.0.0",',
+        "    },",
+        '    "@acme/api": ["@acme/api@workspace:apps/api"],',
+        "",
+        "",
+      ].join("\n"),
     );
   });
 
   test("renders a block from the manifest, and refuses one it cannot key", () => {
     const block = chart();
-    expect(block).toBe([
-      '    "libs/chart": {',
-      '      "name": "@acme/chart",',
-      '      "version": "0.0.0",',
-      '      "dependencies": {',
-      '        "@acme/format": "workspace:*",',
-      "      },",
-      "    },",
-      '    "@acme/chart": ["@acme/chart@workspace:libs/chart"],',
-      "",
-      "",
-    ].join("\n"));
+    expect(block).toBe(
+      [
+        '    "libs/chart": {',
+        '      "name": "@acme/chart",',
+        '      "version": "0.0.0",',
+        '      "dependencies": {',
+        '        "@acme/format": "workspace:*",',
+        "      },",
+        "    },",
+        '    "@acme/chart": ["@acme/chart@workspace:libs/chart"],',
+        "",
+        "",
+      ].join("\n"),
+    );
 
     // bun writes no `version` for the root even when the root manifest has one,
     // and no `packages` entry for it at all. Rendering either produces a file
@@ -150,13 +160,7 @@ describe("the bun adapter", () => {
     // does not supply one is asking for a block that cannot be written. It
     // refuses rather than keying the entry by its directory.
     expect(() =>
-      bunAdapter.renderImporterBlock({
-        packageRoot: "libs/chart",
-        dependencies: {},
-        devDependencies: {},
-        lockfileText: lockfile,
-        workspaceRoots: {},
-      }),
+      bunAdapter.renderImporterBlock({ packageRoot: "libs/chart", dependencies: {}, devDependencies: {}, lockfileText: lockfile, workspaceRoots: {} }),
     ).toThrow("without its package name");
   });
 
@@ -224,18 +228,20 @@ describe("the bun adapter", () => {
     // `dependencies` before `devDependencies`, both before the closing brace.
     const bare = bunAdapter.importerBlock(lockfile, "libs/logger")!;
     const dev = bunAdapter.addBlockDependency(bare, "@acme/chart", "workspace:*", "workspace:libs/chart", "dev");
-    expect(dev).toBe([
-      '    "libs/logger": {',
-      '      "name": "@acme/logger",',
-      '      "version": "0.0.0",',
-      '      "devDependencies": {',
-      '        "@acme/chart": "workspace:*",',
-      "      },",
-      "    },",
-      '    "@acme/logger": ["@acme/logger@workspace:libs/logger"],',
-      "",
-      "",
-    ].join("\n"));
+    expect(dev).toBe(
+      [
+        '    "libs/logger": {',
+        '      "name": "@acme/logger",',
+        '      "version": "0.0.0",',
+        '      "devDependencies": {',
+        '        "@acme/chart": "workspace:*",',
+        "      },",
+        "    },",
+        '    "@acme/logger": ["@acme/logger@workspace:libs/logger"],',
+        "",
+        "",
+      ].join("\n"),
+    );
 
     // Promotion to runtime moves the entry rather than declaring it twice, and
     // the emptied `devDependencies` map goes with it.
@@ -323,24 +329,25 @@ describe("the bun adapter", () => {
     // `packages` keys are name chains, not `name@version` ids, so this is an
     // existence check: the resolution *disagreeing* with the range is what
     // regenerate-and-compare catches instead.
-    const incomplete = lockfile.replace('    "left-pad": ["left-pad@1.3.0", "", {}, "sha512-XI5MPzVNApjAyhQzphX8BkmKsKUxD4LdyK24iZeQGinBN9yTQT3bFlCBy/aVx2HrNcqQGsdot8ghrjyrvMCoEA=="],\n', "");
-    expect(bunAdapter.missingResolutions(incomplete)).toEqual([
-      "apps/web declares left-pad@1.3.0, and the lockfile has no packages entry for it",
-    ]);
+    const incomplete = lockfile.replace(
+      '    "left-pad": ["left-pad@1.3.0", "", {}, "sha512-XI5MPzVNApjAyhQzphX8BkmKsKUxD4LdyK24iZeQGinBN9yTQT3bFlCBy/aVx2HrNcqQGsdot8ghrjyrvMCoEA=="],\n',
+      "",
+    );
+    expect(bunAdapter.missingResolutions(incomplete)).toEqual(["apps/web declares left-pad@1.3.0, and the lockfile has no packages entry for it"]);
 
     // A dependency hoisting could not satisfy at the top level is resolved
     // under the owning workspace's own chain. Reporting that as missing would
     // make the check fire on lockfiles bun itself wrote.
-    const chained = lockfile.replace(
-      '    "left-pad": ["left-pad@1.3.0"',
-      '    "@acme/web/left-pad": ["left-pad@1.3.0"',
-    );
+    const chained = lockfile.replace('    "left-pad": ["left-pad@1.3.0"', '    "@acme/web/left-pad": ["left-pad@1.3.0"');
     expect(bunAdapter.missingResolutions(chained)).toEqual([]);
   });
 
   test("lists workspace packages from the root manifest, refusing globs it cannot walk", async () => {
     const root = fixtureRepo({ "package.json": '{"name":"fixture","workspaces":["libs/*"]}\n' });
-    for (const [dir, name] of [["libs/one", "@acme/one"], ["libs/two", "@acme/two"]] as const) {
+    for (const [dir, name] of [
+      ["libs/one", "@acme/one"],
+      ["libs/two", "@acme/two"],
+    ] as const) {
       mkdirSync(join(root, dir), { recursive: true });
       writeFileSync(join(root, dir, "package.json"), JSON.stringify({ name }));
     }
@@ -350,7 +357,10 @@ describe("the bun adapter", () => {
     ]);
 
     const nested = fixtureRepo({ "package.json": '{"name":"fixture","workspaces":["apps/*/ui"]}\n' });
-    for (const [dir, name] of [["apps/one/ui", "@acme/one-ui"], ["apps/two/ui", "@acme/two-ui"]] as const) {
+    for (const [dir, name] of [
+      ["apps/one/ui", "@acme/one-ui"],
+      ["apps/two/ui", "@acme/two-ui"],
+    ] as const) {
       mkdirSync(join(nested, dir), { recursive: true });
       writeFileSync(join(nested, dir, "package.json"), JSON.stringify({ name }));
     }
@@ -374,7 +384,7 @@ describe("the bun adapter", () => {
   });
 
   test("registers membership in the root manifest only when the globs do not already cover it", () => {
-    const multiline = ['{', '  "name": "fixture",', '  "workspaces": [', '    "apps/*",', '    "libs/*"', "  ]", "}", ""].join("\n");
+    const multiline = ["{", '  "name": "fixture",', '  "workspaces": [', '    "apps/*",', '    "libs/*"', "  ]", "}", ""].join("\n");
     expect(bunAdapter.workspaceManifestEdit(multiline, "libs/chart")).toEqual({ kind: "already-satisfied" });
 
     const added = bunAdapter.workspaceManifestEdit(multiline, "vendor/chart");

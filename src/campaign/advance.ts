@@ -90,12 +90,7 @@ export async function advanceCampaign(options: AdvanceCampaignOptions): Promise<
 
   assertChildSequence(evaluation.ledger, child);
   const campaign = appendCampaignChild(evaluation.ledger, child);
-  return {
-    outcome: options.stopForReview === false ? "ready-to-apply" : "review-required",
-    campaign,
-    child,
-    graph,
-  };
+  return { outcome: options.stopForReview === false ? "ready-to-apply" : "review-required", campaign, child, graph };
 }
 
 /** No replacement can close only the second, audited half of a pair. */
@@ -125,9 +120,7 @@ function assertChildSequence(campaign: CampaignLedger, child: CampaignChildPlan)
   const previous = campaign.children.at(-1);
   if (previous === undefined) {
     if (child.kind === "preparation") return;
-    throw new CampaignAdvanceError(
-      `first child ${child.id} must be a preparation; compile preparation first`,
-    );
+    throw new CampaignAdvanceError(`first child ${child.id} must be a preparation; compile preparation first`);
   }
   if (previous.status !== "applied") throw new CampaignAdvanceError(`cannot advance while child ${previous.id} awaits application and audit`);
   if (previous.kind === "preparation") {

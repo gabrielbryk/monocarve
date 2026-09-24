@@ -21,9 +21,6 @@ describe("printed approval workflow", () => {
   test("does not offer approval again after --commit-approval", () => {
     const guidance = approvalGuidance(evidence.manifestPath, { ...evidence, commit: "approved" });
     expect(guidance).not.toHaveProperty("approve");
-    expect(guidance).toMatchObject({
-      commit: "approved",
-      apply: ["monocarve", "apply", "--plan", evidence.manifestPath, "--commit"],
-    });
+    expect(guidance).toMatchObject({ commit: "approved", apply: ["monocarve", "apply", "--plan", evidence.manifestPath, "--commit"] });
   });
 });

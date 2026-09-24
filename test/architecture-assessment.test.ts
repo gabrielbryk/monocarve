@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { fixtureGit, scratchDirectory } from "./support/fixture-repo.ts";
-import { runIn } from "./support/cli.ts";
 import { hashBytes } from "../src/util/hash.ts";
+import { runIn } from "./support/cli.ts";
+import { fixtureGit, scratchDirectory } from "./support/fixture-repo.ts";
 
 test("live and replay assessment publish deterministic same-baseline evidence and reject consumer drift", async () => {
   const root = assessmentFixture();
@@ -48,7 +48,11 @@ test("truncated report recipes include an executable evidence destination", asyn
   expect(result.code).toBe(0);
   const findings = readFileSync(join(root, "bounded/findings.md"), "utf8");
   for (const name of ["hotspots", "backlog"] as const) {
-    const report = (JSON.parse(readFileSync(join(root, `bounded/${name}.json`), "utf8")) as { result: { status: string; value: { truncated: boolean; deeperCommand: string } } }).result;
+    const report = (
+      JSON.parse(readFileSync(join(root, `bounded/${name}.json`), "utf8")) as {
+        result: { status: string; value: { truncated: boolean; deeperCommand: string } };
+      }
+    ).result;
     expect(report.status).toBe("available");
     expect(report.value.truncated).toBeTrue();
     expect(report.value.deeperCommand).toContain("--evidence-dir <path>");
@@ -62,7 +66,21 @@ test("truncated report recipes include an executable evidence destination", asyn
 
 test("explicit declaration batch reuses one complete program and collision-safe names", async () => {
   const root = assessmentFixture();
-  const result = await runIn(root, "split-candidates", "--app", "web", "--evidence-dir", "splits", "--file", "apps/web/src/alpha/model.ts", "--file", "apps/web/src/beta/model.ts", "--file", "apps/web/src/alpha/model.ts", "--json");
+  const result = await runIn(
+    root,
+    "split-candidates",
+    "--app",
+    "web",
+    "--evidence-dir",
+    "splits",
+    "--file",
+    "apps/web/src/alpha/model.ts",
+    "--file",
+    "apps/web/src/beta/model.ts",
+    "--file",
+    "apps/web/src/alpha/model.ts",
+    "--json",
+  );
   expect(result.code).toBe(0);
   const aggregate = JSON.parse(result.stdout) as { selection: { deduplicated: number }; entries: { reportPath: string }[] };
   expect(aggregate.selection.deduplicated).toBe(1);
@@ -85,7 +103,9 @@ test("batch program includes configured consumers outside the application tsconf
   const batch = await runIn(root, "split-candidates", "--app", "web", "--evidence-dir", "splits", "--file", "apps/web/src/alpha/model.ts", "--json");
   expect(batch.code).toBe(0);
   const aggregate = JSON.parse(batch.stdout) as { entries: { reportPath: string }[] };
-  const artifact = JSON.parse(readFileSync(join(root, "splits", aggregate.entries[0]!.reportPath), "utf8")) as { report: { consumers: { consumerPath: string }[] } };
+  const artifact = JSON.parse(readFileSync(join(root, "splits", aggregate.entries[0]!.reportPath), "utf8")) as {
+    report: { consumers: { consumerPath: string }[] };
+  };
   const report = artifact.report;
   expect(report.consumers.some((consumer) => consumer.consumerPath === "apps/web/consumers/check.ts")).toBeTrue();
   expect(report.consumers.some((consumer) => consumer.consumerPath === "shared/marker.ts")).toBeTrue();
@@ -159,7 +179,7 @@ test("unsupported computed module relationships are structured batch failures", 
 
 test("unresolved analyzer relationships are structured batch incompleteness", async () => {
   const root = assessmentFixture();
-  writeFileSync(join(root, "apps/web/src/alpha/model.ts"), 'export const broken: Missing = 1; export interface Alpha { value: number }\n');
+  writeFileSync(join(root, "apps/web/src/alpha/model.ts"), "export const broken: Missing = 1; export interface Alpha { value: number }\n");
   const result = await runIn(root, "split-candidates", "--app", "web", "--evidence-dir", "splits", "--file", "apps/web/src/alpha/model.ts", "--json");
   expect(result.code).toBe(1);
   const output = JSON.parse(result.stdout) as { code: string; published: boolean; diagnostics: { phase: string; category: string }[] };
@@ -173,10 +193,34 @@ test("batch selectors reject positional, output, and repeated hotspot conflicts"
   const positional = await runIn(root, "split-candidates", "--app", "web", "--evidence-dir", "splits", "--file", "apps/web/src/shared.ts", "extra", "--json");
   expect(positional.code).toBe(64);
   expect(positional.stderr).toContain("rejects positional targets");
-  const output = await runIn(root, "split-candidates", "--app", "web", "--evidence-dir", "splits", "--file", "apps/web/src/shared.ts", "--out", "legacy.json", "--json");
+  const output = await runIn(
+    root,
+    "split-candidates",
+    "--app",
+    "web",
+    "--evidence-dir",
+    "splits",
+    "--file",
+    "apps/web/src/shared.ts",
+    "--out",
+    "legacy.json",
+    "--json",
+  );
   expect(output.code).toBe(64);
   expect(output.stderr).toContain("rejects positional targets and --out");
-  const repeated = await runIn(root, "split-candidates", "--app", "web", "--evidence-dir", "splits", "--split-hotspots", "1", "--split-hotspots", "2", "--json");
+  const repeated = await runIn(
+    root,
+    "split-candidates",
+    "--app",
+    "web",
+    "--evidence-dir",
+    "splits",
+    "--split-hotspots",
+    "1",
+    "--split-hotspots",
+    "2",
+    "--json",
+  );
   expect(repeated.code).toBe(64);
   expect(repeated.stderr).toContain("--split-hotspots only once");
   expect(existsSync(join(root, "splits"))).toBeFalse();
@@ -184,10 +228,15 @@ test("batch selectors reject positional, output, and repeated hotspot conflicts"
 
 test("legacy single-file JSON keeps semantic diagnostics outside batch envelopes", async () => {
   const root = assessmentFixture();
-  writeFileSync(join(root, "apps/web/src/alpha/model.ts"), 'export const broken: Missing = 1; export interface Alpha { value: number }\n');
+  writeFileSync(join(root, "apps/web/src/alpha/model.ts"), "export const broken: Missing = 1; export interface Alpha { value: number }\n");
   const result = await runIn(root, "split-candidates", "--file", "apps/web/src/alpha/model.ts", "--out", "legacy.json", "--json");
   expect(result.code).toBe(0);
-  const report = JSON.parse(result.stdout) as { schemaVersion: number; source: { diagnostics: { code: number; category: string }[] }; selection?: unknown; status?: unknown };
+  const report = JSON.parse(result.stdout) as {
+    schemaVersion: number;
+    source: { diagnostics: { code: number; category: string }[] };
+    selection?: unknown;
+    status?: unknown;
+  };
   expect(report.schemaVersion).toBe(1);
   expect(report.source.diagnostics).toContainEqual(expect.objectContaining({ code: 2304, category: "error" }));
   expect(report.selection).toBeUndefined();
@@ -200,17 +249,33 @@ function assessmentFixture(): string {
   for (const dir of ["apps/web/src/alpha", "apps/web/src/beta", "packages/tool/src"]) mkdirSync(join(root, dir), { recursive: true });
   writeFileSync(join(root, "apps/web/src/shared.ts"), "export const shared = 1;\n");
   writeFileSync(join(root, "apps/web/src/consumer.ts"), 'import { shared } from "./shared.ts"; export const result = shared + 1;\n');
-  writeFileSync(join(root, "apps/web/src/alpha/model.ts"), 'import { shared } from "../shared.ts"; export interface Alpha { value: number } export const alpha = shared;\n');
-  writeFileSync(join(root, "apps/web/src/beta/model.ts"), 'import { shared } from "../shared.ts"; export interface Beta { value: number } export const beta = shared;\n');
+  writeFileSync(
+    join(root, "apps/web/src/alpha/model.ts"),
+    'import { shared } from "../shared.ts"; export interface Alpha { value: number } export const alpha = shared;\n',
+  );
+  writeFileSync(
+    join(root, "apps/web/src/beta/model.ts"),
+    'import { shared } from "../shared.ts"; export interface Beta { value: number } export const beta = shared;\n',
+  );
   writeFileSync(join(root, "apps/web/src/cycle-a.ts"), 'import { b } from "./cycle-b.ts"; export function a(): number { return b(); }\n');
   writeFileSync(join(root, "apps/web/src/cycle-b.ts"), 'import { a } from "./cycle-a.ts"; export function b(): number { return a(); }\n');
-  writeFileSync(join(root, "apps/web/tsconfig.json"), '{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","allowImportingTsExtensions":true,"noEmit":true,"strict":true},"include":["src/**/*.ts"]}\n');
+  writeFileSync(
+    join(root, "apps/web/tsconfig.json"),
+    '{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","allowImportingTsExtensions":true,"noEmit":true,"strict":true},"include":["src/**/*.ts"]}\n',
+  );
   writeFileSync(join(root, "packages/tool/package.json"), '{"name":"@acme/tool"}\n');
   writeFileSync(join(root, "packages/tool/src/index.ts"), "export {};\n");
   writeFileSync(join(root, "package.json"), '{"private":true,"workspaces":["packages/*"]}\n');
   writeFileSync(join(root, "bun.lock"), "{}\n");
-  writeFileSync(join(root, "monocarve.config.json"), `${JSON.stringify({ applications: [{ name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json" }], packageRoots: ["packages"], packageManager: "bun", testPathPatterns: ["\\.test\\.ts$"], scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } } }, null, 2)}\n`);
-  fixtureGit(root, "init", "-q", "-b", "assessment-fixture"); fixtureGit(root, "config", "user.email", "fixture@example.invalid"); fixtureGit(root, "config", "user.name", "Fixture"); fixtureGit(root, "add", "."); fixtureGit(root, "commit", "-qm", "fixture");
+  writeFileSync(
+    join(root, "monocarve.config.json"),
+    `${JSON.stringify({ applications: [{ name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json" }], packageRoots: ["packages"], packageManager: "bun", testPathPatterns: ["\\.test\\.ts$"], scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } } }, null, 2)}\n`,
+  );
+  fixtureGit(root, "init", "-q", "-b", "assessment-fixture");
+  fixtureGit(root, "config", "user.email", "fixture@example.invalid");
+  fixtureGit(root, "config", "user.name", "Fixture");
+  fixtureGit(root, "add", ".");
+  fixtureGit(root, "commit", "-qm", "fixture");
   return root;
 }
 

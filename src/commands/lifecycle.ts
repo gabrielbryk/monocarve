@@ -1,15 +1,21 @@
 /** Read-only operator lifecycle classification. */
 import { flagString, type ParsedArgs } from "../cli/args.ts";
-import { headCommit, showBaseline } from "../util/git.ts";
+import {
+  readAppliedPlanReceipt,
+  readReconciliationRecord,
+  reconciliationAuditManifest,
+  verifyReceiptLink,
+  verifyReconciliationLink,
+} from "../reconciliation/index.ts";
+import type { ReadEvidence, ReconciliationRecord } from "../reconciliation/index.ts";
+import { assertReconcilableAudit } from "../reconciliation/validate.ts";
+import { readApplyTransactionState } from "../transaction/apply-state.ts";
+import { auditPlanSync } from "../transaction/audit.ts";
 import { inspectCommitChain } from "../transaction/commit-evidence.ts";
 import { classifyLifecycle, type LifecycleStatus } from "../transaction/lifecycle-status.ts";
-import { auditPlanSync } from "../transaction/audit.ts";
-import { assertReconcilableAudit } from "../reconciliation/validate.ts";
-import { readAppliedPlanReceipt, readReconciliationRecord, reconciliationAuditManifest, verifyReceiptLink, verifyReconciliationLink } from "../reconciliation/index.ts";
-import type { ReadEvidence, ReconciliationRecord } from "../reconciliation/index.ts";
-import { readApplyTransactionState } from "../transaction/apply-state.ts";
-import type { CommandSpec } from "./types.ts";
+import { headCommit, showBaseline } from "../util/git.ts";
 import { load, loadManifest, print } from "./shared.ts";
+import type { CommandSpec } from "./types.ts";
 
 async function status(args: ParsedArgs): Promise<void> {
   const { config, rootDir } = await load(args);
@@ -26,19 +32,26 @@ async function status(args: ParsedArgs): Promise<void> {
   const reconciliation = loadReconciliation(args, rootDir, manifest, path, manifestBytes, chain);
   const auditedManifest = reconciliation?.value === undefined ? manifest : reconciliationAuditManifest(manifest, reconciliation.value);
   const audit = chain.phase === "applied" ? auditPlanSync({ config, rootDir, manifest: auditedManifest }) : undefined;
-  const auditEvidence = audit === undefined ? undefined : {
-    passed: audit.passed, reconcilable: !audit.passed && reconcilable(audit), failures: audit.failures,
-  };
+  const auditEvidence =
+    audit === undefined ? undefined : { passed: audit.passed, reconcilable: !audit.passed && reconcilable(audit), failures: audit.failures };
   const receipt = loadReceipt(args, rootDir, manifest, path, manifestBytes, chain, reconciliation);
   const evidence = {
-    manifestPath: path, planId: manifest.planId, atBaseline: head === manifest.baselineCommit,
-    planWritten: true, chain, ...(auditEvidence === undefined ? {} : { audit: auditEvidence }),
-    ...(receipt === undefined ? {} : { receipt: receipt.evidence }), ...(reconciliation === undefined ? {} : { reconciliation: reconciliation.evidence }),
+    manifestPath: path,
+    planId: manifest.planId,
+    atBaseline: head === manifest.baselineCommit,
+    planWritten: true,
+    chain,
+    ...(auditEvidence === undefined ? {} : { audit: auditEvidence }),
+    ...(receipt === undefined ? {} : { receipt: receipt.evidence }),
+    ...(reconciliation === undefined ? {} : { reconciliation: reconciliation.evidence }),
   };
   const classified = classifyLifecycle(evidence);
   const transaction = readApplyTransactionState(rootDir);
   const output: LifecycleStatus & { readonly transaction: typeof transaction | null } = {
-    ...classified, planId: manifest.planId, manifestPath: path, headCommit: head,
+    ...classified,
+    planId: manifest.planId,
+    manifestPath: path,
+    headCommit: head,
     evidence,
     transaction: transaction ?? null,
   };
@@ -49,16 +62,29 @@ export const lifecycleCommands: Record<string, CommandSpec> = {
   status: {
     summary: "report the lifecycle state and one safe next command",
     usage: "status [--plan <path>] [--receipt <path>] [--reconciliation <path>]",
-    details: "Read-only. Proves exact approval and application commit boundaries, audits an applied tree, validates optional immutable receipt and reconciliation records, reports durable transaction evidence, and emits exactly one next command.",
+    details:
+      "Read-only. Proves exact approval and application commit boundaries, audits an applied tree, validates optional immutable receipt and reconciliation records, reports durable transaction evidence, and emits exactly one next command.",
     run: status,
   },
 };
 
 function reconcilable(report: ReturnType<typeof auditPlanSync>): boolean {
-  try { assertReconcilableAudit(report); return true; } catch { return false; }
+  try {
+    assertReconcilableAudit(report);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-function loadReconciliation(args: ParsedArgs, rootDir: string, manifest: Awaited<ReturnType<typeof loadManifest>>["manifest"], manifestPath: string, manifestBytes: string | null, chain: ReturnType<typeof inspectCommitChain>) {
+function loadReconciliation(
+  args: ParsedArgs,
+  rootDir: string,
+  manifest: Awaited<ReturnType<typeof loadManifest>>["manifest"],
+  manifestPath: string,
+  manifestBytes: string | null,
+  chain: ReturnType<typeof inspectCommitChain>,
+) {
   const path = flagString(args, "reconciliation");
   if (path === undefined) return undefined;
   const failures: string[] = [];
@@ -68,11 +94,21 @@ function loadReconciliation(args: ParsedArgs, rootDir: string, manifest: Awaited
     if (manifestBytes === null) throw new Error("approved manifest bytes are unavailable");
     evidence = readReconciliationRecord(rootDir, path);
     approvalCommit = verifyReconciliationLink({ rootDir, manifest, manifestPath, manifestBytes, chain, evidence }).approvalCommit;
-  } catch (error) { failures.push((error as Error).message); }
+  } catch (error) {
+    failures.push((error as Error).message);
+  }
   return { path, value: evidence?.value, approvalCommit, evidence: { valid: failures.length === 0, failures } };
 }
 
-function loadReceipt(args: ParsedArgs, rootDir: string, manifest: Awaited<ReturnType<typeof loadManifest>>["manifest"], manifestPath: string, manifestBytes: string | null, chain: ReturnType<typeof inspectCommitChain>, reconciliation?: ReturnType<typeof loadReconciliation>) {
+function loadReceipt(
+  args: ParsedArgs,
+  rootDir: string,
+  manifest: Awaited<ReturnType<typeof loadManifest>>["manifest"],
+  manifestPath: string,
+  manifestBytes: string | null,
+  chain: ReturnType<typeof inspectCommitChain>,
+  reconciliation?: ReturnType<typeof loadReconciliation>,
+) {
   const path = flagString(args, "receipt");
   if (path === undefined) return undefined;
   const failures: string[] = [];
@@ -80,10 +116,17 @@ function loadReceipt(args: ParsedArgs, rootDir: string, manifest: Awaited<Return
     if (manifestBytes === null) throw new Error("approved manifest bytes are unavailable");
     const receipt = readAppliedPlanReceipt(rootDir, path);
     verifyReceiptLink(receipt, manifest, manifestPath, manifestBytes, chain);
-    if (receipt.value.reconciliation !== undefined && (reconciliation?.value === undefined || reconciliation.approvalCommit === undefined ||
-      receipt.value.reconciliation.recordId !== reconciliation.value.recordId || receipt.value.reconciliation.approvalCommit !== reconciliation.approvalCommit)) {
+    if (
+      receipt.value.reconciliation !== undefined &&
+      (reconciliation?.value === undefined ||
+        reconciliation.approvalCommit === undefined ||
+        receipt.value.reconciliation.recordId !== reconciliation.value.recordId ||
+        receipt.value.reconciliation.approvalCommit !== reconciliation.approvalCommit)
+    ) {
       throw new Error("receipt reconciliation linkage is not proven by the supplied approved record");
     }
-  } catch (error) { failures.push((error as Error).message); }
+  } catch (error) {
+    failures.push((error as Error).message);
+  }
   return { path, evidence: { valid: failures.length === 0, failures } };
 }

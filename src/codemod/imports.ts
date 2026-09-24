@@ -156,7 +156,7 @@ function resolvedImport(importerPath: string, specifier: string, boundary?: stri
     return base;
   }
   // `./x.js` in TypeScript source means `./x.ts` on disk under NodeNext.
-  const javascriptBase = JAVASCRIPT_SOURCE_EXTENSIONS.includes(extname(base) as typeof JAVASCRIPT_SOURCE_EXTENSIONS[number])
+  const javascriptBase = JAVASCRIPT_SOURCE_EXTENSIONS.includes(extname(base) as (typeof JAVASCRIPT_SOURCE_EXTENSIONS)[number])
     ? base.slice(0, -extname(base).length)
     : base;
   const direct = [
@@ -173,15 +173,9 @@ function resolvedImport(importerPath: string, specifier: string, boundary?: stri
   return result;
 }
 
-function resolveWithTypeScript(
-  key: string,
-  importerPath: string,
-  specifier: string,
-  boundary?: string,
-): string | null {
+function resolveWithTypeScript(key: string, importerPath: string, specifier: string, boundary?: string): string | null {
   const options = compilerOptions(importerPath, boundary);
-  const module = ts.resolveModuleName(specifier, importerPath, options, ts.sys)
-    .resolvedModule;
+  const module = ts.resolveModuleName(specifier, importerPath, options, ts.sys).resolvedModule;
   const result = module ? resolve(module.resolvedFileName) : resolvePathAlias(options, specifier, importerPath);
   resolutionCache.set(key, result);
   return result;
@@ -196,8 +190,8 @@ function resolvePathAlias(options: ts.CompilerOptions, specifier: string, import
     const wildcard = marker < 0 ? "" : specifier.slice(prefix.length, specifier.length - suffix.length);
     const target = targets[0];
     if (target === undefined) continue;
-    const baseDirectory = typeof options.baseUrl === "string" ? options.baseUrl
-      : typeof options.pathsBasePath === "string" ? options.pathsBasePath : dirname(importerPath);
+    const baseDirectory =
+      typeof options.baseUrl === "string" ? options.baseUrl : typeof options.pathsBasePath === "string" ? options.pathsBasePath : dirname(importerPath);
     const base = resolve(baseDirectory, target.replace("*", wildcard));
     if (existsSync(base)) return base;
     const source = SUFFIXES.map((extension) => base + extension).find(existsSync);
@@ -220,7 +214,7 @@ function matchesDonor(importerPath: string, specifier: string, donorPath: string
   // moved. `resolvedImport` already treats a written `./x.js` as `./x.ts`
   // while the file exists; replay must recognize the same former path once it
   // no longer exists or a move-before-rewrite journal becomes order-sensitive.
-  const javascriptBase = JAVASCRIPT_SOURCE_EXTENSIONS.includes(extname(base) as typeof JAVASCRIPT_SOURCE_EXTENSIONS[number])
+  const javascriptBase = JAVASCRIPT_SOURCE_EXTENSIONS.includes(extname(base) as (typeof JAVASCRIPT_SOURCE_EXTENSIONS)[number])
     ? base.slice(0, -extname(base).length)
     : base;
   const formerPaths = [
@@ -245,15 +239,11 @@ function matchesDonor(importerPath: string, specifier: string, donorPath: string
     const wildcard = marker < 0 ? "" : specifier.slice(marker + 1, specifier.length - suffixLength);
     for (const target of targets) {
       const substituted = target.replace("*", wildcard);
-      const baseDirectory = typeof options.baseUrl === "string" ? options.baseUrl
-        : typeof options.pathsBasePath === "string" ? options.pathsBasePath : dirname(importerPath);
+      const baseDirectory =
+        typeof options.baseUrl === "string" ? options.baseUrl : typeof options.pathsBasePath === "string" ? options.pathsBasePath : dirname(importerPath);
       const aliasBase = resolve(baseDirectory, substituted);
       // Alias candidates are compared against the donor's former absolute path.
-      formerPaths.push(
-        aliasBase,
-        ...SUFFIXES.map((suffix) => aliasBase + suffix),
-        ...SUFFIXES.map((suffix) => resolve(aliasBase, `index${suffix}`)),
-      );
+      formerPaths.push(aliasBase, ...SUFFIXES.map((suffix) => aliasBase + suffix), ...SUFFIXES.map((suffix) => resolve(aliasBase, `index${suffix}`)));
     }
   }
   return formerPaths.some((candidate) => candidate === resolve(donorPath));
@@ -303,21 +293,12 @@ export function inventoryModuleReferences(
   const file = ts.createSourceFile(importerPath, source, ts.ScriptTarget.Latest, true, scriptKind(importerPath));
   const references: ModuleReference[] = [];
 
-  const add = (
-    kind: ModuleReferenceKind,
-    node: ts.Node,
-    argument: ts.Node | undefined,
-    typeOnly: boolean,
-    dynamic: boolean,
-  ): void => {
+  const add = (kind: ModuleReferenceKind, node: ts.Node, argument: ts.Node | undefined, typeOnly: boolean, dynamic: boolean): void => {
     const specifier = argument ? literal(argument) : null;
     references.push({
       kind,
       specifier,
-      resolved:
-        specifier && (resolveNonRelative || specifier.startsWith("."))
-          ? resolvedImport(importerPath, specifier, boundary, resolutionExtensions)
-          : null,
+      resolved: specifier && (resolveNonRelative || specifier.startsWith(".")) ? resolvedImport(importerPath, specifier, boundary, resolutionExtensions) : null,
       dynamic,
       typeOnly,
       supported: specifier !== null,
@@ -325,8 +306,7 @@ export function inventoryModuleReferences(
       end: node.end,
       // `getStart(file)` skips the literal's leading trivia, so this is the
       // opening delimiter and `end` is one past the closing one.
-      specifierSpan:
-        argument && specifier !== null ? { start: argument.getStart(file), end: argument.end } : null,
+      specifierSpan: argument && specifier !== null ? { start: argument.getStart(file), end: argument.end } : null,
     });
   };
 
@@ -338,13 +318,7 @@ export function inventoryModuleReferences(
     } else if (ts.isImportTypeNode(node)) {
       add("import-type", node, ts.isLiteralTypeNode(node.argument) ? node.argument.literal : undefined, true, false);
     } else if (ts.isImportEqualsDeclaration(node)) {
-      add(
-        "import-equals",
-        node,
-        ts.isExternalModuleReference(node.moduleReference) ? node.moduleReference.expression : undefined,
-        false,
-        false,
-      );
+      add("import-equals", node, ts.isExternalModuleReference(node.moduleReference) ? node.moduleReference.expression : undefined, false, false);
     } else if (ts.isCallExpression(node)) {
       addCall(node, add, moduleSpecifierCalls);
     }
@@ -363,21 +337,21 @@ function inventoryCssImports(source: string, importerPath: string, boundary: str
     const start = match.index;
     const literalOffset = match[0].indexOf(`${match[1]}${specifier}${match[1]}`);
     references.push({
-      kind: "asset-import", specifier, resolved: resolvedImport(importerPath, specifier, boundary, resolutionExtensions),
-      dynamic: false, typeOnly: false, supported: true, start, end: start + match[0].length,
+      kind: "asset-import",
+      specifier,
+      resolved: resolvedImport(importerPath, specifier, boundary, resolutionExtensions),
+      dynamic: false,
+      typeOnly: false,
+      supported: true,
+      start,
+      end: start + match[0].length,
       specifierSpan: { start: start + literalOffset, end: start + literalOffset + specifier.length + 2 },
     });
   }
   return references;
 }
 
-type AddReference = (
-  kind: ModuleReferenceKind,
-  node: ts.Node,
-  argument: ts.Node | undefined,
-  typeOnly: boolean,
-  dynamic: boolean,
-) => void;
+type AddReference = (kind: ModuleReferenceKind, node: ts.Node, argument: ts.Node | undefined, typeOnly: boolean, dynamic: boolean) => void;
 
 function addCall(node: ts.CallExpression, add: AddReference, moduleSpecifierCalls: readonly string[]): void {
   const expression = node.expression;
@@ -407,14 +381,8 @@ function qualifiedName(node: ts.Expression): string | undefined {
  * References whose specifier is computed. A file containing one cannot be
  * planned: no codemod can prove what it will import at runtime.
  */
-export function unsupportedModuleReferences(
-  source: string,
-  importerPath: string,
-  boundary?: string,
-): ModuleReference[] {
-  return inventoryModuleReferences(source, importerPath, false, boundary).filter(
-    (reference) => reference.specifier === null,
-  );
+export function unsupportedModuleReferences(source: string, importerPath: string, boundary?: string): ModuleReference[] {
+  return inventoryModuleReferences(source, importerPath, false, boundary).filter((reference) => reference.specifier === null);
 }
 
 export function applyReplacements(source: string, replacements: readonly Replacement[]): string {
@@ -486,5 +454,18 @@ export function applyEscapeRewrites(
   resolutionExtensions: readonly string[] = [],
   cssImportExtensions: readonly string[] = [],
 ): string {
-  return rewrites.reduce((value, rewrite) => rewriteResolvedImportSpecifier(value, sourcePath, resolve(dirname(sourcePath), rewrite.donorlessSpecifier), rewrite.packageSpecifier, boundary, moduleSpecifierCalls, resolutionExtensions, cssImportExtensions), source);
+  return rewrites.reduce(
+    (value, rewrite) =>
+      rewriteResolvedImportSpecifier(
+        value,
+        sourcePath,
+        resolve(dirname(sourcePath), rewrite.donorlessSpecifier),
+        rewrite.packageSpecifier,
+        boundary,
+        moduleSpecifierCalls,
+        resolutionExtensions,
+        cssImportExtensions,
+      ),
+    source,
+  );
 }

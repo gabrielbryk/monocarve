@@ -5,8 +5,8 @@ import { pathToFileURL } from "node:url";
 
 import ts from "typescript";
 
-import { CONFIG_FILENAMES } from "../branding.ts";
 import { loadSnapshotConfig, type ConfigSnapshotFile } from "../assessment/config-snapshot.ts";
+import { CONFIG_FILENAMES } from "../branding.ts";
 import { ConfigError } from "../errors.ts";
 import { monocarveConfigSchema, type MonocarveConfig } from "./schema.ts";
 
@@ -50,9 +50,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Loade
   const configPath = options.configPath ? resolve(cwd, options.configPath) : findConfigFile(cwd);
 
   if (!configPath) {
-    throw new ConfigError(
-      `no config found in ${cwd} or any parent directory (looked for ${CONFIG_FILENAMES.join(", ")})`,
-    );
+    throw new ConfigError(`no config found in ${cwd} or any parent directory (looked for ${CONFIG_FILENAMES.join(", ")})`);
   }
   if (!existsSync(configPath)) {
     throw new ConfigError(`config not found: ${configPath}`);
@@ -60,12 +58,10 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Loade
 
   if (options.refuseStaticFilesystemImports) assertNoStaticFilesystemImports(configPath);
 
-  const snapshot = options.executionBoundary === "snapshot" && !configPath.endsWith(".json")
-    ? loadSnapshotConfig(configPath) : undefined;
+  const snapshot = options.executionBoundary === "snapshot" && !configPath.endsWith(".json") ? loadSnapshotConfig(configPath) : undefined;
   const raw = snapshot === undefined ? await readRawConfig(configPath) : snapshot.value;
   const config = parseConfig(raw, configPath);
-  return { config, configPath, rootDir: resolve(dirname(configPath), config.root),
-    ...(snapshot === undefined ? {} : { configSnapshot: snapshot.files }) };
+  return { config, configPath, rootDir: resolve(dirname(configPath), config.root), ...(snapshot === undefined ? {} : { configSnapshot: snapshot.files }) };
 }
 
 /**
@@ -87,8 +83,11 @@ export function assertNoStaticFilesystemImports(configPath: string): void {
 
 function configDependencies(path: string): string[] {
   let text: string;
-  try { text = readFileSync(path, "utf8"); }
-  catch { throw new ConfigError(`config dependency cannot be inspected: ${path}`); }
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {
+    throw new ConfigError(`config dependency cannot be inspected: ${path}`);
+  }
   const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
   const nodes: ts.Node[] = [source];
   const dependencies: string[] = [];
@@ -105,7 +104,8 @@ function configDependencies(path: string): string[] {
 }
 
 function configSpecifier(node: ts.Node, source: ts.SourceFile, path: string): string | undefined {
-  if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) return node.moduleSpecifier.text;
+  if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier))
+    return node.moduleSpecifier.text;
   if (!ts.isCallExpression(node)) return undefined;
   const dynamic = node.expression.kind === ts.SyntaxKind.ImportKeyword;
   const required = node.expression.getText(source) === "require";
@@ -118,8 +118,11 @@ function configSpecifier(node: ts.Node, source: ts.SourceFile, path: string): st
 function resolveConfigDependency(specifier: string, path: string): string | undefined {
   if (isFilesystemModule(specifier)) throw new ConfigError(`ASSESSMENT_CONFIG_UNBOUND: filesystem access in config dependency ${path}`);
   if (specifier.startsWith("node:")) return undefined;
-  try { return Bun.resolveSync(specifier, dirname(path)); }
-  catch { throw new ConfigError(`config dependency cannot be resolved: ${specifier}`); }
+  try {
+    return Bun.resolveSync(specifier, dirname(path));
+  } catch {
+    throw new ConfigError(`config dependency cannot be resolved: ${specifier}`);
+  }
 }
 
 function isFilesystemModule(specifier: string): boolean {
@@ -130,9 +133,7 @@ function isFilesystemModule(specifier: string): boolean {
 export function parseConfig(raw: unknown, source = "<inline>"): MonocarveConfig {
   const result = monocarveConfigSchema.safeParse(raw);
   if (!result.success) {
-    const issues = result.error.issues.map(
-      (issue) => `  ${issue.path.length ? issue.path.join(".") : "(root)"}: ${issue.message}`,
-    );
+    const issues = result.error.issues.map((issue) => `  ${issue.path.length ? issue.path.join(".") : "(root)"}: ${issue.message}`);
     throw new ConfigError(`invalid config at ${source}:\n${issues.join("\n")}`);
   }
   return result.data;

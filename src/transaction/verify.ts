@@ -1,13 +1,14 @@
 /** Lifecycle-aware, observational verification of a reviewed extraction plan. */
 import { createPackageManagerAdapter } from "../adapters/registry.ts";
 import type { MonocarveConfig } from "../config.ts";
+import { packageContainerRoots } from "../config.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
 import { headCommit } from "../util/git.ts";
 import { auditPlanSync } from "./audit.ts";
 import { inspectCommitChain } from "./commit-evidence.ts";
+import { currentGeneratorManifest, type GeneratorEvolution } from "./generator-evolution.ts";
 import { regenerateArtifacts } from "./regenerate.ts";
 import { createWorktree } from "./worktree.ts";
-import { currentGeneratorManifest, type GeneratorEvolution } from "./generator-evolution.ts";
 
 export interface AppliedVerification {
   readonly lifecycle: "applied";
@@ -46,15 +47,17 @@ export async function verifyAppliedPlan(options: {
     rootDir: options.rootDir,
     commit,
     worktreeRoot: options.config.transaction.worktreeRoot,
+    packageRoots: packageContainerRoots(options.config),
     nodeModules: options.config.transaction.nodeModules,
     installCommand: packageManager.installCommand(),
     label: `${options.manifest.planId}-verify`,
   });
   let regeneration: ReturnType<typeof regenerateArtifacts>;
   try {
-    regeneration = current.failures.length === 0
-      ? regenerateArtifacts({ config: options.config, treeRoot: worktree.workspacePath, manifest: current.manifest })
-      : { ok: false, artifacts: [], failure: current.failures.join("; ") };
+    regeneration =
+      current.failures.length === 0
+        ? regenerateArtifacts({ config: options.config, treeRoot: worktree.workspacePath, manifest: current.manifest })
+        : { ok: false, artifacts: [], failure: current.failures.join("; ") };
   } finally {
     await worktree.dispose();
   }

@@ -25,13 +25,15 @@ describe("preparation journal", () => {
       seed(root);
       const before = state(root);
 
-      expect(() => executePreparationJournal({
-        rootDir: root,
-        operations: operations(),
-        beforeOperation(index) {
-          if (index === failureIndex) throw new Error(`injected preparation failure ${index}`);
-        },
-      })).toThrow(`injected preparation failure ${failureIndex}`);
+      expect(() =>
+        executePreparationJournal({
+          rootDir: root,
+          operations: operations(),
+          beforeOperation(index) {
+            if (index === failureIndex) throw new Error(`injected preparation failure ${index}`);
+          },
+        }),
+      ).toThrow(`injected preparation failure ${failureIndex}`);
 
       // This would fail if rollback forgot a file's bytes/mode, a deleted file,
       // a replaced symlink, or the directories created for a rendered output.
@@ -64,13 +66,15 @@ describe("preparation journal", () => {
     const root = fixtureRoot();
     seed(root);
 
-    expect(() => executePreparationJournal({
-      rootDir: root,
-      operations: operations(),
-      beforeOperation(index, operation) {
-        if (index === 1) writeFileSync(join(root, operation.path), "concurrent edit");
-      },
-    })).toThrow("compare-and-swap failed for delete.ts");
+    expect(() =>
+      executePreparationJournal({
+        rootDir: root,
+        operations: operations(),
+        beforeOperation(index, operation) {
+          if (index === 1) writeFileSync(join(root, operation.path), "concurrent edit");
+        },
+      }),
+    ).toThrow("compare-and-swap failed for delete.ts");
 
     expect(readFileSync(join(root, "replace.ts"), "utf8")).toBe("original");
     expect(readFileSync(join(root, "delete.ts"), "utf8")).toBe("concurrent edit");
@@ -80,14 +84,16 @@ describe("preparation journal", () => {
     const root = fixtureRoot();
     seed(root);
 
-    expect(() => executePreparationJournal({
-      rootDir: root,
-      operations: [operations()[0]!],
-      beforeOwnershipTransfer() {
-        writeFileSync(join(root, "replace.ts"), "late concurrent replacement");
-        chmodSync(join(root, "replace.ts"), 0o751);
-      },
-    })).toThrow("ownership verification failed for replace.ts");
+    expect(() =>
+      executePreparationJournal({
+        rootDir: root,
+        operations: [operations()[0]!],
+        beforeOwnershipTransfer() {
+          writeFileSync(join(root, "replace.ts"), "late concurrent replacement");
+          chmodSync(join(root, "replace.ts"), 0o751);
+        },
+      }),
+    ).toThrow("ownership verification failed for replace.ts");
 
     expect(readFileSync(join(root, "replace.ts"), "utf8")).toBe("late concurrent replacement");
     expect(Number(lstatSync(join(root, "replace.ts")).mode) & 0o777).toBe(0o751);
@@ -189,10 +195,34 @@ function seed(root: string): void {
 
 function operations(): readonly PreparationFilesystemOperation[] {
   return [
-    { kind: "write", path: "replace.ts", contents: "replacement", preconditionHash: hashText("original"), preconditionMode: 0o755, resultHash: hashText("replacement"), resultMode: 0o644 },
+    {
+      kind: "write",
+      path: "replace.ts",
+      contents: "replacement",
+      preconditionHash: hashText("original"),
+      preconditionMode: 0o755,
+      resultHash: hashText("replacement"),
+      resultMode: 0o644,
+    },
     { kind: "delete", path: "delete.ts", preconditionHash: hashText("remove me"), preconditionMode: 0o644 },
-    { kind: "write", path: "link.ts", contents: "replacement link", preconditionHash: hashText("target.ts"), preconditionMode: 0o755, resultHash: hashText("replacement link"), resultMode: 0o644 },
-    { kind: "write", path: "created/deep/output.ts", contents: "new file", preconditionHash: MISSING, preconditionMode: MISSING, resultHash: hashText("new file"), resultMode: 0o644 },
+    {
+      kind: "write",
+      path: "link.ts",
+      contents: "replacement link",
+      preconditionHash: hashText("target.ts"),
+      preconditionMode: 0o755,
+      resultHash: hashText("replacement link"),
+      resultMode: 0o644,
+    },
+    {
+      kind: "write",
+      path: "created/deep/output.ts",
+      contents: "new file",
+      preconditionHash: MISSING,
+      preconditionMode: MISSING,
+      resultHash: hashText("new file"),
+      resultMode: 0o644,
+    },
     { kind: "delete", path: "last.ts", preconditionHash: MISSING, preconditionMode: MISSING },
   ];
 }

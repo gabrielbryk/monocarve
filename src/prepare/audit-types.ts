@@ -1,6 +1,6 @@
-import type { PreparationManifest } from "./manifest-types.ts";
-import type { Sha256 } from "../util/hash.ts";
 import type { MonocarveConfig } from "../config.ts";
+import type { Sha256 } from "../util/hash.ts";
+import type { PreparationManifest } from "./manifest-types.ts";
 
 /** One independently meaningful preparation-audit claim. */
 export interface PreparationProofResult {

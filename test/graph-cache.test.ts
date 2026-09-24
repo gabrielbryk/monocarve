@@ -2,20 +2,20 @@ import { afterEach, expect, test } from "bun:test";
 
 import { loadConfig } from "../src/config.ts";
 import { resetGraphCaches, scanDependencyGraph } from "../src/graph/index.ts";
-import { cleanupFixtures } from "./support/fixture-repo.ts";
 import { committedWorkspace } from "./support/cli.ts";
+import { cleanupFixtures } from "./support/fixture-repo.ts";
 
-afterEach(() => { resetGraphCaches(); cleanupFixtures(); });
+afterEach(() => {
+  resetGraphCaches();
+  cleanupFixtures();
+});
 
 test("graph cache identity includes configuration semantics", async () => {
   const rootDir = committedWorkspace();
   const { config } = await loadConfig({ cwd: rootDir });
   const first = await scanDependencyGraph({ config, rootDir });
   const path = "apps/web/src/widgets/chart.ts";
-  const changed = {
-    ...config,
-    portfolio: { ...config.portfolio, domains: [{ name: "configured-chart", patterns: ["widgets/chart\\.ts$"] }] },
-  };
+  const changed = { ...config, portfolio: { ...config.portfolio, domains: [{ name: "configured-chart", patterns: ["widgets/chart\\.ts$"] }] } };
   const second = await scanDependencyGraph({ config: changed, rootDir });
   expect(first.nodes.get(path)?.domain).not.toBe("configured-chart");
   expect(second.nodes.get(path)?.domain).toBe("configured-chart");

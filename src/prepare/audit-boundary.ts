@@ -1,3 +1,7 @@
+import { verifyRetainedRootsClearOfValueImports } from "./audit-imports.ts";
+import { verifyAdapterSurfaceAgainstContract } from "./audit-surface.ts";
+import type { PreparationProofResult } from "./audit-types.ts";
+import { preparationProof } from "./audit-types.ts";
 /**
  * The boundary-specific audit proofs (`retainedRootClearance` /
  * `adapterSurfaceParity`), split out of `audit.ts` purely to keep that file
@@ -8,10 +12,6 @@
  * folds this module's proofs into its report and failure list.
  */
 import type { PreparationReplayOperation } from "./manifest-types.ts";
-import type { PreparationProofResult } from "./audit-types.ts";
-import { preparationProof } from "./audit-types.ts";
-import { verifyRetainedRootsClearOfValueImports } from "./audit-imports.ts";
-import { verifyAdapterSurfaceAgainstContract } from "./audit-surface.ts";
 
 export function computeBoundaryAuditProofs(
   rootDir: string,
@@ -22,10 +22,14 @@ export function computeBoundaryAuditProofs(
   verifyRetainedRootsClearOfValueImports(rootDir, operations, retainedRootFailures);
   verifyAdapterSurfaceAgainstContract(rootDir, operations, adapterSurfaceFailures);
   const deletions = operations.filter((operation) => operation.kind === "delete-module");
-  const retainedRootClearance = preparationProof(retainedRootFailures, deletions.reduce((total, operation) => total + operation.importerProof.length, 0));
+  const retainedRootClearance = preparationProof(
+    retainedRootFailures,
+    deletions.reduce((total, operation) => total + operation.importerProof.length, 0),
+  );
   const writes = operations.filter((operation) => operation.kind === "write-file");
-  const hasUnambiguousAdapterPair = writes.filter((operation) => operation.purpose === "port-contract").length === 1
-    && writes.filter((operation) => operation.purpose === "app-adapter").length === 1;
+  const hasUnambiguousAdapterPair =
+    writes.filter((operation) => operation.purpose === "port-contract").length === 1 &&
+    writes.filter((operation) => operation.purpose === "app-adapter").length === 1;
   const adapterSurfaceParity = preparationProof(adapterSurfaceFailures, hasUnambiguousAdapterPair ? 1 : 0);
   return { retainedRootClearance, adapterSurfaceParity };
 }

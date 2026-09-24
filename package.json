@@ -52,18 +52,23 @@
     "cli": "bun run ./src/cli.ts",
     "build": "bun run ./scripts/build.ts",
     "build:bundle": "bun run ./scripts/build.ts --bundle-only",
-    "test": "bun test",
+    "test": "bun test --timeout 60000",
     "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "lint:type-aware": "oxlint --type-aware",
     "max-file-lines": "bun run scripts/quality/max-file-lines.ts",
     "complexity": "bun run scripts/quality/complexity-check.ts",
-    "quality": "bun run max-file-lines && bun run complexity",
+    "oxlint-ratchet": "bun run scripts/quality/oxlint-check.ts",
+    "quality": "bun run max-file-lines && bun run complexity && bun run oxlint-ratchet",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
     "check": "bun run typecheck && bun run test && bun run quality",
     "verify-package": "bun run ./scripts/verify-package.ts",
     "verify-standalone": "bun run ./scripts/verify-standalone.ts",
     "prepublishOnly": "bun run build:bundle && bun run verify-package"
   },
   "dependencies": {
-    "dependency-cruiser": "^16.10.0",
+    "dependency-cruiser": "^18.1.1",
     "elkjs": "^0.11.0",
     "open": "^10.2.0",
     "typescript": "^5.9.0",
@@ -72,6 +77,9 @@
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",
-    "oxc-parser": "^0.139.0"
+    "oxc-parser": "^0.143.0",
+    "oxfmt": "0.67.0",
+    "oxlint": "1.80.0",
+    "oxlint-tsgolint": "7.0.2001"
   }
 }

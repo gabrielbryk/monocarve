@@ -30,7 +30,7 @@ export function relocateJsonObjectKeys(input: PathMigrationInput, pointer: strin
   try {
     document = JSON.parse(input.contents) as unknown;
   } catch (error) {
-    throw new Error(`path-keyed artifact ${input.artifact} is not JSON: ${(error as Error).message}`);
+    throw new Error(`path-keyed artifact ${input.artifact} is not JSON: ${(error as Error).message}`, { cause: error });
   }
   const entries = objectAtPointer(document, pointer);
   for (const { source, target } of input.moves) {

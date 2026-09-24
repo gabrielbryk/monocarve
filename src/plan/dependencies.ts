@@ -25,13 +25,10 @@ export interface InferredDependencies {
   dev: Record<string, string>;
   /** Workspace directories the new package must reference from its tsconfig. */
   packageReferences: string[];
+  /** Importers whose lockfile resolutions supplied each external dependency. */
+  resolutionRoots?: Readonly<Record<string, readonly string[]>>;
 }
 
-export function inferDependencies(
-  context: WorkspaceContext,
-  graph: DependencyGraph,
-  sources: readonly string[],
-  packageName: string,
-): InferredDependencies {
+export function inferDependencies(context: WorkspaceContext, graph: DependencyGraph, sources: readonly string[], packageName: string): InferredDependencies {
   return resolveDependencies(context, graph, collectDependencyEvidence(context, graph, sources, packageName));
 }

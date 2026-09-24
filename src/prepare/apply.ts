@@ -1,18 +1,17 @@
 /** Apply a reviewed preparation plan as one exact-scope source commit. */
 import { readFileSync } from "node:fs";
 
-import { isGuardedBranch, type MonocarveConfig } from "../config.ts";
+import { configDigest, isGuardedBranch, type MonocarveConfig } from "../config.ts";
 import { PreflightError } from "../errors.ts";
+import { snapshotPaths } from "../transaction/journal.ts";
+import { rollback } from "../transaction/rollback.ts";
+import type { GateResult } from "../transaction/simulate.ts";
 import { disallowedDirtyPaths } from "../util/dirty-tree.ts";
 import { fileState } from "../util/files.ts";
 import { currentBranch, git, headCommit, showBaseline, tryGit } from "../util/git.ts";
-import { hashJson } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";
-import { rollback } from "../transaction/rollback.ts";
-import { snapshotPaths } from "../transaction/journal.ts";
-import type { GateResult } from "../transaction/simulate.ts";
+import { PreparationApplyError } from "./apply-error.ts";
 import { auditPreparationSync, type PreparationAuditReport } from "./audit.ts";
-import type { PreparationBaselineGraphScanner } from "./simulate.ts";
 import {
   executePreparationJournal,
   finalizeCompletedPreparationJournal,
@@ -20,17 +19,13 @@ import {
   rollbackCompletedPreparationJournal,
   type PreparationJournalRecovery,
 } from "./journal.ts";
-import { assertPreparationManifestValid, serializePreparationManifest } from "./manifest.ts";
 import type { PreparationManifest } from "./manifest-types.ts";
-import { assertPreparationPolicy, commitPreparationScope, preparationFilesystemOperations, simulatePreparation } from "./simulate.ts";
+import { assertPreparationManifestValid, serializePreparationManifest } from "./manifest.ts";
 import { runPreparationPostJournalPreparers } from "./post-journal.ts";
+import type { PreparationBaselineGraphScanner } from "./simulate.ts";
+import { assertPreparationPolicy, commitPreparationScope, preparationFilesystemOperations, simulatePreparation } from "./simulate.ts";
 
-export class PreparationApplyError extends Error {
-  override readonly name = "PreparationApplyError";
-  constructor(message: string, readonly residue: readonly string[] = []) {
-    super(message);
-  }
-}
+export { PreparationApplyError };
 
 export interface ApplyPreparationOptions {
   readonly config: MonocarveConfig;
@@ -113,12 +108,10 @@ function assertCommittedPreparationPreconditions(options: ApplyPreparationOption
 }
 
 function assertLivePreparationEvidence(options: ApplyPreparationOptions): void {
-  if (options.manifest.baseline.configDigest !== hashJson(options.config)) {
+  if (options.manifest.baseline.configDigest !== configDigest(options.config)) {
     throw new PreflightError("preparation manifest was compiled with a different resolved configuration");
   }
-  const currentFiles = Object.fromEntries(
-    options.manifest.changedFiles.map((path) => [path, fileState(workspacePath(options.rootDir, path))]),
-  );
+  const currentFiles = Object.fromEntries(options.manifest.changedFiles.map((path) => [path, fileState(workspacePath(options.rootDir, path))]));
   const currentContents = Object.fromEntries(
     [...new Set(options.manifest.declarations.map((group) => group.sourcePath))].map((path) => [
       path,
@@ -166,7 +159,10 @@ async function applyCommittedPreparation(
     // The preparation journal owns filesystem recovery. An empty snapshot set
     // makes this helper restore only HEAD/index, never overwrite concurrent
     // residue the journal deliberately preserved.
-    snapshots: snapshotPaths(rootDir, [...(manifest.generatedArtifacts ?? []).map((item) => item.path), ...(manifest.postJournalPreparers ?? []).flatMap((item) => item.outputs)]),
+    snapshots: snapshotPaths(rootDir, [
+      ...(manifest.generatedArtifacts ?? []).map((item) => item.path),
+      ...(manifest.postJournalPreparers ?? []).flatMap((item) => item.outputs),
+    ]),
     staged: true,
     ...(indexTree === null ? {} : { indexTree }),
   };
@@ -175,9 +171,7 @@ async function applyCommittedPreparation(
     journalRecovery = executePreparationJournal({
       rootDir,
       operations: preparationFilesystemOperations(manifest),
-      ...(options.testHooks?.beforeJournalOperation === undefined
-        ? {}
-        : { beforeOperation: (index) => options.testHooks?.beforeJournalOperation?.(index) }),
+      ...(options.testHooks?.beforeJournalOperation === undefined ? {} : { beforeOperation: (index) => options.testHooks?.beforeJournalOperation?.(index) }),
     }).recovery;
   } catch (error) {
     const residue = error instanceof PreparationJournalError ? error.residue : [];

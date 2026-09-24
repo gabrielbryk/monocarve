@@ -20,11 +20,7 @@ The command is a UTF-8 text-filter protocol. It runs from a disposable working
 directory and receives one JSON object on stdin:
 
 ```json
-{
-  "artifact": "quality/source-baseline.json",
-  "contents": "the complete current artifact text",
-  "moves": [{ "source": "apps/a.ts", "target": "libs/a.ts" }]
-}
+{ "artifact": "quality/source-baseline.json", "contents": "the complete current artifact text", "moves": [{ "source": "apps/a.ts", "target": "libs/a.ts" }] }
 ```
 
 `moves` is the plan's complete source-to-target map, sorted by source and then
@@ -54,7 +50,7 @@ invalid because one path may have only one declared producer.
 Path migrations and path-reference rewrites are complementary features that
 handle different kinds of path updates during extraction.
 
-**Path migrations** (`pathMigrations.artifacts`) handle *structured artifacts*:
+**Path migrations** (`pathMigrations.artifacts`) handle _structured artifacts_:
 files where source paths appear as object keys or values in JSON, YAML, or other
 formats. A workspace supplies a command that reads the artifact, receives the
 list of moved files, and produces a corrected version with updated keys or
@@ -66,14 +62,15 @@ journaled but before gates. If its output differs from the recorded hash,
 simulation and apply both fail. A committing apply regenerates the artifact
 and includes it in the wiring commit.
 
-**Path-reference rewrites** (`pathReferenceRewrites`) handle *path tokens found
-in documents*: exact path-shaped substrings in Markdown, JSON, plain text, or
+**Path-reference rewrites** (`pathReferenceRewrites`) handle _path tokens found
+in documents_: exact path-shaped substrings in Markdown, JSON, plain text, or
 configuration files that reference moved code. Monocarve detects and rewrites
 them by byte-level span matching, with no external command. Strict matching
 rules prevent ambiguity: only one moved source may normalize to each token,
 and `matchExtensionless` defaults to `false` so bare stems are not guessed.
 
 Use path migrations when:
+
 - The artifact is structured (JSON, YAML) and the tool owns the update logic
 - Path transformation requires domain knowledge (e.g. excluding test paths, or
   aggregating by directory)
@@ -81,6 +78,7 @@ Use path migrations when:
   hash on replay)
 
 Use path-reference rewrites when:
+
 - The document is unstructured or loosely structured (Markdown, configuration,
   plain text)
 - Every occurrence of the path token should be rewritten identically

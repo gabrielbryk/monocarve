@@ -31,8 +31,11 @@ function visitValidatedEvidenceDirectory(directory: string, depth: number, conte
     return;
   }
   let entries: Dirent[];
-  try { entries = readdirSync(directory, { withFileTypes: true }); }
-  catch { return; }
+  try {
+    entries = readdirSync(directory, { withFileTypes: true });
+  } catch {
+    return;
+  }
   for (const entry of entries.sort((left, right) => byCodeUnit(left.name, right.name))) {
     if (entry.name === ".git" || entry.name === "node_modules") continue;
     if (entry.isDirectory() && !entry.isSymbolicLink()) visitValidatedEvidenceDirectory(resolve(directory, entry.name), depth + 1, context);

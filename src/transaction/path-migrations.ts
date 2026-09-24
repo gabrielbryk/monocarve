@@ -1,13 +1,12 @@
 /** Execute one configured path-key migration as a deterministic text filter. */
 
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 import { PATH_MIGRATION_TMP_PREFIX } from "../branding.ts";
 import type { MigratePathKeysOperation, PathMove } from "../plan/manifest.ts";
 import { scrubbedGitEnv } from "../util/git.ts";
 import { stableStringify } from "../util/hash.ts";
+import { ensureScratchDir } from "../util/scratch-root.ts";
 
 const OUTPUT_TAIL = 4000;
 
@@ -32,7 +31,7 @@ export function runPathMigrationCommand(
   timeoutMs: number,
 ): string {
   const request: PathMigrationInput = { artifact: operation.path, contents, moves: operation.moves };
-  const commandRoot = mkdtempSync(join(tmpdir(), PATH_MIGRATION_TMP_PREFIX));
+  const commandRoot = mkdtempSync(ensureScratchDir(PATH_MIGRATION_TMP_PREFIX));
   let result: ReturnType<typeof Bun.spawnSync>;
   try {
     result = Bun.spawnSync(["sh", "-c", operation.command], {
@@ -51,10 +50,7 @@ export function runPathMigrationCommand(
   if (exitCode !== 0) {
     const signal = result.signalCode ? `killed by ${result.signalCode} after ${timeoutMs}ms\n` : "";
     const output = `${signal}${result.stderr?.toString() ?? ""}`.trimEnd().slice(-OUTPUT_TAIL);
-    throw new Error(
-      `path migration ${operation.path} failed (exit ${exitCode}): ${operation.command}` +
-        (output === "" ? "" : `\n${output}`),
-    );
+    throw new Error(`path migration ${operation.path} failed (exit ${exitCode}): ${operation.command}` + (output === "" ? "" : `\n${output}`));
   }
   if (result.stdout === undefined) throw new Error(`path migration ${operation.path} produced no captured stdout`);
   return decodeUtf8(result.stdout, `path migration output for ${operation.path}`);

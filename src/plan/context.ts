@@ -19,26 +19,15 @@ import { dirname, extname, resolve } from "node:path";
 
 import ts from "typescript";
 
-import {
-  isTestPath,
-  testKindOf,
-  type TestKind,
-  movableRoots,
-  ownerFor,
-  packageNameOf,
-  type MonocarveConfig,
-} from "../config.ts";
 import { inventoryModuleReferences, type ModuleReference } from "../codemod/imports.ts";
-import {
-  evaluationEffectKinds as topLevelEffectKinds,
-  type EvaluationEffectKind,
-} from "../codemod/side-effects.ts";
+import { evaluationEffectKinds as topLevelEffectKinds, type EvaluationEffectKind } from "../codemod/side-effects.ts";
+import { isTestPath, testKindOf, type TestKind, movableRoots, ownerFor, packageNameOf, type MonocarveConfig } from "../config.ts";
 import { MonocarveError } from "../errors.ts";
-import { fileState, isFile, isSourceModulePath, sourceFiles } from "../util/files.ts";
-import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
-import type { FileState } from "../util/hash.ts";
 import { importKinds, type ImportKind } from "../graph/syntax.ts";
-import { packageEntrypoint, readManifest, type PackageManifest } from "../graph/workspace.ts";
+import { packageEntrypoint, readManifest, workspaceInventory, type PackageManifest } from "../graph/workspace.ts";
+import { fileState, isFile, isSourceModulePath, sourceFiles } from "../util/files.ts";
+import type { FileState } from "../util/hash.ts";
+import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
 
 export class PlanningError extends MonocarveError {
   override readonly name = "PlanningError";
@@ -93,6 +82,7 @@ export class WorkspaceContext {
   private readonly manifestCache = new Map<string, PackageManifest>();
   private readonly installedManifestCache = new Map<string, PackageManifest | undefined>();
   private readonly installedCache = new Map<string, boolean>();
+  private workspacePackageRootsCache: Readonly<Record<string, string>> | undefined;
   private sourceListCache: string[] | undefined;
   private consumerIndexCache: Map<string, string[]> | undefined;
 
@@ -103,12 +93,7 @@ export class WorkspaceContext {
     readonly config: MonocarveConfig,
     readonly rootDir: string,
   ) {
-    this.resolutionSuffixes = [
-      "",
-      ".d.ts",
-      ...config.sourceExtensions,
-      ...config.assetExtensions,
-    ];
+    this.resolutionSuffixes = ["", ".d.ts", ...config.sourceExtensions, ...config.assetExtensions];
   }
 
   absolute(path: string): string {
@@ -131,6 +116,13 @@ export class WorkspaceContext {
     return fileState(this.absolute(path));
   }
 
+  /** Configured workspace package names, including packages with no source files. */
+  workspacePackageRoots(): Readonly<Record<string, string>> {
+    if (this.workspacePackageRootsCache !== undefined) return this.workspacePackageRootsCache;
+    this.workspacePackageRootsCache = Object.fromEntries(workspaceInventory(this.config, this.rootDir).packageNames);
+    return this.workspacePackageRootsCache;
+  }
+
   /* ---------------------------------------------------------------------- */
   /* AST-level facts                                                        */
   /* ---------------------------------------------------------------------- */
@@ -140,7 +132,13 @@ export class WorkspaceContext {
     if (!cached) {
       const absolute = this.absolute(path);
       cached = inventoryModuleReferences(
-        readFileSync(absolute, "utf8"), absolute, true, this.rootDir, this.config.moduleSpecifierCalls, this.config.assetExtensions, this.config.cssImportExtensions,
+        readFileSync(absolute, "utf8"),
+        absolute,
+        true,
+        this.rootDir,
+        this.config.moduleSpecifierCalls,
+        this.config.assetExtensions,
+        this.config.cssImportExtensions,
       );
       this.referenceCache.set(path, cached);
     }
@@ -184,13 +182,7 @@ export class WorkspaceContext {
     if (this.parsedSourceCache.has(path)) return this.parsedSourceCache.get(path);
     const absolute = this.absolute(path);
     const parsed = existsSync(absolute)
-      ? ts.createSourceFile(
-          path,
-          readFileSync(absolute, "utf8"),
-          ts.ScriptTarget.Latest,
-          true,
-          path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-        )
+      ? ts.createSourceFile(path, readFileSync(absolute, "utf8"), ts.ScriptTarget.Latest, true, path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS)
       : undefined;
     this.parsedSourceCache.set(path, parsed);
     return parsed;
@@ -268,11 +260,7 @@ export class WorkspaceContext {
     const parsed = this.parsedSource(file);
 
     const visit = (node: ts.Node): void => {
-      if (
-        ts.isImportDeclaration(node) &&
-        ts.isStringLiteral(node.moduleSpecifier) &&
-        node.moduleSpecifier.text === specifier
-      ) {
+      if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === specifier) {
         const clause = node.importClause;
         if (clause?.name) surface.names.add("default");
         if (clause?.namedBindings && ts.isNamespaceImport(clause.namedBindings)) surface.star = true;
@@ -280,12 +268,7 @@ export class WorkspaceContext {
           for (const element of clause.namedBindings.elements) surface.names.add((element.propertyName ?? element.name).text);
         }
       }
-      if (
-        ts.isExportDeclaration(node) &&
-        node.moduleSpecifier &&
-        ts.isStringLiteral(node.moduleSpecifier) &&
-        node.moduleSpecifier.text === specifier
-      ) {
+      if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === specifier) {
         if (!node.exportClause) surface.star = true;
         else if (ts.isNamedExports(node.exportClause)) {
           for (const element of node.exportClause.elements) surface.names.add((element.propertyName ?? element.name).text);

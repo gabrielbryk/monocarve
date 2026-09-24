@@ -20,23 +20,9 @@ export interface ReconciliationRecordPayload {
   readonly createdAt: string;
   readonly generator: ExtractionManifest["generator"];
   readonly provenance?: PlanProvenance;
-  readonly plan: {
-    readonly planId: string;
-    readonly path: string;
-    readonly digest: Sha256;
-    readonly baselineCommit: string;
-    readonly approvalCommit: string;
-  };
-  readonly application: {
-    readonly moveCommit?: string;
-    readonly wiringCommit?: string;
-    readonly resultingCommit: string;
-  };
-  readonly observed: {
-    readonly headCommit: string;
-    readonly auditDigest: Sha256;
-    readonly audit: AuditReport;
-  };
+  readonly plan: { readonly planId: string; readonly path: string; readonly digest: Sha256; readonly baselineCommit: string; readonly approvalCommit: string };
+  readonly application: { readonly moveCommit?: string; readonly wiringCommit?: string; readonly resultingCommit: string };
+  readonly observed: { readonly headCommit: string; readonly auditDigest: Sha256; readonly audit: AuditReport };
   readonly discrepancies: readonly ReconciledDiscrepancy[];
   readonly reason: string;
   readonly approval: { readonly subject: string; readonly body?: string };
@@ -53,17 +39,8 @@ export interface AppliedPlanReceiptPayload {
   readonly provenance?: PlanProvenance;
   readonly plan: ReconciliationRecord["plan"];
   readonly application: ReconciliationRecord["application"];
-  readonly audit: {
-    readonly observedCommit: string;
-    readonly report: AuditReport;
-    readonly digest: Sha256;
-  };
-  readonly reconciliation?: {
-    readonly path: string;
-    readonly digest: Sha256;
-    readonly recordId: Sha256;
-    readonly approvalCommit: string;
-  };
+  readonly audit: { readonly observedCommit: string; readonly report: AuditReport; readonly digest: Sha256 };
+  readonly reconciliation?: { readonly path: string; readonly digest: Sha256; readonly recordId: Sha256; readonly approvalCommit: string };
 }
 
 export interface AppliedPlanReceipt extends AppliedPlanReceiptPayload {

@@ -78,10 +78,7 @@ function workspaceWithColliding(): string {
   rmSync(join(root, ".monocarve"), { recursive: true, force: true });
 
   const chart = readFileSync(join(root, CHART), "utf8");
-  writeFileSync(
-    join(root, CHART),
-    `${chart}\n${ADDED_EXPORTS.map((name, index) => `export const ${name} = ${index};`).join("\n")}\n`,
-  );
+  writeFileSync(join(root, CHART), `${chart}\n${ADDED_EXPORTS.map((name, index) => `export const ${name} = ${index};`).join("\n")}\n`);
 
   // Every consumer reaches the closure, so every one of them lands in
   // `manifest.consumers` and the array is long enough for order to matter.
@@ -91,9 +88,7 @@ function workspaceWithColliding(): string {
   }
 
   const configPath = join(root, "monocarve.config.json");
-  const config = JSON.parse(readFileSync(configPath, "utf8")) as {
-    generatedArtifacts: { artifacts: { path: string }[] };
-  };
+  const config = JSON.parse(readFileSync(configPath, "utf8")) as { generatedArtifacts: { artifacts: { path: string }[] } };
   config.generatedArtifacts.artifacts = ARTIFACTS.map((path) => ({
     path,
     source: "apps/web/src",
@@ -150,14 +145,7 @@ describe("manifest array order", () => {
       .sort((left, right) => left.files.length - right.files.length)[0];
     expect(candidate).toBeDefined();
 
-    const manifest = buildPlanSync({
-      config,
-      rootDir: root,
-      graph,
-      candidate: candidate!,
-      baselineCommit: graph.commit!,
-      packageName: "@acme/chart",
-    });
+    const manifest = buildPlanSync({ config, rootDir: root, graph, candidate: candidate!, baselineCommit: graph.commit!, packageName: "@acme/chart" });
 
     // `dedupeExports`. `Alpha` before `_internal` before `a_b` before `ab`
     // before `alpha` is code-unit order; a collator puts `_internal` first and

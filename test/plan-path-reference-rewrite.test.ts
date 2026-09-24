@@ -16,9 +16,9 @@ import { join } from "node:path";
 
 import { pathReferenceRewriteOperations } from "../src/plan/build-support.ts";
 import { WorkspaceContext } from "../src/plan/context.ts";
-import { buildPathReferenceIndex } from "../src/plan/path-references.ts";
 import type { ExtractionManifest, PlanOperation, RewritePathReferenceOperation } from "../src/plan/manifest.ts";
 import { manifestPaths } from "../src/plan/manifest.ts";
+import { buildPathReferenceIndex } from "../src/plan/path-references.ts";
 import { formatPlanReview, summarizePlanReview } from "../src/plan/review.ts";
 import { validatePlan } from "../src/plan/validate.ts";
 import { hashText } from "../src/util/hash.ts";
@@ -39,10 +39,7 @@ function files() {
 
 function enabledConfig(root: string) {
   return fixtureConfig(root, {
-    pathReferenceRewrites: {
-      enabled: true,
-      roots: [{ root: "docs", extensions: [".md"], mode: "exact-path-token" }],
-    },
+    pathReferenceRewrites: { enabled: true, roots: [{ root: "docs", extensions: [".md"], mode: "exact-path-token" }] },
     gates: { package: [], project: [], workspace: [] },
   });
 }
@@ -105,12 +102,10 @@ describe("plan-level rewrite-path-reference", () => {
     const operations = pathReferenceRewriteOperations(config, new WorkspaceContext(config, root), [move]);
 
     expect(operations).toHaveLength(1);
-    expect(operations[0]!.rewrites).toEqual([{
-      from: "governance/repository.ts", to: target, donor, line: 1, column: 20, referenceBase: "app/backend/src",
-    }]);
-    expect(buildPathReferenceIndex(new WorkspaceContext(config, root)).referencesTo([donor])).toEqual([expect.objectContaining({
-      file: rule, target: donor, text: "governance/repository.ts",
-    })]);
+    expect(operations[0]!.rewrites).toEqual([{ from: "governance/repository.ts", to: target, donor, line: 1, column: 20, referenceBase: "app/backend/src" }]);
+    expect(buildPathReferenceIndex(new WorkspaceContext(config, root)).referencesTo([donor])).toEqual([
+      expect.objectContaining({ file: rule, target: donor, text: "governance/repository.ts" }),
+    ]);
     const issues = validatePlan(manifest(root, [move, operations[0]!]), { config, rootDir: root }).issues;
     expect(issues.filter((issue) => issue.rule.startsWith("path-reference"))).toEqual([]);
   });
@@ -127,17 +122,25 @@ describe("plan-level rewrite-path-reference", () => {
     });
     const config = fixtureConfig(root, {
       pathReferences: { textRoots: [{ root: "app/cloudflare-stack/tests", extensions: [".ts"] }] },
-      pathReferenceRewrites: { enabled: true, roots: [{ root: "app/cloudflare-stack/tests", extensions: [".ts"], mode: "exact-path-token", referenceBase: "app/cloudflare-stack" }] },
+      pathReferenceRewrites: {
+        enabled: true,
+        roots: [{ root: "app/cloudflare-stack/tests", extensions: [".ts"], mode: "exact-path-token", referenceBase: "app/cloudflare-stack" }],
+      },
       gates: { package: [], project: [], workspace: [] },
     });
     const move: PlanOperation = { kind: "move", source: donor, target, preconditionHash: hashText(read(root, donor)), resultHash: hashText(read(root, donor)) };
     const operations = pathReferenceRewriteOperations(config, new WorkspaceContext(config, root), [move]);
 
-    expect(operations[0]?.rewrites).toEqual([{
-      from: "../backend/src/ingest/territory-zips/route-handlers.ts",
-      to: "../../libs/ingest-runtime/src/ingest/territory-zips/route-handlers.ts",
-      donor, line: 1, column: 16, referenceBase: "app/cloudflare-stack",
-    }]);
+    expect(operations[0]?.rewrites).toEqual([
+      {
+        from: "../backend/src/ingest/territory-zips/route-handlers.ts",
+        to: "../../libs/ingest-runtime/src/ingest/territory-zips/route-handlers.ts",
+        donor,
+        line: 1,
+        column: 16,
+        referenceBase: "app/cloudflare-stack",
+      },
+    ]);
     expect(buildPathReferenceIndex(new WorkspaceContext(config, root)).referencesTo([donor])).toEqual([expect.objectContaining({ file: doc, target: donor })]);
   });
 
@@ -155,7 +158,10 @@ describe("plan-level rewrite-path-reference", () => {
     symlinkSync(external, join(root, "app/cloudflare-stack/linked"), "dir");
     const config = fixtureConfig(root, {
       pathReferences: { textRoots: [{ root: "app/cloudflare-stack/tests", extensions: [".ts"] }] },
-      pathReferenceRewrites: { enabled: true, roots: [{ root: "app/cloudflare-stack/tests", extensions: [".ts"], mode: "exact-path-token", referenceBase: "app/cloudflare-stack" }] },
+      pathReferenceRewrites: {
+        enabled: true,
+        roots: [{ root: "app/cloudflare-stack/tests", extensions: [".ts"], mode: "exact-path-token", referenceBase: "app/cloudflare-stack" }],
+      },
       gates: { package: [], project: [], workspace: [] },
     });
     const hash = hashText(read(root, donor));
@@ -223,13 +229,16 @@ describe("plan-level rewrite-path-reference", () => {
     const move = moveOperation(root);
     const good = pathReferenceRewriteOperations(config, context, [move])[0]!;
 
-    const secondMove: PlanOperation = { kind: "move", source: "apps/api/src/other.ts", target: "libs/values/src/other.ts", preconditionHash: "missing", resultHash: hashText("x") };
+    const secondMove: PlanOperation = {
+      kind: "move",
+      source: "apps/api/src/other.ts",
+      target: "libs/values/src/other.ts",
+      preconditionHash: "missing",
+      resultHash: hashText("x"),
+    };
     const withSecondRewrite: RewritePathReferenceOperation = {
       ...good,
-      rewrites: [
-        { from: "apps/api/src/other.ts", to: "libs/values/src/other.ts", donor: "apps/api/src/other.ts", line: 2, column: 1 },
-        ...good.rewrites,
-      ],
+      rewrites: [{ from: "apps/api/src/other.ts", to: "libs/values/src/other.ts", donor: "apps/api/src/other.ts", line: 2, column: 1 }, ...good.rewrites],
     };
 
     const unsorted = manifest(root, [move, secondMove, withSecondRewrite]);
@@ -279,10 +288,7 @@ describe("plan-level rewrite-path-reference", () => {
       [markdownDoc]: `See \`${SOURCE}\` for the implementation.\n`,
     });
     const config = fixtureConfig(root, {
-      pathReferenceRewrites: {
-        enabled: true,
-        roots: [{ root: "docs", extensions: [".markdown"], mode: "exact-path-token" }],
-      },
+      pathReferenceRewrites: { enabled: true, roots: [{ root: "docs", extensions: [".markdown"], mode: "exact-path-token" }] },
       gates: { package: [], project: [], workspace: [] },
     });
     const context = new WorkspaceContext(config, root);
@@ -297,10 +303,7 @@ describe("plan-level rewrite-path-reference", () => {
     expect(operation.documentKind).toBe("markdown");
 
     // Validate against the manifest
-    const testManifest = {
-      ...manifest(root, [move, operation]),
-      changedFiles: [SOURCE, TARGET, markdownDoc].sort(),
-    };
+    const testManifest = { ...manifest(root, [move, operation]), changedFiles: [SOURCE, TARGET, markdownDoc].sort() };
     const result = validatePlan(testManifest, { config, rootDir: root });
     expect(result.issues.filter((issue) => issue.rule === "path-reference-kind")).toHaveLength(0);
   });

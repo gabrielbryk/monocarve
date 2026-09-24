@@ -14,11 +14,12 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 
-import { scrubbedGitEnv } from "../../src/util/git.ts";
+import { CONFIG_BASENAME, SCRATCH_ROOT_ENV, TOOL_NAME } from "../../src/branding.ts";
 import { parseConfig, type MonocarveConfig, type MonocarveUserConfig } from "../../src/config.ts";
-import { CONFIG_BASENAME } from "../../src/branding.ts";
+import { scrubbedGitEnv } from "../../src/util/git.ts";
+import { checkoutSuffix } from "../../src/util/scratch-root.ts";
 
 export function fixtureGit(root: string, ...args: string[]): string {
   // `cwd` is still set for commands and hooks that need the fixture's files,
@@ -111,9 +112,7 @@ function fixtureConfigArgs(args: readonly string[], commandIndex: number): strin
   if (externalScope !== undefined) {
     throw new Error(`fixture git config may not use ${externalScope}; fixture config is local only`);
   }
-  return args.includes("--local")
-    ? [...args]
-    : [...args.slice(0, commandIndex + 1), "--local", ...args.slice(commandIndex + 1)];
+  return args.includes("--local") ? [...args] : [...args.slice(0, commandIndex + 1), "--local", ...args.slice(commandIndex + 1)];
 }
 
 /** Reject options that would override the helper's pinned repository. */
@@ -124,10 +123,7 @@ function assertFixtureCommandArgs(args: readonly string[]): number {
   if (selector !== undefined) {
     throw new Error(`fixture git may not use repository or config selector ${selector}`);
   }
-  if (
-    args[commandIndex] === "init" &&
-    args.slice(commandIndex + 1).some((arg) => arg === "--separate-git-dir" || arg.startsWith("--separate-git-dir="))
-  ) {
+  if (args[commandIndex] === "init" && args.slice(commandIndex + 1).some((arg) => arg === "--separate-git-dir" || arg.startsWith("--separate-git-dir="))) {
     throw new Error("fixture git init may not use --separate-git-dir");
   }
   return commandIndex;
@@ -207,7 +203,7 @@ function register(path: string): string {
 
 /** A committed git repository containing `files`. Registered for cleanup. */
 export function fixtureRepo(files: Record<string, string>, branch = "extraction-fixture"): string {
-  const root = register(realpathSync(mkdtempSync(join(tmpdir(), "monocarve-fixture-"))));
+  const root = register(realpathSync(mkdtempSync(join(testScratchRoot(), "monocarve-fixture-"))));
   fixtureGit(root, "init", "-q", "-b", branch);
   fixtureGit(root, "config", "user.email", "fixture@example.invalid");
   fixtureGit(root, "config", "user.name", "Monocarve Fixture");
@@ -230,22 +226,57 @@ export function cleanupFixtures(): void {
 }
 
 /** A temporary directory outside every repository, for simulation worktrees. */
+
+/**
+ * Test fixtures stay on `os.tmpdir()`, deliberately, where the product's own
+ * disposable state does not.
+ *
+ * The product moved to a cache directory because a simulation worktree is a
+ * checkout that outlives its run when interrupted, and tmpfs charges that
+ * against RAM and inodes. A fixture repository is the opposite on both counts:
+ * it is torn down by `cleanupFixtures` in an `afterEach`, and the suite creates
+ * hundreds of them serially, so the git operations against it are firmly on the
+ * critical path.
+ *
+ * This function is READ-ONLY about the environment, and that matters more than
+ * it looks. `transaction.worktreeRoot` participates in `configDigest`
+ * (`hashJson(config)`), and its default is resolved per parse. Mutating
+ * `MONOCARVE_SCRATCH_ROOT` from in here would therefore change the effective
+ * config partway through a process: a plan compiled before the mutation and
+ * validated after it — or validated by a spawned CLI that inherited a different
+ * value — disagree on the digest, and the plan is rejected as forged. The
+ * `test` script in package.json does not set the variable at all (the product's
+ * own default is exercised, which is the point), so absent an operator setting
+ * it explicitly, every test process and any CLI it spawns simply agree by not
+ * having one.
+ *
+ * The no-override fallback is still checkout-suffixed, via {@link
+ * checkoutSuffix}, for the same reason the product's own default is: bare
+ * `os.tmpdir()` is shared by every checkout on the host, and two suites
+ * running concurrently from different checkouts would otherwise land fixture
+ * repositories in the same directory — this is exactly the failure mode that
+ * motivated this change (a symlink-escape error from a fixture path another
+ * checkout owned).
+ */
+function testScratchRoot(): string {
+  const override = process.env[SCRATCH_ROOT_ENV]?.trim();
+  if (override && isAbsolute(override)) {
+    mkdirSync(override, { recursive: true });
+    return override;
+  }
+  const fallback = join(tmpdir(), TOOL_NAME, checkoutSuffix());
+  mkdirSync(fallback, { recursive: true });
+  return fallback;
+}
+
 export function scratchDirectory(): string {
-  return register(realpathSync(mkdtempSync(join(tmpdir(), "monocarve-scratch-"))));
+  return register(realpathSync(mkdtempSync(join(testScratchRoot(), "monocarve-scratch-"))));
 }
 
 /** Validated config for a fixture repository, written into it as JSON. */
 export function fixtureConfig(root: string, overrides: Partial<MonocarveUserConfig> = {}): MonocarveConfig {
   const base: MonocarveUserConfig = {
-    applications: [
-      {
-        name: "api",
-        sourceRoot: "apps/api/src",
-        tsconfig: "apps/api/tsconfig.json",
-        packageName: "@acme/api",
-        compositionRoots: [],
-      },
-    ],
+    applications: [{ name: "api", sourceRoot: "apps/api/src", tsconfig: "apps/api/tsconfig.json", packageName: "@acme/api", compositionRoots: [] }],
     packageRoots: ["libs"],
     packageScope: "@acme/",
     packageManager: "pnpm",

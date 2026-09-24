@@ -96,9 +96,7 @@ export function verifyLockfile(options: VerifyLockfileOptions): LockfileVerifica
     // Not a skip. The operator asked whether the splice matches what the
     // package manager writes; without the package manager there is no answer,
     // and reporting a pass here would be reporting one the run never obtained.
-    throw new LockfileVerificationError(
-      `lockfile verification needs ${binary} on PATH, and it is not there: ${printable}`,
-    );
+    throw new LockfileVerificationError(`lockfile verification needs ${binary} on PATH, and it is not there: ${printable}`);
   }
 
   const path = resolve(options.workspacePath, options.lockfileName);
@@ -118,9 +116,7 @@ export function verifyLockfile(options: VerifyLockfileOptions): LockfileVerifica
     const exitCode = result.exitCode ?? 1;
     if (exitCode !== 0) {
       const tail = result.stderr.toString().trimEnd().slice(-COMMAND_ERROR_TAIL);
-      throw new LockfileVerificationError(
-        `lockfile verification command failed (exit ${exitCode}): ${printable}${tail === "" ? "" : `\n${tail}`}`,
-      );
+      throw new LockfileVerificationError(`lockfile verification command failed (exit ${exitCode}): ${printable}${tail === "" ? "" : `\n${tail}`}`);
     }
     regenerated = readFileSync(path, "utf8");
   } finally {
@@ -133,16 +129,9 @@ export function verifyLockfile(options: VerifyLockfileOptions): LockfileVerifica
   // Against the *planned* bytes, not the regenerated ones: the plan's lockfile
   // is what the apply lands and what CI will install, and regenerating can
   // repair an incompleteness the plan still carries.
-  const incomplete = (options.completeness?.(planned) ?? []).map(
-    (finding) => `${options.lockfileName}: ${finding}`,
-  );
+  const incomplete = (options.completeness?.(planned) ?? []).map((finding) => `${options.lockfileName}: ${finding}`);
   const differences = [...incomplete, ...lockfileDifference(planned, regenerated, options.lockfileName)];
-  return {
-    ok: differences.length === 0,
-    lockfile: options.lockfileName,
-    command: printable,
-    ...(differences.length === 0 ? {} : { differences }),
-  };
+  return { ok: differences.length === 0, lockfile: options.lockfileName, command: printable, ...(differences.length === 0 ? {} : { differences }) };
 }
 
 /**
@@ -161,11 +150,7 @@ export function lockfileDifference(planned: string, regenerated: string, lockfil
   let start = 0;
   while (start < left.length && start < right.length && left[start] === right[start]) start += 1;
   let end = 0;
-  while (
-    end < left.length - start &&
-    end < right.length - start &&
-    left[left.length - 1 - end] === right[right.length - 1 - end]
-  ) {
+  while (end < left.length - start && end < right.length - start && left[left.length - 1 - end] === right[right.length - 1 - end]) {
     end += 1;
   }
 
@@ -180,9 +165,7 @@ export function lockfileDifference(planned: string, regenerated: string, lockfil
 
 function excerpt(lines: readonly string[], marker: string): string[] {
   const shown = lines.slice(0, MAX_DIFF_LINES).map((line) => `${marker}${truncate(line)}`);
-  return lines.length > MAX_DIFF_LINES
-    ? [...shown, `${marker} … ${lines.length - MAX_DIFF_LINES} more line(s)`]
-    : shown;
+  return lines.length > MAX_DIFF_LINES ? [...shown, `${marker} … ${lines.length - MAX_DIFF_LINES} more line(s)`] : shown;
 }
 
 function truncate(line: string): string {

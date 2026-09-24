@@ -113,12 +113,14 @@ compositionBoundaries: [
     id: "clock-port",
     retained: "apps/storefront/src/clock.ts",
     strategy: "port",
-    contract: "Clock", contractModule: "clock",
+    contract: "Clock",
+    contractModule: "clock",
     appAdapter: "apps/storefront/src/clock-adapter.ts",
     packageImport: "@acme/scheduling/clock",
-    symbols: ["Clock"], template: "clock-adapter",
+    symbols: ["Clock"],
+    template: "clock-adapter",
   },
-]
+];
 ```
 
 Each entry names one `retained` app module and a `strategy`:
@@ -139,15 +141,17 @@ Each entry names one `retained` app module and a `strategy`:
 ### `portPromotions` (backend vocabulary)
 
 ```ts
-portPromotions: [{
-  id: "clock-port",
-  retainedRoots: ["apps/scheduler/src"],
-  contractPackage: "@acme/scheduling",
-  contractModule: "clock",
-  appConcreteType: "apps/scheduler/src/clock.ts#Clock",
-  libraryPort: "Clock",
-  targetPackage: "@acme/scheduling-contracts",
-}]
+portPromotions: [
+  {
+    id: "clock-port",
+    retainedRoots: ["apps/scheduler/src"],
+    contractPackage: "@acme/scheduling",
+    contractModule: "clock",
+    appConcreteType: "apps/scheduler/src/clock.ts#Clock",
+    libraryPort: "Clock",
+    targetPackage: "@acme/scheduling-contracts",
+  },
+];
 ```
 
 `portPromotions` describes the same "port" mechanism from a library's point of
@@ -167,18 +171,17 @@ When one port declaration depends on another declaration in the same donor,
 declare the complete atomic group instead of relying on implicit widening:
 
 ```ts
-portPromotions: [{
-  id: "object-storage-port",
-  retainedRoots: ["apps/scheduler/src/storage"],
-  contractPackage: "@acme/storage-contracts",
-  contractModule: "object-storage",
-  appConcreteTypes: [
-    "apps/scheduler/src/storage/object-storage.ts#DownloadedObject",
-    "apps/scheduler/src/storage/object-storage.ts#ObjectStorage",
-  ],
-  libraryPorts: ["DownloadedObject", "ObjectStorage"],
-  targetPackage: "@acme/storage-contracts",
-}]
+portPromotions: [
+  {
+    id: "object-storage-port",
+    retainedRoots: ["apps/scheduler/src/storage"],
+    contractPackage: "@acme/storage-contracts",
+    contractModule: "object-storage",
+    appConcreteTypes: ["apps/scheduler/src/storage/object-storage.ts#DownloadedObject", "apps/scheduler/src/storage/object-storage.ts#ObjectStorage"],
+    libraryPorts: ["DownloadedObject", "ObjectStorage"],
+    targetPackage: "@acme/storage-contracts",
+  },
+];
 ```
 
 `appConcreteTypes`/`libraryPorts` is mutually exclusive with the legacy
@@ -213,13 +216,15 @@ and manifest validation.
 ### Module promotion (architectural boundary cuts)
 
 ```ts
-modulePromotions: [{
-  id: "resource-contracts",
-  source: "apps/api/src/resources/schemas.ts",
-  targetPackage: "@acme/resource-contracts",
-  targetModule: "index",
-  retireSource: true,
-}]
+modulePromotions: [
+  {
+    id: "resource-contracts",
+    source: "apps/api/src/resources/schemas.ts",
+    targetPackage: "@acme/resource-contracts",
+    targetModule: "index",
+    retireSource: true,
+  },
+];
 ```
 
 A module promotion is an explicit exception to ordinary SCC-closure selection.
@@ -253,17 +258,15 @@ R100, then restores and commits the compatibility file with the other wiring.
 ### Adopting orphaned generated source
 
 ```ts
-generatedSourceAdoptions: [{
-  id: "durable-contracts",
-  // Optional: required when every artifact is outside configured applications.
-  policyAnchor: "apps/api/src/adoption-policy.ts",
-  artifacts: [{
-    path: "apps/api/src/resources/schemas.ts",
-    missingSource: "spec/resources.schema.json",
-    removeHeaderLines: 3,
-  }],
-  retireGenerator: "apps/api/scripts/generate-contracts.ts",
-}]
+generatedSourceAdoptions: [
+  {
+    id: "durable-contracts",
+    // Optional: required when every artifact is outside configured applications.
+    policyAnchor: "apps/api/src/adoption-policy.ts",
+    artifacts: [{ path: "apps/api/src/resources/schemas.ts", missingSource: "spec/resources.schema.json", removeHeaderLines: 3 }],
+    retireGenerator: "apps/api/scripts/generate-contracts.ts",
+  },
+];
 ```
 
 This preparation is deliberately explicit. Compilation verifies the artifact's
@@ -410,13 +413,15 @@ after the rewrites are applied. Declare both in configuration when a prepared
 artifact depends on the rewritten paths:
 
 ```ts
-postJournalPreparers: [{
-  id: "quality-ratchet",
-  phase: "after-journal-before-gates",
-  command: "node tools/promote-ratchet.mjs {targetPath}",
-  outputs: ["quality/baselines/{targetPath}.json"],
-  triggers: ["docs/"],              // matches rewritten doc paths
-}]
+postJournalPreparers: [
+  {
+    id: "quality-ratchet",
+    phase: "after-journal-before-gates",
+    command: "node tools/promote-ratchet.mjs {targetPath}",
+    outputs: ["quality/baselines/{targetPath}.json"],
+    triggers: ["docs/"], // matches rewritten doc paths
+  },
+];
 ```
 
 `pathReferenceRewrites` is distinct from both `rewrite-fs-reference` and
@@ -441,13 +446,15 @@ need stronger semantics than an ordinary path token. Declare the exact registry,
 JSON-pointer pattern, and resolver root; `*` selects array or object entries:
 
 ```ts
-runtimeModuleRegistries: [{
-  file: "apps/api/config/route-registry.json",
-  pointer: "/domains/*/module",
-  resolveFrom: "apps/api/src",
-  // The consumer calls value.slice(2) before resolving it.
-  stripPrefix: "./",
-}]
+runtimeModuleRegistries: [
+  {
+    file: "apps/api/config/route-registry.json",
+    pointer: "/domains/*/module",
+    resolveFrom: "apps/api/src",
+    // The consumer calls value.slice(2) before resolving it.
+    stripPrefix: "./",
+  },
+];
 ```
 
 Only string values selected by that pointer are eligible. The plan records the
@@ -464,18 +471,17 @@ declaration with the existing post-journal generator lifecycle. Its trigger is
 the registry path, not the moved module path:
 
 ```ts
-postJournalPreparers: [{
-  id: "route-stubs",
-  phase: "after-journal-before-gates",
-  command: "bun apps/api/scripts/route-stubs.ts",
-  outputs: ["apps/api/src/routes.ts"],
-  triggers: ["^apps/api/config/route-registry\\.json$"],
-  verify: "bun apps/api/scripts/route-stubs.ts --check",
-  emittedModuleSpecifiers: [{
-    source: "apps/api/scripts/route-stubs.ts",
-    resolutionBase: "apps/api/src/routes.ts",
-  }],
-}]
+postJournalPreparers: [
+  {
+    id: "route-stubs",
+    phase: "after-journal-before-gates",
+    command: "bun apps/api/scripts/route-stubs.ts",
+    outputs: ["apps/api/src/routes.ts"],
+    triggers: ["^apps/api/config/route-registry\\.json$"],
+    verify: "bun apps/api/scripts/route-stubs.ts --check",
+    emittedModuleSpecifiers: [{ source: "apps/api/scripts/route-stubs.ts", resolutionBase: "apps/api/src/routes.ts" }],
+  },
+];
 ```
 
 `emittedModuleSpecifiers` covers generator/template source that contains a
@@ -741,3 +747,31 @@ When in doubt, stop after a refusal or failed simulation, inspect `git status`
 and the reported plan/worktree, correct the cause, and repeat the safe loop from
 plan review. Do not run internal transaction flags or manually stage a partial
 journal as a recovery shortcut.
+
+## Where disposable state lives
+
+Simulation worktrees, the external-consumer proof fixture, the preparer
+bootstrap index and path-migration command directories all have to live outside
+the repository: `apply` refuses to run against a dirty tree, so scratch state
+inside the checkout would block the very command it exists to support.
+
+The parent directory is resolved per run, first hit wins:
+
+1. `MONOCARVE_SCRATCH_ROOT`, when set to an absolute path.
+2. `$XDG_CACHE_HOME/monocarve`.
+3. `~/.cache/monocarve`.
+4. `$TMPDIR/monocarve`, only when the home directory cannot be determined.
+
+`transaction.worktreeRoot` still overrides all of this for worktrees
+specifically, and remains the right knob when simulations need a particular
+filesystem — a larger disk, or one with different `noexec`/quota behaviour.
+
+A cache directory rather than `/tmp` is deliberate. On most Linux hosts `/tmp`
+is tmpfs: RAM-backed, cleared on reboot, and budgeted in inodes as much as in
+bytes. A simulation worktree is a full checkout plus a mirrored `node_modules`,
+which is thousands of inodes apiece — enough that a host can exhaust `/tmp`
+while `df` still reports it half empty, and enough that an interrupted run's
+evidence would vanish at the next reboot.
+
+Interrupted runs leave worktrees behind, since no `finally` survives `SIGKILL`.
+Reclaim them with `monocarve prune-worktrees`.

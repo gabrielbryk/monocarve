@@ -3,18 +3,11 @@ import { dirname, resolve } from "node:path";
 
 import ts from "typescript";
 
+import { sourceFiles } from "../util/files.ts";
 import { byCodeUnit, hashJson } from "../util/hash.ts";
 import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
-import { sourceFiles } from "../util/files.ts";
 import { analyzeProgramSource, referenceSpace, SymbolAnalysisError } from "./analyze.ts";
-import type {
-  AnalyzeWorkspaceSymbolsInput,
-  ExternalSymbolConsumer,
-  SymbolGraph,
-  SymbolSpace,
-  SymbolSplitCandidate,
-  WorkspaceSymbolAnalysis,
-} from "./types.ts";
+import type { AnalyzeWorkspaceSymbolsInput, ExternalSymbolConsumer, SymbolGraph, SymbolSpace, SymbolSplitCandidate, WorkspaceSymbolAnalysis } from "./types.ts";
 
 interface MutableConsumer {
   readonly groupId: string;
@@ -47,12 +40,17 @@ export class WorkspaceProgramError extends SymbolAnalysisError {
   readonly completenessDiagnostics: readonly ProgramCompletenessDiagnostic[];
 
   constructor(message: string, diagnostics: readonly ProgramCompletenessDiagnostic[]) {
-    super(message, diagnostics.map((entry) => ({
-      phase: entry.phase === "syntactic" ? "syntactic" as const : "semantic" as const,
-      code: entry.code, category: entry.category, message: entry.message,
-      ...(entry.start === undefined ? {} : { start: entry.start }),
-      ...(entry.length === undefined ? {} : { length: entry.length }),
-    })));
+    super(
+      message,
+      diagnostics.map((entry) => ({
+        phase: entry.phase === "syntactic" ? ("syntactic" as const) : ("semantic" as const),
+        code: entry.code,
+        category: entry.category,
+        message: entry.message,
+        ...(entry.start === undefined ? {} : { start: entry.start }),
+        ...(entry.length === undefined ? {} : { length: entry.length }),
+      })),
+    );
     this.completenessDiagnostics = diagnostics;
   }
 }
@@ -72,9 +70,7 @@ export function analyzeWorkspaceSymbolsWithProgram(
   const targetAbsolute = workspacePath(rootDir, sourcePath);
   const sourceText = workspace.program.getSourceFile(targetAbsolute)?.text ?? readFileSync(targetAbsolute, "utf8");
   const program = workspace.program;
-  const target = program.getSourceFile(targetAbsolute) ?? program.getSourceFiles().find(
-    (file) => normalize(file.fileName) === normalize(targetAbsolute),
-  );
+  const target = program.getSourceFile(targetAbsolute) ?? program.getSourceFiles().find((file) => normalize(file.fileName) === normalize(targetAbsolute));
   if (!target) throw new SymbolAnalysisError(`${sourcePath} is not included by ${workspace.tsconfigPath}`, []);
 
   const checker = program.getTypeChecker();
@@ -88,26 +84,24 @@ export function analyzeWorkspaceSymbolsWithProgram(
   });
   const groupByName = new Map(source.groups.map((group) => [group.name, group]));
   const consumers = collectConsumers(program, checker, targetAbsolute, rootDir, groupByName, input.affinityForPath);
-  const records: ExternalSymbolConsumer[] = [...consumers.values()].map((entry) => ({
-    groupId: entry.groupId,
-    groupName: entry.groupName,
-    consumerPath: entry.consumerPath,
-    affinity: entry.affinity,
-    space: mergeSpaces([...entry.spaces]),
-    referenceCount: entry.referenceCount,
-  })).sort((left, right) =>
-    byCodeUnit(left.groupName, right.groupName) ||
-    byCodeUnit(left.affinity, right.affinity) ||
-    byCodeUnit(left.consumerPath, right.consumerPath) ||
-    byCodeUnit(left.groupId, right.groupId),
-  );
+  const records: ExternalSymbolConsumer[] = [...consumers.values()]
+    .map((entry) => ({
+      groupId: entry.groupId,
+      groupName: entry.groupName,
+      consumerPath: entry.consumerPath,
+      affinity: entry.affinity,
+      space: mergeSpaces([...entry.spaces]),
+      referenceCount: entry.referenceCount,
+    }))
+    .sort(
+      (left, right) =>
+        byCodeUnit(left.groupName, right.groupName) ||
+        byCodeUnit(left.affinity, right.affinity) ||
+        byCodeUnit(left.consumerPath, right.consumerPath) ||
+        byCodeUnit(left.groupId, right.groupId),
+    );
 
-  return {
-    schemaVersion: 1,
-    source,
-    consumers: records,
-    splitCandidates: splitCandidates(source, records),
-  };
+  return { schemaVersion: 1, source, consumers: records, splitCandidates: splitCandidates(source, records) };
 }
 
 function collectConsumers(
@@ -135,7 +129,15 @@ function collectConsumers(
   return consumers;
 }
 
-function recordConsumer(node: ts.Identifier, checker: ts.TypeChecker, targetAbsolute: string, consumerPath: string, affinity: string, groupByName: ReadonlyMap<string, SymbolGraph["groups"][number]>, consumers: Map<string, MutableConsumer>): void {
+function recordConsumer(
+  node: ts.Identifier,
+  checker: ts.TypeChecker,
+  targetAbsolute: string,
+  consumerPath: string,
+  affinity: string,
+  groupByName: ReadonlyMap<string, SymbolGraph["groups"][number]>,
+  consumers: Map<string, MutableConsumer>,
+): void {
   let symbol = checker.getSymbolAtLocation(node);
   if (symbol && (symbol.flags & ts.SymbolFlags.Alias) !== 0) symbol = checker.getAliasedSymbol(symbol);
   const declaration = symbol?.declarations?.find((entry) => normalize(entry.getSourceFile().fileName) === normalize(targetAbsolute));
@@ -144,8 +146,12 @@ function recordConsumer(node: ts.Identifier, checker: ts.TypeChecker, targetAbso
   if (!group) return;
   const key = `${group.id}\0${consumerPath}\0${affinity}`;
   const current = consumers.get(key) ?? {
-    groupId: group.id, groupName: group.name, consumerPath, affinity,
-    spaces: new Set<"type" | "value">(), referenceCount: 0,
+    groupId: group.id,
+    groupName: group.name,
+    consumerPath,
+    affinity,
+    spaces: new Set<"type" | "value">(),
+    referenceCount: 0,
   };
   current.spaces.add(referenceSpace(node));
   current.referenceCount += 1;
@@ -157,14 +163,20 @@ export function workspaceProgram(rootDir: string, tsconfigPath: string): ts.Prog
   return createWorkspaceSymbolProgram(rootDir, tsconfigPath).program;
 }
 
-export function createWorkspaceSymbolProgram(rootDir: string, tsconfigPath: string, additionalRoots: readonly string[] = [], readInput: (path: string) => string | undefined = (path) => ts.sys.readFile(path)): WorkspaceSymbolProgram {
+export function createWorkspaceSymbolProgram(
+  rootDir: string,
+  tsconfigPath: string,
+  additionalRoots: readonly string[] = [],
+  readInput: (path: string) => string | undefined = (path) => ts.sys.readFile(path),
+): WorkspaceSymbolProgram {
   const configPath = workspacePath(rootDir, relativeWorkspacePath(rootDir, tsconfigPath));
   const system = { ...ts.sys, readFile: readInput };
   const read = ts.readConfigFile(configPath, readInput);
   if (!read.error && typeof read.config === "object" && read.config !== null) {
     // `extends` files are loaded by parseJsonConfigFileContent through the supplied system.
   }
-  if (read.error) throw new WorkspaceProgramError(`cannot read TypeScript config ${tsconfigPath}`, [completenessDiagnostic(rootDir, read.error, "configuration")]);
+  if (read.error)
+    throw new WorkspaceProgramError(`cannot read TypeScript config ${tsconfigPath}`, [completenessDiagnostic(rootDir, read.error, "configuration")]);
   const parsed = ts.parseJsonConfigFileContent(read.config, system, dirname(configPath), undefined, configPath);
   const configDiagnostics = parsed.errors.map((entry) => completenessDiagnostic(rootDir, entry, "configuration"));
   const fatal = parsed.errors.filter((entry) => entry.category === ts.DiagnosticCategory.Error);
@@ -177,10 +189,18 @@ export function createWorkspaceSymbolProgram(rootDir: string, tsconfigPath: stri
   host.readFile = readInput;
   host.getSourceFile = (fileName, languageVersion, onError) => {
     const text = readInput(fileName);
-    if (text === undefined) { onError?.(`File not found: ${fileName}`); return undefined; }
+    if (text === undefined) {
+      onError?.(`File not found: ${fileName}`);
+      return undefined;
+    }
     return ts.createSourceFile(fileName, text, languageVersion);
   };
-  const program = ts.createProgram({ rootNames, options: parsed.options, host, ...(parsed.projectReferences === undefined ? {} : { projectReferences: parsed.projectReferences }) });
+  const program = ts.createProgram({
+    rootNames,
+    options: parsed.options,
+    host,
+    ...(parsed.projectReferences === undefined ? {} : { projectReferences: parsed.projectReferences }),
+  });
   const diagnostics: ProgramCompletenessDiagnostic[] = [
     ...configDiagnostics,
     ...program.getConfigFileParsingDiagnostics().map((entry) => completenessDiagnostic(rootDir, entry, "configuration")),
@@ -196,45 +216,48 @@ function completenessDiagnostic(rootDir: string, entry: ts.Diagnostic, phase: Pr
   const categories = ["warning", "error", "suggestion", "message"] as const;
   const fileName = entry.file?.fileName;
   return {
-    phase, code: entry.code, category: categories[entry.category] ?? "message",
+    phase,
+    code: entry.code,
+    category: categories[entry.category] ?? "message",
     message: ts.flattenDiagnosticMessageText(entry.messageText, "\n"),
     ...(fileName === undefined ? {} : { path: inside(rootDir, fileName) ? relativeWorkspacePath(rootDir, fileName) : normalize(fileName) }),
-    ...(entry.start === undefined ? {} : { start: entry.start }), ...(entry.length === undefined ? {} : { length: entry.length }),
+    ...(entry.start === undefined ? {} : { start: entry.start }),
+    ...(entry.length === undefined ? {} : { length: entry.length }),
   };
 }
 
 function splitCandidates(graph: SymbolGraph, consumers: readonly ExternalSymbolConsumer[]): SymbolSplitCandidate[] {
   const groupById = new Map(graph.groups.map((group) => [group.id, group]));
-  return graph.components.map((component): SymbolSplitCandidate => {
-    const groups = component.groupIds.map((id) => groupById.get(id)!).filter(Boolean);
-    const groupSet = new Set(component.groupIds);
-    const relevant = consumers.filter((consumer) => groupSet.has(consumer.groupId));
-    const affinityCounts: Record<string, number> = {};
-    for (const consumer of relevant) affinityCounts[consumer.affinity] = (affinityCounts[consumer.affinity] ?? 0) + consumer.referenceCount;
-    const sortedAffinities = Object.entries(affinityCounts).sort(
-      ([leftName, left], [rightName, right]) => right - left || byCodeUnit(leftName, rightName),
-    );
-    const total = sortedAffinities.reduce((sum, [, count]) => sum + count, 0);
-    const dominantAffinity = sortedAffinities[0]?.[0];
-    const concentration = total === 0 ? 0 : (sortedAffinities[0]?.[1] ?? 0) / total;
-    const incoming = graph.edges.filter((edge) => !groupSet.has(edge.source) && groupSet.has(edge.target)).length;
-    const outgoing = graph.edges.filter((edge) => groupSet.has(edge.source) && !groupSet.has(edge.target)).length;
-    const names = groups.map((group) => group.name).sort(byCodeUnit);
-    return {
-      id: hashJson({ sourceHash: graph.sourceHash, component: component.id, consumers: relevant }),
-      groupIds: [...component.groupIds],
-      names,
-      space: mergeSpaces(groups.map((group) => group.space)),
-      exported: groups.some((group) => group.exported),
-      consumers: relevant,
-      affinities: Object.fromEntries(sortedAffinities.sort(([left], [right]) => byCodeUnit(left, right))),
-      ...(dominantAffinity === undefined ? {} : { dominantAffinity }),
-      affinityConcentration: concentration,
-      incomingBoundaryEdges: incoming,
-      outgoingBoundaryEdges: outgoing,
-      score: Math.round(concentration * 1000) + relevant.length * 10 - (incoming + outgoing),
-    };
-  }).sort((left, right) => right.score - left.score || byCodeUnit(left.id, right.id));
+  return graph.components
+    .map((component): SymbolSplitCandidate => {
+      const groups = component.groupIds.map((id) => groupById.get(id)!).filter(Boolean);
+      const groupSet = new Set(component.groupIds);
+      const relevant = consumers.filter((consumer) => groupSet.has(consumer.groupId));
+      const affinityCounts: Record<string, number> = {};
+      for (const consumer of relevant) affinityCounts[consumer.affinity] = (affinityCounts[consumer.affinity] ?? 0) + consumer.referenceCount;
+      const sortedAffinities = Object.entries(affinityCounts).sort(([leftName, left], [rightName, right]) => right - left || byCodeUnit(leftName, rightName));
+      const total = sortedAffinities.reduce((sum, [, count]) => sum + count, 0);
+      const dominantAffinity = sortedAffinities[0]?.[0];
+      const concentration = total === 0 ? 0 : (sortedAffinities[0]?.[1] ?? 0) / total;
+      const incoming = graph.edges.filter((edge) => !groupSet.has(edge.source) && groupSet.has(edge.target)).length;
+      const outgoing = graph.edges.filter((edge) => groupSet.has(edge.source) && !groupSet.has(edge.target)).length;
+      const names = groups.map((group) => group.name).sort(byCodeUnit);
+      return {
+        id: hashJson({ sourceHash: graph.sourceHash, component: component.id, consumers: relevant }),
+        groupIds: [...component.groupIds],
+        names,
+        space: mergeSpaces(groups.map((group) => group.space)),
+        exported: groups.some((group) => group.exported),
+        consumers: relevant,
+        affinities: Object.fromEntries(sortedAffinities.sort(([left], [right]) => byCodeUnit(left, right))),
+        ...(dominantAffinity === undefined ? {} : { dominantAffinity }),
+        affinityConcentration: concentration,
+        incomingBoundaryEdges: incoming,
+        outgoingBoundaryEdges: outgoing,
+        score: Math.round(concentration * 1000) + relevant.length * 10 - (incoming + outgoing),
+      };
+    })
+    .sort((left, right) => right.score - left.score || byCodeUnit(left.id, right.id));
 }
 
 function declarationName(node: ts.Declaration): string | undefined {

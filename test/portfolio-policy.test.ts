@@ -75,11 +75,7 @@ describe("portfolio protected-path policy", () => {
     const sibling = await chartCandidate(withProtectedPaths(config, ["apps/web/src/widget"]));
 
     expect(exact.rejectionReasons.find((reason) => reason.code === "protected-path")?.edges).toEqual([CHART]);
-    expect(descendant.rejectionReasons.find((reason) => reason.code === "protected-path")?.edges).toEqual([
-      CHART_ASSET,
-      CHART_TEST,
-      CHART,
-    ]);
+    expect(descendant.rejectionReasons.find((reason) => reason.code === "protected-path")?.edges).toEqual([CHART_ASSET, CHART_TEST, CHART]);
     expect(sibling.rejectionReasons.some((reason) => reason.code === "protected-path")).toBe(false);
     expect(sibling.eligible).toBe(true);
   });
@@ -89,11 +85,7 @@ describe("portfolio protected-path policy", () => {
     const chart = await chartCandidate(withProtectedPaths(config, [path]));
     const reason = chart.rejectionReasons.find((entry) => entry.code === "protected-path");
 
-    expect(reason).toEqual({
-      code: "protected-path",
-      detail: "1 movable path(s) are protected by portfolio.protectedPaths",
-      edges: [path],
-    });
+    expect(reason).toEqual({ code: "protected-path", detail: "1 movable path(s) are protected by portfolio.protectedPaths", edges: [path] });
     expect(chart.eligible).toBe(false);
   });
 });
@@ -112,9 +104,7 @@ function withPortfolioOverrides(config: MonocarveConfig, overrides: Record<strin
 
 async function rootOnlyCandidate(config: MonocarveConfig) {
   const { graph } = await fixture();
-  const candidate = buildPortfolio({ config, graph }).candidates.find(
-    (entry) => entry.files.length === 1 && entry.files[0] === "apps/web/src/types.ts",
-  );
+  const candidate = buildPortfolio({ config, graph }).candidates.find((entry) => entry.files.length === 1 && entry.files[0] === "apps/web/src/types.ts");
   if (!candidate) throw new Error("fixture no longer produces the standalone types.ts candidate");
   return candidate;
 }
@@ -153,7 +143,12 @@ describe("raw graph scan is unaffected by boundary-aware ranking config", () => 
         ...config,
         portfolio: { ...config.portfolio, retainedRoots: ["apps/web/src/widgets"], forbidTargetSuggestion: ["root"] },
         compositionBoundaries: [
-          { id: "widgets-shim", retained: "apps/web/src/widgets/chart.ts", strategy: "existing-package", replacement: { specifier: "@acme/chart", symbols: ["renderChart"] } },
+          {
+            id: "widgets-shim",
+            retained: "apps/web/src/widgets/chart.ts",
+            strategy: "existing-package",
+            replacement: { specifier: "@acme/chart", symbols: ["renderChart"] },
+          },
         ],
         portPromotions: [
           {

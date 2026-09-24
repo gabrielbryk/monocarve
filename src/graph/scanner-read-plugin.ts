@@ -7,8 +7,8 @@ export const SCANNER_READ_SYMBOL = Symbol.for(`${TOOL_NAME}.scanner-read.v1`);
 
 function linkTypeScript(source: string, path: string): string {
   const load = /const typescript = await tryImport\(\s*"typescript",\s*meta\.supportedTranspilers\.typescript,\s*\);/u;
-  const required = /\/extract\/(?:tsc\/(?:parse|extract-typescript-deps)|transpile\/typescript-wrap)\.mjs$/u.test(path)
-    || path.endsWith("/config-utl/extract-ts-config.mjs");
+  const required =
+    /\/extract\/(?:tsc\/(?:parse|extract-typescript-deps)|transpile\/typescript-wrap)\.mjs$/u.test(path) || path.endsWith("/config-utl/extract-ts-config.mjs");
   if (required && !load.test(source)) throw new Error(`dependency-cruiser TypeScript integration changed: ${path}`);
   if (load.test(source)) return source.replace(load, 'import typescript from "typescript";');
   if (!path.endsWith("/extract/transpile/meta.mjs")) return source;

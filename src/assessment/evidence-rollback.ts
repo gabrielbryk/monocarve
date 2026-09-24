@@ -2,11 +2,20 @@
 import { lstatSync, readFileSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 
-import type { EvidenceManifestBase } from "./evidence.ts";
 import { equalOwnedBytes } from "./evidence-recovery-write.ts";
+import type { EvidenceManifestBase } from "./evidence.ts";
 
-interface FileIdentity { readonly device: number; readonly inode: number; readonly mode: number }
-interface RollbackPaths { readonly target: string; readonly backup: string; readonly stage: string; readonly recovery: string }
+interface FileIdentity {
+  readonly device: number;
+  readonly inode: number;
+  readonly mode: number;
+}
+interface RollbackPaths {
+  readonly target: string;
+  readonly backup: string;
+  readonly stage: string;
+  readonly recovery: string;
+}
 interface RollbackProgress {
   readonly stageCreated: boolean;
   readonly priorPreserved: boolean;
@@ -39,7 +48,9 @@ function rollbackPublished(paths: RollbackPaths, progress: RollbackProgress, can
     operations.assertIdentity(paths.target, progress.stageIdentity, "published bundle");
     operations.removeOwnedDirectory(paths.target);
     return false;
-  } catch { return true; /* uncertain published state is recovery evidence */ }
+  } catch {
+    return true; /* uncertain published state is recovery evidence */
+  }
 }
 
 function restorePrior(paths: RollbackPaths, priorPreserved: boolean, canRestorePrior: boolean, operations: RollbackOperations): boolean {
@@ -48,12 +59,19 @@ function restorePrior(paths: RollbackPaths, priorPreserved: boolean, canRestoreP
     renameSync(paths.backup, paths.target);
     operations.syncDirectory(dirname(paths.target));
     return false;
-  } catch { return priorPreserved; /* ambiguous rename outcome requires operator recovery */ }
+  } catch {
+    return priorPreserved; /* ambiguous rename outcome requires operator recovery */
+  }
 }
 
 function removeStage(paths: RollbackPaths, progress: RollbackProgress, published: boolean, operations: RollbackOperations): void {
   if (!progress.stageCreated || published || progress.stageIdentity === undefined || !entryExists(paths.stage)) return;
-  try { operations.assertIdentity(paths.stage, progress.stageIdentity, "staging directory"); operations.removeOwnedDirectory(paths.stage); } catch { /* uncertain residue is recovery evidence */ }
+  try {
+    operations.assertIdentity(paths.stage, progress.stageIdentity, "staging directory");
+    operations.removeOwnedDirectory(paths.stage);
+  } catch {
+    /* uncertain residue is recovery evidence */
+  }
 }
 
 function removeRecovery(paths: RollbackPaths, progress: RollbackProgress, priorPreserved: boolean, published: boolean, operations: RollbackOperations): void {
@@ -64,7 +82,9 @@ function removeRecovery(paths: RollbackPaths, progress: RollbackProgress, priorP
     if (!progress.ownedRecoveryBytes.some((expected) => equalOwnedBytes(observed, expected))) return;
     rmSync(paths.recovery);
     operations.syncDirectory(dirname(paths.recovery));
-  } catch { /* uncertain residue is recovery evidence */ }
+  } catch {
+    /* uncertain residue is recovery evidence */
+  }
 }
 
 function sameIdentity(path: string, identity: FileIdentity): boolean {
@@ -72,14 +92,21 @@ function sameIdentity(path: string, identity: FileIdentity): boolean {
   return !stat.isSymbolicLink() && stat.dev === identity.device && stat.ino === identity.inode && stat.mode === identity.mode;
 }
 
-function intactPriorBackup(path: string, identity: FileIdentity | undefined, manifest: EvidenceManifestBase | undefined, operations: RollbackOperations): boolean {
+function intactPriorBackup(
+  path: string,
+  identity: FileIdentity | undefined,
+  manifest: EvidenceManifestBase | undefined,
+  operations: RollbackOperations,
+): boolean {
   if (!entryExists(path) || identity === undefined) return false;
   try {
     operations.assertIdentity(path, identity, "preserved prior bundle");
     if (manifest === undefined) return readdirSync(path).length === 0;
     operations.validateBundle(path, manifest);
     return true;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 function entryExists(path: string): boolean {

@@ -2,9 +2,15 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-import { analyzeCapabilityPartitions, analyzeWorkspaceSymbols, createWorkspaceSymbolProgram, SymbolAnalysisError, WorkspaceProgramError } from "../src/symbols/index.ts";
-import { loadConfig } from "../src/config.ts";
 import { captureAssessmentSnapshot } from "../src/assessment/snapshot.ts";
+import { loadConfig } from "../src/config.ts";
+import {
+  analyzeCapabilityPartitions,
+  analyzeWorkspaceSymbols,
+  createWorkspaceSymbolProgram,
+  SymbolAnalysisError,
+  WorkspaceProgramError,
+} from "../src/symbols/index.ts";
 import { stableStringify } from "../src/util/hash.ts";
 import { cleanupFixtures, fixtureGit, scratchDirectory } from "./support/fixture-repo.ts";
 
@@ -17,14 +23,18 @@ function write(root: string, path: string, text: string): void {
 function workspace(): string {
   const root = join(scratchDirectory(), "workspace-symbols");
   write(root, "tsconfig.json", JSON.stringify({ compilerOptions: { strict: true, moduleResolution: "bundler", module: "esnext" }, include: ["src/**/*.ts"] }));
-  write(root, "src/hub.ts", `
+  write(
+    root,
+    "src/hub.ts",
+    `
 export interface Invoice { total: number }
 export interface Customer { name: string }
 export function price(invoice: Invoice): number { return invoice.total }
 export function greet(customer: Customer): string { return customer.name }
 function alpha(): number { return beta() }
 function beta(): number { return alpha() }
-`);
+`,
+  );
   write(root, "src/billing/use.ts", 'import { price, type Invoice } from "../hub"; export const total = (invoice: Invoice) => price(invoice);\n');
   write(root, "src/crm/use.ts", 'import { greet, type Customer } from "../hub"; export const hello = (customer: Customer) => greet(customer);\n');
   return root;
@@ -34,12 +44,13 @@ afterAll(cleanupFixtures);
 
 test("maps external type/value consumers to deterministic affinity-ranked declaration SCCs", () => {
   const root = workspace();
-  const analyze = () => analyzeWorkspaceSymbols({
-    rootDir: root,
-    tsconfigPath: "tsconfig.json",
-    sourcePath: "src/hub.ts",
-    affinityForPath: (path) => path.includes("/billing/") ? "billing" : path.includes("/crm/") ? "crm" : "shared",
-  });
+  const analyze = () =>
+    analyzeWorkspaceSymbols({
+      rootDir: root,
+      tsconfigPath: "tsconfig.json",
+      sourcePath: "src/hub.ts",
+      affinityForPath: (path) => (path.includes("/billing/") ? "billing" : path.includes("/crm/") ? "crm" : "shared"),
+    });
   const first = analyze();
   const second = analyze();
   expect(stableStringify(first)).toBe(stableStringify(second));
@@ -60,28 +71,16 @@ test("maps external type/value consumers to deterministic affinity-ranked declar
 test("reports unresolved imports from the workspace program without inventing resolution failures", () => {
   const root = workspace();
   write(root, "src/hub.ts", 'import type { Missing } from "./missing"; export interface Invoice { total: Missing }\n');
-  const analysis = analyzeWorkspaceSymbols({
-    rootDir: root,
-    tsconfigPath: "tsconfig.json",
-    sourcePath: "src/hub.ts",
-    affinityForPath: () => "shared",
-  });
-  expect(analysis.source.diagnostics).toContainEqual(expect.objectContaining({
-    phase: "semantic",
-    code: 2307,
-    category: "error",
-  }));
+  const analysis = analyzeWorkspaceSymbols({ rootDir: root, tsconfigPath: "tsconfig.json", sourcePath: "src/hub.ts", affinityForPath: () => "shared" });
+  expect(analysis.source.diagnostics).toContainEqual(expect.objectContaining({ phase: "semantic", code: 2307, category: "error" }));
 });
 
 test("refuses a target outside the configured TypeScript program", () => {
   const root = workspace();
   write(root, "outside.ts", "export const outside = 1;\n");
-  expect(() => analyzeWorkspaceSymbols({
-    rootDir: root,
-    tsconfigPath: "tsconfig.json",
-    sourcePath: "outside.ts",
-    affinityForPath: () => "shared",
-  })).toThrow(SymbolAnalysisError);
+  expect(() => analyzeWorkspaceSymbols({ rootDir: root, tsconfigPath: "tsconfig.json", sourcePath: "outside.ts", affinityForPath: () => "shared" })).toThrow(
+    SymbolAnalysisError,
+  );
 });
 
 test("inventory-backed TypeScript reads refuse transient consumer bytes and restore before verification", async () => {
@@ -92,14 +91,27 @@ test("inventory-backed TypeScript reads refuse transient consumer bytes and rest
   write(root, "apps/web/src/main.ts", "export const main = 1;\n");
   write(root, "apps/web/consumers/check.ts", 'import { main } from "../src/main.ts"; export const check = main;\n');
   write(root, "apps/web/package.json", '{"name":"@acme/web","private":true}\n');
-  write(root, "apps/web/tsconfig.json", '{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","allowImportingTsExtensions":true,"noEmit":true,"strict":true},"include":["src/**/*.ts"]}\n');
+  write(
+    root,
+    "apps/web/tsconfig.json",
+    '{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","allowImportingTsExtensions":true,"noEmit":true,"strict":true},"include":["src/**/*.ts"]}\n',
+  );
   write(root, "package.json", '{"private":true,"workspaces":[]}\n');
   write(root, "bun.lock", "{}\n");
-  write(root, "monocarve.config.json", `${JSON.stringify({
-    applications: [{ name: "web", sourceRoot: "apps/web/src", consumerRoots: ["apps/web/consumers"], tsconfig: "apps/web/tsconfig.json" }],
-    packageRoots: ["packages"], packageManager: "bun",
-    scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\\n' } },
-  }, null, 2)}\n`);
+  write(
+    root,
+    "monocarve.config.json",
+    `${JSON.stringify(
+      {
+        applications: [{ name: "web", sourceRoot: "apps/web/src", consumerRoots: ["apps/web/consumers"], tsconfig: "apps/web/tsconfig.json" }],
+        packageRoots: ["packages"],
+        packageManager: "bun",
+        scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\\n' } },
+      },
+      null,
+      2,
+    )}\n`,
+  );
   fixtureGit(root, "init", "-q", "-b", "assessment-fixture");
   fixtureGit(root, "config", "user.email", "fixture@example.invalid");
   fixtureGit(root, "config", "user.name", "Fixture");
@@ -118,13 +130,16 @@ test("inventory-backed TypeScript reads refuse transient consumer bytes and rest
       if (resolve(path) !== resolve(consumer)) return snapshot.readTypeScriptInput(path);
       consumerRead = true;
       writeFileSync(consumer, `${original}export const transient = true;\n`);
-      try { return snapshot.readTypeScriptInput(path); }
-      finally {
+      try {
+        return snapshot.readTypeScriptInput(path);
+      } finally {
         writeFileSync(consumer, original);
         restoredBeforeVerification = readFileSync(consumer, "utf8") === original;
       }
     });
-  } catch (error) { caught = error; }
+  } catch (error) {
+    caught = error;
+  }
   expect(consumerRead).toBeTrue();
   expect(restoredBeforeVerification).toBeTrue();
   expect(caught).toMatchObject({ qualification: { diagnostics: [expect.objectContaining({ code: "ASSESSMENT_INPUT_DRIFT" })] } });
@@ -142,7 +157,7 @@ test("partitions broad context properties by real consumer affinity", () => {
     tsconfigPath: "tsconfig.json",
     sourcePath: "src/context.ts",
     interfaceName: "Runtime",
-    affinityForPath: (path) => path.includes("/billing/") ? "billing" : path.includes("/crm/") ? "crm" : "shared",
+    affinityForPath: (path) => (path.includes("/billing/") ? "billing" : path.includes("/crm/") ? "crm" : "shared"),
   });
   expect(report.partitions).toEqual([
     { affinities: ["billing"], properties: ["billing"], declarations: ["bill"] },
@@ -157,14 +172,16 @@ test("orders equal-affinity keys by UTF-16 code unit and exposes config parse fa
   write(root, "src/billing/tie-user.ts", 'import { tie } from "../tie"; export const billing = tie();\n');
   write(root, "src/crm/tie-user.ts", 'import { tie } from "../tie"; export const crm = tie();\n');
   const analysis = analyzeWorkspaceSymbols({
-    rootDir: root, tsconfigPath: "tsconfig.json", sourcePath: "src/tie.ts",
-    affinityForPath: (path) => path.includes("/billing/") ? "Z" : path.includes("/crm/") ? "a" : "shared",
+    rootDir: root,
+    tsconfigPath: "tsconfig.json",
+    sourcePath: "src/tie.ts",
+    affinityForPath: (path) => (path.includes("/billing/") ? "Z" : path.includes("/crm/") ? "a" : "shared"),
   });
   const candidate = analysis.splitCandidates.find((entry) => entry.names.includes("tie"));
   expect(candidate).toBeDefined();
   expect(Object.keys(candidate?.affinities ?? {})).toEqual(["Z", "a"]);
 
-  writeFileSync(join(root, "tsconfig.json"), "{ \"compilerOptions\": { \"module\": \"esnext\",\n");
+  writeFileSync(join(root, "tsconfig.json"), '{ "compilerOptions": { "module": "esnext",\n');
   expect(() => createWorkspaceSymbolProgram(root, "tsconfig.json")).toThrow(WorkspaceProgramError);
   try {
     createWorkspaceSymbolProgram(root, "tsconfig.json");

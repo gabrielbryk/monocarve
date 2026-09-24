@@ -2,11 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import {
-  assertEnumerableGlobs,
-  globsCoverPackage,
-  resolveWorkspacePackages,
-} from "../src/adapters/workspace-globs.ts";
+import { assertEnumerableGlobs, globsCoverPackage, resolveWorkspacePackages } from "../src/adapters/workspace-globs.ts";
 import { cleanupFixtures, fixtureRepo } from "./support/fixture-repo.ts";
 
 afterEach(cleanupFixtures);
@@ -23,10 +19,7 @@ test("nested segment globs enumerate zero, one, and multiple packages determinis
   mkdirSync(join(root, "apps/no-manifest/ui"), { recursive: true });
 
   expect(resolveWorkspacePackages(root, ["missing/*/ui"])).toEqual({ packages: [], unmatched: ["missing/*/ui"] });
-  expect(resolveWorkspacePackages(root, ["apps/alpha/ui"])).toEqual({
-    packages: [{ name: "@acme/alpha-ui", dir: "apps/alpha/ui" }],
-    unmatched: [],
-  });
+  expect(resolveWorkspacePackages(root, ["apps/alpha/ui"])).toEqual({ packages: [{ name: "@acme/alpha-ui", dir: "apps/alpha/ui" }], unmatched: [] });
   expect(resolveWorkspacePackages(root, ["apps/*/ui"])).toEqual({
     packages: [
       { name: "@acme/alpha-ui", dir: "apps/alpha/ui" },
@@ -41,9 +34,7 @@ test("overlapping declarations deduplicate roots and supported negations exclude
   packageAt(root, "apps/alpha/ui", "@acme/alpha-ui");
   packageAt(root, "apps/beta/ui", "@acme/beta-ui");
 
-  expect(resolveWorkspacePackages(root, ["apps/*/ui", "apps/alpha/ui", "!apps/beta/ui"]).packages).toEqual([
-    { name: "@acme/alpha-ui", dir: "apps/alpha/ui" },
-  ]);
+  expect(resolveWorkspacePackages(root, ["apps/*/ui", "apps/alpha/ui", "!apps/beta/ui"]).packages).toEqual([{ name: "@acme/alpha-ui", dir: "apps/alpha/ui" }]);
   expect(globsCoverPackage(["apps/*/ui", "!apps/beta/ui"], "apps/alpha/ui")).toBeTrue();
   expect(globsCoverPackage(["apps/*/ui", "!apps/beta/ui"], "apps/beta/ui")).toBeFalse();
   expect(globsCoverPackage(["apps/*/ui"], "apps/alpha/other")).toBeFalse();

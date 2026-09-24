@@ -12,6 +12,15 @@ audit proofs.
 
 ### Added
 
+- `prune-worktrees` command, reclaiming simulation worktrees left behind by
+  interrupted runs. A run disposes its own worktree on success and on failure
+  alike, but no `finally` survives `SIGKILL` or a closed terminal, so leftovers
+  accumulate in `transaction.worktreeRoot`. Defaults to `--older-than 1h`
+  because that root is shared with any concurrently running simulation;
+  `--all` ignores age. The underlying `pruneWorktrees` had existed unexported
+  from any command since it was written.
+- `MONOCARVE_SCRATCH_ROOT`, overriding where every disposable directory is
+  created.
 - bun package-manager adapter. `packageManager: "bun"` now resolves to a real
   adapter instead of the `not yet ported` seam: workspace membership is read
   from and written to the root `package.json` `workspaces` array, and the
@@ -23,6 +32,29 @@ audit proofs.
 
 ### Changed
 
+- **Breaking:** `configDigest` no longer covers `transaction.worktreeRoot`.
+  That field is a machine-local scratch path, and including it made a plan's
+  identity depend on the filesystem of the machine that compiled it: two hosts
+  with different `TMPDIR` computed different digests for the same plan, and a
+  plan compiled before a scratch root changed was rejected as forged
+  afterwards. Manifests recorded before this change no longer validate and must
+  be recompiled. Every other configuration field, including the rest of the
+  transaction block, still participates.
+- Simulation worktrees and the other disposable directories default to a cache
+  root rather than `os.tmpdir()` (see `MONOCARVE_SCRATCH_ROOT` under Added).
+
+- Disposable state — simulation worktrees, the external-consumer proof fixture,
+  the preparer bootstrap index and path-migration command directories — now
+  defaults to `$XDG_CACHE_HOME/monocarve` or `~/.cache/monocarve` instead of
+  `os.tmpdir()`. On most Linux hosts `/tmp` is tmpfs, where a worktree-sized
+  tree is charged against RAM and against an inode budget that is exhausted
+  long before the byte budget, and where an interrupted run's evidence is lost
+  at the next reboot. `transaction.worktreeRoot` still overrides this for
+  worktrees, and `os.tmpdir()` remains the fallback when no home directory can
+  be determined.
+- `node_modules` mirroring for the `symlink` strategy is bounded to the
+  configured package-container subtrees (`packageContainerRoots`) instead of
+  walking the whole repository, while remaining unbounded in depth within them.
 - `RenderImporterInput` carries optional `packageName` and `packageVersion`, for
   lockfiles that record a package's identity as well as its dependencies.
 - `PackageManagerAdapter` gained `blockDeclaresImporter`, replacing a hardcoded

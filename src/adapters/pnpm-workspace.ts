@@ -3,8 +3,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { AdapterEditResult, WorkspaceInspection, WorkspacePackage } from "./types.ts";
 import { LockfileError } from "./pnpm-error.ts";
+import type { AdapterEditResult, WorkspaceInspection, WorkspacePackage } from "./types.ts";
 import { assertEnumerableGlobs, globsCoverPackage, resolveWorkspacePackages } from "./workspace-globs.ts";
 
 export async function listPackages(rootDir: string, manifestName: string): Promise<WorkspacePackage[]> {

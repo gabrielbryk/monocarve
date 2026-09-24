@@ -16,8 +16,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { buildDependencyGraph, type ScanReport } from "../src/graph/build.ts";
 import { buildPlanSync } from "../src/plan/build.ts";
 import { refreshExtractionPlan } from "../src/plan/refresh.ts";
-import { validatePlan } from "../src/plan/validate.ts";
 import { normalizeTargetSubpath, packageModulePath } from "../src/plan/target-layout.ts";
+import { validatePlan } from "../src/plan/validate.ts";
 import { buildPortfolio } from "../src/portfolio/rank.ts";
 import type { PortfolioCandidate } from "../src/portfolio/types.ts";
 import { resolveCommit } from "../src/util/git.ts";
@@ -43,14 +43,28 @@ function workspace(extra: Record<string, string> = {}) {
     ...extra,
   });
   const config = fixtureConfig(root);
-  return { root, config, ...graphFor(root, config, Object.keys(extra).filter((path) => path.startsWith("apps/"))) };
+  return {
+    root,
+    config,
+    ...graphFor(
+      root,
+      config,
+      Object.keys(extra).filter((path) => path.startsWith("apps/")),
+    ),
+  };
 }
 
 function graphFor(root: string, config: ReturnType<typeof fixtureConfig>, extraSources: readonly string[]) {
   const modules: ScanReport["modules"] = [
     { source: DONOR, dependencies: [] },
     ...extraSources.map((source) => ({ source, dependencies: [] })),
-    { source: CONSUMER, dependencies: [{ module: "./build/detect.ts", resolved: DONOR }, ...extraSources.map((source) => ({ module: `./${source.slice("apps/api/src/".length)}`, resolved: source }))] },
+    {
+      source: CONSUMER,
+      dependencies: [
+        { module: "./build/detect.ts", resolved: DONOR },
+        ...extraSources.map((source) => ({ module: `./${source.slice("apps/api/src/".length)}`, resolved: source })),
+      ],
+    },
   ];
   const graph = buildDependencyGraph({ config, rootDir: root, reports: { api: { modules } }, commit: resolveCommit(root, "HEAD").commit });
   const candidate = buildPortfolio({ config, graph }).candidates.find((entry) => entry.files.includes(DONOR));
@@ -59,7 +73,7 @@ function graphFor(root: string, config: ReturnType<typeof fixtureConfig>, extraS
 }
 
 function moveTargets(manifest: ReturnType<typeof buildPlanSync>): string[] {
-  return manifest.operations.flatMap((operation) => operation.kind === "move" || operation.kind === "move-with-rewrite" ? [operation.target] : []);
+  return manifest.operations.flatMap((operation) => (operation.kind === "move" || operation.kind === "move-with-rewrite" ? [operation.target] : []));
 }
 
 describe("target subpath — path derivation", () => {
@@ -93,9 +107,7 @@ describe("target subpath — compiled plans", () => {
 
   test("with it, the donor lands directly in the requested directory and the barrel agrees", () => {
     const { root, config, graph, candidate } = workspace();
-    const manifest = buildPlanSync({
-      config, rootDir: root, graph, candidate, baselineCommit: "HEAD", packageName: PACKAGE, targetSubpath: "./src/",
-    });
+    const manifest = buildPlanSync({ config, rootDir: root, graph, candidate, baselineCommit: "HEAD", packageName: PACKAGE, targetSubpath: "./src/" });
 
     expect(moveTargets(manifest)).toEqual([`${PACKAGE_ROOT}/src/detect.ts`]);
     // Normalized once, recorded once: the reviewed manifest carries the exact
@@ -111,9 +123,9 @@ describe("target subpath — compiled plans", () => {
 
   test("it applies only to an existing package", () => {
     const { root, config, graph, candidate } = workspace();
-    expect(() => buildPlanSync({
-      config, rootDir: root, graph, candidate, baselineCommit: "HEAD", packageName: "@acme/fresh", targetSubpath: "src",
-    })).toThrow("applies only when extending an existing package");
+    expect(() => buildPlanSync({ config, rootDir: root, graph, candidate, baselineCommit: "HEAD", packageName: "@acme/fresh", targetSubpath: "src" })).toThrow(
+      "applies only when extending an existing package",
+    );
   }, 60_000);
 
   test("two selected files whose basenames collide are refused, not silently merged", () => {
@@ -121,16 +133,14 @@ describe("target subpath — compiled plans", () => {
     const { root, config, graph, candidate } = workspace({ [second]: "export const other = 2;\n" });
     const both = { ...candidate, files: [DONOR, second].sort() };
 
-    expect(() => buildPlanSync({
-      config, rootDir: root, graph, candidate: both, baselineCommit: "HEAD", packageName: PACKAGE, targetSubpath: "src",
-    })).toThrow("would land on the same target path");
+    expect(() => buildPlanSync({ config, rootDir: root, graph, candidate: both, baselineCommit: "HEAD", packageName: PACKAGE, targetSubpath: "src" })).toThrow(
+      "would land on the same target path",
+    );
   }, 60_000);
 
   test("a refresh keeps the reviewed subpath instead of relocating the extraction", () => {
     const { root, config, graph, candidate } = workspace();
-    const manifest = buildPlanSync({
-      config, rootDir: root, graph, candidate, baselineCommit: "HEAD", packageName: PACKAGE, targetSubpath: "src",
-    });
+    const manifest = buildPlanSync({ config, rootDir: root, graph, candidate, baselineCommit: "HEAD", packageName: PACKAGE, targetSubpath: "src" });
 
     const refreshed = refreshExtractionPlan({ manifest, config, rootDir: root, graph, resolveCandidate: () => candidate });
 

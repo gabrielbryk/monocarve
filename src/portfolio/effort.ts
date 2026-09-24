@@ -2,7 +2,8 @@ import type { CandidateEffort, PortfolioCandidate } from "./types.ts";
 
 /** Deterministic review-effort heuristic; it is explicitly not elapsed-time prediction. */
 export function estimateCandidateEffort(candidate: Omit<PortfolioCandidate, "score" | "effort">): CandidateEffort {
-  const units = candidate.files.length +
+  const units =
+    candidate.files.length +
     candidate.tests.length +
     candidate.assets.length +
     candidate.consumerChurn * 3 +
@@ -12,9 +13,12 @@ export function estimateCandidateEffort(candidate: Omit<PortfolioCandidate, "sco
     candidate.rejectionReasons.length * 5 +
     (candidate.recommendation?.reasons.length ?? 0) * 2;
   const reviewUnits = Math.max(1, units);
-  const risk = candidate.rejectionReasons.length > 0 || candidate.recommendation?.status === "discouraged"
-    ? "high"
-    : candidate.warnings.length > 0 || candidate.recommendation?.status === "review-required" ? "medium" : "low";
+  const risk =
+    candidate.rejectionReasons.length > 0 || candidate.recommendation?.status === "discouraged"
+      ? "high"
+      : candidate.warnings.length > 0 || candidate.recommendation?.status === "review-required"
+        ? "medium"
+        : "low";
   return {
     reviewUnits,
     locPerReviewUnit: candidate.lineCount / reviewUnits,

@@ -74,11 +74,7 @@ export function normalizeTargetSubpath(value: string): string {
  * selected files that would collide there are refused by the caller's existing
  * duplicate-target check rather than silently overwriting one another.
  */
-export function packageModulePath(
-  context: TargetRelativeResolver,
-  source: string,
-  targetSubpath: string | undefined,
-): string {
+export function packageModulePath(context: TargetRelativeResolver, source: string, targetSubpath: string | undefined): string {
   if (targetSubpath === undefined) return context.targetRelativePath(source);
   const normalized = normalizeTargetSubpath(targetSubpath);
   const below = normalized === PACKAGE_SOURCE_DIR ? "" : normalized.slice(PACKAGE_SOURCE_DIR.length + 1);

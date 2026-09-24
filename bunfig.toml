@@ -5,4 +5,9 @@ root = "./test"
 # TypeScript program construction and subprocess-backed CLI proofs can cross
 # Bun's 5s default when the full suite runs concurrently. Keep hangs bounded
 # while leaving genuinely long E2E cases to their own explicit timeouts.
-timeout = 60000
+#
+# Bun 1.4.2 does not read this key: a 6s test still fails at 5000ms with it set.
+# The real setting is `--timeout` on the `test` script in package.json. This is
+# left here, documented, so the next person does not re-add it expecting it to
+# work.
+# timeout = 60000

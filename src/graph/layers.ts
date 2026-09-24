@@ -13,9 +13,9 @@ import { basename } from "node:path";
 
 import { isFirstPartyPackageOwner, isPackageOwner, type MonocarveConfig } from "../config.ts";
 import { byCodeUnit } from "../util/hash.ts";
-import { generatedProvenance } from "./workspace.ts";
 import { buildApplicationGraph, stronglyConnectedComponents, transitive, type ApplicationGraph } from "./components.ts";
 import type { DependencyGraph, ModuleEdge } from "./model.ts";
+import { generatedProvenance } from "./workspace.ts";
 
 export interface ComponentReport {
   readonly id: number;
@@ -54,17 +54,11 @@ const POLICY_NAME = /(?:helper|rule|policy|validation|normalize|format|transform
 
 function frameworkDependencies(config: MonocarveConfig, graph: DependencyGraph, component: readonly string[]): string[] {
   const declared = new Set(config.portfolio.frameworkPackages);
-  const found = [
-    ...new Set(component.flatMap((node) => [...(graph.externalBySource.get(node) ?? [])])),
-  ].filter((name) => declared.has(name));
+  const found = [...new Set(component.flatMap((node) => [...(graph.externalBySource.get(node) ?? [])]))].filter((name) => declared.has(name));
   return found.sort();
 }
 
-function archetype(
-  config: MonocarveConfig,
-  component: readonly string[],
-  framework: readonly string[],
-): Archetype {
+function archetype(config: MonocarveConfig, component: readonly string[], framework: readonly string[]): Archetype {
   const names = component.map((node) => basename(node).replace(/\.[^.]+$/, ""));
   if (names.every((name) => CONTRACT_NAME.test(name))) return "contract";
   if (component.some((node) => isCompositionRoot(config, node))) return "composition";
@@ -83,15 +77,12 @@ export function isCompositionRoot(config: MonocarveConfig, path: string): boolea
   return config.portfolio.compositionRootPatterns.some((pattern) => new RegExp(pattern).test(path));
 }
 
-function workspaceDependencies(
-  config: MonocarveConfig,
-  graph: DependencyGraph,
-  component: readonly string[],
-  edges: readonly ModuleEdge[],
-): string[] {
+function workspaceDependencies(config: MonocarveConfig, graph: DependencyGraph, component: readonly string[], edges: readonly ModuleEdge[]): string[] {
   return [
     ...new Set([
-      ...edges.map((edge) => graph.nodes.get(edge.to)?.owner ?? "").filter((owner) => owner !== "" && (isPackageOwner(config, owner) || isFirstPartyPackageOwner(config, owner))),
+      ...edges
+        .map((edge) => graph.nodes.get(edge.to)?.owner ?? "")
+        .filter((owner) => owner !== "" && (isPackageOwner(config, owner) || isFirstPartyPackageOwner(config, owner))),
       ...component.flatMap((node) => [...(graph.workspaceDependenciesBySource.get(node) ?? [])]),
     ]),
   ].sort();
@@ -113,15 +104,10 @@ function flags(
   ].filter((flag): flag is string => flag !== undefined);
 }
 
-export function componentReports(
-  config: MonocarveConfig,
-  graph: DependencyGraph,
-  application: ApplicationGraph,
-): ComponentReport[] {
+export function componentReports(config: MonocarveConfig, graph: DependencyGraph, application: ApplicationGraph): ComponentReport[] {
   const { components, outgoing, incoming, layers } = application.condensed;
   const selfEdges = new Set(graph.edges.filter((edge) => edge.from === edge.to).map((edge) => edge.from));
-  const lines = (paths: readonly string[]): number =>
-    paths.reduce((total, path) => total + (graph.nodes.get(path)?.lineCount ?? 0), 0);
+  const lines = (paths: readonly string[]): number => paths.reduce((total, path) => total + (graph.nodes.get(path)?.lineCount ?? 0), 0);
 
   return components.map((component, id) => {
     const closureNodes = [...transitive(id, outgoing)].flatMap((dependency) => components[dependency] ?? []);
@@ -152,21 +138,20 @@ export function componentReports(
       dependencies: [...(outgoing.get(id) ?? [])].sort((left, right) => left - right),
       dependents: [...(incoming.get(id) ?? [])].sort((left, right) => left - right),
       inboundNodes: [...(incoming.get(id) ?? [])].flatMap((dependency) => components[dependency] ?? []).sort(),
-      testImporterFiles: [
-        ...new Set(component.flatMap((node) => [...(graph.testImporters.get(node) ?? [])])),
-      ].sort(),
+      testImporterFiles: [...new Set(component.flatMap((node) => [...(graph.testImporters.get(node) ?? [])]))].sort(),
       transitiveClosure: closureNodes.sort(),
       transitiveClosureLines: lines(allNodes),
       domains,
       closedWithinDomain: domains.length === 1 && allNodes.every((node) => graph.nodes.get(node)?.domain === domains[0]),
       libraryDependencies: libraries,
-      externalPackages: [
-        ...new Set(component.flatMap((node) => [...(graph.externalBySource.get(node) ?? [])])),
-      ].sort(),
+      externalPackages: [...new Set(component.flatMap((node) => [...(graph.externalBySource.get(node) ?? [])]))].sort(),
       frameworkDependencies: framework,
       archetype: kind,
       generated,
-      dynamicImports: directEdges.filter((edge) => edge.dynamic).map((edge) => edge.specifier).sort(),
+      dynamicImports: directEdges
+        .filter((edge) => edge.dynamic)
+        .map((edge) => edge.specifier)
+        .sort(),
       typeOnlyEdges: directEdges.filter((edge) => edge.typeOnly).length,
       flags: flags(config, component, framework, kind, generatedSourceMissing),
     };
@@ -190,17 +175,14 @@ export interface DomainReport {
 export function domainReports(graph: DependencyGraph, application: ApplicationGraph): DomainReport[] {
   const { components, componentByNode, outgoing } = application.condensed;
   const domainOf = (path: string): string => graph.nodes.get(path)?.domain ?? "unknown";
-  const lines = (paths: readonly string[]): number =>
-    paths.reduce((total, path) => total + (graph.nodes.get(path)?.lineCount ?? 0), 0);
+  const lines = (paths: readonly string[]): number => paths.reduce((total, path) => total + (graph.nodes.get(path)?.lineCount ?? 0), 0);
 
   return [...new Set(application.nodes.map(domainOf))].sort().map((domain) => {
     const nodes = application.nodes.filter((node) => domainOf(node) === domain);
     const nodeSet = new Set(nodes);
     const closed = nodes.filter((node) => {
       const component = componentByNode.get(node)!;
-      return [component, ...transitive(component, outgoing)].every((id) =>
-        (components[id] ?? []).every((dependency) => domainOf(dependency) === domain),
-      );
+      return [component, ...transitive(component, outgoing)].every((id) => (components[id] ?? []).every((dependency) => domainOf(dependency) === domain));
     });
     const crossDomainEdges = graph.edges
       .filter((edge) => nodeSet.has(edge.from) && application.nodeSet.has(edge.to) && domainOf(edge.to) !== domain)
@@ -240,11 +222,7 @@ export interface DomainComponentReport {
 }
 
 /** Condensation of the domain graph: which whole domains are entangled with which. */
-export function domainComponentReports(
-  domains: readonly DomainReport[],
-  graph: DependencyGraph,
-  application: ApplicationGraph,
-): DomainComponentReport[] {
+export function domainComponentReports(domains: readonly DomainReport[], graph: DependencyGraph, application: ApplicationGraph): DomainComponentReport[] {
   const names = domains.map((entry) => entry.domain);
   const domainOf = (path: string): string => graph.nodes.get(path)?.domain ?? "unknown";
   const outgoing = new Map<string, string[]>(names.map((domain) => [domain, []]));
@@ -338,11 +316,7 @@ export function analyzeLayers(config: MonocarveConfig, graph: DependencyGraph, a
     },
     ownership: owners.map((owner) => {
       const paths = graph.paths.filter((path) => graph.nodes.get(path)?.owner === owner);
-      return {
-        owner,
-        files: paths.length,
-        lines: paths.reduce((total, path) => total + (graph.nodes.get(path)?.lineCount ?? 0), 0),
-      };
+      return { owner, files: paths.length, lines: paths.reduce((total, path) => total + (graph.nodes.get(path)?.lineCount ?? 0), 0) };
     }),
     unresolvedRelativeImports: graph.unresolved,
     externalPackages: [...graph.externalPackages.entries()]
@@ -350,8 +324,6 @@ export function analyzeLayers(config: MonocarveConfig, graph: DependencyGraph, a
       .sort((left, right) => right.count - left.count || byCodeUnit(left.name, right.name)),
     domains,
     domainComponents: domainComponentReports(domains, graph, applicationGraph),
-    components: components
-      .slice()
-      .sort((left, right) => left.layer - right.layer || byCodeUnit(left.nodes[0] ?? "", right.nodes[0] ?? "")),
+    components: components.slice().sort((left, right) => left.layer - right.layer || byCodeUnit(left.nodes[0] ?? "", right.nodes[0] ?? "")),
   };
 }

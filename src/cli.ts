@@ -2,20 +2,18 @@
 /** Executable boundary: parse, dispatch, and classify failures. */
 
 import { TOOL_NAME, TOOL_VERSION } from "./branding.ts";
+import { executableBuildIdentity } from "./build-identity.ts";
 import { parseArgs } from "./cli/args.ts";
+import { resetCodemodCaches } from "./codemod/imports.ts";
 import { COMMANDS, USAGE, commandHelp } from "./commands/index.ts";
 import { IoError, NotYetPortedError, MonocarveError, UsageError } from "./errors.ts";
-import { resetCodemodCaches } from "./codemod/imports.ts";
-import { executableBuildIdentity } from "./build-identity.ts";
 
 export { parseArgs, type ParsedArgs } from "./cli/args.ts";
 
 export async function main(argv: readonly string[]): Promise<number> {
   const args = parseArgs(argv);
   if (args.flags.has("version")) {
-    process.stdout.write(args.flags.has("verbose")
-      ? `${JSON.stringify(executableBuildIdentity(), null, 2)}\n`
-      : `${TOOL_NAME} ${TOOL_VERSION}\n`);
+    process.stdout.write(args.flags.has("verbose") ? `${JSON.stringify(executableBuildIdentity(), null, 2)}\n` : `${TOOL_NAME} ${TOOL_VERSION}\n`);
     return 0;
   }
   if (args.command === undefined || args.flags.has("help")) {
@@ -46,11 +44,15 @@ export async function main(argv: readonly string[]): Promise<number> {
  */
 async function runWithCompleteStdout(run: () => Promise<void>): Promise<void> {
   let failure: Error | undefined;
-  const capture = (error: Error): void => { failure ??= error; };
+  const capture = (error: Error): void => {
+    failure ??= error;
+  };
   process.stdout.on("error", capture);
   try {
     await run();
-    await new Promise<void>((resolve) => process.stdout.write("", () => resolve()));
+    await new Promise<void>((resolve) => {
+      process.stdout.write("", () => resolve());
+    });
     if (failure !== undefined) throw new IoError(`could not write stdout: ${failure.message}`);
   } finally {
     process.stdout.off("error", capture);

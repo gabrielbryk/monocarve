@@ -3,13 +3,13 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { parseConfig } from "../src/config.ts";
 import { buildDependencyGraph } from "../src/graph/build.ts";
 import { buildPlanSync } from "../src/plan/build.ts";
-import { validatePlan } from "../src/plan/validate.ts";
 import { partitionTests } from "../src/plan/consumers.ts";
 import { WorkspaceContext } from "../src/plan/context.ts";
+import { validatePlan } from "../src/plan/validate.ts";
 import { buildPortfolio } from "../src/portfolio/rank.ts";
-import { cleanupFixtures, fixtureGit, fixtureRepo, read } from "./support/fixture-repo.ts";
 import { executeJournal } from "../src/transaction/journal.ts";
 import { hashText } from "../src/util/hash.ts";
+import { cleanupFixtures, fixtureGit, fixtureRepo, read } from "./support/fixture-repo.ts";
 
 const sourceRoot = "apps/api/src";
 const config = () =>
@@ -45,7 +45,9 @@ describe("self-contained test relocation", () => {
       scaffoldTemplates: { packageJson: { contents: "{}" } },
     });
     const root = fixtureRepo({
-      "package.json": "{}\n", "apps/api/package.json": "{}\n", "apps/api/tsconfig.json": "{}\n",
+      "package.json": "{}\n",
+      "apps/api/package.json": "{}\n",
+      "apps/api/tsconfig.json": "{}\n",
       [`${sourceRoot}/unit.ts`]: "export const unit = 1;\n",
       [`${sourceRoot}/unit.unit.ts`]: 'import { unit } from "./unit.ts"; void unit;\n',
       [`${sourceRoot}/unit.integration.ts`]: 'import { unit } from "./unit.ts"; void unit;\n',
@@ -55,31 +57,44 @@ describe("self-contained test relocation", () => {
     expect(workspace.testKind(`${sourceRoot}/unit.unit.ts`)).toBe("unit");
     expect(workspace.testKind(`${sourceRoot}/unit.integration.ts`)).toBe("integration");
     expect(workspace.testKind(`${sourceRoot}/unit.e2e.ts`)).toBe("e2e");
-    expect(partitionTests(workspace, [`${sourceRoot}/unit.ts`], [`${sourceRoot}/unit.unit.ts`, `${sourceRoot}/unit.integration.ts`, `${sourceRoot}/unit.e2e.ts`], [])).toEqual({
-      travelling: [`${sourceRoot}/unit.unit.ts`],
-      retained: [`${sourceRoot}/unit.e2e.ts`, `${sourceRoot}/unit.integration.ts`],
-    });
+    expect(
+      partitionTests(
+        workspace,
+        [`${sourceRoot}/unit.ts`],
+        [`${sourceRoot}/unit.unit.ts`, `${sourceRoot}/unit.integration.ts`, `${sourceRoot}/unit.e2e.ts`],
+        [],
+      ),
+    ).toEqual({ travelling: [`${sourceRoot}/unit.unit.ts`], retained: [`${sourceRoot}/unit.e2e.ts`, `${sourceRoot}/unit.integration.ts`] });
   });
 
   test("refuses a path matching more than one configured test kind", () => {
-    expect(() => parseConfig({
-      applications: [{ name: "api", sourceRoot, tsconfig: "apps/api/tsconfig.json" }], packageRoots: ["libs"],
-      testKinds: { unit: ["test"], integration: ["test"], e2e: [] }, scaffoldTemplates: { packageJson: { contents: "{}" } },
-    })).toThrow("must not repeat a pattern across test kinds");
+    expect(() =>
+      parseConfig({
+        applications: [{ name: "api", sourceRoot, tsconfig: "apps/api/tsconfig.json" }],
+        packageRoots: ["libs"],
+        testKinds: { unit: ["test"], integration: ["test"], e2e: [] },
+        scaffoldTemplates: { packageJson: { contents: "{}" } },
+      }),
+    ).toThrow("must not repeat a pattern across test kinds");
   });
 
   test("refuses mixing legacy and typed test classifiers", () => {
-    expect(() => parseConfig({
-      applications: [{ name: "api", sourceRoot, tsconfig: "apps/api/tsconfig.json" }], packageRoots: ["libs"],
-      testPathPatterns: ["\\.test\\.ts$"], testKinds: { unit: ["\\.unit\\.ts$"], integration: [], e2e: [] },
-      scaffoldTemplates: { packageJson: { contents: "{}" } },
-    })).toThrow("cannot be combined with legacy testPathPatterns");
+    expect(() =>
+      parseConfig({
+        applications: [{ name: "api", sourceRoot, tsconfig: "apps/api/tsconfig.json" }],
+        packageRoots: ["libs"],
+        testPathPatterns: ["\\.test\\.ts$"],
+        testKinds: { unit: ["\\.unit\\.ts$"], integration: [], e2e: [] },
+        scaffoldTemplates: { packageJson: { contents: "{}" } },
+      }),
+    ).toThrow("cannot be combined with legacy testPathPatterns");
   });
   test("retains a test that reaches app code outside the production closure", () => {
     const workspace = context({
       [`${sourceRoot}/unit.ts`]: "export const unit = 1;\n",
       [`${sourceRoot}/shell.ts`]: "export const shell = 1;\n",
-      [`${sourceRoot}/unit.test.ts`]: 'import { unit } from "./unit.ts"; import { shell } from "./shell.ts"; import "undeclared-test-only"; void unit; void shell;\n',
+      [`${sourceRoot}/unit.test.ts`]:
+        'import { unit } from "./unit.ts"; import { shell } from "./shell.ts"; import "undeclared-test-only"; void unit; void shell;\n',
     });
     expect(partitionTests(workspace, [`${sourceRoot}/unit.ts`], [`${sourceRoot}/unit.test.ts`], [])).toEqual({
       travelling: [],
@@ -103,14 +118,10 @@ describe("self-contained test relocation", () => {
       [`${sourceRoot}/unit.ts`]: "export const unit = 1;\n",
       [`${sourceRoot}/shell.ts`]: "export const shell = 1;\n",
       [`${sourceRoot}/test-support.test.ts`]: 'import { unit } from "./unit.ts"; export { unit };\n',
-      [`${sourceRoot}/consumer.test.ts`]: 'import { unit } from "./unit.ts"; import { shell } from "./shell.ts"; import "./test-support.test.ts"; void unit; void shell;\n',
+      [`${sourceRoot}/consumer.test.ts`]:
+        'import { unit } from "./unit.ts"; import { shell } from "./shell.ts"; import "./test-support.test.ts"; void unit; void shell;\n',
     });
-    expect(partitionTests(
-      workspace,
-      [`${sourceRoot}/unit.ts`],
-      [`${sourceRoot}/consumer.test.ts`, `${sourceRoot}/test-support.test.ts`],
-      [],
-    )).toEqual({
+    expect(partitionTests(workspace, [`${sourceRoot}/unit.ts`], [`${sourceRoot}/consumer.test.ts`, `${sourceRoot}/test-support.test.ts`], [])).toEqual({
       travelling: [],
       retained: [`${sourceRoot}/consumer.test.ts`, `${sourceRoot}/test-support.test.ts`],
     });
@@ -192,21 +203,32 @@ describe("self-contained test relocation", () => {
       config: configured,
       rootDir: root,
       commit: fixtureGit(root, "rev-parse", "HEAD").trim(),
-      reports: { api: { modules: Object.keys(files).map((source) => ({ source, dependencies: source.endsWith("unit.test.ts") ? [
-        { module: "./unit.ts", resolved: `${sourceRoot}/unit.ts` },
-        { module: "./shell.ts", resolved: `${sourceRoot}/shell.ts` },
-      ] : [] })) } },
+      reports: {
+        api: {
+          modules: Object.keys(files).map((source) => ({
+            source,
+            dependencies: source.endsWith("unit.test.ts")
+              ? [
+                  { module: "./unit.ts", resolved: `${sourceRoot}/unit.ts` },
+                  { module: "./shell.ts", resolved: `${sourceRoot}/shell.ts` },
+                ]
+              : [],
+          })),
+        },
+      },
     });
     const candidate = buildPortfolio({ config: configured, graph }).candidates.find((entry) => entry.files.includes(`${sourceRoot}/unit.ts`));
     expect(candidate?.eligible).toBe(true);
     const manifest = buildPlanSync({ config: configured, rootDir: root, graph, candidate: candidate!, baselineCommit: graph.commit!, packageName: "unit" });
     expect(validatePlan(manifest, { config: configured, rootDir: root })).toMatchObject({ ok: true });
     expect(manifest.source.tests).toEqual([]);
-    expect(manifest.consumers).toContainEqual(expect.objectContaining({
-      file: `${sourceRoot}/unit.test.ts`,
-      dependencySection: "dev",
-      specifiers: [{ from: "./unit.ts", to: "unit/unit", donor: `${sourceRoot}/unit.ts` }],
-    }));
+    expect(manifest.consumers).toContainEqual(
+      expect.objectContaining({
+        file: `${sourceRoot}/unit.test.ts`,
+        dependencySection: "dev",
+        specifiers: [{ from: "./unit.ts", to: "unit/unit", donor: `${sourceRoot}/unit.ts` }],
+      }),
+    );
     const appManifest = manifest.operations.find((operation) => operation.kind === "write-file" && operation.path === "apps/api/package.json");
     expect(appManifest?.kind === "write-file" && appManifest.contents).toContain('"devDependencies": {\n    "unit": "workspace:*"');
     // Failure after the retained-test rewrite must restore that rewrite and the
@@ -230,10 +252,7 @@ describe("self-contained test relocation", () => {
   });
 
   test("keeps a closure-contained test travelling in the compiled manifest", () => {
-    const files = {
-      [`${sourceRoot}/unit.ts`]: "export const unit = 1;\n",
-      [`${sourceRoot}/unit.test.ts`]: 'import { unit } from "./unit.ts"; void unit;\n',
-    };
+    const files = { [`${sourceRoot}/unit.ts`]: "export const unit = 1;\n", [`${sourceRoot}/unit.test.ts`]: 'import { unit } from "./unit.ts"; void unit;\n' };
     const root = fixtureRepo({
       "package.json": '{"private":true}\n',
       "pnpm-workspace.yaml": "packages:\n  - apps/*\n  - libs/*\n",
@@ -253,20 +272,22 @@ describe("self-contained test relocation", () => {
       config: configured,
       rootDir: root,
       commit: fixtureGit(root, "rev-parse", "HEAD").trim(),
-      reports: { api: { modules: [
-        { source: `${sourceRoot}/unit.ts`, dependencies: [] },
-        { source: `${sourceRoot}/unit.test.ts`, dependencies: [{ module: "./unit.ts", resolved: `${sourceRoot}/unit.ts` }] },
-      ] } },
+      reports: {
+        api: {
+          modules: [
+            { source: `${sourceRoot}/unit.ts`, dependencies: [] },
+            { source: `${sourceRoot}/unit.test.ts`, dependencies: [{ module: "./unit.ts", resolved: `${sourceRoot}/unit.ts` }] },
+          ],
+        },
+      },
     });
     const candidate = buildPortfolio({ config: configured, graph }).candidates.find((entry) => entry.files.includes(`${sourceRoot}/unit.ts`));
     expect(candidate?.eligible).toBe(true);
     const manifest = buildPlanSync({ config: configured, rootDir: root, graph, candidate: candidate!, baselineCommit: graph.commit!, packageName: "unit" });
     expect(manifest.source.tests).toEqual([`${sourceRoot}/unit.test.ts`]);
-    expect(manifest.operations).toContainEqual(expect.objectContaining({
-      kind: "move",
-      source: `${sourceRoot}/unit.test.ts`,
-      target: "libs/unit/src/unit.test.ts",
-    }));
+    expect(manifest.operations).toContainEqual(
+      expect.objectContaining({ kind: "move", source: `${sourceRoot}/unit.test.ts`, target: "libs/unit/src/unit.test.ts" }),
+    );
     expect(manifest.consumers.some((consumer) => consumer.file === `${sourceRoot}/unit.test.ts`)).toBe(false);
     expect(validatePlan(manifest, { config: configured, rootDir: root })).toMatchObject({ ok: true });
   });
@@ -301,10 +322,7 @@ describe("self-contained test relocation", () => {
   });
 
   test("profiles change target, scaffold, gates, and manifest identity without colliding", () => {
-    const files = {
-      [`${sourceRoot}/unit.ts`]: "export const unit = 1;\n",
-      [`${sourceRoot}/unit.test.ts`]: 'import { unit } from "./unit.ts"; void unit;\n',
-    };
+    const files = { [`${sourceRoot}/unit.ts`]: "export const unit = 1;\n", [`${sourceRoot}/unit.test.ts`]: 'import { unit } from "./unit.ts"; void unit;\n' };
     const root = fixtureRepo({
       "package.json": '{"private":true}\n',
       "pnpm-workspace.yaml": "packages:\n  - apps/*\n  - libs/*\n  - test-libs/*\n  - helpers/*\n",
@@ -358,7 +376,9 @@ describe("self-contained test relocation", () => {
       projectId: "project-root",
       profile: { name: "testing", candidateName: "root" },
     });
-    expect(defaultProfile.operations).toContainEqual(expect.objectContaining({ kind: "write-file", path: "test-libs/api-root/package.json", contents: expect.stringContaining('"name": "profile"') }));
+    expect(defaultProfile.operations).toContainEqual(
+      expect.objectContaining({ kind: "write-file", path: "test-libs/api-root/package.json", contents: expect.stringContaining('"name": "profile"') }),
+    );
     expect(defaultProfile.gates.package).toEqual(["test -f test-libs/api-root/package.json"]);
     expect(defaultProfile.planId).toBe(`${candidate!.id}--testing`);
     expect(helper.planId).toBe(`${candidate!.id}--helper`);
@@ -379,9 +399,7 @@ describe("self-contained test relocation", () => {
     const forgedScaffold = {
       ...defaultProfile,
       operations: defaultProfile.operations.map((operation) =>
-        operation.kind === "write-file" && operation.generator === "scaffold:package-json"
-          ? { ...operation, contents: '{"tampered":true}\n' }
-          : operation,
+        operation.kind === "write-file" && operation.generator === "scaffold:package-json" ? { ...operation, contents: '{"tampered":true}\n' } : operation,
       ),
     };
     expect(validatePlan(forgedScaffold, { config: configured, rootDir: root })).toMatchObject({
@@ -402,8 +420,16 @@ describe("self-contained test relocation", () => {
       ok: false,
       issues: expect.arrayContaining([expect.objectContaining({ rule: "target-profile-scaffold" })]),
     });
-    expect(() => buildPlanSync({ config: configured, rootDir: root, graph, candidate: candidate!, baselineCommit: graph.commit!, profile: "helper", packageName: "@acme/nope" })).toThrow(
-      "cannot override a selected extraction profile",
-    );
+    expect(() =>
+      buildPlanSync({
+        config: configured,
+        rootDir: root,
+        graph,
+        candidate: candidate!,
+        baselineCommit: graph.commit!,
+        profile: "helper",
+        packageName: "@acme/nope",
+      }),
+    ).toThrow("cannot override a selected extraction profile");
   });
 });

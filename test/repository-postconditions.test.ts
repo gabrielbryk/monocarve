@@ -8,11 +8,18 @@ afterEach(cleanupFixtures);
 
 test("repository postconditions reject duplicate sections and unresolved workspace packages", async () => {
   const base = "lockfileVersion: '9.0'\n\nimporters:\n\n  libs/contracts: {}\n\n";
-  const block = pnpmAdapter.renderImporterBlock({ packageRoot: "libs/app", dependencies: { "@acme/contracts": "workspace:*" }, devDependencies: { "@acme/contracts": "workspace:*", "@acme/missing": "workspace:*" }, lockfileText: base, workspaceRoots: { "@acme/contracts": "libs/contracts", "@acme/missing": "libs/missing" } });
+  const block = pnpmAdapter.renderImporterBlock({
+    packageRoot: "libs/app",
+    dependencies: { "@acme/contracts": "workspace:*" },
+    devDependencies: { "@acme/contracts": "workspace:*", "@acme/missing": "workspace:*" },
+    lockfileText: base,
+    workspaceRoots: { "@acme/contracts": "libs/contracts", "@acme/missing": "libs/missing" },
+  });
   const root = fixtureRepo({
     "pnpm-workspace.yaml": "packages:\n  - 'libs/*'\n",
     "pnpm-lock.yaml": pnpmAdapter.insertImporter(base, "libs/app", `${block}\n\n`),
-    "libs/app/package.json": '{"name":"@acme/app","dependencies":{"@acme/contracts":"workspace:*"},"devDependencies":{"@acme/contracts":"workspace:*","@acme/missing":"workspace:*"}}\n',
+    "libs/app/package.json":
+      '{"name":"@acme/app","dependencies":{"@acme/contracts":"workspace:*"},"devDependencies":{"@acme/contracts":"workspace:*","@acme/missing":"workspace:*"}}\n',
     "libs/contracts/package.json": '{"name":"@acme/contracts"}\n',
   });
   const report = await auditRepositoryPostconditions({ rootDir: root, adapter: pnpmAdapter });
@@ -35,11 +42,7 @@ test("repository postconditions include the root package importer", async () => 
 
 test("repository postconditions accept a catalog dependency whose pnpm importer carries its concrete selected range", async () => {
   const root = fixtureRepo({
-    "package.json": JSON.stringify({
-      name: "@acme/root",
-      devDependencies: { "left-pad": "catalog:" },
-      workspaces: { catalog: { "left-pad": "1.3.0" } },
-    }),
+    "package.json": JSON.stringify({ name: "@acme/root", devDependencies: { "left-pad": "catalog:" }, workspaces: { catalog: { "left-pad": "1.3.0" } } }),
     "pnpm-workspace.yaml": "packages: []\n",
     "pnpm-lock.yaml": [
       "lockfileVersion: '9.0'",

@@ -29,11 +29,9 @@ export function assertEnumerableGlobs(globs: readonly string[], manager: string)
   for (const glob of globs) {
     const pattern = glob.startsWith("!") ? glob.slice(1) : glob;
     if (!supportedPattern(pattern, glob.startsWith("!"))) {
-      throw new WorkspaceDiscoveryError(
-        patternEscapes(glob) ? "unsafe-path" : "unsupported-glob",
-        `${manager} workspace glob is not yet ported: ${glob}`,
-        { patterns: [glob] },
-      );
+      throw new WorkspaceDiscoveryError(patternEscapes(glob) ? "unsafe-path" : "unsupported-glob", `${manager} workspace glob is not yet ported: ${glob}`, {
+        patterns: [glob],
+      });
     }
   }
 }
@@ -81,11 +79,9 @@ function assertUniqueNames(packages: readonly WorkspacePackage[]): void {
   for (const pkg of packages) {
     const previous = owners.get(pkg.name);
     if (previous !== undefined && previous !== pkg.dir) {
-      throw new WorkspaceDiscoveryError(
-        "duplicate-package",
-        `workspace package name ${pkg.name} is declared by both ${previous} and ${pkg.dir}`,
-        { paths: [previous, pkg.dir] },
-      );
+      throw new WorkspaceDiscoveryError("duplicate-package", `workspace package name ${pkg.name} is declared by both ${previous} and ${pkg.dir}`, {
+        paths: [previous, pkg.dir],
+      });
     }
     owners.set(pkg.name, pkg.dir);
   }

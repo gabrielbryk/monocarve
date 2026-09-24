@@ -28,17 +28,19 @@ snapshots:
 `;
 
 function operationsFor(files: Record<string, string>, runtime: Record<string, string>, dev: Record<string, string> = {}) {
-  const root = fixtureRepo({
-    "pnpm-lock.yaml": LOCKFILE,
-    "libs/target/package.json": '{"name":"@acme/target"}\n',
-    ...files,
-  });
+  const root = fixtureRepo({ "pnpm-lock.yaml": LOCKFILE, "libs/target/package.json": '{"name":"@acme/target"}\n', ...files });
   const config = fixtureConfig(root);
   return packageOperations({
-    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
-    packageManager: pnpmAdapter, taskRunner: moonAdapter,
-    packageName: "@acme/target", packageRoot: "libs/target", projectId: "target",
-    production: [], dependencies: { runtime, dev, packageReferences: [] },
+    context: new WorkspaceContext(config, root),
+    config,
+    application: config.applications[0]!,
+    packageManager: pnpmAdapter,
+    taskRunner: moonAdapter,
+    packageName: "@acme/target",
+    packageRoot: "libs/target",
+    projectId: "target",
+    production: [],
+    dependencies: { runtime, dev, packageReferences: [] },
   });
 }
 
@@ -57,8 +59,9 @@ describe("existing target package lockfile importer", () => {
   });
 
   test("refuses an existing package whose importer is absent", () => {
-    expect(() => operationsFor({ "pnpm-lock.yaml": LOCKFILE.replace("\n  libs/target: {}\n", "") }, { "runtime-lib": "^1.0.0" }))
-      .toThrow("has no importer entry for existing package libs/target");
+    expect(() => operationsFor({ "pnpm-lock.yaml": LOCKFILE.replace("\n  libs/target: {}\n", "") }, { "runtime-lib": "^1.0.0" })).toThrow(
+      "has no importer entry for existing package libs/target",
+    );
   });
 
   test("does not rewrite an unchanged importer", () => {
@@ -67,14 +70,24 @@ describe("existing target package lockfile importer", () => {
 
   test("derives the replacement importer from the merged manifest and never demotes an existing runtime dependency", () => {
     const dependency = "@acme/contracts";
-    const lockfile = LOCKFILE.replace("  libs/target: {}", `  libs/target:\n    dependencies:\n      '${dependency}':\n        specifier: workspace:*\n        version: link:../contracts`);
-    const operations = operationsFor({
-      "pnpm-lock.yaml": lockfile,
-      "libs/target/package.json": `${JSON.stringify({ name: "@acme/target", dependencies: { [dependency]: "workspace:*" } })}\n`,
-    }, { "runtime-lib": "^1.0.0" }, { [dependency]: "workspace:*" });
+    const lockfile = LOCKFILE.replace(
+      "  libs/target: {}",
+      `  libs/target:\n    dependencies:\n      '${dependency}':\n        specifier: workspace:*\n        version: link:../contracts`,
+    );
+    const operations = operationsFor(
+      {
+        "pnpm-lock.yaml": lockfile,
+        "libs/target/package.json": `${JSON.stringify({ name: "@acme/target", dependencies: { [dependency]: "workspace:*" } })}\n`,
+      },
+      { "runtime-lib": "^1.0.0" },
+      { [dependency]: "workspace:*" },
+    );
     const manifest = operations.find((operation) => operation.kind === "write-file" && operation.path === "libs/target/package.json");
     const importer = operations.find((operation) => operation.kind === "lockfile-importer" && operation.packageRoot === "libs/target");
-    const packageJson = manifest?.kind === "write-file" ? JSON.parse(manifest.contents) as { dependencies: Record<string, string>; devDependencies: Record<string, string> } : undefined;
+    const packageJson =
+      manifest?.kind === "write-file"
+        ? (JSON.parse(manifest.contents) as { dependencies: Record<string, string>; devDependencies: Record<string, string> })
+        : undefined;
 
     expect(packageJson?.dependencies[dependency]).toBe("workspace:*");
     expect(packageJson?.devDependencies[dependency]).toBeUndefined();

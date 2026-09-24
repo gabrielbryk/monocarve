@@ -1,11 +1,11 @@
 import { buildApplicationGraph, stronglyConnectedComponents, toSccs } from "../graph/components.ts";
 import type { Scc } from "../graph/model.ts";
 import type { PortfolioCandidate } from "../portfolio/types.ts";
-import { PlanningError, WorkspaceContext } from "./context.ts";
-import { partitionTests } from "./consumers.ts";
-import { buildPlanSync, type BuildPlanOptions } from "./build.ts";
-import type { ExtractionManifest } from "./manifest.ts";
 import { hashJson } from "../util/hash.ts";
+import { buildPlanSync, type BuildPlanOptions } from "./build.ts";
+import { partitionTests } from "./consumers.ts";
+import { PlanningError, WorkspaceContext } from "./context.ts";
+import type { ExtractionManifest } from "./manifest.ts";
 
 export interface CompileModulePromotionInput extends Omit<BuildPlanOptions, "candidate" | "modulePromotion" | "packageName"> {
   readonly promotionId: string;
@@ -51,19 +51,24 @@ export function compileModulePromotion(input: CompileModulePromotionInput): Extr
     .filter((edge) => edge.from === promotion.source || edge.to === promotion.source)
     .map(({ from, to }) => ({ from, to }))
     .sort((left, right) => left.from.localeCompare(right.from) || left.to.localeCompare(right.to));
-  const introducedApplicationDependencies = [...new Set((input.graph.outgoing.get(promotion.source) ?? [])
-    .filter((path) => input.graph.nodes.get(path)?.zone === "application"))].sort();
-  if (!cutsScc && containmentRemoved.length === 0) throw new PlanningError(`module promotion ${promotion.id} cuts neither a multi-module SCC nor an architectural containment edge at the baseline`);
-  if (!cutsScc && introducedApplicationDependencies.length > 0) throw new PlanningError(`module promotion ${promotion.id} would introduce a package dependency on application modules: ${introducedApplicationDependencies.join(", ")}`);
+  const introducedApplicationDependencies = [
+    ...new Set((input.graph.outgoing.get(promotion.source) ?? []).filter((path) => input.graph.nodes.get(path)?.zone === "application")),
+  ].sort();
+  if (!cutsScc && containmentRemoved.length === 0)
+    throw new PlanningError(`module promotion ${promotion.id} cuts neither a multi-module SCC nor an architectural containment edge at the baseline`);
+  if (!cutsScc && introducedApplicationDependencies.length > 0)
+    throw new PlanningError(
+      `module promotion ${promotion.id} would introduce a package dependency on application modules: ${introducedApplicationDependencies.join(", ")}`,
+    );
   const context = input.context ?? new WorkspaceContext(input.config, input.rootDir);
   const importers = modulePromotionImporterEvidence({ graph: input.graph, context, source: promotion.source });
   const directTests = importers.filter((path) => context.isTest(path));
   const testPartition = partitionTests(context, [promotion.source], directTests, []);
-  const promotedSpecifier = promotion.targetModule === "index"
-    ? promotion.targetPackage
-    : `${promotion.targetPackage}/${promotion.targetModule.replace(/^\.\//, "")}`;
+  const promotedSpecifier =
+    promotion.targetModule === "index" ? promotion.targetPackage : `${promotion.targetPackage}/${promotion.targetModule.replace(/^\.\//, "")}`;
   const travellingTestRewrites = testPartition.travelling.flatMap((test) =>
-    context.moduleReferences(test)
+    context
+      .moduleReferences(test)
       .filter((reference) => reference.specifier !== null && reference.resolved === context.absolute(promotion.source))
       .map((reference) => ({ file: test, specifier: reference.specifier!, package: promotedSpecifier })),
   );
@@ -72,17 +77,41 @@ export function compileModulePromotion(input: CompileModulePromotionInput): Extr
     id: `promotion-${hashJson({ id: promotion.id, source: promotion.source, commit: input.graph.commit })}`,
     application: node.application,
     suggestedPackageName: promotion.targetPackage,
-    files: [promotion.source], tests: directTests, assets: [], sccs: [scc], seed: scc,
-    lineCount: node.lineCount, owners: [node.owner], domains: [node.domain], dependencies: [],
-    consumers: [], consumerChurn: importers.length, coverage: testPartition.travelling.length > 0 ? 1 : 0,
-    score: 0, eligible: true, rejectionReasons: [], warnings: [], rewriteEscapes: travellingTestRewrites, classification: "extraction",
+    files: [promotion.source],
+    tests: directTests,
+    assets: [],
+    sccs: [scc],
+    seed: scc,
+    lineCount: node.lineCount,
+    owners: [node.owner],
+    domains: [node.domain],
+    dependencies: [],
+    consumers: [],
+    consumerChurn: importers.length,
+    coverage: testPartition.travelling.length > 0 ? 1 : 0,
+    score: 0,
+    eligible: true,
+    rejectionReasons: [],
+    warnings: [],
+    rewriteEscapes: travellingTestRewrites,
+    classification: "extraction",
   };
   const proof: NonNullable<ExtractionManifest["modulePromotion"]> = {
-    id: promotion.id, source: promotion.source, targetModule: promotion.targetModule,
-    retireSource: promotion.retireSource, importerProof: importers,
+    id: promotion.id,
+    source: promotion.source,
+    targetModule: promotion.targetModule,
+    retireSource: promotion.retireSource,
+    importerProof: importers,
     ...(cutsScc
       ? { cycleCut: { before: [...component], after, removedEdges } }
-      : { containmentCut: { architecturalEdgesBefore: architecturalEdges.length, architecturalEdgesAfter: architecturalEdges.length - containmentRemoved.length, removedEdges: containmentRemoved, introducedApplicationDependencies } }),
+      : {
+          containmentCut: {
+            architecturalEdgesBefore: architecturalEdges.length,
+            architecturalEdgesAfter: architecturalEdges.length - containmentRemoved.length,
+            removedEdges: containmentRemoved,
+            introducedApplicationDependencies,
+          },
+        }),
   };
   const manifest = buildPlanSync({ ...input, context, candidate, packageName: promotion.targetPackage, modulePromotion: proof });
   const compiledImporters = [...new Set([...manifest.consumers.map((item) => item.file), ...manifest.source.tests])].sort();

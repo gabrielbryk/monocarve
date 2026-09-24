@@ -4,8 +4,8 @@ import { join } from "node:path";
 
 import { loadSnapshotConfig } from "../src/assessment/config-snapshot.ts";
 import { hashBytes } from "../src/util/hash.ts";
-import { fixtureGit, scratchDirectory } from "./support/fixture-repo.ts";
 import { runIn } from "./support/cli.ts";
+import { fixtureGit, scratchDirectory } from "./support/fixture-repo.ts";
 
 function config(source: string): { readonly root: string; readonly path: string } {
   const root = scratchDirectory();
@@ -54,7 +54,9 @@ test("a caught ambient read still invalidates config authority", () => {
 });
 
 test("a caught exists probe outside the captured set invalidates authority", () => {
-  const { path } = config('const fs = process.getBuiltinModule("node:fs"); let exists = false; try { exists = fs.existsSync("/etc/hostname") } catch {} export default { exists };');
+  const { path } = config(
+    'const fs = process.getBuiltinModule("node:fs"); let exists = false; try { exists = fs.existsSync("/etc/hostname") } catch {} export default { exists };',
+  );
   expect(() => loadSnapshotConfig(path)).toThrow("ASSESSMENT_CONFIG_UNBOUND");
 });
 
@@ -98,10 +100,21 @@ test("assessment CLI accepts a TS config with an imported helper and binds its b
   mkdirSync(join(root, "apps/web/src"), { recursive: true });
   mkdirSync(join(root, "packages"));
   writeFileSync(join(root, "apps/web/src/main.ts"), "export const main = 1;\n");
-  writeFileSync(join(root, "apps/web/tsconfig.json"), '{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","noEmit":true},"include":["src/**/*.ts"]}\n');
+  writeFileSync(
+    join(root, "apps/web/tsconfig.json"),
+    '{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","noEmit":true},"include":["src/**/*.ts"]}\n',
+  );
   writeFileSync(join(root, "package.json"), '{"private":true,"workspaces":[]}\n');
   writeFileSync(join(root, "bun.lock"), "{}\n");
-  writeFileSync(join(root, "monocarve.config.json"), JSON.stringify({ applications: [{ name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json" }], packageRoots: ["packages"], packageManager: "bun", scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } } }));
+  writeFileSync(
+    join(root, "monocarve.config.json"),
+    JSON.stringify({
+      applications: [{ name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json" }],
+      packageRoots: ["packages"],
+      packageManager: "bun",
+      scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
+    }),
+  );
   const helper = join(root, "config-helper.ts");
   writeFileSync(helper, 'import config from "./monocarve.config.json"; export default config;\n');
   writeFileSync(join(root, "monocarve.config.ts"), 'import config from "./config-helper.ts"; export default config;\n');

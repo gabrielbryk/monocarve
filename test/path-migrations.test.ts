@@ -15,8 +15,8 @@ import { pathMigrationOperations } from "../src/plan/build.ts";
 import { WorkspaceContext } from "../src/plan/context.ts";
 import type { ExtractionManifest, MigratePathKeysOperation, PlanOperation } from "../src/plan/manifest.ts";
 import { validatePlan } from "../src/plan/validate.ts";
-import { auditPlanSync } from "../src/transaction/audit.ts";
 import { applyPlan } from "../src/transaction/apply.ts";
+import { auditPlanSync } from "../src/transaction/audit.ts";
 import { executeJournal } from "../src/transaction/journal.ts";
 import { readUtf8Artifact, runPathMigrationCommand } from "../src/transaction/path-migrations.ts";
 import { hashText } from "../src/util/hash.ts";
@@ -87,20 +87,8 @@ function configFor(root: string, command = fixtureCommand(root)) {
 
 function moves(root: string): PlanOperation[] {
   return [
-    {
-      kind: "move",
-      source: SECOND,
-      target: SECOND_TARGET,
-      preconditionHash: hashText(read(root, SECOND)),
-      resultHash: hashText(read(root, SECOND)),
-    },
-    {
-      kind: "move",
-      source: FIRST,
-      target: FIRST_TARGET,
-      preconditionHash: hashText(read(root, FIRST)),
-      resultHash: hashText(read(root, FIRST)),
-    },
+    { kind: "move", source: SECOND, target: SECOND_TARGET, preconditionHash: hashText(read(root, SECOND)), resultHash: hashText(read(root, SECOND)) },
+    { kind: "move", source: FIRST, target: FIRST_TARGET, preconditionHash: hashText(read(root, FIRST)), resultHash: hashText(read(root, FIRST)) },
   ];
 }
 
@@ -112,10 +100,7 @@ function migration(root: string, command = fixtureCommand(root)): { config: Retu
 
 function manifest(root: string, operation: MigratePathKeysOperation): ExtractionManifest {
   const sourceHash = hashText(read(root, FIRST));
-  const operations: PlanOperation[] = [
-    { kind: "move", source: FIRST, target: FIRST_TARGET, preconditionHash: sourceHash, resultHash: sourceHash },
-    operation,
-  ];
+  const operations: PlanOperation[] = [{ kind: "move", source: FIRST, target: FIRST_TARGET, preconditionHash: sourceHash, resultHash: sourceHash }, operation];
   return {
     schemaVersion: 2,
     planId: "path-migration-fixture",
@@ -180,12 +165,9 @@ describe("path-keyed artifact migrations", () => {
     const operations = pathMigrationOperations(config, new WorkspaceContext(config, root), [firstMove], (proof) => proofs.push(proof));
 
     expect(operations).toEqual([]);
-    expect(proofs).toEqual([{
-      path: BASELINE,
-      command: fixtureCommand(root),
-      moves: [{ source: FIRST, target: FIRST_TARGET }],
-      artifactHash: hashText(read(root, BASELINE)),
-    }]);
+    expect(proofs).toEqual([
+      { path: BASELINE, command: fixtureCommand(root), moves: [{ source: FIRST, target: FIRST_TARGET }], artifactHash: hashText(read(root, BASELINE)) },
+    ]);
 
     const placeholder: MigratePathKeysOperation = {
       kind: "migrate-path-keys",
@@ -220,13 +202,9 @@ describe("path-keyed artifact migrations", () => {
     const { config, operation } = migration(root);
     const base = manifest(root, { ...operation, moves: [{ source: FIRST, target: FIRST_TARGET }] });
     const drifted = { ...base, operations: [base.operations[0]!, { ...base.operations[1]!, command: "different" }] };
-    expect(validatePlan(drifted, { config, rootDir: root }).issues.map((issue) => issue.rule)).toContain(
-      "path-migration-config",
-    );
+    expect(validatePlan(drifted, { config, rootDir: root }).issues.map((issue) => issue.rule)).toContain("path-migration-config");
     const omitted = { ...base, operations: [base.operations[0]!], changedFiles: [FIRST, FIRST_TARGET].sort() };
-    expect(validatePlan(omitted, { config, rootDir: root }).issues.map((issue) => issue.rule)).toContain(
-      "path-migration-config",
-    );
+    expect(validatePlan(omitted, { config, rootDir: root }).issues.map((issue) => issue.rule)).toContain("path-migration-config");
   });
 
   test("apply refuses changed command output by result hash and rolls back", async () => {
@@ -238,9 +216,7 @@ describe("path-keyed artifact migrations", () => {
     const manifestPath = landManifest(root, plan);
     write(root, "scripts/migrate-paths.ts", MIGRATOR.replace("artifact.paths[move.source];", "artifact.paths[move.source] + 1;"));
 
-    await expect(applyPlan({ config, rootDir: root, manifest: plan, manifestPath, commit: true, skipSimulation: true })).rejects.toThrow(
-      "hash mismatch",
-    );
+    await expect(applyPlan({ config, rootDir: root, manifest: plan, manifestPath, commit: true, skipSimulation: true })).rejects.toThrow("hash mismatch");
     expect(read(root, FIRST)).toContain("alpha");
     expect(existsSync(join(root, FIRST_TARGET))).toBe(false);
     expect(read(root, BASELINE)).toContain(FIRST);
@@ -253,9 +229,7 @@ describe("path-keyed artifact migrations", () => {
     const operation = { ...good.operation, command };
     const config = configFor(root, command);
 
-    await expect(executeJournal({ config, treeRoot: root, manifest: manifest(root, operation) })).rejects.toThrow(
-      "failed (exit 7)",
-    );
+    await expect(executeJournal({ config, treeRoot: root, manifest: manifest(root, operation) })).rejects.toThrow("failed (exit 7)");
     expect(existsSync(join(root, "ignored-output.txt"))).toBe(false);
     expect(read(root, BASELINE)).toContain(FIRST);
     expect(read(root, FIRST)).toContain("alpha");
@@ -286,17 +260,13 @@ describe("path-keyed artifact migrations", () => {
     fixtureGit(root, "add", "--", BASELINE);
     fixtureGit(root, "commit", "-qm", "test: seed non-UTF-8 artifact");
     const config = configFor(root);
-    expect(() => pathMigrationOperations(config, new WorkspaceContext(config, root), [moves(root)[1]!])).toThrow(
-      "is not valid UTF-8 text",
-    );
+    expect(() => pathMigrationOperations(config, new WorkspaceContext(config, root), [moves(root)[1]!])).toThrow("is not valid UTF-8 text");
   });
 
   test("refuses migration output that is not valid UTF-8 text", () => {
     const root = fixtureRepo(files());
     const config = configFor(root, fixtureCommand(root, "invalid-output.ts"));
-    expect(() => pathMigrationOperations(config, new WorkspaceContext(config, root), [moves(root)[1]!])).toThrow(
-      "migration output",
-    );
+    expect(() => pathMigrationOperations(config, new WorkspaceContext(config, root), [moves(root)[1]!])).toThrow("migration output");
   });
 
   test("preserves a UTF-8 BOM through the command protocol", () => {
@@ -306,12 +276,7 @@ describe("path-keyed artifact migrations", () => {
     const contents = readUtf8Artifact(join(root, BASELINE), BASELINE);
     expect(contents.codePointAt(0)).toBe(0xfeff);
 
-    const result = runPathMigrationCommand(
-      root,
-      { path: BASELINE, command: fixtureCommand(root, "echo-contents.ts"), moves: [] },
-      contents,
-      10_000,
-    );
+    const result = runPathMigrationCommand(root, { path: BASELINE, command: fixtureCommand(root, "echo-contents.ts"), moves: [] }, contents, 10_000);
     expect(Buffer.from(result, "utf8")).toEqual(raw);
   });
 

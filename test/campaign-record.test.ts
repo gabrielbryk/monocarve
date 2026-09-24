@@ -23,13 +23,16 @@ function child(): CampaignChildPlan {
 }
 
 function ledger(): CampaignLedger {
-  return appendCampaignChild(createCampaignLedger({
-    campaignId: "record-campaign",
-    objective: "prepare a type-only seam",
-    stopConditions: [],
-    baselineCommit: BASELINE,
-    initialGraph: graph({ modules: 4, edges: 3 }),
-  }), child());
+  return appendCampaignChild(
+    createCampaignLedger({
+      campaignId: "record-campaign",
+      objective: "prepare a type-only seam",
+      stopConditions: [],
+      baselineCommit: BASELINE,
+      initialGraph: graph({ modules: 4, edges: 3 }),
+    }),
+    child(),
+  );
 }
 
 function report(plan = child(), passed = true): PreparationAuditReport {
@@ -81,9 +84,7 @@ describe("campaign application recording", () => {
   });
 
   test("refuses a plan identity that differs from the planned tail", () => {
-    expect(() => recordCampaignApplication(input({
-      plan: { ...child(), planId: "other-plan" },
-    }))).toThrow("does not match planned campaign child");
+    expect(() => recordCampaignApplication(input({ plan: { ...child(), planId: "other-plan" } }))).toThrow("does not match planned campaign child");
   });
 
   test("refuses audit or scan evidence from a different resulting HEAD", () => {
@@ -93,13 +94,13 @@ describe("campaign application recording", () => {
 
   test("refuses failed or wrong-kind audit evidence and absent post-scan evidence", () => {
     const failed = report(child(), false);
-    expect(() => recordCampaignApplication(input({
-      audit: { kind: "preparation", report: failed, digest: hashJson(failed) },
-    }))).toThrow("immediate audit failed");
+    expect(() => recordCampaignApplication(input({ audit: { kind: "preparation", report: failed, digest: hashJson(failed) } }))).toThrow(
+      "immediate audit failed",
+    );
     const valid = report();
-    expect(() => recordCampaignApplication(input({
-      audit: { kind: "extraction", report: valid as never, digest: hashJson(valid) },
-    }))).toThrow("does not match preparation plan");
+    expect(() => recordCampaignApplication(input({ audit: { kind: "extraction", report: valid as never, digest: hashJson(valid) } }))).toThrow(
+      "does not match preparation plan",
+    );
     expect(() => recordCampaignApplication(input({ postScan: undefined as unknown as GraphMetricSnapshot }))).toThrow("fresh post-scan evidence is required");
   });
 });

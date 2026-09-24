@@ -8,9 +8,9 @@
  * would then reject for reasons nobody can see from the plan.
  */
 
-import ts from "typescript";
 import { realpathSync } from "node:fs";
 import { relative, resolve } from "node:path";
+import ts from "typescript";
 
 import { MonocarveError } from "../errors.ts";
 import { git, repositoryPrefix, showBaseline } from "../util/git.ts";
@@ -53,7 +53,7 @@ export function sourceExportsFromBaseline(workspaceRoot: string, commit: string,
     git({ cwd: workspaceRoot }, "ls-tree", "-r", "--name-only", commit, "--", prefix || ".")
       .split("\n")
       .filter(Boolean)
-      .map((entry) => prefix && entry.startsWith(prefix) ? entry.slice(prefix.length) : entry),
+      .map((entry) => (prefix && entry.startsWith(prefix) ? entry.slice(prefix.length) : entry)),
   );
   const baselineDirectories = new Set<string>([""]);
   for (const file of baselineFiles) {
@@ -90,16 +90,13 @@ export function sourceExportsFromBaseline(workspaceRoot: string, commit: string,
     // directory can only help TypeScript locate immutable baseline files.
     directoryExists: (directoryName) => {
       const workspacePath = baselineWorkspacePathOf(directoryName, baselineDirectories);
-      return workspacePath !== null
-        || (fallback.directoryExists?.(directoryName) ?? false);
+      return workspacePath !== null || (fallback.directoryExists?.(directoryName) ?? false);
     },
     fileExists: (fileName) => baselineText(fileName) !== null || fallback.fileExists(fileName),
     readFile: (fileName) => baselineText(fileName) ?? fallback.readFile(fileName),
     getSourceFile: (fileName, languageVersion) => {
       const contents = baselineText(fileName);
-      return contents === null
-        ? fallback.getSourceFile(fileName, languageVersion)
-        : ts.createSourceFile(fileName, contents, languageVersion, true);
+      return contents === null ? fallback.getSourceFile(fileName, languageVersion) : ts.createSourceFile(fileName, contents, languageVersion, true);
     },
   };
   return sourceExportsFromProgram(absolute, path, ts.createProgram([absolute], options, host));

@@ -23,12 +23,17 @@ describe("preparation inline import audit", () => {
       target: { path: "apps/api/src/types/contracts.ts" },
       targetContents: target,
       targetImportProofs: [],
-      inlineImportTypeProofs: [{
-        originalSpecifier: "./models.ts", targetSpecifier: "../wrong.ts",
-        resolvedSourcePath: "apps/api/src/models.ts", start: donor.indexOf('"./models.ts"'),
-        end: donor.indexOf('"./models.ts"') + '"./models.ts"'.length,
-        sourceHash: hashText('"./models.ts"'), proofBaselineHash: hashText(donor),
-      }],
+      inlineImportTypeProofs: [
+        {
+          originalSpecifier: "./models.ts",
+          targetSpecifier: "../wrong.ts",
+          resolvedSourcePath: "apps/api/src/models.ts",
+          start: donor.indexOf('"./models.ts"'),
+          end: donor.indexOf('"./models.ts"') + '"./models.ts"'.length,
+          sourceHash: hashText('"./models.ts"'),
+          proofBaselineHash: hashText(donor),
+        },
+      ],
     } as unknown as ExtractTypeDeclarationsOperation;
     const failures: string[] = [];
 
@@ -38,9 +43,33 @@ describe("preparation inline import audit", () => {
   });
 
   test.each([
-    { label: "extensionless", donorPath: "apps/api/src/contracts.ts", targetPath: "apps/api/src/types/contracts.ts", original: "./models", rewritten: "../models", resolved: "apps/api/src/models.ts", files: { "apps/api/src/models.ts": "export interface Shape {}\n" } },
-    { label: "directory index", donorPath: "apps/api/src/contracts.ts", targetPath: "apps/api/src/types/contracts.ts", original: "./models", rewritten: "../models", resolved: "apps/api/src/models/index.ts", files: { "apps/api/src/models/index.ts": "export interface Shape {}\n" } },
-    { label: "same directory", donorPath: "apps/api/src/contracts.ts", targetPath: "apps/api/src/contracts-types.ts", original: "./models", rewritten: "./models", resolved: "apps/api/src/models.ts", files: { "apps/api/src/models.ts": "export interface Shape {}\n" } },
+    {
+      label: "extensionless",
+      donorPath: "apps/api/src/contracts.ts",
+      targetPath: "apps/api/src/types/contracts.ts",
+      original: "./models",
+      rewritten: "../models",
+      resolved: "apps/api/src/models.ts",
+      files: { "apps/api/src/models.ts": "export interface Shape {}\n" },
+    },
+    {
+      label: "directory index",
+      donorPath: "apps/api/src/contracts.ts",
+      targetPath: "apps/api/src/types/contracts.ts",
+      original: "./models",
+      rewritten: "../models",
+      resolved: "apps/api/src/models/index.ts",
+      files: { "apps/api/src/models/index.ts": "export interface Shape {}\n" },
+    },
+    {
+      label: "same directory",
+      donorPath: "apps/api/src/contracts.ts",
+      targetPath: "apps/api/src/contracts-types.ts",
+      original: "./models",
+      rewritten: "./models",
+      resolved: "apps/api/src/models.ts",
+      files: { "apps/api/src/models.ts": "export interface Shape {}\n" },
+    },
   ])("accepts TypeScript-resolved $label inline import provenance", ({ donorPath, targetPath, original, rewritten, resolved, files }) => {
     const donor = `export type Shape = import(${JSON.stringify(original)}).Shape;\n`;
     const target = `export type Shape = import(${JSON.stringify(rewritten)}).Shape;\n`;
@@ -52,12 +81,21 @@ describe("preparation inline import audit", () => {
     });
     const literal = JSON.stringify(original);
     const operation = {
-      donor: { path: donorPath, preconditionHash: hashText(donor) }, target: { path: targetPath }, targetContents: target,
-      targetImportProofs: [], inlineImportTypeProofs: [{
-        originalSpecifier: original, targetSpecifier: rewritten, resolvedSourcePath: resolved,
-        start: donor.indexOf(literal), end: donor.indexOf(literal) + literal.length,
-        sourceHash: hashText(literal), proofBaselineHash: hashText(donor),
-      }],
+      donor: { path: donorPath, preconditionHash: hashText(donor) },
+      target: { path: targetPath },
+      targetContents: target,
+      targetImportProofs: [],
+      inlineImportTypeProofs: [
+        {
+          originalSpecifier: original,
+          targetSpecifier: rewritten,
+          resolvedSourcePath: resolved,
+          start: donor.indexOf(literal),
+          end: donor.indexOf(literal) + literal.length,
+          sourceHash: hashText(literal),
+          proofBaselineHash: hashText(donor),
+        },
+      ],
     } as unknown as ExtractTypeDeclarationsOperation;
     const failures: string[] = [];
     verifyTargetImportProofs(root, fixtureConfig(root), [operation], new Map([[donorPath, new TextEncoder().encode(donor)]]), failures);

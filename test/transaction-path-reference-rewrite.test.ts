@@ -14,6 +14,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
+import { FAIL_OPERATION_ENV } from "../src/branding.ts";
 import { pathReferenceRewriteOperations } from "../src/plan/build-support.ts";
 import { WorkspaceContext } from "../src/plan/context.ts";
 import type { ExtractionManifest, PlanOperation, RewritePathReferenceOperation } from "../src/plan/manifest.ts";
@@ -21,9 +22,8 @@ import { manifestPaths, operationPaths } from "../src/plan/manifest.ts";
 import { rewritePathReferenceText } from "../src/plan/path-reference-rewrites.ts";
 import { validatePlan } from "../src/plan/validate.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
-import { FAIL_OPERATION_ENV } from "../src/branding.ts";
-import { executeJournal } from "../src/transaction/journal.ts";
 import { JournalError } from "../src/transaction/journal-error.ts";
+import { executeJournal } from "../src/transaction/journal.ts";
 import { hashText } from "../src/util/hash.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, read, write } from "./support/fixture-repo.ts";
 
@@ -44,10 +44,7 @@ function files(): Record<string, string> {
 
 function configFor(root: string) {
   return fixtureConfig(root, {
-    pathReferenceRewrites: {
-      enabled: true,
-      roots: [{ root: "docs", extensions: [".md"], mode: "exact-path-token" }],
-    },
+    pathReferenceRewrites: { enabled: true, roots: [{ root: "docs", extensions: [".md"], mode: "exact-path-token" }] },
     gates: { package: [], project: [], workspace: [] },
   });
 }
@@ -114,10 +111,7 @@ describe("rewrite-path-reference transaction", () => {
     });
     const rewrite = rewriteOp(root, config);
     expect(rewrite.rewrites[0]?.referenceBase).toBe("apps/api");
-    const forged: RewritePathReferenceOperation = {
-      ...rewrite,
-      rewrites: rewrite.rewrites.map((entry) => ({ ...entry, referenceBase: "apps/other" })),
-    };
+    const forged: RewritePathReferenceOperation = { ...rewrite, rewrites: rewrite.rewrites.map((entry) => ({ ...entry, referenceBase: "apps/other" })) };
 
     await expect(executeJournal({ config, treeRoot: root, manifest: manifest(root, [moveOp(root), forged]) })).rejects.toThrow("replay mismatch");
     expect(read(root, DOC)).toBe("See src/alpha.ts for details.\n");
@@ -137,7 +131,10 @@ describe("rewrite-path-reference transaction", () => {
     const plan = manifest(root, [move, rewrite]);
     await executeJournal({ config, treeRoot: root, manifest: plan });
 
-    const expectedText = rewritePathReferenceText(DOC_ORIGINAL, rewrite.rewrites.map((entry) => ({ ...entry, span: findSpan(DOC_ORIGINAL, entry.from) })));
+    const expectedText = rewritePathReferenceText(
+      DOC_ORIGINAL,
+      rewrite.rewrites.map((entry) => ({ ...entry, span: findSpan(DOC_ORIGINAL, entry.from) })),
+    );
     const landed = read(root, DOC);
     expect(landed).toBe(expectedText);
     expect(landed).toBe(`See ${FIRST_TARGET} for details.\n`);
@@ -189,10 +186,7 @@ describe("rewrite-path-reference transaction", () => {
     // `resultHash` check — it fires before that check is ever reached.
     const forged: RewritePathReferenceOperation = {
       ...rewrite,
-      rewrites: [
-        ...rewrite.rewrites,
-        { from: "apps/api/src/beta.ts", to: "libs/values/src/beta.ts", donor: "apps/api/src/beta.ts", line: 1, column: 1 },
-      ],
+      rewrites: [...rewrite.rewrites, { from: "apps/api/src/beta.ts", to: "libs/values/src/beta.ts", donor: "apps/api/src/beta.ts", line: 1, column: 1 }],
     };
     const plan = manifest(root, [forged]);
 
@@ -215,11 +209,7 @@ describe("rewrite-path-reference transaction", () => {
     // against a real plan, not merely a bit twiddled in isolation.
     const forgedTo = "totally/made/up/evil.ts";
     const forgedText = rewritePathReferenceText(DOC_ORIGINAL, [{ ...original, to: forgedTo, span: findSpan(DOC_ORIGINAL, original.from) }]);
-    const forged: RewritePathReferenceOperation = {
-      ...rewrite,
-      rewrites: [{ ...original, to: forgedTo }],
-      resultHash: hashText(forgedText),
-    };
+    const forged: RewritePathReferenceOperation = { ...rewrite, rewrites: [{ ...original, to: forgedTo }], resultHash: hashText(forgedText) };
     const plan = manifest(root, [move, forged]);
 
     await expect(executeJournal({ config, treeRoot: root, manifest: plan })).rejects.toThrow("replay mismatch");
@@ -253,7 +243,9 @@ describe("rewrite-path-reference transaction", () => {
     let error: Error;
     try {
       error = await executeJournal({ config, treeRoot: root, manifest: plan }).then(
-        () => { throw new Error("expected executeJournal to reject"); },
+        () => {
+          throw new Error("expected executeJournal to reject");
+        },
         (caught: unknown) => caught as Error,
       );
     } finally {
@@ -296,10 +288,7 @@ describe("rewrite-path-reference transaction", () => {
     const move = moveOp(root);
     const rewrite = rewriteOp(root, config);
 
-    const forged: RewritePathReferenceOperation = {
-      ...rewrite,
-      rewrites: [{ ...rewrite.rewrites[0]!, to: "totally/made/up/evil.ts" }],
-    };
+    const forged: RewritePathReferenceOperation = { ...rewrite, rewrites: [{ ...rewrite.rewrites[0]!, to: "totally/made/up/evil.ts" }] };
     const plan = manifest(root, [move, forged]);
 
     const issues = validatePlan(plan, { config, rootDir: root }).issues;

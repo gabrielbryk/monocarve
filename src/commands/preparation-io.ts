@@ -10,7 +10,8 @@ export function relativeTypeSpecifier(fromPath: string, resolvedSourcePath: stri
   const originalExtension = originalSpecifier.match(/(\.[^./]+)$/)?.[1];
   const resolvedExtension = resolvedSourcePath.match(/(\.[^./]+)$/)?.[1];
   if (originalExtension === undefined && resolvedExtension !== undefined) destination = resolvedSourcePath.slice(0, -resolvedExtension.length);
-  else if (originalExtension !== undefined && resolvedExtension !== undefined) destination = `${resolvedSourcePath.slice(0, -resolvedExtension.length)}${originalExtension}`;
+  else if (originalExtension !== undefined && resolvedExtension !== undefined)
+    destination = `${resolvedSourcePath.slice(0, -resolvedExtension.length)}${originalExtension}`;
   const specifier = relative(dirname(fromPath), destination).replaceAll("\\", "/");
   return specifier.startsWith(".") ? specifier : `./${specifier}`;
 }

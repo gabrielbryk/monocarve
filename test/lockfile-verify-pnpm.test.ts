@@ -3,18 +3,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { LockfileError, pnpmAdapter } from "../src/adapters/pnpm.ts";
+import { applyPlan } from "../src/transaction/apply.ts";
 import { verifyLockfile } from "../src/transaction/lockfile-verify.ts";
 import { simulatePlan } from "../src/transaction/simulate.ts";
-import { applyPlan } from "../src/transaction/apply.ts";
 import { cleanupFixtures, read, scratchDirectory, write } from "./support/fixture-repo.ts";
-import {
-  MIS_SORTED_SPLICE,
-  ORACLE_BLIND_SPOT,
-  SHAPES,
-  checkShape,
-  describeResult,
-  frozenLockfileFailure,
-} from "./support/lockfile-shapes.ts";
+import { MIS_SORTED_SPLICE, ORACLE_BLIND_SPOT, SHAPES, checkShape, describeResult, frozenLockfileFailure } from "./support/lockfile-shapes.ts";
 import {
   APP,
   LOCKFILE,
@@ -104,10 +97,7 @@ describe("lockfile verification against real pnpm", () => {
   test.skipIf(PNPM === null)(
     "simulation rejects manifest and importer divergence without waiting for an opt-in round-trip",
     async () => {
-      const { config, manifest, root } = simulationFixture(
-        { siblingDependencies: false, consumerDependencies: true },
-        { overDeclare: true },
-      );
+      const { config, manifest, root } = simulationFixture({ siblingDependencies: false, consumerDependencies: true }, { overDeclare: true });
 
       // The independent projection compares the landed package manifest to the
       // importer, so this former blind spot is now rejected even without asking
@@ -129,10 +119,7 @@ describe("lockfile verification against real pnpm", () => {
   test.skipIf(PNPM === null)(
     "the flag passes the simulation when the splice really is what pnpm writes",
     async () => {
-      const { config, manifest, root } = simulationFixture({
-        siblingDependencies: false,
-        consumerDependencies: false,
-      });
+      const { config, manifest, root } = simulationFixture({ siblingDependencies: false, consumerDependencies: false });
 
       const result = await simulatePlan({ config, rootDir: root, manifest, verifyLockfile: true });
 
@@ -239,9 +226,7 @@ describe("the splice against real pnpm, over generated workspace shapes", () => 
       // whole sorted-insertion half of the matrix is about.
       const position = (text: string, root: string): number => text.indexOf(`\n  ${root}:`);
       expect(position(result.planned, "libs/analytics")).toBeGreaterThan(position(result.planned, "libs/format"));
-      expect(position(result.regenerated, "libs/analytics")).toBeLessThan(
-        position(result.regenerated, "libs/format"),
-      );
+      expect(position(result.regenerated, "libs/analytics")).toBeLessThan(position(result.regenerated, "libs/format"));
     },
     120_000,
   );
@@ -283,9 +268,7 @@ describe("the splice against real pnpm, over generated workspace shapes", () => 
       expect(checked.ok).toBe(false);
       // The finding names the importer and the resolution, so it is actionable
       // without re-reading the file — and it names what pnpm named.
-      expect(checked.differences?.[0]).toBe(
-        `${LOCKFILE}: libs/analytics declares left-pad@1.3.0, and the lockfile has no entry for it`,
-      );
+      expect(checked.differences?.[0]).toBe(`${LOCKFILE}: libs/analytics declares left-pad@1.3.0, and the lockfile has no entry for it`);
     },
     120_000,
   );
@@ -305,12 +288,7 @@ describe("the splice against real pnpm, over generated workspace shapes", () => 
       write(
         root,
         `${APP}/package.json`,
-        packageManifest("@acme/api", {
-          "@acme/format": "workspace:*",
-          mypad: "npm:left-pad@1.3.0",
-          react: "18.3.1",
-          "react-dom": "18.3.1",
-        }),
+        packageManifest("@acme/api", { "@acme/format": "workspace:*", mypad: "npm:left-pad@1.3.0", react: "18.3.1", "react-dom": "18.3.1" }),
       );
       runPnpm(root);
       const lockfile = read(root, LOCKFILE);

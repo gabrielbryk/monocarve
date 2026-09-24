@@ -116,17 +116,20 @@ function addDependencySubpaths(
   }
 }
 
-function dependencySubpathEntry(
-  require: NodeRequire,
-  dependency: string,
-  subpath: string,
-  packageRoot: string,
-  exported: unknown,
-): string | undefined {
+function dependencySubpathEntry(require: NodeRequire, dependency: string, subpath: string, packageRoot: string, exported: unknown): string | undefined {
   const declared = typesCondition(exported);
   const typed = declared === undefined ? undefined : resolve(packageRoot, declared);
   if (typed !== undefined && existsSync(typed)) return typed;
-  return definitelyTypedEntry(require, dependency, subpath) ?? resolveTarget(packageRoot, exportTarget(exported));
+  const runtimeTarget = resolveTarget(packageRoot, exportTarget(exported));
+  // A subpath export with no explicit `types` condition — a bare string value
+  // like `"./sha2.js": "./sha2.js"` (@noble/hashes ships every subpath this
+  // way) applies to every condition including `types`, so there is nothing
+  // for typesCondition to find even though a real `.d.ts` sibling exists.
+  // rootDependencyEntry already prefers that sibling for the `.` export;
+  // subpaths need the identical fallback or the `paths` alias points TypeScript
+  // straight at the runtime `.js` file with `allowJs` off, misreporting a
+  // perfectly typed package as TS7016 "implicitly has an 'any' type".
+  return definitelyTypedEntry(require, dependency, subpath) ?? adjacentDeclaration(runtimeTarget ?? "") ?? runtimeTarget;
 }
 
 function definitelyTypedEntry(require: NodeRequire, dependency: string, subpath?: string): string | undefined {
@@ -138,8 +141,7 @@ function definitelyTypedEntry(require: NodeRequire, dependency: string, subpath?
     return undefined;
   }
   const manifest = readManifest(join(root, "package.json"));
-  const candidates = subpath === undefined
-    ? [declaredTypings(manifest) ?? manifest?.main ?? "index.d.ts"]
-    : [`${subpath}.d.ts`, `${subpath}/index.d.ts`, subpath];
+  const candidates =
+    subpath === undefined ? [declaredTypings(manifest) ?? manifest?.main ?? "index.d.ts"] : [`${subpath}.d.ts`, `${subpath}/index.d.ts`, subpath];
   return candidates.map((entry) => resolve(root, entry)).find(existsSync);
 }

@@ -1,10 +1,5 @@
+import type { DeclarationGroup, ExternalSymbolConsumer, SymbolSpace, WorkspaceSymbolAnalysis } from "../symbols/types.ts";
 import type { Sha256 } from "../util/hash.ts";
-import type {
-  DeclarationGroup,
-  ExternalSymbolConsumer,
-  SymbolSpace,
-  WorkspaceSymbolAnalysis,
-} from "../symbols/types.ts";
 import type { TypeOnlyExtractionRefusalCode, TypeOnlyExtractionSafety } from "./safety.ts";
 
 /** A declaration partition is named by its role, never by a guessed module path. */

@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 160,
+  "tabWidth": 2,
+  "useTabs": false,
+  "singleQuote": false,
+  "jsxSingleQuote": false,
+  "semi": true,
+  "trailingComma": "all",
+  "arrowParens": "always",
+  "endOfLine": "lf",
+  "objectWrap": "collapse",
+  "sortImports": {
+    "newlinesBetween": false,
+    "partitionByNewline": true,
+    "sortSideEffects": false
+  },
+  "sortPackageJson": false,
+  "ignorePatterns": ["**/.worktrees/**", "**/dist/**", "**/artifacts/**", "**/node_modules/**", "**/fixtures/**", "**/test/fixtures/**", "**/*.tsbuildinfo"],
+  "overrides": [
+    {
+      "files": ["**/*.json", "**/*.jsonc"],
+      "options": {
+        "trailingComma": "none",
+        "objectWrap": "preserve"
+      }
+    }
+  ],
+  "proseWrap": "preserve"
+}

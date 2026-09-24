@@ -54,20 +54,19 @@ function realPipelineWorkspace(): string {
 
   const configPath = join(root, "monocarve.config.json");
   const config = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
-  config.pathReferenceRewrites = {
-    enabled: true,
-    roots: [{ root: "docs", extensions: [".md"], mode: "exact-path-token" }],
-  };
-  config.postJournalPreparers = [{
-    id: "doc-ratchet",
-    phase: "after-journal-before-gates",
-    command: `printf ok > ${REAL_OUTPUT}`,
-    outputs: [REAL_OUTPUT],
-    // Matches only the rewritten document, never the moved production
-    // source: this is the exact capability that was unreachable dead code.
-    triggers: [`^${REAL_DOC}$`],
-    verify: `grep -q ok ${REAL_OUTPUT}`,
-  }];
+  config.pathReferenceRewrites = { enabled: true, roots: [{ root: "docs", extensions: [".md"], mode: "exact-path-token" }] };
+  config.postJournalPreparers = [
+    {
+      id: "doc-ratchet",
+      phase: "after-journal-before-gates",
+      command: `printf ok > ${REAL_OUTPUT}`,
+      outputs: [REAL_OUTPUT],
+      // Matches only the rewritten document, never the moved production
+      // source: this is the exact capability that was unreachable dead code.
+      triggers: [`^${REAL_DOC}$`],
+      verify: `grep -q ok ${REAL_OUTPUT}`,
+    },
+  ];
   // A workspace gate that reads the preparer's output: gates can only pass
   // if the preparer ran, and ran before the gates phase — the "before
   // gates" half of the acceptance test, not just "it ran at some point".
@@ -119,9 +118,7 @@ describe("post-journal preparer trigger matches a rewritten document", () => {
     const candidate = buildPortfolio({ config, graph }).candidates.find((entry) => entry.eligible && entry.files.includes(REAL_CHART));
     expect(candidate).toBeDefined();
 
-    const manifest = buildPlanSync({
-      config, rootDir: root, graph, candidate: candidate!, baselineCommit: graph.commit!, packageName: "@acme/chart-docref",
-    });
+    const manifest = buildPlanSync({ config, rootDir: root, graph, candidate: candidate!, baselineCommit: graph.commit!, packageName: "@acme/chart-docref" });
 
     // Proves the wiring end to end: the compiled journal actually contains a
     // rewrite-path-reference operation naming the document (not just that

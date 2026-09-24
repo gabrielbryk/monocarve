@@ -16,15 +16,17 @@ function symbolIsTypeOnly(symbol: ts.Symbol): boolean {
 }
 
 function isTypeOnlyDeclaration(declaration: ts.Declaration): boolean {
-  return ts.isInterfaceDeclaration(declaration) ||
+  return (
+    ts.isInterfaceDeclaration(declaration) ||
     ts.isTypeAliasDeclaration(declaration) ||
     ts.isTypeParameterDeclaration(declaration) ||
-    (ts.isImportSpecifier(declaration) && declaration.isTypeOnly);
+    (ts.isImportSpecifier(declaration) && declaration.isTypeOnly)
+  );
 }
 
 function bindingNames(name: ts.BindingName): string[] {
   if (ts.isIdentifier(name)) return [name.text];
-  return name.elements.flatMap((element) => ts.isBindingElement(element) ? bindingNames(element.name) : []);
+  return name.elements.flatMap((element) => (ts.isBindingElement(element) ? bindingNames(element.name) : []));
 }
 
 function recordModifierExport(statement: ts.Statement, exported: Set<string>): void {
@@ -45,18 +47,19 @@ function recordModifierExport(statement: ts.Statement, exported: Set<string>): v
 }
 
 function namedDeclarationName(statement: ts.Statement): string | undefined {
-  if (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isInterfaceDeclaration(statement) ||
-    ts.isTypeAliasDeclaration(statement) || ts.isEnumDeclaration(statement)) {
+  if (
+    ts.isFunctionDeclaration(statement) ||
+    ts.isClassDeclaration(statement) ||
+    ts.isInterfaceDeclaration(statement) ||
+    ts.isTypeAliasDeclaration(statement) ||
+    ts.isEnumDeclaration(statement)
+  ) {
     return statement.name?.text;
   }
   return undefined;
 }
 
-function recordExportDeclaration(
-  statement: ts.ExportDeclaration,
-  exported: Set<string>,
-  typeOnly: Map<string, boolean>,
-): boolean {
+function recordExportDeclaration(statement: ts.ExportDeclaration, exported: Set<string>, typeOnly: Map<string, boolean>): boolean {
   if (!statement.exportClause) return true;
   if (ts.isNamespaceExport(statement.exportClause)) {
     exported.add(statement.exportClause.name.text);
@@ -92,11 +95,9 @@ export function resolveExportSurface(checker: ts.TypeChecker, sourceFile: ts.Sou
   const moduleSymbol = checker.getSymbolAtLocation(sourceFile);
   if (!moduleSymbol) return [];
   const metadata = exportMetadata(sourceFile);
-  return checker.getExportsOfModule(moduleSymbol)
+  return checker
+    .getExportsOfModule(moduleSymbol)
     .filter((symbol) => metadata.hasExportStar || metadata.explicitlyExported.has(symbol.getName()))
-    .map((symbol) => ({
-      name: symbol.getName(),
-      typeOnly: metadata.explicitTypeOnly.get(symbol.getName()) ?? symbolIsTypeOnly(symbol),
-    }))
+    .map((symbol) => ({ name: symbol.getName(), typeOnly: metadata.explicitTypeOnly.get(symbol.getName()) ?? symbolIsTypeOnly(symbol) }))
     .sort((left, right) => byCodeUnit(left.name, right.name));
 }

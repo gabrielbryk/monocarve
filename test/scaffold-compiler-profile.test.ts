@@ -13,10 +13,18 @@ test("refuses a JSX application scaffold whose configured tsconfig cannot enable
     applications: [{ name: "api", sourceRoot: "apps/api/src", tsconfig: "apps/api/tsconfig.json", packageName: "@acme/api", compilerProfile: { jsx: true } }],
     scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' }, tsconfig: { contents: '{"compilerOptions":{"strict":true}}\n' } },
   });
-  expect(() => packageOperations({
-    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
-    packageManager: pnpmAdapter, taskRunner: moonAdapter, packageName: "@acme/new-package",
-    packageRoot: "libs/new-package", projectId: "new-package", production: ["apps/api/src/view.tsx"],
-    dependencies: { runtime: {}, dev: {}, packageReferences: [] },
-  })).toThrow("compilerProfile requires JSX");
+  expect(() =>
+    packageOperations({
+      context: new WorkspaceContext(config, root),
+      config,
+      application: config.applications[0]!,
+      packageManager: pnpmAdapter,
+      taskRunner: moonAdapter,
+      packageName: "@acme/new-package",
+      packageRoot: "libs/new-package",
+      projectId: "new-package",
+      production: ["apps/api/src/view.tsx"],
+      dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+    }),
+  ).toThrow("compilerProfile requires JSX");
 });

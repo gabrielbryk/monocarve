@@ -1,18 +1,18 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { createPackageManagerAdapter } from "../../adapters/registry.ts";
 import { getApplication, isPackageOwner, packageNameOf, triggeredPathMigrations } from "../../config.ts";
 import { applicationOwner } from "../../config/helpers.ts";
-import { createPackageManagerAdapter } from "../../adapters/registry.ts";
+import { readManifest } from "../../graph/workspace.ts";
+import { readUtf8Artifact, runPathMigrationCommand } from "../../transaction/path-migrations.ts";
 import { fileState } from "../../util/files.ts";
 import { hashText, isFileState, isSha256 } from "../../util/hash.ts";
 import { relativeWorkspacePath } from "../../util/paths.ts";
-import { readManifest } from "../../graph/workspace.ts";
 import { isAnyMove, regeneratedArtifactPaths, type ExtractionManifest, type ImportRewrite, type PlanOperation } from "../manifest.ts";
 import { relativeFsLiteral } from "../static-fs-references.ts";
-import { readUtf8Artifact, runPathMigrationCommand } from "../../transaction/path-migrations.ts";
-import { validatePathReferenceRewrite } from "./path-reference.ts";
 import { validatePathMigrationOperation } from "./path-migration-operation.ts";
+import { validatePathReferenceRewrite } from "./path-reference.ts";
 import type { ValidatePlanOptions, ValidationIssue } from "./shared.ts";
 import { Issues } from "./shared.ts";
 
@@ -31,12 +31,7 @@ export interface OperationContext {
 }
 
 /** Validate ordered journal operations and their declared transaction footprint. */
-export function validateOperations(
-  manifest: ExtractionManifest,
-  options: ValidatePlanOptions,
-  issues: Issues,
-  context: OperationContext,
-): void {
+export function validateOperations(manifest: ExtractionManifest, options: ValidatePlanOptions, issues: Issues, context: OperationContext): void {
   const operations = manifest.operations ?? [];
   if (operations.length === 0) {
     issues.add("operations", "operations must not be empty");
@@ -65,10 +60,7 @@ export function validateOperations(
   validateChangedFiles(manifest, issues, mutated);
 }
 
-function workspacePackageNames(
-  manifest: ExtractionManifest,
-  options: ValidatePlanOptions,
-): Set<string> | undefined {
+function workspacePackageNames(manifest: ExtractionManifest, options: ValidatePlanOptions): Set<string> | undefined {
   const packages = options.offline
     ? undefined
     : new Set(
@@ -109,13 +101,14 @@ function validateOperation(
     case "move-with-rewrite":
       validateMove(operation, index, options, issues, context, moved, mutated, workspacePackages);
       return;
-    case "rewrite-import":
+    case "rewrite-import": {
       const crossDonorMove = movePaths.has(operation.file) && operation.donors.some((donor) => donor !== operation.file && movePaths.has(donor));
       if (movePaths.has(operation.file) && !crossDonorMove) {
         issues.add("multiple-mutations", `multiple operations mutate ${operation.file}`, { operationIndex: index });
       }
       validateRewrite(operation, index, issues, context, mutated, crossDonorMove);
       return;
+    }
     case "rewrite-fs-reference":
       if (movePaths.has(operation.file)) {
         issues.add("multiple-mutations", `multiple operations mutate ${operation.file}`, { operationIndex: index });
@@ -129,8 +122,14 @@ function validateOperation(
       validateWrite(operation, index, options, issues, mutated, isPromotionCompatibilityWrite(manifest, operation));
       return;
     case "delete-file":
-      if (operation.preconditionHash === "missing") issues.add("invalid-precondition", `cannot delete missing file ${operation.path}`, { operationIndex: index });
-      if (!isFileState(operation.preconditionHash) || !isFileState(operation.resultHash) || operation.resultHash !== "missing") issues.add("delete-hash", "delete result must be the missing file state", { operationIndex: index, operationKind: operation.kind, path: operation.path });
+      if (operation.preconditionHash === "missing")
+        issues.add("invalid-precondition", `cannot delete missing file ${operation.path}`, { operationIndex: index });
+      if (!isFileState(operation.preconditionHash) || !isFileState(operation.resultHash) || operation.resultHash !== "missing")
+        issues.add("delete-hash", "delete result must be the missing file state", {
+          operationIndex: index,
+          operationKind: operation.kind,
+          path: operation.path,
+        });
       mutated.add(operation.path);
       return;
     case "lockfile-importer":
@@ -146,9 +145,7 @@ function validateOperation(
       validatePathReferenceRewrite(operation, index, issues, moves, mutated);
       return;
     default:
-      issues.add("unknown-operation", `unsupported operation kind ${(operation as { kind: string }).kind}`, {
-        operationIndex: index,
-      });
+      issues.add("unknown-operation", `unsupported operation kind ${(operation as { kind: string }).kind}`, { operationIndex: index });
   }
 }
 
@@ -165,7 +162,10 @@ function validateMoveCoverage(
 
   const migrationOperations = manifest.operations.filter((operation) => operation.kind === "migrate-path-keys");
   const migrationNoops = manifest.pathMigrationNoops ?? [];
-  const requiredMigrations = triggeredPathMigrations(options.config, moves.map((move) => move.source));
+  const requiredMigrations = triggeredPathMigrations(
+    options.config,
+    moves.map((move) => move.source),
+  );
   for (const artifact of requiredMigrations) {
     const operationCount = migrationOperations.filter((operation) => operation.path === artifact.path).length;
     const noopCount = migrationNoops.filter((proof) => proof.path === artifact.path).length;
@@ -206,7 +206,9 @@ function validatePathMigrationNoops(
   const proofs = manifest.pathMigrationNoops ?? [];
   const expectedMoves = moves
     .map(({ source, target }) => ({ source, target }))
-    .sort((left, right) => left.source < right.source ? -1 : left.source > right.source ? 1 : left.target < right.target ? -1 : left.target > right.target ? 1 : 0);
+    .sort((left, right) =>
+      left.source < right.source ? -1 : left.source > right.source ? 1 : left.target < right.target ? -1 : left.target > right.target ? 1 : 0,
+    );
   const seen = new Set<string>();
   for (const proof of proofs) {
     const at = { path: proof.path };
@@ -214,7 +216,8 @@ function validatePathMigrationNoops(
     seen.add(proof.path);
     const configured = required.find((artifact) => artifact.path === proof.path);
     if (!configured) issues.add("path-migration-config", `plan declares an unconfigured no-op path migration: ${proof.path}`, at);
-    else if (configured.command !== proof.command) issues.add("path-migration-config", `no-op path migration command differs from config for ${proof.path}`, at);
+    else if (configured.command !== proof.command)
+      issues.add("path-migration-config", `no-op path migration command differs from config for ${proof.path}`, at);
     if (JSON.stringify(proof.moves) !== JSON.stringify(expectedMoves)) {
       issues.add("path-migration-moves", `no-op path migration does not carry the exact sorted move map: ${proof.path}`, at);
     }
@@ -261,7 +264,8 @@ function readdirNames(absolute: string): string[] {
 function operationKey(operation: PlanOperation): string {
   if (isAnyMove(operation)) return `${operation.kind}:${operation.source}:${operation.target}`;
   if (operation.kind === "lockfile-importer") return `${operation.kind}:${operation.packageRoot}`;
-  if (operation.kind === "write-file" || operation.kind === "delete-file" || operation.kind === "migrate-path-keys") return `${operation.kind}:${operation.path}`;
+  if (operation.kind === "write-file" || operation.kind === "delete-file" || operation.kind === "migrate-path-keys")
+    return `${operation.kind}:${operation.path}`;
   if (operation.kind === "rewrite-path-reference") return `rewrite-path-reference:${operation.file}`;
   return `${operation.kind}:${operation.file}`;
 }
@@ -289,7 +293,7 @@ function validateMove(
     issues.add("move-precondition", `move precondition does not match the baseline blob ${operation.source}`, at);
   }
   if (operation.kind === "move-with-rewrite") {
-      validateMoveWithRewrite(operation, issues, context, workspacePackages, at);
+    validateMoveWithRewrite(operation, issues, context, workspacePackages, at);
     return;
   }
   if (operation.resultHash !== context.blobs[operation.source]) {
@@ -443,10 +447,12 @@ function validateWrite(
 }
 
 function isPromotionCompatibilityWrite(manifest: ExtractionManifest, operation: Extract<PlanOperation, { kind: "write-file" }>): boolean {
-  return manifest.modulePromotion?.retireSource === false
-    && operation.path === manifest.modulePromotion.source
-    && operation.generator === "module-promotion:compatibility-reexport"
-    && operation.preconditionHash === "missing";
+  return (
+    manifest.modulePromotion?.retireSource === false &&
+    operation.path === manifest.modulePromotion.source &&
+    operation.generator === "module-promotion:compatibility-reexport" &&
+    operation.preconditionHash === "missing"
+  );
 }
 
 function validateLockfileImporter(
@@ -492,4 +498,10 @@ function validateLockfileImporter(
   mutated.add(operation.lockfile);
 }
 
-const readFileSyncSafe = (path: string): string | undefined => { try { return readFileSync(path, "utf8"); } catch { return undefined; } };
+const readFileSyncSafe = (path: string): string | undefined => {
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return undefined;
+  }
+};

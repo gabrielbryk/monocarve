@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../src/adapters/registry.ts";
-import { LockfileError, pnpmAdapter } from "../src/adapters/pnpm.ts";
 import { moonAdapter, noneTaskRunner } from "../src/adapters/moon.ts";
+import { LockfileError, pnpmAdapter } from "../src/adapters/pnpm.ts";
+import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../src/adapters/registry.ts";
 import { loadConfig } from "../src/config.ts";
 import { hashText } from "../src/util/hash.ts";
 import { cleanupFixtures, fixtureRepo } from "./support/fixture-repo.ts";
@@ -49,7 +49,9 @@ describe("adapters", () => {
     // below would still pass if the registry had thrown for every manager.
     expect(createPackageManagerAdapter({ ...config, packageManager: "bun" }).id).toBe("bun");
     for (const packageManager of ["npm", "yarn"] as const) {
-      expect(() => createPackageManagerAdapter({ ...config, packageManager })).toThrow(`not yet ported: adapters/registry: ${packageManager} package-manager adapter`);
+      expect(() => createPackageManagerAdapter({ ...config, packageManager })).toThrow(
+        `not yet ported: adapters/registry: ${packageManager} package-manager adapter`,
+      );
     }
     for (const taskRunner of ["nx", "turbo"] as const) {
       expect(() => createTaskRunnerAdapter({ ...config, taskRunner })).toThrow(`not yet ported: adapters/registry: ${taskRunner} task-runner adapter`);
@@ -93,28 +95,18 @@ describe("adapters", () => {
     // `  libs/logger: {}` plus a `dependencies:` mapping under it is a key with
     // two values, which is not YAML. The key has to lose its inline map first.
     expect(wired).toBe(
-      [
-        "  libs/logger:",
-        "    dependencies:",
-        "      '@acme/chart':",
-        "        specifier: workspace:*",
-        "        version: link:../chart",
-        "",
-        "",
-      ].join("\n"),
+      ["  libs/logger:", "    dependencies:", "      '@acme/chart':", "        specifier: workspace:*", "        version: link:../chart", "", ""].join("\n"),
     );
     expect(wired).not.toContain("{}");
     expect(pnpmAdapter.addBlockDependency(wired, "@acme/chart", "workspace:*", "link:../chart")).toBe(wired);
     // The expanded block still round-trips through the section it came from.
-    expect(pnpmAdapter.importerBlock(pnpmAdapter.replaceImporter(lockfile, "libs/logger", wired), "libs/logger")).toBe(
-      wired,
-    );
+    expect(pnpmAdapter.importerBlock(pnpmAdapter.replaceImporter(lockfile, "libs/logger", wired), "libs/logger")).toBe(wired);
 
     // An inline value that is not the empty map is content, and making room for
     // a dependency by discarding it would lose a resolution silently.
-    expect(() =>
-      pnpmAdapter.addBlockDependency("  libs/logger: [1]\n\n", "@acme/chart", "workspace:*", "link:../chart"),
-    ).toThrow("cannot expand an inline importer that is not empty");
+    expect(() => pnpmAdapter.addBlockDependency("  libs/logger: [1]\n\n", "@acme/chart", "workspace:*", "link:../chart")).toThrow(
+      "cannot expand an inline importer that is not empty",
+    );
   });
 
   test("adds a dependency to an existing block in sorted order, once", () => {
@@ -146,13 +138,15 @@ describe("adapters", () => {
       "",
     ].join("\n");
 
-    expect(() => pnpmAdapter.renderImporterBlock({
-      packageRoot: "libs/chart",
-      dependencies: { "left-pad": "catalog:" },
-      devDependencies: {},
-      lockfileText: divergent,
-      workspaceRoots: {},
-    })).toThrow("lockfile resolves left-pad@catalog: to more than one version");
+    expect(() =>
+      pnpmAdapter.renderImporterBlock({
+        packageRoot: "libs/chart",
+        dependencies: { "left-pad": "catalog:" },
+        devDependencies: {},
+        lockfileText: divergent,
+        workspaceRoots: {},
+      }),
+    ).toThrow("lockfile resolves left-pad@catalog: to more than one version");
   });
 
   test("removes exactly one dependency and collapses an emptied importer", () => {
@@ -206,13 +200,11 @@ describe("adapters", () => {
       "",
       "",
     ].join("\n");
-    expect(() => pnpmAdapter.addBlockDependency(duplicate, "@acme/chart", "workspace:*", "link:../../libs/chart")).toThrow(
-      "more than one dependency section",
-    );
-    const optional = duplicate.replace("    dependencies:", "    optionalDependencies:").replace("    devDependencies:\n      '@acme/chart':\n        specifier: workspace:*\n        version: link:../../libs/chart", "");
-    expect(() => pnpmAdapter.addBlockDependency(optional, "@acme/chart", "workspace:*", "link:../../libs/chart", "dev")).toThrow(
-      "optionalDependencies",
-    );
+    expect(() => pnpmAdapter.addBlockDependency(duplicate, "@acme/chart", "workspace:*", "link:../../libs/chart")).toThrow("more than one dependency section");
+    const optional = duplicate
+      .replace("    dependencies:", "    optionalDependencies:")
+      .replace("    devDependencies:\n      '@acme/chart':\n        specifier: workspace:*\n        version: link:../../libs/chart", "");
+    expect(() => pnpmAdapter.addBlockDependency(optional, "@acme/chart", "workspace:*", "link:../../libs/chart", "dev")).toThrow("optionalDependencies");
     const unfamiliar = [
       "  apps/web:",
       "    dependencies:",
@@ -245,13 +237,7 @@ describe("adapters", () => {
     // A package that declares nothing is inline, because that is what pnpm
     // writes for one; `  libs/chart:` alone is YAML null, not an empty map.
     expect(
-      pnpmAdapter.renderImporterBlock({
-        packageRoot: "libs/chart",
-        dependencies: {},
-        devDependencies: {},
-        lockfileText: lockfile,
-        workspaceRoots: {},
-      }),
+      pnpmAdapter.renderImporterBlock({ packageRoot: "libs/chart", dependencies: {}, devDependencies: {}, lockfileText: lockfile, workspaceRoots: {} }),
     ).toBe("  libs/chart: {}");
     // An exact pin is not self-attesting. This lockfile carries no packages:
     // or snapshots: entry for it, so writing `version: 1.0.0` would name a
@@ -341,9 +327,7 @@ describe("adapters", () => {
 
     // Agreement is not ambiguity: the common case must still resolve, and must
     // resolve to the version both importers actually hold.
-    expect(render(disagreeing("1.0.0(react@18.0.0)", "1.0.0(react@18.0.0)"))).toContain(
-      "        version: 1.0.0(react@18.0.0)",
-    );
+    expect(render(disagreeing("1.0.0(react@18.0.0)", "1.0.0(react@18.0.0)"))).toContain("        version: 1.0.0(react@18.0.0)");
 
     // One importer is still one answer — including when it is the last entry in
     // the section, where the scan has no following entry to stop at.
@@ -364,6 +348,80 @@ describe("adapters", () => {
     expect(render(single)).toContain("        version: 1.0.0(react@18.0.0)");
   });
 
+  test("projects an existing importer from its own peer-context resolution", () => {
+    const lockfileText = disagreeing("1.0.0(react@17.0.0)", "1.0.0(react@18.0.0)");
+    const block = pnpmAdapter.renderImporterBlock({
+      packageRoot: "apps/admin",
+      dependencies: { pluggable: "^1.0.0" },
+      devDependencies: {},
+      lockfileText,
+      workspaceRoots: {},
+    });
+
+    expect(block).toContain("        version: 1.0.0(react@17.0.0)");
+    expect(block).not.toContain("        version: 1.0.0(react@18.0.0)");
+  });
+
+  test("projects a new importer from its donating importer resolution", () => {
+    const lockfileText = disagreeing("1.0.0(react@17.0.0)", "1.0.0(react@18.0.0)");
+    const block = pnpmAdapter.renderImporterBlock({
+      packageRoot: "libs/chart",
+      dependencies: { pluggable: "^1.0.0" },
+      devDependencies: {},
+      lockfileText,
+      workspaceRoots: {},
+      resolutionRoots: { pluggable: ["apps/admin"] },
+    });
+
+    expect(block).toContain("        version: 1.0.0(react@17.0.0)");
+    expect(block).not.toContain("        version: 1.0.0(react@18.0.0)");
+  });
+
+  test("projects a new catalog importer from its donating importer resolution", () => {
+    const lockfileText = disagreeing("1.0.0(react@17.0.0)", "1.0.0(react@18.0.0)").replaceAll("specifier: ^1.0.0", "specifier: catalog:");
+    const block = pnpmAdapter.renderImporterBlock({
+      packageRoot: "libs/chart",
+      dependencies: {},
+      devDependencies: { pluggable: "catalog:" },
+      lockfileText,
+      workspaceRoots: {},
+      resolutionRoots: { pluggable: ["apps/admin"] },
+    });
+
+    expect(block).toContain("specifier: 'catalog:'");
+    expect(block).toContain("        version: 1.0.0(react@17.0.0)");
+    expect(block).not.toContain("        version: 1.0.0(react@18.0.0)");
+  });
+
+  test("refuses a new importer whose owner contexts disagree", () => {
+    const lockfileText = disagreeing("1.0.0(react@17.0.0)", "1.0.0(react@18.0.0)");
+
+    expect(() =>
+      pnpmAdapter.renderImporterBlock({
+        packageRoot: "libs/chart",
+        dependencies: { pluggable: "^1.0.0" },
+        devDependencies: {},
+        lockfileText,
+        workspaceRoots: {},
+        resolutionRoots: { pluggable: ["apps/admin", "apps/web"] },
+      }),
+    ).toThrow("lockfile resolves pluggable@^1.0.0 to more than one version");
+  });
+
+  test("projects an existing catalog importer from its own peer-context resolution", () => {
+    const lockfileText = disagreeing("1.0.0(react@17.0.0)", "1.0.0(react@18.0.0)").replaceAll("specifier: ^1.0.0", "specifier: catalog:");
+    const block = pnpmAdapter.renderImporterBlock({
+      packageRoot: "apps/admin",
+      dependencies: { pluggable: "catalog:" },
+      devDependencies: {},
+      lockfileText,
+      workspaceRoots: {},
+    });
+
+    expect(block).toContain("        version: 1.0.0(react@17.0.0)");
+    expect(block).not.toContain("        version: 1.0.0(react@18.0.0)");
+  });
+
   test("edits workspace membership only when the globs do not already cover it", () => {
     const manifest = "packages:\n  - apps/*\n  - libs/*\n";
     expect(pnpmAdapter.workspaceManifestEdit(manifest, "libs/chart")).toEqual({ kind: "already-satisfied" });
@@ -381,7 +439,10 @@ describe("adapters", () => {
     await expect(pnpmAdapter.listPackages(nested)).rejects.toThrow("workspace glob is not yet ported");
 
     const supportedNested = fixtureRepo({ "pnpm-workspace.yaml": "packages:\n  - 'apps/*/ui'\n" });
-    for (const [dir, name] of [["apps/one/ui", "@acme/one-ui"], ["apps/two/ui", "@acme/two-ui"]] as const) {
+    for (const [dir, name] of [
+      ["apps/one/ui", "@acme/one-ui"],
+      ["apps/two/ui", "@acme/two-ui"],
+    ] as const) {
       mkdirSync(join(supportedNested, dir), { recursive: true });
       writeFileSync(join(supportedNested, dir, "package.json"), JSON.stringify({ name }));
     }
@@ -391,7 +452,10 @@ describe("adapters", () => {
     ]);
 
     const excluded = fixtureRepo({ "pnpm-workspace.yaml": "packages:\n  - 'libs/*'\n  - '!**/dist/**'\n" });
-    const excludedPackages: Array<[string, string]> = [["libs/kept", "@acme/kept"], ["libs/dist", "@acme/excluded"]];
+    const excludedPackages: Array<[string, string]> = [
+      ["libs/kept", "@acme/kept"],
+      ["libs/dist", "@acme/excluded"],
+    ];
     for (const [dir, name] of excludedPackages) {
       mkdirSync(join(excluded, dir), { recursive: true });
       writeFileSync(join(excluded, dir, "package.json"), JSON.stringify({ name }));
@@ -412,9 +476,7 @@ describe("adapters", () => {
     expect(moonAdapter.wrapGateCommand("moon run chart:test")).toEqual(["sh", "-c", "moon run chart:test"]);
 
     // Glob-based discovery needs no registration at all.
-    expect(moonAdapter.registerProject("projects:\n  globs:\n    - 'libs/*'\n", "libs/chart", "chart")).toEqual({
-      kind: "already-satisfied",
-    });
+    expect(moonAdapter.registerProject("projects:\n  globs:\n    - 'libs/*'\n", "libs/chart", "chart")).toEqual({ kind: "already-satisfied" });
 
     const explicit = "projects:\n  api: 'apps/api'\n  logger: 'libs/logger'\n";
     const registered = moonAdapter.registerProject(explicit, "libs/chart", "chart");
@@ -429,15 +491,8 @@ describe("adapters", () => {
       reason: "project discovery globs do not cover libs/chart",
     });
     expect(
-      moonAdapter.registerProject(
-        "projects:\n  globs:\n    - 'apps/*'\nother:\n  globs:\n    - 'libs/*'\n  chart: 'libs/chart'\n",
-        "libs/chart",
-        "chart",
-      ),
-    ).toEqual({
-      kind: "unmet-precondition",
-      reason: "project discovery globs do not cover libs/chart",
-    });
+      moonAdapter.registerProject("projects:\n  globs:\n    - 'apps/*'\nother:\n  globs:\n    - 'libs/*'\n  chart: 'libs/chart'\n", "libs/chart", "chart"),
+    ).toEqual({ kind: "unmet-precondition", reason: "project discovery globs do not cover libs/chart" });
     expect(
       moonAdapter.registerProject(
         "projects:\n  api: 'apps/api'\n# Existing projects stay sorted by id.\n  chart: 'libs/chart'\nother:\n  enabled: true\n",

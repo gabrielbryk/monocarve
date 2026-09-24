@@ -1,23 +1,23 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 
-import { triggeredArtifacts, type MonocarveConfig, type PreparerConfig } from "../config.ts";
-import type { ExtractionManifest, MoveOperation } from "../plan/manifest.ts";
-import { executePreparationJournal, finalizeCompletedPreparationJournal, rollbackCompletedPreparationJournal } from "../prepare/journal.ts";
 import { createPackageManagerAdapter } from "../adapters/registry.ts";
-import { createWorktree } from "../transaction/worktree.ts";
-import { fileState } from "../util/files.ts";
-import { currentBranch, git, headCommit, repositoryPrefix, resolveCommit, showBaseline, showBaselineBytes, statusEntries } from "../util/git.ts";
+import { type MonocarveConfig, packageContainerRoots } from "../config.ts";
 import { isGuardedBranch } from "../config.ts";
-import { byCodeUnit, hashBytes, hashJson, hashText, MISSING, stableStringify } from "../util/hash.ts";
-import { workspacePath } from "../util/paths.ts";
-import { renderTemplate } from "../util/template.ts";
-import { PREPARER_MANIFEST_SCHEMA_VERSION, type PreparerManifest, type PreparerMutation } from "./manifest.ts";
-import { bindBootstrapConfig } from "./bootstrap-config.ts";
-import { preparationPostJournalRecords, runPreparationPostJournalPreparers } from "../prepare/post-journal.ts";
+import type { ExtractionManifest } from "../plan/manifest.ts";
+import { executePreparationJournal, finalizeCompletedPreparationJournal, rollbackCompletedPreparationJournal } from "../prepare/journal.ts";
+import { runPreparationPostJournalPreparers } from "../prepare/post-journal.ts";
 import { restoreSnapshot, snapshotPaths } from "../transaction/journal.ts";
+import { createWorktree } from "../transaction/worktree.ts";
+import { currentBranch, git, headCommit, repositoryPrefix, resolveCommit, showBaseline, statusEntries } from "../util/git.ts";
+import { byCodeUnit, hashText, stableStringify } from "../util/hash.ts";
+import { workspacePath } from "../util/paths.ts";
+import { bindBootstrapConfig } from "./bootstrap-config.ts";
+import { planPreparerCompilation, runPreparerCompilation } from "./core-compile.ts";
+import { assertCommittedMutationsMatch, assertMutationsMatchState, unique, validatedPath } from "./core-support.ts";
+import { assertPreparerManifestMatchesConfig, assertPreparerManifestShape } from "./core-validate.ts";
 import { PreparerError } from "./error.ts";
+import type { PreparerManifest } from "./manifest.ts";
 import { runPreparerCommand } from "./run-command.ts";
-import { applyFileCreates, applyTextReplacements, type FileCreate } from "./declarative.ts";
 
 export { PreparerError } from "./error.ts";
 
@@ -42,98 +42,19 @@ export interface CompileStandalonePreparerInput {
 }
 
 export async function compilePreparerManifest(input: CompilePreparerInput): Promise<PreparerManifest> {
-  const policy = findPolicy(input.config, input.preparerId);
-  const move = findMove(input.extraction, input.sourcePath);
-  const resolved = resolveCommit(input.rootDir, input.extraction.baselineCommit);
-  const vars = variables(input.extraction, move);
-  const declaredOutputs = policy.outputs.map((path) => renderTemplate(path, vars)).map((path) => validatedPath(input.rootDir, path));
-  const command = policy.command === undefined ? undefined : renderTemplate(policy.command, vars);
-  const replacements = policy.replacements?.map((replacement) => ({
-    path: validatedPath(input.rootDir, renderTemplate(replacement.path, vars)),
-    before: replacement.before,
-    after: replacement.after,
-    ...(replacement.prefix === undefined ? {} : { prefix: replacement.prefix }),
-    ...(replacement.suffix === undefined ? {} : { suffix: replacement.suffix }),
-  }));
-  const creates = policy.creates?.map((create) => ({
-    path: validatedPath(input.rootDir, renderTemplate(create.path, vars)),
-    contents: create.contents,
-    mode: create.mode ?? 0o644,
-  }));
-  assertDistinctCreates(creates);
-  const createPaths = creates?.map((create) => create.path) ?? [];
-  assertNoDuplicatePaths(declaredOutputs, "duplicate declared preparer output path");
-  const declaredCreate = createPaths.find((path) => declaredOutputs.includes(path));
-  if (declaredCreate !== undefined) throw new PreparerError(`created path is automatically an output and must not be declared twice: ${declaredCreate}`);
-  const overlap = replacements?.find((replacement) => createPaths.includes(replacement.path));
-  if (overlap !== undefined) throw new PreparerError(`preparer path cannot be both replaced and created: ${overlap.path}`);
-  const outputs = unique([...declaredOutputs, ...createPaths]);
-  const undeclaredReplacement = replacements?.find((replacement) => !outputs.includes(replacement.path));
-  if (undeclaredReplacement !== undefined) throw new PreparerError(`text replacement path is not a declared output: ${undeclaredReplacement.path}`);
-  const verify = policy.verify === undefined ? undefined : renderTemplate(policy.verify, vars);
+  const plan = planPreparerCompilation(input);
   const adapter = createPackageManagerAdapter(input.config);
   const worktree = await createWorktree({
     rootDir: input.rootDir,
-    commit: resolved.commit,
+    commit: plan.resolved.commit,
     worktreeRoot: input.config.transaction.worktreeRoot,
+    packageRoots: packageContainerRoots(input.config),
     nodeModules: input.config.transaction.nodeModules,
     installCommand: adapter.installCommand(),
-    label: `prepare-${policy.id}`,
+    label: `prepare-${plan.policy.id}`,
   });
   try {
-    const before = Object.fromEntries(outputs.map((path) => [path, state(worktree.workspacePath, path)]));
-    if (replacements !== undefined) applyTextReplacements(worktree.workspacePath, replacements);
-    if (creates !== undefined) applyFileCreates(worktree.workspacePath, creates);
-    if (command !== undefined) await runPreparerCommand(command, worktree.workspacePath, input.config.gates.timeoutMs, "preparer");
-    if (verify !== undefined) await runPreparerCommand(verify, worktree.workspacePath, input.config.gates.timeoutMs, "preparer verify");
-    const initialMutations = outputs.map((path): PreparerMutation => mutation(worktree.workspacePath, path, before[path]!));
-    // A preparer is also the supported reconciliation path after its source
-    // rewrite has already landed. Keep every declared mutation path in trigger
-    // scope even when it is at the terminal state, otherwise a stale derived
-    // artifact can never be repaired by recompiling the same preparer.
-    const triggerPaths = initialMutations.map((item) => item.path).sort(byCodeUnit);
-    const generatedArtifacts = triggeredArtifacts(input.config, triggerPaths).map((artifact) => ({
-      path: artifact.path, source: artifact.source, regenerate: artifact.regenerate, regenerateOnApply: true as const,
-      ...(artifact.exemptReason === undefined ? {} : { exemptReason: artifact.exemptReason }),
-    })).sort((left, right) => byCodeUnit(left.path, right.path));
-    const postJournalPreparers = preparationPostJournalRecords(input.config, triggerPaths);
-    const generatedPaths = unique([...generatedArtifacts.map((item) => item.path), ...postJournalPreparers.flatMap((item) => item.outputs)]);
-    const overlap = generatedPaths.find((path) => outputs.includes(path));
-    if (overlap !== undefined) throw new PreparerError(`preparer output cannot also be a triggered generated output: ${overlap}`);
-    // Dependency installation runs before this point and may rewrite generated
-    // files (for example pnpm-lock.yaml or Moon's root tsconfig).  Capture the
-    // reviewed precondition from the immutable baseline commit, not the
-    // disposable worktree after install; otherwise simulation records
-    // post-install bytes as pre=result and real apply cannot commit them.
-    const generatedBefore = Object.fromEntries(generatedPaths.map((path) => [path, baselineState(input.rootDir, resolved.commit, path)]));
-    const generation = runPreparationPostJournalPreparers(input.config, worktree.workspacePath, { triggerPaths, generatedArtifacts, postJournalPreparers });
-    if (!generation.ok) throw new PreparerError(generation.failure ?? "preparer generation failed");
-    const changed = unique(statusEntries(worktree.workspacePath).flatMap((entry) => entry.paths)).sort(byCodeUnit);
-    const changedFiles = unique([...outputs, ...generatedPaths]);
-    const undeclared = changed.filter((path) => !changedFiles.includes(path));
-    if (undeclared.length > 0) throw new PreparerError(`preparer wrote undeclared repository-visible path(s): ${undeclared.join(", ")}`);
-    const mutations = [...initialMutations, ...generatedPaths.map((path): PreparerMutation => mutation(worktree.workspacePath, path, generatedBefore[path]!))]
-      .sort((left, right) => byCodeUnit(left.path, right.path));
-    const draft = {
-      schemaVersion: PREPARER_MANIFEST_SCHEMA_VERSION,
-      createdAt: resolved.committedAt,
-      baseline: { commit: resolved.commit, configDigest: hashJson(input.config) },
-      extractionPlanId: input.extraction.planId,
-      preparer: { id: policy.id, phase: policy.phase, ...(command === undefined ? {} : { command }), ...(replacements === undefined ? {} : { replacements }), ...(creates === undefined ? {} : { creates }), ...(verify === undefined ? {} : { verify }), commit: renderCommit(policy, vars) },
-      binding: {
-        application: input.extraction.application,
-        packageName: input.extraction.target.packageName,
-        packageRoot: input.extraction.target.packageRoot,
-        sourcePath: move.source,
-        targetPath: move.target,
-      },
-      mutations,
-      generatedArtifacts,
-      postJournalPreparers,
-      triggerPaths,
-      changedFiles,
-    } as const;
-    return { ...draft, planId: hashJson(draft) };
+    return await runPreparerCompilation(input, plan, worktree.workspacePath);
   } finally {
     await worktree.dispose();
   }
@@ -156,7 +77,9 @@ export async function compileStandalonePreparerManifest(input: CompileStandalone
     preparerId: input.preparerId,
     sourcePath: input.sourcePath,
   });
-  return input.bootstrapConfigPath === undefined ? manifest : bindBootstrapConfig(input.rootDir, manifest, validatedPath(input.rootDir, input.bootstrapConfigPath));
+  return input.bootstrapConfigPath === undefined
+    ? manifest
+    : bindBootstrapConfig(input.rootDir, manifest, validatedPath(input.rootDir, input.bootstrapConfigPath));
 }
 
 export function serializePreparerManifest(manifest: PreparerManifest): string {
@@ -177,8 +100,12 @@ export function assertApprovedPreparerManifest(rootDir: string, path: string, ma
   }
   const changed = git({ cwd: rootDir }, "diff", "--name-only", "--no-renames", `${baseline}..${head}`).split("\n").filter(Boolean);
   const repositoryPath = `${repositoryPrefix(rootDir)}${path}`;
-  const expectedPaths = [repositoryPath, ...(manifest.bootstrapConfig === undefined ? [] : [`${repositoryPrefix(rootDir)}${manifest.bootstrapConfig.path}`])].sort(byCodeUnit);
-  if (changed.length !== expectedPaths.length || changed.sort(byCodeUnit).some((item, index) => item !== expectedPaths[index])) throw new PreparerError("approved preparer commit must contain exactly the manifest and its declared bootstrap config");
+  const expectedPaths = [
+    repositoryPath,
+    ...(manifest.bootstrapConfig === undefined ? [] : [`${repositoryPrefix(rootDir)}${manifest.bootstrapConfig.path}`]),
+  ].sort(byCodeUnit);
+  if (changed.length !== expectedPaths.length || changed.sort(byCodeUnit).some((item, index) => item !== expectedPaths[index]))
+    throw new PreparerError("approved preparer commit must contain exactly the manifest and its declared bootstrap config");
   const expected = serializePreparerManifest(manifest);
   const loaded = readFileSync(workspacePath(rootDir, path), "utf8");
   if (loaded !== expected || showBaseline(rootDir, head, path) !== expected) {
@@ -187,7 +114,12 @@ export function assertApprovedPreparerManifest(rootDir: string, path: string, ma
   if (manifest.bootstrapConfig !== undefined) {
     const committed = showBaseline(rootDir, head, manifest.bootstrapConfig.path);
     const parent = showBaseline(rootDir, baseline, manifest.bootstrapConfig.path);
-    if (committed === null || parent === null || hashText(committed) !== manifest.bootstrapConfig.resultHash || hashText(parent) !== manifest.bootstrapConfig.preconditionHash) {
+    if (
+      committed === null ||
+      parent === null ||
+      hashText(committed) !== manifest.bootstrapConfig.resultHash ||
+      hashText(parent) !== manifest.bootstrapConfig.preconditionHash
+    ) {
       throw new PreparerError("approved bootstrap config does not match reviewed preimage and result");
     }
   }
@@ -218,10 +150,7 @@ export async function applyPreparerManifest(options: {
   try {
     const generation = runPreparationPostJournalPreparers(options.config, options.rootDir, options.manifest);
     if (!generation.ok) throw new PreparerError(generation.failure ?? "preparer generation failed");
-    for (const item of options.manifest.mutations) {
-      const actual = state(options.rootDir, item.path);
-      if (actual.hash !== item.resultHash || actual.mode !== item.resultMode) throw new PreparerError(`applied preparer output differs from reviewed result: ${item.path}`);
-    }
+    assertMutationsMatchState(options.rootDir, options.manifest.mutations);
     if (options.verify === true && options.manifest.preparer.verify !== undefined) {
       await runPreparerCommand(options.manifest.preparer.verify, options.rootDir, options.config.gates.timeoutMs, "preparer verify");
     }
@@ -235,92 +164,32 @@ export async function applyPreparerManifest(options: {
   }
 }
 
-export async function simulatePreparerManifest(options: { readonly rootDir: string; readonly config: MonocarveConfig; readonly manifest: PreparerManifest }): Promise<void> {
+export async function simulatePreparerManifest(options: {
+  readonly rootDir: string;
+  readonly config: MonocarveConfig;
+  readonly manifest: PreparerManifest;
+}): Promise<void> {
   assertPreparerManifest(options.config, options.manifest);
   const adapter = createPackageManagerAdapter(options.config);
-  const worktree = await createWorktree({ rootDir: options.rootDir, commit: options.manifest.baseline.commit, worktreeRoot: options.config.transaction.worktreeRoot, nodeModules: options.config.transaction.nodeModules, installCommand: adapter.installCommand(), label: options.manifest.planId });
-  try { await applyPreparerManifest({ rootDir: worktree.workspacePath, config: options.config, manifest: options.manifest, verify: true }); }
-  finally { await worktree.dispose(); }
+  const worktree = await createWorktree({
+    rootDir: options.rootDir,
+    commit: options.manifest.baseline.commit,
+    worktreeRoot: options.config.transaction.worktreeRoot,
+    packageRoots: packageContainerRoots(options.config),
+    nodeModules: options.config.transaction.nodeModules,
+    installCommand: adapter.installCommand(),
+    label: options.manifest.planId,
+  });
+  try {
+    await applyPreparerManifest({ rootDir: worktree.workspacePath, config: options.config, manifest: options.manifest, verify: true });
+  } finally {
+    await worktree.dispose();
+  }
 }
 
 export function assertPreparerManifest(config: MonocarveConfig, value: unknown): asserts value is PreparerManifest {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new PreparerError("preparer manifest must be a JSON object");
-  const manifest = value as Partial<PreparerManifest>;
-  if (manifest.schemaVersion !== PREPARER_MANIFEST_SCHEMA_VERSION) throw new PreparerError("unsupported preparer manifest schema");
-  if (typeof manifest.planId !== "string" || typeof manifest.extractionPlanId !== "string") throw new PreparerError("preparer manifest identities must be strings");
-  if (manifest.baseline === undefined || typeof manifest.baseline.commit !== "string" || typeof manifest.baseline.configDigest !== "string") throw new PreparerError("preparer manifest baseline is invalid");
-  if (manifest.bootstrapConfig !== undefined && (manifest.bootstrapConfig === null || typeof manifest.bootstrapConfig !== "object" || typeof manifest.bootstrapConfig.path !== "string" || typeof manifest.bootstrapConfig.contents !== "string" || manifest.bootstrapConfig.resultHash !== hashText(manifest.bootstrapConfig.contents) || ![0o644, 0o755].includes(manifest.bootstrapConfig.preconditionMode as number) || ![0o644, 0o755].includes(manifest.bootstrapConfig.resultMode))) throw new PreparerError("preparer manifest bootstrap config is invalid");
-  if (manifest.preparer === undefined || typeof manifest.preparer.id !== "string") throw new PreparerError("preparer manifest policy is invalid");
-  if (manifest.preparer.command !== undefined && typeof manifest.preparer.command !== "string") throw new PreparerError("preparer manifest command is invalid");
-  if (manifest.preparer.replacements !== undefined && (!Array.isArray(manifest.preparer.replacements) || manifest.preparer.replacements.some((item) => item === null || typeof item !== "object" || typeof item.path !== "string" || typeof item.before !== "string" || typeof item.after !== "string" || (item.prefix !== undefined && typeof item.prefix !== "string") || (item.suffix !== undefined && typeof item.suffix !== "string")))) throw new PreparerError("preparer manifest replacements are invalid");
-  if (manifest.preparer.creates !== undefined && (!Array.isArray(manifest.preparer.creates) || manifest.preparer.creates.some((item) => item === null || typeof item !== "object" || typeof item.path !== "string" || typeof item.contents !== "string" || (item.mode !== 0o644 && item.mode !== 0o755)))) throw new PreparerError("preparer manifest creates are invalid");
-  if (manifest.preparer.commit === undefined || typeof manifest.preparer.commit.subject !== "string") throw new PreparerError("preparer manifest commit policy is invalid");
-  if (manifest.binding === undefined || Object.values(manifest.binding).some((item) => typeof item !== "string")) throw new PreparerError("preparer manifest move binding is invalid");
-  if (!Array.isArray(manifest.mutations) || manifest.mutations.some((item) => item === null || typeof item !== "object" || typeof item.path !== "string" || typeof item.contents !== "string")) throw new PreparerError("preparer manifest mutations are invalid");
-  if (!Array.isArray(manifest.generatedArtifacts) || !Array.isArray(manifest.postJournalPreparers) || !Array.isArray(manifest.triggerPaths) || !Array.isArray(manifest.changedFiles)) throw new PreparerError("preparer manifest generation scope is invalid");
-  if (manifest.baseline.configDigest !== hashJson(config)) throw new PreparerError("preparer manifest configuration digest mismatch");
-  const { planId: _planId, ...draft } = manifest;
-  if (manifest.planId !== hashJson(draft)) throw new PreparerError("preparer manifest identity mismatch");
-  const policy = findPolicy(config, manifest.preparer.id);
-  if (policy.phase !== manifest.preparer.phase) throw new PreparerError("preparer manifest phase differs from configuration");
-  const vars = {
-    app: manifest.binding.application,
-    package: manifest.binding.packageName,
-    packageRoot: manifest.binding.packageRoot,
-    planId: manifest.extractionPlanId,
-    sourcePath: manifest.binding.sourcePath,
-    targetPath: manifest.binding.targetPath,
-  };
-  const expectedCommand = policy.command === undefined ? undefined : renderTemplate(policy.command, vars);
-  const expectedReplacements = policy.replacements?.map((replacement) => ({
-    path: renderTemplate(replacement.path, vars),
-    before: replacement.before,
-    after: replacement.after,
-    ...(replacement.prefix === undefined ? {} : { prefix: replacement.prefix }),
-    ...(replacement.suffix === undefined ? {} : { suffix: replacement.suffix }),
-  }));
-  const expectedCreates = policy.creates?.map((create) => ({
-    path: validatedPath(".", renderTemplate(create.path, vars)),
-    contents: create.contents,
-    mode: create.mode ?? 0o644,
-  }));
-  const renderedOutputs = policy.outputs.map((path) => validatedPath(".", renderTemplate(path, vars)));
-  assertNoDuplicatePaths(renderedOutputs, "duplicate declared preparer output path");
-  const redundantCreateOutput = expectedCreates?.find((create) => renderedOutputs.includes(create.path));
-  if (redundantCreateOutput !== undefined) throw new PreparerError(`created path is automatically an output and must not be declared twice: ${redundantCreateOutput.path}`);
-  const expectedVerify = policy.verify === undefined ? undefined : renderTemplate(policy.verify, vars);
-  const expectedCommit = renderCommit(policy, vars);
-  if (manifest.preparer.command !== expectedCommand || !sameOptionalPolicy(manifest.preparer.replacements, expectedReplacements) || !sameOptionalPolicy(manifest.preparer.creates, expectedCreates) || manifest.preparer.verify !== expectedVerify || hashJson(manifest.preparer.commit) !== hashJson(expectedCommit)) {
-    throw new PreparerError("preparer manifest commands differ from configuration");
-  }
-  const expectedPrimaryOutputs = unique([...renderedOutputs, ...(expectedCreates?.map((create) => create.path) ?? [])]);
-  const expectedTriggerPaths = [...expectedPrimaryOutputs].sort(byCodeUnit);
-  if (hashJson(manifest.triggerPaths) !== hashJson(expectedTriggerPaths)) throw new PreparerError("preparer manifest trigger paths differ from declared mutations");
-  const expectedArtifacts = triggeredArtifacts(config, manifest.triggerPaths).map((artifact) => ({
-    path: artifact.path, source: artifact.source, regenerate: artifact.regenerate, regenerateOnApply: true as const,
-    ...(artifact.exemptReason === undefined ? {} : { exemptReason: artifact.exemptReason }),
-  })).sort((left, right) => byCodeUnit(left.path, right.path));
-  const expectedPostJournal = preparationPostJournalRecords(config, manifest.triggerPaths);
-  if (hashJson(manifest.generatedArtifacts) !== hashJson(expectedArtifacts) || hashJson(manifest.postJournalPreparers) !== hashJson(expectedPostJournal)) throw new PreparerError("preparer manifest generation policy differs from configuration");
-  const expectedOutputs = unique([...expectedPrimaryOutputs, ...expectedArtifacts.map((item) => item.path), ...expectedPostJournal.flatMap((item) => item.outputs)]);
-  if (hashJson(manifest.changedFiles) !== hashJson(expectedOutputs)) throw new PreparerError("preparer manifest changed scope differs from configuration");
-  const actualOutputs = manifest.mutations.map((item) => item.path).sort(byCodeUnit);
-  if (manifest.bootstrapConfig !== undefined) {
-    validatedPath(".", manifest.bootstrapConfig.path);
-    if (actualOutputs.includes(manifest.bootstrapConfig.path)) throw new PreparerError("bootstrap config cannot also be a preparer output");
-  }
-  if (expectedOutputs.length !== actualOutputs.length || expectedOutputs.some((path, index) => path !== actualOutputs[index])) {
-    throw new PreparerError("preparer manifest outputs differ from configuration");
-  }
-  for (const create of manifest.preparer.creates ?? []) {
-    const mutation = manifest.mutations.find((item) => item.path === create.path);
-    if (mutation === undefined || mutation.contents !== create.contents || mutation.resultHash !== hashText(create.contents) || mutation.resultMode !== create.mode) {
-      throw new PreparerError(`preparer manifest create result differs from policy: ${create.path}`);
-    }
-    const absent = mutation.preconditionHash === MISSING && mutation.preconditionMode === MISSING;
-    const alreadyCreated = mutation.preconditionHash === mutation.resultHash && mutation.preconditionMode === mutation.resultMode;
-    if (!absent && !alreadyCreated) throw new PreparerError(`preparer manifest create precondition is neither missing nor exact: ${create.path}`);
-  }
+  assertPreparerManifestShape(value);
+  assertPreparerManifestMatchesConfig(config, value);
 }
 
 /** Commit only an already-applied, byte- and mode-exact preparer result. */
@@ -333,10 +202,7 @@ export function commitPreparerOutputs(rootDir: string, config: MonocarveConfig, 
     .map((item) => item.path)
     .sort(byCodeUnit);
   if (declared.length === 0) throw new PreparerError("preparer output commit has no effective mutations");
-  for (const item of manifest.mutations) {
-    const actual = state(rootDir, item.path);
-    if (actual.hash !== item.resultHash || actual.mode !== item.resultMode) throw new PreparerError(`applied preparer output differs from reviewed result: ${item.path}`);
-  }
+  assertMutationsMatchState(rootDir, manifest.mutations);
   const dirty = unique(statusEntries(rootDir).flatMap((entry) => entry.paths)).sort(byCodeUnit);
   if (dirty.length !== declared.length || dirty.some((item, index) => item !== declared[index])) {
     throw new PreparerError(`preparer output commit requires exactly the declared dirty paths; found: ${dirty.join(", ") || "(none)"}`);
@@ -344,7 +210,17 @@ export function commitPreparerOutputs(rootDir: string, config: MonocarveConfig, 
   git({ cwd: rootDir, quiet: true }, "add", "--", ...declared);
   const commit = manifest.preparer.commit;
   try {
-    git({ cwd: rootDir, quiet: true }, "-c", "core.hooksPath=/dev/null", "commit", "-m", commit.subject, ...(commit.body === undefined ? [] : ["-m", commit.body]), "--", ...declared);
+    git(
+      { cwd: rootDir, quiet: true },
+      "-c",
+      "core.hooksPath=/dev/null",
+      "commit",
+      "-m",
+      commit.subject,
+      ...(commit.body === undefined ? [] : ["-m", commit.body]),
+      "--",
+      ...declared,
+    );
   } catch (error) {
     git({ cwd: rootDir, quiet: true }, "reset", "--", ...declared);
     throw error;
@@ -352,82 +228,8 @@ export function commitPreparerOutputs(rootDir: string, config: MonocarveConfig, 
   const result = headCommit(rootDir);
   const committed = git({ cwd: rootDir }, "diff-tree", "--no-commit-id", "--name-only", "-r", result).split("\n").filter(Boolean).sort(byCodeUnit);
   const expected = declared.map((item) => `${repositoryPrefix(rootDir)}${item}`).sort(byCodeUnit);
-  if (committed.length !== expected.length || committed.some((item, index) => item !== expected[index])) throw new PreparerError("preparer output commit path verification failed");
-  for (const item of manifest.mutations) {
-    const blob = showBaseline(rootDir, result, item.path);
-    const tree = git({ cwd: rootDir }, "ls-tree", result, "--", `${repositoryPrefix(rootDir)}${item.path}`);
-    const committedMode = Number.parseInt((tree.split(" ")[0] ?? "").slice(-3), 8);
-    if (blob === null || hashText(blob) !== item.resultHash || committedMode !== item.resultMode) throw new PreparerError(`preparer output commit proof failed: ${item.path}`);
-  }
+  if (committed.length !== expected.length || committed.some((item, index) => item !== expected[index]))
+    throw new PreparerError("preparer output commit path verification failed");
+  assertCommittedMutationsMatch(rootDir, result, manifest.mutations);
   return result;
-}
-
-function mutation(root: string, path: string, before: ReturnType<typeof state>): PreparerMutation {
-  const absolute = workspacePath(root, path);
-  if (!existsSync(absolute) || !statSync(absolute).isFile()) throw new PreparerError(`declared preparer output is not a file: ${path}`);
-  const bytes = readFileSync(absolute);
-  const contents = bytes.toString("utf8");
-  if (hashText(contents) !== hashBytes(bytes)) throw new PreparerError(`declared preparer output is not UTF-8 text: ${path}`);
-  const mode = canonicalMode(statSync(absolute).mode);
-  return { path, preconditionHash: before.hash, preconditionMode: before.mode, resultHash: hashBytes(bytes), resultMode: mode, contents };
-}
-
-function state(root: string, path: string): { readonly hash: ReturnType<typeof fileState>; readonly mode: number | "missing" } {
-  const absolute = workspacePath(root, path);
-  return existsSync(absolute) ? { hash: fileState(absolute), mode: canonicalMode(statSync(absolute).mode) } : { hash: MISSING, mode: MISSING };
-}
-
-function baselineState(root: string, commit: string, path: string): { readonly hash: ReturnType<typeof fileState>; readonly mode: number | "missing" } {
-  const bytes = showBaselineBytes(root, commit, path);
-  if (bytes === null) return { hash: MISSING, mode: MISSING };
-  const tree = git({ cwd: root }, "ls-tree", commit, "--", `${repositoryPrefix(root)}${path}`);
-  const mode = tree.split(" ")[0];
-  return { hash: hashBytes(bytes), mode: mode === "100755" ? 0o755 : 0o644 };
-}
-
-function canonicalMode(mode: number): 0o644 | 0o755 { return (mode & 0o111) === 0 ? 0o644 : 0o755; }
-
-function findPolicy(config: MonocarveConfig, id: string): PreparerConfig {
-  const policy = config.preparers.find((item) => item.id === id);
-  if (!policy) throw new PreparerError(`unknown configured preparer: ${id}`);
-  return policy;
-}
-
-function findMove(manifest: ExtractionManifest, source: string): MoveOperation {
-  const matches = manifest.operations.filter((operation): operation is MoveOperation => operation.kind === "move" && operation.source === source);
-  if (matches.length !== 1) throw new PreparerError(`expected one byte-identical move for source path: ${source}`);
-  return matches[0]!;
-}
-
-function variables(manifest: ExtractionManifest, move: MoveOperation): Readonly<Record<string, string>> {
-  return { app: manifest.application, package: manifest.target.packageName, packageRoot: manifest.target.packageRoot, planId: manifest.planId, sourcePath: move.source, targetPath: move.target };
-}
-
-function renderCommit(policy: PreparerConfig, vars: Readonly<Record<string, string>>): { readonly subject: string; readonly body?: string } {
-  return { subject: renderTemplate(policy.commit.subject, vars), ...(policy.commit.body === undefined ? {} : { body: renderTemplate(policy.commit.body, vars) }) };
-}
-
-function validatedPath(root: string, path: string): string { workspacePath(root, path); return path.replaceAll("\\", "/"); }
-function unique(items: readonly string[]): string[] { return [...new Set(items)].sort(byCodeUnit); }
-
-function assertDistinctCreates(creates: readonly FileCreate[] | undefined): void {
-  if (creates === undefined) return;
-  const seen = new Set<string>();
-  for (const create of creates) {
-    if (seen.has(create.path)) throw new PreparerError(`duplicate preparer create path: ${create.path}`);
-    seen.add(create.path);
-  }
-}
-
-function assertNoDuplicatePaths(paths: readonly string[], message: string): void {
-  const seen = new Set<string>();
-  for (const path of paths) {
-    if (seen.has(path)) throw new PreparerError(`${message}: ${path}`);
-    seen.add(path);
-  }
-}
-
-function sameOptionalPolicy(left: unknown, right: unknown): boolean {
-  if (left === undefined || right === undefined) return left === right;
-  return hashJson(left) === hashJson(right);
 }

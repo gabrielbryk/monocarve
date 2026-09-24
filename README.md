@@ -6,7 +6,7 @@
 A deterministic **extraction compiler** for TypeScript monorepos.
 
 It decomposes large applications into workspace packages via compiled,
-replayable, hash-verified plans. Instead of doing a refactor, it *compiles* one —
+replayable, hash-verified plans. Instead of doing a refactor, it _compiles_ one —
 a manifest that says exactly which bytes move where, what each file must hash to
 before and after, and which commits result. That manifest is then simulated in a
 disposable worktree, replayed into the real checkout, and audited for byte
@@ -48,7 +48,7 @@ file subtly rewritten during the move, one consumer left pointing at a path that
 still resolves, one dynamic import that quietly became static. Reviewers cannot
 see any of that in a 400-file diff, and tests do not necessarily catch it.
 
-The premise here is that this class of refactor should be *compiled and verified*
+The premise here is that this class of refactor should be _compiled and verified_
 rather than performed:
 
 - **Deterministic.** Same repo, same commit, same plan — byte for byte. Nothing
@@ -61,7 +61,7 @@ rather than performed:
 - **Provable, about content.** "Did any byte change?" reduces to hash
   comparisons plus one replay proof for the single operation kind that
   legitimately edits content, and "does the package have the boundary the plan
-  promised?" is proven against the landed tree. What that does *not* prove is
+  promised?" is proven against the landed tree. What that does _not_ prove is
   behaviour: consumers are repointed at a barrel that re-exports the whole moved
   closure, so a module a consumer never named is now evaluated on import. That
   risk is inventoried per module and warned about at plan time, not proven
@@ -107,17 +107,17 @@ model so a different scanner can replace it.
 connected component, take its transitive first-party closure, add the tests that
 cover it and every asset it imports. Then apply eligibility:
 
-| rule | meaning |
-| --- | --- |
-| containment | no relative import leaves the closure… |
+| rule                       | meaning                                                                                               |
+| -------------------------- | ----------------------------------------------------------------------------------------------------- |
+| containment                | no relative import leaves the closure…                                                                |
 | …except rewritable escapes | …unless it lands on a symbol an existing package already exports, which becomes a `move-with-rewrite` |
-| asset-inclusive closures | a `./styles.css` import is legal *because* the asset moves too, byte-identically |
-| single owner | exactly one application owns the closure |
-| no composition roots | entrypoints and DI wiring never leave |
-| has a surface | something is exported, and something consumes it |
-| not `.d.ts`-only | types with no implementation belong somewhere else |
+| asset-inclusive closures   | a `./styles.css` import is legal _because_ the asset moves too, byte-identically                      |
+| single owner               | exactly one application owns the closure                                                              |
+| no composition roots       | entrypoints and DI wiring never leave                                                                 |
+| has a surface              | something is exported, and something consumes it                                                      |
+| not `.d.ts`-only           | types with no implementation belong somewhere else                                                    |
 
-Runtime-domain crossing is *not* a rejection — it scores down and raises a
+Runtime-domain crossing is _not_ a rejection — it scores down and raises a
 warning, because that split is often the very thing the extraction fixes.
 Rejections carry the concrete edges to break, which is what `backlog` prints.
 
@@ -125,18 +125,18 @@ Rejections carry the concrete edges to break, which is what `backlog` prints.
 hashes, and an ordered journal of operations, each with a precondition hash and a
 result hash.
 
-| operation | what it does |
-| --- | --- |
-| `move` | byte-identical relocation; `resultHash === preconditionHash`. Assets too. |
-| `rewrite-import` | consumer that stays put, repointed at the new package (AST edit) |
-| `write-file` | package scaffolding rendered from config templates |
+| operation           | what it does                                                                                                                                                                                                                                                                                                           |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `move`              | byte-identical relocation; `resultHash === preconditionHash`. Assets too.                                                                                                                                                                                                                                              |
+| `rewrite-import`    | consumer that stays put, repointed at the new package (AST edit)                                                                                                                                                                                                                                                       |
+| `write-file`        | package scaffolding rendered from config templates                                                                                                                                                                                                                                                                     |
 | `lockfile-importer` | one importer block inserted at its sorted position — so a plan never embeds a whole lockfile. Both shapes a package manager writes are read and produced, the block form and the inline `root: {}` an importer with no dependencies gets. Run `--verify-lockfile` to check the splice against the real package manager |
-| `move-with-rewrite` | the only kind whose content changes as it moves; excluded from the R100 check and staged into the wiring commit as delete + add |
+| `move-with-rewrite` | the only kind whose content changes as it moves; excluded from the R100 check and staged into the wiring commit as delete + add                                                                                                                                                                                        |
 
 Plus consumer rewrites, Conventional Commit subjects rendered from config, a
 declared `expectedDynamicImportDelta` the audit holds it to, and an
 `evaluationEffects` inventory: what importing the new package does when it is
-*evaluated*, rather than when something in it is called. The portfolio warns
+_evaluated_, rather than when something in it is called. The portfolio warns
 whenever it is non-empty, because a consumer that used to deep-import one module
 will now evaluate all of them, in barrel order.
 
@@ -171,7 +171,7 @@ installed, so nothing was read" stay three distinct answers.
 Read that inventory for what it is. It over-approximates the effects it
 reports — every top-level call counts and most are harmless — and it is a
 syntactic scan, so a module missing from it has not been shown to be pure.
-Nothing inside a third-party package is parsed. And it is a *set*: it says
+Nothing inside a third-party package is parsed. And it is a _set_: it says
 nothing about the order the barrel imposes, which is exactly what matters when
 two modules' effects interact, and which the plan chose when it chose the
 barrel's `export *` order.
@@ -203,13 +203,13 @@ what an apply does. A non-zero exit aborts like a failed gate, with the
 generator's own output attached.
 
 **audit** — independent proofs, each of which can fail on its own: byte fidelity
-(every moved file, every rewritten consumer and every file the plan *wrote* must
+(every moved file, every rewritten consumer and every file the plan _wrote_ must
 hash to what its operation declared),
-consumer completeness (specifier comparison *and* re-resolution, so no edge
+consumer completeness (specifier comparison _and_ re-resolution, so no edge
 points into a moved path), boundary rules, an external-consumer compile proof, a
 codemod replay proof that re-derives every `move-with-rewrite` file from its
 baseline blob and demands byte equality, and an entrypoint-closure proof that
-parses the *landed* barrel and rejects any module it evaluates beyond the set the
+parses the _landed_ barrel and rejects any module it evaluates beyond the set the
 plan declared — plus lockfile-importer and generated-artifact integrity, and a
 graph property check that holds the dynamic-import multiset to what the plan
 declared.
@@ -222,7 +222,7 @@ bytes to choose — the entrypoint-closure proof is the cross-check that keeps o
 of them honest, because it derives the barrel it expects from `source.files`
 rather than from the operation. And the `evaluationEffects` inventory is declared
 and bounded, not verified: the audit proves the barrel evaluates nothing outside
-the set of modules this plan *moves*, which is neither a claim that those
+the set of modules this plan _moves_, which is neither a claim that those
 modules' effects are benign nor a re-derivation of the closure. The closure is
 not re-walked at audit time — doing so would re-resolve and re-parse every
 reachable module, and would check the plan against the same code that produced
@@ -238,7 +238,7 @@ worktree with the package manager and fails on any difference. It is opt-in
 because it costs a package-manager run, and when it is asked for, a package
 manager that is missing or that fails is an error rather than a skip.
 
-All of it reads the tree as *that plan* left it, not the repository as it stands
+All of it reads the tree as _that plan_ left it, not the repository as it stands
 today. The equalities are strict on purpose — moved, rewritten and written bytes,
 the landed lockfile block, the barrel's evaluated module set — so anything that
 legitimately touches those paths later makes the audit red. Extracting a second
@@ -294,7 +294,9 @@ method-size, fan-out, and composite structural thresholds. Both checks print
 the exact files and metrics to fix; they have no baseline exemptions.
 
 Bun-only: the config may be a `.ts` file, the CLI is a `.ts` entrypoint, and the
-test runner is `bun test`. A JSON config changes the config format, not the
+test runner is `bun run test` (the wrapper sets the scratch root and timeout;
+bare `bun test` scatters scratch directories and uses a 5s timeout that several
+subprocess-backed tests exceed). A JSON config changes the config format, not the
 runtime support policy.
 
 For the complete safe operating sequence, including manifest review, the
@@ -308,43 +310,43 @@ These are the main workflow commands, not the complete registry. Run
 `monocarve --help` for every command and the
 [CLI reference](docs/cli-reference.md) for every flag.
 
-| command | does |
-| --- | --- |
-| `scan` | build the dependency model, print a summary |
-| `config-doctor` | explain effective configuration and workspace integration without writing |
-| `symbols --file <path>` | read-only declaration graph with type/value edges and declaration SCCs |
-| `split-candidates --file <path>` | rank declaration SCCs using cross-file consumers and configured domain affinity |
-| `capabilities --file <path> --type <interface>` | partition broad contexts by real compiler-resolved property consumers |
-| `lazy-registry --file <path>` | map dynamic feature entries to current candidate closures and package targets |
-| `hotspots` | rank modules that inflate extraction closures and name the preparation lever |
-| `impact --plan <preparation>` | run a gated counterfactual and compare exact before/after extraction capacity |
-| `seams --file <path> --candidate <id>` | propose a declaration partition and report type-only preparation safety |
-| `seams-multi --file <path> --file <path>` | analyze exact declaration SCCs across multiple files |
-| `prepare-plan` | compile a reviewed, replayable type-only declaration preparation |
-| `prepare-multi-plan` | compile reviewed per-donor seams into one atomic multi-file preparation |
-| `prepare-apply` / `prepare-audit` | simulate or commit a preparation, then independently replay its proof |
+| command                                                                                                    | does                                                                                                                     |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `scan`                                                                                                     | build the dependency model, print a summary                                                                              |
+| `config-doctor`                                                                                            | explain effective configuration and workspace integration without writing                                                |
+| `symbols --file <path>`                                                                                    | read-only declaration graph with type/value edges and declaration SCCs                                                   |
+| `split-candidates --file <path>`                                                                           | rank declaration SCCs using cross-file consumers and configured domain affinity                                          |
+| `capabilities --file <path> --type <interface>`                                                            | partition broad contexts by real compiler-resolved property consumers                                                    |
+| `lazy-registry --file <path>`                                                                              | map dynamic feature entries to current candidate closures and package targets                                            |
+| `hotspots`                                                                                                 | rank modules that inflate extraction closures and name the preparation lever                                             |
+| `impact --plan <preparation>`                                                                              | run a gated counterfactual and compare exact before/after extraction capacity                                            |
+| `seams --file <path> --candidate <id>`                                                                     | propose a declaration partition and report type-only preparation safety                                                  |
+| `seams-multi --file <path> --file <path>`                                                                  | analyze exact declaration SCCs across multiple files                                                                     |
+| `prepare-plan`                                                                                             | compile a reviewed, replayable type-only declaration preparation                                                         |
+| `prepare-multi-plan`                                                                                       | compile reviewed per-donor seams into one atomic multi-file preparation                                                  |
+| `prepare-apply` / `prepare-audit`                                                                          | simulate or commit a preparation, then independently replay its proof                                                    |
 | `preparer-plan` / `preparer-bootstrap-commit` / `preparer-simulate` / `preparer-apply` / `preparer-commit` | compile, bootstrap through normal hooks, prove, journal-apply, and explicitly commit configured declared-output ratchets |
-| `campaign resolve` | re-scan and resolve the next ordered `{path, packageName}` target; compile at most one plan and stop for review |
-| `campaign optimize` | emit ROI-ranked stable targets and coupling preparation priorities |
-| legacy `campaign init/status/advance/record` | finish an existing schema-v1 preparation/extraction pair ledger |
-| `portfolio` | grouped candidates with separate mechanical eligibility and architectural recommendation |
-| `scope` | resolve a stable source path to its current candidate and review an intentional target |
-| `conflicts --plan <candidate>=<manifest> ...` | exact same-baseline operation conflicts and path-disjoint planning waves |
-| `plan` | compile a plan for one candidate; reports explicit `targetMode` and `targetPackageRoot` for new or existing packages |
-| `plan-review` | render the deterministic human review and exact approval inputs |
-| `refresh` | explicitly recompile a stale plan at current `HEAD` without silent replacement |
-| `approve` | inspect exact manifest approval evidence; `--commit` commits only that manifest and refuses unrelated dirt |
-| `relocate-tests` | compile a configured leaf integration-test package |
-| `apply` | simulate, then apply as verified commits |
-| `apply-status` / `apply-recover` | inspect or safely release a stopped committing-apply owner |
-| `doctor` | replay, audit, and run gates in an isolated worktree |
-| `inspect-gates` | run gates separately in isolation and attribute generated or undeclared paths |
-| `audit` | verify an applied plan's declared bytes, boundaries, and replay proofs |
-| `verify` | validate a plan + apply preflight, touching nothing |
-| `next` | pick the highest-scoring candidate and plan it (`--apply` also simulates) |
-| `backlog` | blocked candidates with the concrete edges to break |
-| `layers` | read-only decomposition report: domains, components, layers |
-| `check import-extensions` | relative specifiers inside packages that lack an explicit extension |
+| `campaign resolve`                                                                                         | re-scan and resolve the next ordered `{path, packageName}` target; compile at most one plan and stop for review          |
+| `campaign optimize`                                                                                        | emit ROI-ranked stable targets and coupling preparation priorities                                                       |
+| legacy `campaign init/status/advance/record`                                                               | finish an existing schema-v1 preparation/extraction pair ledger                                                          |
+| `portfolio`                                                                                                | grouped candidates with separate mechanical eligibility and architectural recommendation                                 |
+| `scope`                                                                                                    | resolve a stable source path to its current candidate and review an intentional target                                   |
+| `conflicts --plan <candidate>=<manifest> ...`                                                              | exact same-baseline operation conflicts and path-disjoint planning waves                                                 |
+| `plan`                                                                                                     | compile a plan for one candidate; reports explicit `targetMode` and `targetPackageRoot` for new or existing packages     |
+| `plan-review`                                                                                              | render the deterministic human review and exact approval inputs                                                          |
+| `refresh`                                                                                                  | explicitly recompile a stale plan at current `HEAD` without silent replacement                                           |
+| `approve`                                                                                                  | inspect exact manifest approval evidence; `--commit` commits only that manifest and refuses unrelated dirt               |
+| `relocate-tests`                                                                                           | compile a configured leaf integration-test package                                                                       |
+| `apply`                                                                                                    | simulate, then apply as verified commits                                                                                 |
+| `apply-status` / `apply-recover`                                                                           | inspect or safely release a stopped committing-apply owner                                                               |
+| `doctor`                                                                                                   | replay, audit, and run gates in an isolated worktree                                                                     |
+| `inspect-gates`                                                                                            | run gates separately in isolation and attribute generated or undeclared paths                                            |
+| `audit`                                                                                                    | verify an applied plan's declared bytes, boundaries, and replay proofs                                                   |
+| `verify`                                                                                                   | validate a plan + apply preflight, touching nothing                                                                      |
+| `next`                                                                                                     | pick the highest-scoring candidate and plan it (`--apply` also simulates)                                                |
+| `backlog`                                                                                                  | blocked candidates with the concrete edges to break                                                                      |
+| `layers`                                                                                                   | read-only decomposition report: domains, components, layers                                                              |
+| `check import-extensions`                                                                                  | relative specifiers inside packages that lack an explicit extension                                                      |
 
 Ordinary graph-reading commands accept `--graph <app>=<file>`, which replays a
 captured scanner report instead of cruising again — scanning a large application
@@ -367,7 +369,7 @@ whole-file move commit remains an R100 rename.
 
 ### Reading `portfolio` and `backlog`
 
-Both print one *slice* of one partition of the portfolio, and both take
+Both print one _slice_ of one partition of the portfolio, and both take
 `--limit` (default 20). So both report the slice and the population separately,
 and the counts never depend on the limit:
 
@@ -376,9 +378,9 @@ and the counts never depend on the limit:
   "schema": "portfolio",
   "totals": { "candidates": 662, "eligible": 136, "blocked": 526 }, // whole portfolio, always
   "limit": 20,
-  "truncated": true,        // there are more eligible candidates than `top` holds
-  "top": [ /* the 20 highest-scoring eligible candidates */ ],
-  "selected": [ /* ids */ ]
+  "truncated": true, // there are more eligible candidates than `top` holds
+  "top": [/* the 20 highest-scoring eligible candidates */],
+  "selected": [/* ids */],
 }
 ```
 
@@ -399,38 +401,38 @@ directory. **This schema is the genericity boundary**: if the engine needs to
 know something about a particular repository, it comes from here. Nothing about a
 specific workspace is hardcoded anywhere in `src/`.
 
-| field | purpose |
-| --- | --- |
-| `applications[]` | `name`, `sourceRoot`, `tsconfig`, optional `packageName`, `project`, `compositionRoots`, `compilerProfile` (`lib`, `types`, `jsx`, `moduleResolution`, `esModuleInterop`, `allowSyntheticDefaultImports` — the external-consumer proof has to compile the way the application itself does), per-app `scaffoldTemplates` |
-| `packageRoots[]` | where packages live (`libs/`, `packages/`), in preference order |
-| `packageScope` | scope prefix for generated names (`@acme/`) |
-| `packageManager` | selects the adapter: workspace membership + lockfile ops |
-| `taskRunner` | selects the adapter: project files + gate invocation |
-| `gates` | command templates per tier (`package`, `project`, `workspace`) with `{package}`, `{packageRoot}`, `{project}`, `{app}` |
-| `commitTemplates` | `plan` / `move` / `wiring` subjects (single-line enforced), plus an optional shared commit body rendered verbatim from workspace config; default body is empty |
-| `testKinds` | mutually exclusive `unit`, `integration`, and `e2e` path classifiers; ordinary extraction moves only unit tests |
-| `testPathPatterns` | legacy unit-test regexes; cannot be combined with `testKinds` |
-| `sourceExtensions` | compiler-owned source-module suffixes; defaults to generic TypeScript/JavaScript module forms and may be replaced by workspace policy |
-| `assetExtensions` | extensions treated as movable assets; a scaffold containing one cannot retain a blanket `sideEffects: false` claim |
-| `cssImportExtensions` | configured asset extensions whose files contain ordered CSS `@import` references that must be discovered and rewritten |
-| `assetEmissionProofs` | optional build command plus output roots/extensions; compares baseline and landed CSS selector sets and declaration order |
-| `guardedBranches` | branches on which `apply` refuses to commit |
-| `scaffoldTemplates` | required workspace-owned `package.json` template plus optional `tsconfig` / task-file / `extraFiles`, `entrypoint`, baseline `devDependencies`, `barrelExport`, `barrelSpecifier`, and opt-in module-preserving `publicSurface` subpaths |
-| `portfolio` | `domains`, `nestedDomainRoots`, `frameworkPackages`, `compositionRootPatterns`, `minFiles`, `maxFiles`, scoring `weights`, `extracted` ids to skip |
-| `firstPartyRoots` | roots that are first-party but neither application nor package (generated, shared) |
-| `firstPartyPackages` | `root` + `name` pairs for an exact-root first-party package (the root itself is the package, unlike `packageRoots`); the declared `name` drives dependency inference |
-| `packageNamePattern` | what a generated package name must look like; defaults from `packageScope` |
-| `generatedArtifacts` | provenance-header patterns, plus artifacts a move invalidates (`path`, `source`, `regenerate`, `triggers`, `exemptReason`) and the per-command `timeoutMs` their regeneration gets — its own budget, because a codegen command is not a gate tier |
-| `postJournalPreparers` | ordered anchored `replacements`, exact `creates`, optional declared-output commands, and verification run after moves and dependency installation but before audit/gates; optional `emittedModuleSpecifiers` rewrites exact generator-template imports |
-| `preparers` | pre-extraction declared-output policies: optional ordered text `replacements`, declarative file `creates`, an optional repository command and verification, and exact commit metadata |
-| `dependencyPruning` | `mode: "report"` (default) records possible donor dependency orphans; `apply` removes reviewed candidates. Configured tests and tsconfig `types` count as consumers; `keep` retains irreducible tool/runtime dependencies by repository policy. |
-| `graph` | `tsPreCompilationDeps`, extra cruiser config, `exclude`, `cache` |
-| `transaction` | `allowDirtyPaths`, `worktreeRoot`, `nodeModules` strategy, cleanup policy, gate retries, and simulation behavior |
-| `preparation` | repository gates and commit policy required for type-only declaration preparation |
-| `pathMigrations` | deterministic text-filter commands for path-keyed artifacts whose keys must follow moves |
-| `planDir` | where compiled manifests are written |
-| `campaignDir` | git-ignored mutable campaign ledgers |
-| `moduleSpecifierCalls` | qualified calls whose first argument is a rewritable module path |
+| field                  | purpose                                                                                                                                                                                                                                                                                                                 |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `applications[]`       | `name`, `sourceRoot`, `tsconfig`, optional `packageName`, `project`, `compositionRoots`, `compilerProfile` (`lib`, `types`, `jsx`, `moduleResolution`, `esModuleInterop`, `allowSyntheticDefaultImports` — the external-consumer proof has to compile the way the application itself does), per-app `scaffoldTemplates` |
+| `packageRoots[]`       | where packages live (`libs/`, `packages/`), in preference order                                                                                                                                                                                                                                                         |
+| `packageScope`         | scope prefix for generated names (`@acme/`)                                                                                                                                                                                                                                                                             |
+| `packageManager`       | selects the adapter: workspace membership + lockfile ops                                                                                                                                                                                                                                                                |
+| `taskRunner`           | selects the adapter: project files + gate invocation                                                                                                                                                                                                                                                                    |
+| `gates`                | command templates per tier (`package`, `project`, `workspace`) with `{package}`, `{packageRoot}`, `{project}`, `{app}`                                                                                                                                                                                                  |
+| `commitTemplates`      | `plan` / `move` / `wiring` subjects (single-line enforced), plus an optional shared commit body rendered verbatim from workspace config; default body is empty                                                                                                                                                          |
+| `testKinds`            | mutually exclusive `unit`, `integration`, and `e2e` path classifiers; ordinary extraction moves only unit tests                                                                                                                                                                                                         |
+| `testPathPatterns`     | legacy unit-test regexes; cannot be combined with `testKinds`                                                                                                                                                                                                                                                           |
+| `sourceExtensions`     | compiler-owned source-module suffixes; defaults to generic TypeScript/JavaScript module forms and may be replaced by workspace policy                                                                                                                                                                                   |
+| `assetExtensions`      | extensions treated as movable assets; a scaffold containing one cannot retain a blanket `sideEffects: false` claim                                                                                                                                                                                                      |
+| `cssImportExtensions`  | configured asset extensions whose files contain ordered CSS `@import` references that must be discovered and rewritten                                                                                                                                                                                                  |
+| `assetEmissionProofs`  | optional build command plus output roots/extensions; compares baseline and landed CSS selector sets and declaration order                                                                                                                                                                                               |
+| `guardedBranches`      | branches on which `apply` refuses to commit                                                                                                                                                                                                                                                                             |
+| `scaffoldTemplates`    | required workspace-owned `package.json` template plus optional `tsconfig` / task-file / `extraFiles`, `entrypoint`, baseline `devDependencies`, `barrelExport`, `barrelSpecifier`, and opt-in module-preserving `publicSurface` subpaths                                                                                |
+| `portfolio`            | `domains`, `nestedDomainRoots`, `frameworkPackages`, `compositionRootPatterns`, `minFiles`, `maxFiles`, scoring `weights`, `extracted` ids to skip                                                                                                                                                                      |
+| `firstPartyRoots`      | roots that are first-party but neither application nor package (generated, shared)                                                                                                                                                                                                                                      |
+| `firstPartyPackages`   | `root` + `name` pairs for an exact-root first-party package (the root itself is the package, unlike `packageRoots`); the declared `name` drives dependency inference                                                                                                                                                    |
+| `packageNamePattern`   | what a generated package name must look like; defaults from `packageScope`                                                                                                                                                                                                                                              |
+| `generatedArtifacts`   | provenance-header patterns, plus artifacts a move invalidates (`path`, `source`, `regenerate`, `triggers`, `exemptReason`) and the per-command `timeoutMs` their regeneration gets — its own budget, because a codegen command is not a gate tier                                                                       |
+| `postJournalPreparers` | ordered anchored `replacements`, exact `creates`, optional declared-output commands, and verification run after moves and dependency installation but before audit/gates; optional `emittedModuleSpecifiers` rewrites exact generator-template imports                                                                  |
+| `preparers`            | pre-extraction declared-output policies: optional ordered text `replacements`, declarative file `creates`, an optional repository command and verification, and exact commit metadata                                                                                                                                   |
+| `dependencyPruning`    | `mode: "report"` (default) records possible donor dependency orphans; `apply` removes reviewed candidates. Configured tests and tsconfig `types` count as consumers; `keep` retains irreducible tool/runtime dependencies by repository policy.                                                                         |
+| `graph`                | `tsPreCompilationDeps`, extra cruiser config, `exclude`, `cache`                                                                                                                                                                                                                                                        |
+| `transaction`          | `allowDirtyPaths`, `worktreeRoot`, `nodeModules` strategy, cleanup policy, gate retries, and simulation behavior                                                                                                                                                                                                        |
+| `preparation`          | repository gates and commit policy required for type-only declaration preparation                                                                                                                                                                                                                                       |
+| `pathMigrations`       | deterministic text-filter commands for path-keyed artifacts whose keys must follow moves                                                                                                                                                                                                                                |
+| `planDir`              | where compiled manifests are written                                                                                                                                                                                                                                                                                    |
+| `campaignDir`          | git-ignored mutable campaign ledgers                                                                                                                                                                                                                                                                                    |
+| `moduleSpecifierCalls` | qualified calls whose first argument is a rewritable module path                                                                                                                                                                                                                                                        |
 
 A working example lives at `fixtures/basic-monorepo/monocarve.config.json`.
 
@@ -445,19 +447,15 @@ see earlier results. Every item names a declared `outputs` path and provides
 `before`, `after`, and at least one non-empty `prefix` or `suffix` anchor:
 
 ```ts
-preparers: [{
-  id: "tighten-widget-limit",
-  phase: "pre-extraction",
-  replacements: [{
-    path: "{sourcePath}",
-    prefix: "export const widget = { ",
-    before: "limit: 10",
-    after: "limit: 20",
-    suffix: " };",
-  }],
-  outputs: ["{sourcePath}"],
-  commit: { subject: "refactor: tighten widget limit" },
-}]
+preparers: [
+  {
+    id: "tighten-widget-limit",
+    phase: "pre-extraction",
+    replacements: [{ path: "{sourcePath}", prefix: "export const widget = { ", before: "limit: 10", after: "limit: 20", suffix: " };" }],
+    outputs: ["{sourcePath}"],
+    commit: { subject: "refactor: tighten widget limit" },
+  },
+];
 ```
 
 The writable state is exactly `prefix + before + suffix`. It must occur once;
@@ -551,19 +549,19 @@ test/
 
 Honest accounting:
 
-| area | state |
-| --- | --- |
-| config schema, loader, helpers | implemented |
-| scan (dependency-cruiser + AST union), components, layers report | implemented |
-| portfolio: closures, containment, assets, rewritable escapes, ranking | implemented |
-| plan: manifest compilation, scaffolding, consumer + lockfile wiring | implemented |
-| plan validation (structure, coverage, semantics, ordering, boundary) | implemented |
-| transaction: journal, disposable-worktree simulation, apply, rollback | implemented |
-| audit: byte fidelity, consumers, boundary, compile proof, codemod replay, entrypoint closure | implemented |
-| pnpm package-manager adapter (lockfile importers); moon and `none` task-runner adapters | implemented |
-| bun package-manager adapter (composite `bun.lock` importers, `workspaces` membership) | implemented |
-| `check import-extensions` | implemented |
-| nx, turbo, npm, yarn adapters | **not started** (interfaces exist) |
+| area                                                                                         | state                              |
+| -------------------------------------------------------------------------------------------- | ---------------------------------- |
+| config schema, loader, helpers                                                               | implemented                        |
+| scan (dependency-cruiser + AST union), components, layers report                             | implemented                        |
+| portfolio: closures, containment, assets, rewritable escapes, ranking                        | implemented                        |
+| plan: manifest compilation, scaffolding, consumer + lockfile wiring                          | implemented                        |
+| plan validation (structure, coverage, semantics, ordering, boundary)                         | implemented                        |
+| transaction: journal, disposable-worktree simulation, apply, rollback                        | implemented                        |
+| audit: byte fidelity, consumers, boundary, compile proof, codemod replay, entrypoint closure | implemented                        |
+| pnpm package-manager adapter (lockfile importers); moon and `none` task-runner adapters      | implemented                        |
+| bun package-manager adapter (composite `bun.lock` importers, `workspaces` membership)        | implemented                        |
+| `check import-extensions`                                                                    | implemented                        |
+| nx, turbo, npm, yarn adapters                                                                | **not started** (interfaces exist) |
 
 An unimplemented adapter exits 3 with the seam it hit. Nothing pretends to
 succeed.

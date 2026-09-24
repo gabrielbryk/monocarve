@@ -1,5 +1,5 @@
-import { isAbsolute, relative, resolve } from "node:path";
 import { realpathSync } from "node:fs";
+import { isAbsolute, relative, resolve } from "node:path";
 
 import type { ScanReport } from "../graph/build.ts";
 import { hashBytes } from "../util/hash.ts";

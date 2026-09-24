@@ -122,16 +122,8 @@ function workspaceWithEscapes(): string {
   );
   write(root, "apps/web/src/ledger.ts", 'import { gone } from "./nowhere.ts";\n\nexport const ledger = gone;\n');
 
-  write(
-    root,
-    "libs/format/src/Money.ts",
-    "export function formatMoney(value: number): string {\n  return `$${value.toFixed(2)}`;\n}\n",
-  );
-  write(
-    root,
-    "libs/format/src/ledger.ts",
-    "export function formatLedger(value: number): string {\n  return value.toFixed(0);\n}\n",
-  );
+  write(root, "libs/format/src/Money.ts", "export function formatMoney(value: number): string {\n  return `$${value.toFixed(2)}`;\n}\n");
+  write(root, "libs/format/src/ledger.ts", "export function formatLedger(value: number): string {\n  return value.toFixed(0);\n}\n");
   write(root, "libs/format/src/index.ts", 'export * from "./number.ts";\nexport * from "./Money.ts";\nexport * from "./ledger.ts";\n');
 
   write(
@@ -180,14 +172,7 @@ function compile(): Promise<Compiled> {
       .sort((left, right) => left.files.length - right.files.length)[0];
     expect(candidate).toBeDefined();
 
-    const manifest = buildPlanSync({
-      config,
-      rootDir: root,
-      graph,
-      candidate: candidate!,
-      baselineCommit: graph.commit!,
-      packageName: "@acme/chart",
-    });
+    const manifest = buildPlanSync({ config, rootDir: root, graph, candidate: candidate!, baselineCommit: graph.commit!, packageName: "@acme/chart" });
     return { graph, manifest, rewriteEscapes: candidate!.rewriteEscapes };
   })();
   return compiled;
@@ -206,12 +191,8 @@ describe("graph.unresolved order", () => {
     const { graph, manifest } = await compile();
     expect(graph.unresolved.map(tuple)).toEqual(UNRESOLVED.map(([source, specifier]) => [source, specifier]));
 
-    const collated = [...graph.unresolved].sort(
-      (left, right) => left.source.localeCompare(right.source) || left.specifier.localeCompare(right.specifier),
-    );
-    const codeUnits = [...graph.unresolved].sort(
-      (left, right) => byCodeUnit(left.source, right.source) || byCodeUnit(left.specifier, right.specifier),
-    );
+    const collated = [...graph.unresolved].sort((left, right) => left.source.localeCompare(right.source) || left.specifier.localeCompare(right.specifier));
+    const codeUnits = [...graph.unresolved].sort((left, right) => byCodeUnit(left.source, right.source) || byCodeUnit(left.specifier, right.specifier));
 
     // The claim that makes the rest worth asserting: this array's order is not a
     // presentation detail, it is hashed, so the two orders are two different
@@ -231,9 +212,7 @@ describe("escape rewrite order", () => {
     // array is what a reviewer and the replay proof both see, and
     // `serializeManifest` sorts object keys but never reorders an array.
     const serialized = JSON.parse(serializeManifest(manifest)) as ExtractionManifest;
-    const operation = serialized.operations.find(
-      (entry): entry is MoveWithRewriteOperation => entry.kind === "move-with-rewrite" && entry.source === CHART,
-    );
+    const operation = serialized.operations.find((entry): entry is MoveWithRewriteOperation => entry.kind === "move-with-rewrite" && entry.source === CHART);
     expect(operation).toBeDefined();
     expect(operation!.rewrites.map((rewrite) => rewrite.donorlessSpecifier)).toEqual(CHART_SPECIFIERS);
   });
@@ -277,10 +256,7 @@ describe("workspace package order", () => {
       ["libs/ledger", "@acme/ledger"],
     ] as const) {
       mkdirSync(join(root, dir), { recursive: true });
-      writeFileSync(
-        join(root, dir, "package.json"),
-        `${JSON.stringify({ name, version: "0.0.0", private: true }, null, 2)}\n`,
-      );
+      writeFileSync(join(root, dir, "package.json"), `${JSON.stringify({ name, version: "0.0.0", private: true }, null, 2)}\n`);
     }
 
     expect((await pnpmAdapter.listPackages(root)).map((entry) => entry.name)).toEqual(names);

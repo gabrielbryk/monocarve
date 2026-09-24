@@ -1,8 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 
-import { byCodeUnit, hashText, type Sha256 } from "./util/hash.ts";
 import { TOOL_VERSION } from "./branding.ts";
+import { byCodeUnit, hashText, type Sha256 } from "./util/hash.ts";
 
 declare const __MONOCARVE_BUILD_INTEGRITY__: string | undefined;
 declare const __MONOCARVE_SOURCE_REVISION__: string | undefined;
@@ -49,11 +49,13 @@ export function executableBuildIdentityFor(mode: PackagingMode): ExecutableBuild
 
 export function sourceTreeIntegrity(sourceRoot: string): Sha256 {
   const paths = sourceFiles(sourceRoot).sort(byCodeUnit);
-  const canonical = paths.map((path) => {
-    const relativePath = relative(sourceRoot, path).replaceAll("\\", "/");
-    const contents = readFileSync(path, "utf8");
-    return `${relativePath.length}:${relativePath}${contents.length}:${contents}`;
-  }).join("");
+  const canonical = paths
+    .map((path) => {
+      const relativePath = relative(sourceRoot, path).replaceAll("\\", "/");
+      const contents = readFileSync(path, "utf8");
+      return `${relativePath.length}:${relativePath}${contents.length}:${contents}`;
+    })
+    .join("");
   return hashText(canonical);
 }
 

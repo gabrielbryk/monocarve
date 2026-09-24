@@ -22,7 +22,10 @@ function fixture(): { readonly root: string; readonly config: ReturnType<typeof 
   const root = fixtureRepo(files);
   const config = parseConfig({
     applications: [{ name: "web", sourceRoot: APP, tsconfig: "apps/web/tsconfig.json", packageName: "@acme/web" }],
-    packageRoots: ["libs"], packageScope: "@acme/", portfolio: { minFiles: 1 }, scaffoldTemplates: { packageJson: { contents: "{}" } },
+    packageRoots: ["libs"],
+    packageScope: "@acme/",
+    portfolio: { minFiles: 1 },
+    scaffoldTemplates: { packageJson: { contents: "{}" } },
   });
   write(root, "monocarve.config.json", `${JSON.stringify(config)}\n`);
   return { root, config, graph: graphFor(root, config) };
@@ -30,8 +33,13 @@ function fixture(): { readonly root: string; readonly config: ReturnType<typeof 
 
 function graphFor(root: string, config: ReturnType<typeof parseConfig>) {
   const dependencies: Record<string, string[]> = {
-    a: ["b", "c", "hub"], b: ["a", "c", "hub"], c: ["a", "b", "d", "hub"],
-    d: ["c", "e", "f", "hub"], e: ["d", "f", "hub"], f: ["d", "e", "hub"], hub: [],
+    a: ["b", "c", "hub"],
+    b: ["a", "c", "hub"],
+    c: ["a", "b", "d", "hub"],
+    d: ["c", "e", "f", "hub"],
+    e: ["d", "f", "hub"],
+    f: ["d", "e", "hub"],
+    hub: [],
   };
   const modules: ScanReport["modules"] = Object.entries(dependencies).map(([name, targets]) => ({
     source: `${APP}/${name}.ts`,
@@ -60,13 +68,16 @@ describe("community diagnostics", () => {
   test("normalizes graph iteration order byte-for-byte", () => {
     const { graph } = fixture();
     const canonical = analyzeCommunities(graph, { hubInboundThreshold: 4 });
-    const permuted = analyzeCommunities({
-      ...graph,
-      paths: [...graph.paths].reverse(),
-      edges: [...graph.edges].reverse(),
-      nodes: new Map([...graph.nodes].reverse()),
-      incoming: new Map([...graph.incoming].reverse().map(([path, values]) => [path, [...values].reverse()])),
-    }, { hubInboundThreshold: 4 });
+    const permuted = analyzeCommunities(
+      {
+        ...graph,
+        paths: [...graph.paths].reverse(),
+        edges: [...graph.edges].reverse(),
+        nodes: new Map([...graph.nodes].reverse()),
+        incoming: new Map([...graph.incoming].reverse().map(([path, values]) => [path, [...values].reverse()])),
+      },
+      { hubInboundThreshold: 4 },
+    );
     expect(JSON.stringify(permuted)).toBe(JSON.stringify(canonical));
   });
 

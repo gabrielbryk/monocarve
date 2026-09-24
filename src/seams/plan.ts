@@ -1,22 +1,10 @@
 import { isAbsolute } from "node:path";
 
+import type { DeclarationGroup, SymbolEdge, SymbolSplitCandidate, WorkspaceSymbolAnalysis } from "../symbols/types.ts";
 import { byCodeUnit, hashJson, type Sha256 } from "../util/hash.ts";
 import { normalizePath } from "../util/paths.ts";
-import type {
-  DeclarationGroup,
-  SymbolEdge,
-  SymbolSplitCandidate,
-  WorkspaceSymbolAnalysis,
-} from "../symbols/types.ts";
 import { classifyTypeOnlyExtraction, type TypeOnlyExtractionSafety } from "./safety.ts";
-import type {
-  AffectedSeamConsumer,
-  PlanSeamInput,
-  RequiredSeamImport,
-  RetainedSeamCycle,
-  SeamBlocker,
-  SeamPlan,
-} from "./types.ts";
+import type { AffectedSeamConsumer, PlanSeamInput, RequiredSeamImport, RetainedSeamCycle, SeamBlocker, SeamPlan } from "./types.ts";
 
 /** The requested candidate is not an atomic component of this source analysis. */
 export class SeamPlanningError extends Error {
@@ -37,28 +25,23 @@ export function planSeam(input: PlanSeamInput): SeamPlan {
   const movedIds = [...candidate.groupIds].sort(byCodeUnit);
   const movedSet = new Set(movedIds);
   const movedGroups = groupsFor(movedIds, groupById);
-  const retainedGroups = [...input.analysis.source.groups]
-    .filter((group) => !movedSet.has(group.id))
-    .sort(compareGroups);
+  const retainedGroups = [...input.analysis.source.groups].filter((group) => !movedSet.has(group.id)).sort(compareGroups);
   const cyclesRetained = cyclicComponents(input.analysis, movedSet);
   const requiredImports = boundaryImports(input.analysis, movedSet, groupById);
   const affectedConsumers = consumersFor(candidate, input.analysis);
-  const typeOnlyPreparationSafety = movedGroups.map((group) => classifyTypeOnlyExtraction({
-    sourceText: input.sourceText,
-    graph: input.analysis.source,
-    groupId: group.id,
-    selectedDeclarationIds: group.declarationIds,
-  })).sort((left, right) => byCodeUnit(left.groupId, right.groupId));
-  const eligibleForTypeOnlyPreparation = typeOnlyPreparationSafety.every((result) => result.eligible)
-    && requiredImports.every((requirement) => requirement.space === "type");
-  const remainingBlockers = blockersFor(
-    input.analysis,
-    targetPath,
-    candidate,
-    cyclesRetained,
-    requiredImports,
-    typeOnlyPreparationSafety,
-  );
+  const typeOnlyPreparationSafety = movedGroups
+    .map((group) =>
+      classifyTypeOnlyExtraction({
+        sourceText: input.sourceText,
+        graph: input.analysis.source,
+        groupId: group.id,
+        selectedDeclarationIds: group.declarationIds,
+      }),
+    )
+    .sort((left, right) => byCodeUnit(left.groupId, right.groupId));
+  const eligibleForTypeOnlyPreparation =
+    typeOnlyPreparationSafety.every((result) => result.eligible) && requiredImports.every((requirement) => requirement.space === "type");
+  const remainingBlockers = blockersFor(input.analysis, targetPath, candidate, cyclesRetained, requiredImports, typeOnlyPreparationSafety);
   const identity = {
     schemaVersion: 1 as const,
     sourcePath: input.analysis.source.sourcePath,
@@ -119,18 +102,15 @@ function boundaryImports(
   return analysis.source.edges
     .filter((edge) => moved.has(edge.source) !== moved.has(edge.target))
     .map((edge) => importFor(edge, moved, groupById))
-    .sort((left, right) =>
-      byCodeUnit(left.importer, right.importer) ||
-      byCodeUnit(left.importerGroupId, right.importerGroupId) ||
-      byCodeUnit(left.importedGroupId, right.importedGroupId),
+    .sort(
+      (left, right) =>
+        byCodeUnit(left.importer, right.importer) ||
+        byCodeUnit(left.importerGroupId, right.importerGroupId) ||
+        byCodeUnit(left.importedGroupId, right.importedGroupId),
     );
 }
 
-function importFor(
-  edge: SymbolEdge,
-  moved: ReadonlySet<Sha256>,
-  groupById: ReadonlyMap<Sha256, DeclarationGroup>,
-): RequiredSeamImport {
+function importFor(edge: SymbolEdge, moved: ReadonlySet<Sha256>, groupById: ReadonlyMap<Sha256, DeclarationGroup>): RequiredSeamImport {
   const importer = groupById.get(edge.source);
   const imported = groupById.get(edge.target);
   if (!importer || !imported) throw new SeamPlanningError("symbol graph edge references a missing declaration group");
@@ -153,11 +133,12 @@ function consumersFor(candidate: SymbolSplitCandidate, analysis: WorkspaceSymbol
   return analysis.consumers
     .filter((consumer) => moved.has(consumer.groupId))
     .map((consumer) => ({ ...consumer, partition: "moved" as const, confidence: "exact" as const }))
-    .sort((left, right) =>
-      byCodeUnit(left.groupName, right.groupName) ||
-      byCodeUnit(left.affinity, right.affinity) ||
-      byCodeUnit(left.consumerPath, right.consumerPath) ||
-      byCodeUnit(left.groupId, right.groupId),
+    .sort(
+      (left, right) =>
+        byCodeUnit(left.groupName, right.groupName) ||
+        byCodeUnit(left.affinity, right.affinity) ||
+        byCodeUnit(left.consumerPath, right.consumerPath) ||
+        byCodeUnit(left.groupId, right.groupId),
     );
 }
 
@@ -179,7 +160,11 @@ function blockersFor(
   const sourcePath = analysis.source.sourcePath;
   const blockers: SeamBlocker[] = [];
   if (targetPath === undefined) {
-    blockers.push({ code: "target-path-not-provided", message: "no destination path was supplied; affinity is not a module-path proof", confidence: "heuristic" });
+    blockers.push({
+      code: "target-path-not-provided",
+      message: "no destination path was supplied; affinity is not a module-path proof",
+      confidence: "heuristic",
+    });
   } else if (targetPath === sourcePath) {
     blockers.push({ code: "target-path-is-source", message: "target path is the source path, so no seam can be formed", confidence: "exact" });
   }
@@ -192,7 +177,11 @@ function blockersFor(
     blockers.push({ code: "split-affinity", message: "external consumers span multiple affinities, so ownership remains heuristic", confidence: "heuristic" });
   }
   if (requiredImports.some((requirement) => requirement.space !== "type")) {
-    blockers.push({ code: "value-boundary-dependency", message: "the selected declarations have a value-space dependency across the proposed seam", confidence: "exact" });
+    blockers.push({
+      code: "value-boundary-dependency",
+      message: "the selected declarations have a value-space dependency across the proposed seam",
+      confidence: "exact",
+    });
   }
   for (const result of safety) {
     for (const evidence of result.evidence) {
@@ -211,12 +200,14 @@ function blockersFor(
 }
 
 function compareBlockers(left: SeamBlocker, right: SeamBlocker): number {
-  return byCodeUnit(left.code, right.code)
-    || byCodeUnit(left.groupId ?? "", right.groupId ?? "")
-    || (left.start ?? -1) - (right.start ?? -1)
-    || (left.end ?? -1) - (right.end ?? -1)
-    || byCodeUnit(left.declarationId ?? "", right.declarationId ?? "")
-    || byCodeUnit(left.message, right.message);
+  return (
+    byCodeUnit(left.code, right.code) ||
+    byCodeUnit(left.groupId ?? "", right.groupId ?? "") ||
+    (left.start ?? -1) - (right.start ?? -1) ||
+    (left.end ?? -1) - (right.end ?? -1) ||
+    byCodeUnit(left.declarationId ?? "", right.declarationId ?? "") ||
+    byCodeUnit(left.message, right.message)
+  );
 }
 
 function sameIds(left: readonly Sha256[], right: readonly Sha256[]): boolean {

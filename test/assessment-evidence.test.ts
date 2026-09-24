@@ -7,10 +7,16 @@ import { scratchDirectory } from "./support/fixture-repo.ts";
 
 test("evidence publication validates integrity and replaces generated files byte-identically", () => {
   const root = scratchDirectory();
-  const publish = (replace = false) => publishEvidence<EvidenceManifestBase>({
-    rootDir: root, destination: "evidence", analyticalRoots: ["src"], artifacts: { "raw/app.json": "{}\n", "summary.json": "{\"ok\":true}\n" },
-    requiredArtifacts: new Set(["raw/app.json"]), manifest: () => ({ kind: "architecture-assessment" }), ...(replace ? { replaceGenerated: true } : {}),
-  });
+  const publish = (replace = false) =>
+    publishEvidence<EvidenceManifestBase>({
+      rootDir: root,
+      destination: "evidence",
+      analyticalRoots: ["src"],
+      artifacts: { "raw/app.json": "{}\n", "summary.json": '{"ok":true}\n' },
+      requiredArtifacts: new Set(["raw/app.json"]),
+      manifest: () => ({ kind: "architecture-assessment" }),
+      ...(replace ? { replaceGenerated: true } : {}),
+    });
   const first = publish();
   validateBundle(join(root, "evidence"), first.manifest);
   const before = readFileSync(join(root, "evidence/manifest.json"), "utf8");
@@ -20,7 +26,13 @@ test("evidence publication validates integrity and replaces generated files byte
 
 test("evidence publication rejects unsafe paths, unrelated contents, busy writers, and insufficient budgets", () => {
   const root = scratchDirectory();
-  const base = { rootDir: root, analyticalRoots: ["src"], artifacts: { "summary.json": "1234567890\n" }, requiredArtifacts: new Set(["summary.json"]), manifest: () => ({ kind: "architecture-assessment" as const }) };
+  const base = {
+    rootDir: root,
+    analyticalRoots: ["src"],
+    artifacts: { "summary.json": "1234567890\n" },
+    requiredArtifacts: new Set(["summary.json"]),
+    manifest: () => ({ kind: "architecture-assessment" as const }),
+  };
   expect(() => publishEvidence({ ...base, destination: "../escape" })).toThrow("EVIDENCE_DESTINATION_UNSAFE");
   expect(() => publishEvidence({ ...base, destination: "src/evidence" })).toThrow("EVIDENCE_DESTINATION_UNSAFE");
   mkdirSync(join(root, "busy.lock"));
@@ -33,9 +45,16 @@ test("evidence publication rejects unsafe paths, unrelated contents, busy writer
 
 test("caught replacement failure restores the prior bundle at every phase", () => {
   const root = scratchDirectory();
-  const publish = (contents: string, extra: Partial<Parameters<typeof publishEvidence<EvidenceManifestBase>>[0]> = {}) => publishEvidence<EvidenceManifestBase>({
-    rootDir: root, destination: "evidence", analyticalRoots: ["src"], artifacts: { "summary.json": contents }, requiredArtifacts: new Set(["summary.json"]), manifest: () => ({ kind: "architecture-assessment" }), ...extra,
-  });
+  const publish = (contents: string, extra: Partial<Parameters<typeof publishEvidence<EvidenceManifestBase>>[0]> = {}) =>
+    publishEvidence<EvidenceManifestBase>({
+      rootDir: root,
+      destination: "evidence",
+      analyticalRoots: ["src"],
+      artifacts: { "summary.json": contents },
+      requiredArtifacts: new Set(["summary.json"]),
+      manifest: () => ({ kind: "architecture-assessment" }),
+      ...extra,
+    });
   publish("old\n");
   expect(() => publish("new\n", { replaceGenerated: true, failAfter: "prior-preserved" })).toThrow("injected evidence failure");
   expect(readFileSync(join(root, "evidence/summary.json"), "utf8")).toBe("old\n");

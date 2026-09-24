@@ -1,7 +1,13 @@
 /** Error reporting shared by preparation journal apply and recovery. */
-export class PreparationJournalError extends Error {
+import { MonocarveError } from "../errors.ts";
+
+export class PreparationJournalError extends MonocarveError {
   override readonly name = "PreparationJournalError";
-  constructor(message: string, readonly residue: readonly string[] = [], cause?: unknown) {
+  constructor(
+    message: string,
+    readonly residue: readonly string[] = [],
+    cause?: unknown,
+  ) {
     super(message, cause === undefined ? undefined : { cause });
   }
 }

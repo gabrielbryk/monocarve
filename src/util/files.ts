@@ -3,8 +3,8 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { hashBytes, MISSING, type FileState } from "./hash.ts";
 import { DEFAULT_SOURCE_EXTENSIONS } from "../config/source-policy.ts";
+import { hashBytes, MISSING, type FileState } from "./hash.ts";
 
 /** Extensions the engine treats as TypeScript/JavaScript modules. */
 export const SOURCE_EXTENSIONS = DEFAULT_SOURCE_EXTENSIONS;

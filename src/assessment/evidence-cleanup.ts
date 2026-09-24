@@ -3,7 +3,11 @@ import { dirname, relative, resolve } from "node:path";
 import { byCodeUnit } from "../util/hash.ts";
 import type { EvidenceArtifactRecord, EvidenceManifestBase } from "./evidence.ts";
 
-interface FileIdentity { readonly device: number; readonly inode: number; readonly mode: number }
+interface FileIdentity {
+  readonly device: number;
+  readonly inode: number;
+  readonly mode: number;
+}
 type Hook = ((phase: "cleanup-quarantined") => void) | undefined;
 type AssertIdentity = (path: string, identity: FileIdentity, label: string) => void;
 type Exists = (path: string) => boolean;
@@ -11,7 +15,16 @@ type SyncDirectory = (path: string) => void;
 type Refusal = (message: string) => Error;
 type VerifyBundle = (path: string, manifest: EvidenceManifestBase) => void;
 
-export function removeQuarantinedFile(path: string, identity: FileIdentity, hook: Hook, label: string, assertIdentity: AssertIdentity, exists: Exists, syncDirectory: SyncDirectory, refusal: Refusal): void {
+export function removeQuarantinedFile(
+  path: string,
+  identity: FileIdentity,
+  hook: Hook,
+  label: string,
+  assertIdentity: AssertIdentity,
+  exists: Exists,
+  syncDirectory: SyncDirectory,
+  refusal: Refusal,
+): void {
   const quarantine = `${path}.quarantine`;
   if (exists(quarantine)) throw refusal(`cleanup quarantine already exists: ${quarantine}`);
   assertIdentity(path, identity, `${label} entry`);
@@ -24,15 +37,28 @@ export function removeQuarantinedFile(path: string, identity: FileIdentity, hook
 }
 
 export function listBundleEntries(root: string, refusal: Refusal, current = root): string[] {
-  return readdirSync(current, { withFileTypes: true }).flatMap((entry) => {
-    const absolute = resolve(current, entry.name);
-    if (entry.isSymbolicLink()) throw refusal(`bundle contains symlink ${relative(root, absolute)}`);
-    const name = relative(root, absolute).replaceAll("\\", "/");
-    return entry.isDirectory() ? [name, ...listBundleEntries(root, refusal, absolute)] : [name];
-  }).sort(byCodeUnit);
+  return readdirSync(current, { withFileTypes: true })
+    .flatMap((entry) => {
+      const absolute = resolve(current, entry.name);
+      if (entry.isSymbolicLink()) throw refusal(`bundle contains symlink ${relative(root, absolute)}`);
+      const name = relative(root, absolute).replaceAll("\\", "/");
+      return entry.isDirectory() ? [name, ...listBundleEntries(root, refusal, absolute)] : [name];
+    })
+    .sort(byCodeUnit);
 }
 
-export function removeQuarantinedDirectory(path: string, identity: FileIdentity | undefined, manifest: EvidenceManifestBase | undefined, hook: Hook, label: string, assertIdentity: AssertIdentity, exists: Exists, syncDirectory: SyncDirectory, refusal: Refusal, verifyBundle?: VerifyBundle): void {
+export function removeQuarantinedDirectory(
+  path: string,
+  identity: FileIdentity | undefined,
+  manifest: EvidenceManifestBase | undefined,
+  hook: Hook,
+  label: string,
+  assertIdentity: AssertIdentity,
+  exists: Exists,
+  syncDirectory: SyncDirectory,
+  refusal: Refusal,
+  verifyBundle?: VerifyBundle,
+): void {
   const quarantine = `${path}.quarantine`;
   if (exists(quarantine)) throw refusal(`cleanup quarantine already exists: ${quarantine}`);
   if (identity !== undefined) assertIdentity(path, identity, label);
@@ -47,7 +73,11 @@ export function removeQuarantinedDirectory(path: string, identity: FileIdentity 
   }
   if (manifest !== undefined) verifyBundle?.(quarantine, manifest);
   const directories = expectedDirectories(expected);
-  for (const file of expected.filter((entry) => !directories.has(entry)).sort(byCodeUnit).reverse()) unlinkSync(resolve(quarantine, file));
+  for (const file of expected
+    .filter((entry) => !directories.has(entry))
+    .sort(byCodeUnit)
+    .reverse())
+    unlinkSync(resolve(quarantine, file));
   for (const directory of [...directories].sort((a, b) => b.length - a.length || byCodeUnit(b, a))) rmdirSync(resolve(quarantine, directory));
   rmdirSync(quarantine);
   syncDirectory(dirname(path));
@@ -67,12 +97,14 @@ function expectedDirectories(paths: readonly string[]): Set<string> {
 }
 
 function listEntries(root: string, current = root): string[] {
-  return readdirSync(current, { withFileTypes: true }).flatMap((entry) => {
-    const child = resolve(current, entry.name);
-    if (entry.isSymbolicLink()) return [`${relativeName(root, child)}\0symlink`];
-    const name = relativeName(root, child);
-    return entry.isDirectory() ? [name, ...listEntries(root, child)] : [name];
-  }).sort(byCodeUnit);
+  return readdirSync(current, { withFileTypes: true })
+    .flatMap((entry) => {
+      const child = resolve(current, entry.name);
+      if (entry.isSymbolicLink()) return [`${relativeName(root, child)}\0symlink`];
+      const name = relativeName(root, child);
+      return entry.isDirectory() ? [name, ...listEntries(root, child)] : [name];
+    })
+    .sort(byCodeUnit);
 }
 
 function relativeName(root: string, path: string): string {

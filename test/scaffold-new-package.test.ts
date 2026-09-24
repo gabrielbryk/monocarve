@@ -8,21 +8,84 @@ import { cleanupFixtures, fixtureConfig, fixtureRepo } from "./support/fixture-r
 
 afterAll(cleanupFixtures);
 
-function newPackage(root: string, taskRunner = noneTaskRunner, tests: readonly string[] | undefined = undefined, packageJson = '{"name":"{package}"}\n') {
-  const config = fixtureConfig(root, taskRunner === moonAdapter ? {
-    taskRunner: "moon",
-    scaffoldTemplates: {
-      packageJson: { contents: packageJson },
-      taskFile: { contents: "id: {project}\ntags: [frontend-library]\n" },
-    },
-  } : {});
+function newPackage(root: string, taskRunner = noneTaskRunner, tests?: readonly string[], packageJson = '{"name":"{package}"}\n') {
+  const config = fixtureConfig(
+    root,
+    taskRunner === moonAdapter
+      ? {
+          taskRunner: "moon",
+          scaffoldTemplates: { packageJson: { contents: packageJson }, taskFile: { contents: "id: {project}\ntags: [frontend-library]\n" } },
+        }
+      : {},
+  );
   return packageOperations({
-    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
-    packageManager: pnpmAdapter, taskRunner, packageName: "@acme/new-package",
-    packageRoot: "libs/new-package", projectId: "new-package", production: [],
-    ...(tests === undefined ? {} : { tests }), dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+    context: new WorkspaceContext(config, root),
+    config,
+    application: config.applications[0]!,
+    packageManager: pnpmAdapter,
+    taskRunner,
+    packageName: "@acme/new-package",
+    packageRoot: "libs/new-package",
+    projectId: "new-package",
+    production: [],
+    ...(tests === undefined ? {} : { tests }),
+    dependencies: { runtime: {}, dev: {}, packageReferences: [] },
   });
 }
+
+test("resolves scaffold-only workspace devDependencies from configured package roots", () => {
+  const root = fixtureRepo({
+    "pnpm-workspace.yaml": "packages:\n  - libs/*\n  - tools/*\n",
+    "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n",
+    "tools/vitest-config/package.json": '{"name":"@acme/vitest-config"}\n',
+    "tools/vitest-config/tsconfig.json": '{"compilerOptions":{"composite":true}}\n',
+  });
+  const config = fixtureConfig(root, {
+    packageRoots: ["libs", "tools"],
+    scaffoldTemplates: {
+      packageJson: { contents: '{"name":"{package}","devDependencies":{"@acme/vitest-config":"workspace:*"}}\n' },
+      tsconfig: { contents: '{"compilerOptions":{"composite":true},"references":[]}\n' },
+    },
+  });
+  const operations = packageOperations({
+    context: new WorkspaceContext(config, root),
+    config,
+    application: config.applications[0]!,
+    packageManager: pnpmAdapter,
+    taskRunner: noneTaskRunner,
+    packageName: "@acme/new-package",
+    packageRoot: "libs/new-package",
+    projectId: "new-package",
+    production: [],
+    dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+  });
+  const importer = operations.find((operation) => operation.kind === "lockfile-importer");
+  expect(importer).toMatchObject({ kind: "lockfile-importer", block: expect.stringContaining("version: link:../../tools/vitest-config") });
+  const tsconfig = operations.find((operation) => operation.kind === "write-file" && operation.path === "libs/new-package/tsconfig.json");
+  expect(tsconfig?.kind === "write-file" ? JSON.parse(tsconfig.contents).references : undefined).toEqual([{ path: "../../tools/vitest-config/tsconfig.json" }]);
+});
+
+test("refuses an unknown scaffold workspace dependency", () => {
+  const root = fixtureRepo({ "pnpm-workspace.yaml": "packages:\n  - libs/*\n", "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n" });
+  const config = fixtureConfig(root, {
+    scaffoldTemplates: { packageJson: { contents: '{"name":"{package}","devDependencies":{"@acme/missing":"workspace:*"}}\n' } },
+  });
+
+  expect(() =>
+    packageOperations({
+      context: new WorkspaceContext(config, root),
+      config,
+      application: config.applications[0]!,
+      packageManager: pnpmAdapter,
+      taskRunner: noneTaskRunner,
+      packageName: "@acme/new-package",
+      packageRoot: "libs/new-package",
+      projectId: "new-package",
+      production: [],
+      dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+    }),
+  ).toThrow("workspace dependency has no package reference: @acme/missing");
+});
 
 test("generates a Moon empty-suite override only for an explicitly test-less move", () => {
   const root = fixtureRepo({
@@ -40,8 +103,9 @@ test("uses Bun's empty-suite flag for a Bun test scaffold", () => {
     "pnpm-workspace.yaml": "packages:\n  - libs/*\n",
     "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\n",
   });
-  const task = newPackage(root, moonAdapter, [], '{"name":"{package}","scripts":{"test":"bun test"}}\n')
-    .find((operation) => operation.kind === "write-file" && operation.path === "libs/new-package/moon.yml");
+  const task = newPackage(root, moonAdapter, [], '{"name":"{package}","scripts":{"test":"bun test"}}\n').find(
+    (operation) => operation.kind === "write-file" && operation.path === "libs/new-package/moon.yml",
+  );
   expect(task).toMatchObject({ kind: "write-file", contents: expect.stringContaining("args: [--pass-with-no-tests]") });
 });
 
@@ -59,16 +123,32 @@ test("records automatic React JSX dependencies as compiler-consumed Knip depende
   const root = fixtureRepo({
     "knip.jsonc": '{\n  "workspaces": {\n    ".": {}\n  }\n}\n',
     "pnpm-workspace.yaml": "packages:\n  - libs/*\n",
-    "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      react:\n        specifier: 19.2.7\n        version: 19.2.7\n\npackages:\n\n  react@19.2.7: {}\n",
+    "pnpm-lock.yaml":
+      "lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      react:\n        specifier: 19.2.7\n        version: 19.2.7\n\npackages:\n\n  react@19.2.7: {}\n",
   });
   const config = fixtureConfig(root, {
-    applications: [{ name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json", packageName: "@acme/web", compositionRoots: [], compilerProfile: { jsx: true } }],
+    applications: [
+      {
+        name: "web",
+        sourceRoot: "apps/web/src",
+        tsconfig: "apps/web/tsconfig.json",
+        packageName: "@acme/web",
+        compositionRoots: [],
+        compilerProfile: { jsx: true },
+      },
+    ],
     portfolio: { frameworkPackages: ["react"] },
   });
   const operations = packageOperations({
-    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
-    packageManager: pnpmAdapter, taskRunner: noneTaskRunner, packageName: "@acme/new-package",
-    packageRoot: "libs/new-package", projectId: "new-package", production: ["apps/web/src/Widget.tsx"],
+    context: new WorkspaceContext(config, root),
+    config,
+    application: config.applications[0]!,
+    packageManager: pnpmAdapter,
+    taskRunner: noneTaskRunner,
+    packageName: "@acme/new-package",
+    packageRoot: "libs/new-package",
+    projectId: "new-package",
+    production: ["apps/web/src/Widget.tsx"],
     dependencies: { runtime: { react: "19.2.7" }, dev: {}, packageReferences: [] },
   });
   const knip = operations.find((operation) => operation.kind === "write-file" && operation.path === "knip.jsonc");
@@ -95,38 +175,41 @@ test("puts inferred workspace references in a configured library project", () =>
     },
   });
   const operations = packageOperations({
-    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
-    packageManager: pnpmAdapter, taskRunner: noneTaskRunner, packageName: "@acme/new-package",
-    packageRoot: "libs/new-package", projectId: "new-package", production: ["apps/api/src/Widget.tsx"],
+    context: new WorkspaceContext(config, root),
+    config,
+    application: config.applications[0]!,
+    packageManager: pnpmAdapter,
+    taskRunner: noneTaskRunner,
+    packageName: "@acme/new-package",
+    packageRoot: "libs/new-package",
+    projectId: "new-package",
+    production: ["apps/api/src/Widget.tsx"],
     dependencies: { runtime: {}, dev: {}, packageReferences: ["libs/format"] },
   });
-  const writes = new Map(
-    operations.filter((operation) => operation.kind === "write-file").map((operation) => [operation.path, operation.contents]),
-  );
+  const writes = new Map(operations.filter((operation) => operation.kind === "write-file").map((operation) => [operation.path, operation.contents]));
 
   expect(JSON.parse(writes.get("libs/new-package/tsconfig.json")!)).toEqual({
-    compilerOptions: { composite: true }, files: [], references: [
-      { path: "./tsconfig.lib.json" }, { path: "./tsconfig.spec.json" }, { path: "../format" },
-    ],
+    compilerOptions: { composite: true },
+    files: [],
+    references: [{ path: "./tsconfig.lib.json" }, { path: "./tsconfig.spec.json" }, { path: "../format" }],
   });
   expect(JSON.parse(writes.get("libs/new-package/tsconfig.lib.json")!)).toEqual({
-    compilerOptions: { jsx: "react-jsx" }, references: [{ path: "../format/tsconfig.lib.json" }],
+    compilerOptions: { jsx: "react-jsx" },
+    references: [{ path: "../format/tsconfig.lib.json" }],
   });
   expect(JSON.parse(writes.get("libs/new-package/tsconfig.spec.json")!)).toEqual({
-    extends: "./tsconfig.lib.json", references: [{ path: "./tsconfig.lib.json" }],
+    extends: "./tsconfig.lib.json",
+    references: [{ path: "./tsconfig.lib.json" }],
   });
 });
 
 test("writes a new solution tsconfig even when its rendered bytes are already canonical", () => {
-  const root = fixtureRepo({
-    "pnpm-workspace.yaml": "packages:\n  - libs/*\n",
-    "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\n",
-  });
-  const solution = `${JSON.stringify({
-    compilerOptions: { composite: true },
-    files: [],
-    references: [{ path: "./tsconfig.lib.json" }, { path: "./tsconfig.spec.json" }],
-  }, null, 2)}\n`;
+  const root = fixtureRepo({ "pnpm-workspace.yaml": "packages:\n  - libs/*\n", "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n\n" });
+  const solution = `${JSON.stringify(
+    { compilerOptions: { composite: true }, files: [], references: [{ path: "./tsconfig.lib.json" }, { path: "./tsconfig.spec.json" }] },
+    null,
+    2,
+  )}\n`;
   const config = fixtureConfig(root, {
     scaffoldTemplates: {
       packageJson: { contents: '{"name":"{package}"}\n' },
@@ -139,20 +222,22 @@ test("writes a new solution tsconfig even when its rendered bytes are already ca
     },
   });
   const operations = packageOperations({
-    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
-    packageManager: pnpmAdapter, taskRunner: noneTaskRunner, packageName: "@acme/new-package",
-    packageRoot: "libs/new-package", projectId: "new-package", production: [],
+    context: new WorkspaceContext(config, root),
+    config,
+    application: config.applications[0]!,
+    packageManager: pnpmAdapter,
+    taskRunner: noneTaskRunner,
+    packageName: "@acme/new-package",
+    packageRoot: "libs/new-package",
+    projectId: "new-package",
+    production: [],
     dependencies: { runtime: {}, dev: {}, packageReferences: [] },
   });
   const configs = operations
-    .flatMap((operation) => operation.kind === "write-file" && operation.path.startsWith("libs/new-package/tsconfig") ? [operation.path] : [])
+    .flatMap((operation) => (operation.kind === "write-file" && operation.path.startsWith("libs/new-package/tsconfig") ? [operation.path] : []))
     .sort();
 
-  expect(configs).toEqual([
-    "libs/new-package/tsconfig.json",
-    "libs/new-package/tsconfig.lib.json",
-    "libs/new-package/tsconfig.spec.json",
-  ]);
+  expect(configs).toEqual(["libs/new-package/tsconfig.json", "libs/new-package/tsconfig.lib.json", "libs/new-package/tsconfig.spec.json"]);
   const rootConfig = operations.find((operation) => operation.kind === "write-file" && operation.path === "libs/new-package/tsconfig.json");
   expect(rootConfig).toMatchObject({ contents: solution, preconditionHash: "missing" });
 });
@@ -166,18 +251,34 @@ test("refuses a configured reference target without a scaffold template", () => 
     },
   });
 
-  expect(() => packageOperations({
-    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
-    packageManager: pnpmAdapter, taskRunner: noneTaskRunner, packageName: "@acme/new-package",
-    packageRoot: "libs/new-package", projectId: "new-package", production: [],
-    dependencies: { runtime: {}, dev: {}, packageReferences: [] },
-  })).toThrow(PlanningError);
-  expect(() => packageOperations({
-    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
-    packageManager: pnpmAdapter, taskRunner: noneTaskRunner, packageName: "@acme/new-package",
-    packageRoot: "libs/new-package", projectId: "new-package", production: [],
-    dependencies: { runtime: {}, dev: {}, packageReferences: [] },
-  })).toThrow('projectReferences.target "tsconfig.lib.json" must name a configured scaffold extraFile');
+  expect(() =>
+    packageOperations({
+      context: new WorkspaceContext(config, root),
+      config,
+      application: config.applications[0]!,
+      packageManager: pnpmAdapter,
+      taskRunner: noneTaskRunner,
+      packageName: "@acme/new-package",
+      packageRoot: "libs/new-package",
+      projectId: "new-package",
+      production: [],
+      dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+    }),
+  ).toThrow(PlanningError);
+  expect(() =>
+    packageOperations({
+      context: new WorkspaceContext(config, root),
+      config,
+      application: config.applications[0]!,
+      packageManager: pnpmAdapter,
+      taskRunner: noneTaskRunner,
+      packageName: "@acme/new-package",
+      packageRoot: "libs/new-package",
+      projectId: "new-package",
+      production: [],
+      dependencies: { runtime: {}, dev: {}, packageReferences: [] },
+    }),
+  ).toThrow('projectReferences.target "tsconfig.lib.json" must name a configured scaffold extraFile');
 });
 
 test("references an exact-root dependency through its existing root tsconfig", () => {
@@ -193,22 +294,24 @@ test("references an exact-root dependency through its existing root tsconfig", (
     scaffoldTemplates: {
       packageJson: { contents: '{"name":"{package}"}\n' },
       tsconfig: { contents: '{"files":[],"references":[{"path":"./tsconfig.lib.json"}]}\n' },
-      extraFiles: {
-        "tsconfig.lib.json": { contents: '{"compilerOptions":{"jsx":"react-jsx"}}\n' },
-      },
+      extraFiles: { "tsconfig.lib.json": { contents: '{"compilerOptions":{"jsx":"react-jsx"}}\n' } },
       projectReferences: { target: "tsconfig.lib.json", dependencyTarget: "tsconfig.lib.json" },
     },
   });
 
   const operations = packageOperations({
-    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
-    packageManager: pnpmAdapter, taskRunner: noneTaskRunner, packageName: "@acme/new-package",
-    packageRoot: "libs/new-package", projectId: "new-package", production: ["apps/api/src/Widget.tsx"],
+    context: new WorkspaceContext(config, root),
+    config,
+    application: config.applications[0]!,
+    packageManager: pnpmAdapter,
+    taskRunner: noneTaskRunner,
+    packageName: "@acme/new-package",
+    packageRoot: "libs/new-package",
+    projectId: "new-package",
+    production: ["apps/api/src/Widget.tsx"],
     dependencies: { runtime: { "@acme/shared": "workspace:*" }, dev: {}, packageReferences: ["shared"] },
   });
-  const lib = operations.find(
-    (operation) => operation.kind === "write-file" && operation.path === "libs/new-package/tsconfig.lib.json",
-  );
+  const lib = operations.find((operation) => operation.kind === "write-file" && operation.path === "libs/new-package/tsconfig.lib.json");
   expect(lib?.kind).toBe("write-file");
   if (lib?.kind !== "write-file") throw new Error("missing generated library tsconfig");
   expect(JSON.parse(lib.contents).references).toEqual([{ path: "../../shared/tsconfig.json" }]);
@@ -227,28 +330,28 @@ test("omits a project reference for a non-composite exact-root dependency", () =
     scaffoldTemplates: {
       packageJson: { contents: '{"name":"{package}"}\n' },
       tsconfig: { contents: '{"files":[],"references":[{"path":"./tsconfig.lib.json"}]}\n' },
-      extraFiles: {
-        "tsconfig.lib.json": { contents: '{"compilerOptions":{"jsx":"react-jsx"}}\n' },
-      },
+      extraFiles: { "tsconfig.lib.json": { contents: '{"compilerOptions":{"jsx":"react-jsx"}}\n' } },
       projectReferences: { target: "tsconfig.lib.json", dependencyTarget: "tsconfig.lib.json" },
     },
   });
 
   const operations = packageOperations({
-    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
-    packageManager: pnpmAdapter, taskRunner: noneTaskRunner, packageName: "@acme/new-package",
-    packageRoot: "libs/new-package", projectId: "new-package", production: ["apps/api/src/Widget.tsx"],
+    context: new WorkspaceContext(config, root),
+    config,
+    application: config.applications[0]!,
+    packageManager: pnpmAdapter,
+    taskRunner: noneTaskRunner,
+    packageName: "@acme/new-package",
+    packageRoot: "libs/new-package",
+    projectId: "new-package",
+    production: ["apps/api/src/Widget.tsx"],
     dependencies: { runtime: { "@acme/shared": "workspace:*" }, dev: {}, packageReferences: ["shared"] },
   });
-  const lib = operations.find(
-    (operation) => operation.kind === "write-file" && operation.path === "libs/new-package/tsconfig.lib.json",
-  );
+  const lib = operations.find((operation) => operation.kind === "write-file" && operation.path === "libs/new-package/tsconfig.lib.json");
   expect(lib?.kind).toBe("write-file");
   if (lib?.kind !== "write-file") throw new Error("missing generated library tsconfig");
   expect(JSON.parse(lib.contents).references).toBeUndefined();
-  const solution = operations.find(
-    (operation) => operation.kind === "write-file" && operation.path === "libs/new-package/tsconfig.json",
-  );
+  const solution = operations.find((operation) => operation.kind === "write-file" && operation.path === "libs/new-package/tsconfig.json");
   if (solution?.kind !== "write-file") throw new Error("missing generated solution tsconfig");
   expect(JSON.parse(solution.contents).references).toEqual([{ path: "./tsconfig.lib.json" }]);
 });
@@ -256,21 +359,25 @@ test("omits a project reference for a non-composite exact-root dependency", () =
 test("adds conditional dev dependencies only when their trigger dependency is inferred", () => {
   const root = fixtureRepo({
     "pnpm-workspace.yaml": "packages:\n  - libs/*\n",
-    "pnpm-lock.yaml": "lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      leaflet:\n        specifier: ^1.9.4\n        version: 1.9.4\n    devDependencies:\n      '@types/leaflet':\n        specifier: ^1.9.21\n        version: 1.9.21\n\npackages:\n\n  leaflet@1.9.4: {}\n  '@types/leaflet@1.9.21': {}\n",
+    "pnpm-lock.yaml":
+      "lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n      leaflet:\n        specifier: ^1.9.4\n        version: 1.9.4\n    devDependencies:\n      '@types/leaflet':\n        specifier: ^1.9.21\n        version: 1.9.21\n\npackages:\n\n  leaflet@1.9.4: {}\n  '@types/leaflet@1.9.21': {}\n",
   });
   const config = fixtureConfig(root, {
     scaffoldTemplates: {
       packageJson: { contents: '{"name":"{package}"}\n' },
-      devDependenciesByDependency: {
-        leaflet: { "@types/leaflet": "^1.9.21" },
-        absent: { "@types/absent": "^1.0.0" },
-      },
+      devDependenciesByDependency: { leaflet: { "@types/leaflet": "^1.9.21" }, absent: { "@types/absent": "^1.0.0" } },
     },
   });
   const operations = packageOperations({
-    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
-    packageManager: pnpmAdapter, taskRunner: noneTaskRunner, packageName: "@acme/map",
-    packageRoot: "libs/map", projectId: "map", production: ["apps/api/src/map.ts"],
+    context: new WorkspaceContext(config, root),
+    config,
+    application: config.applications[0]!,
+    packageManager: pnpmAdapter,
+    taskRunner: noneTaskRunner,
+    packageName: "@acme/map",
+    packageRoot: "libs/map",
+    projectId: "map",
+    production: ["apps/api/src/map.ts"],
     dependencies: { runtime: { leaflet: "^1.9.4" }, dev: {}, packageReferences: [] },
   });
   const manifest = operations.find((operation) => operation.kind === "write-file" && operation.path === "libs/map/package.json");
@@ -297,17 +404,18 @@ test("extends an existing solution tsconfig with newly inferred package referenc
     },
   });
   const operations = packageOperations({
-    context: new WorkspaceContext(config, root), config, application: config.applications[0]!,
-    packageManager: pnpmAdapter, taskRunner: noneTaskRunner, packageName: "@acme/target",
-    packageRoot: "libs/target", projectId: "target", production: ["apps/api/src/feature.ts"],
+    context: new WorkspaceContext(config, root),
+    config,
+    application: config.applications[0]!,
+    packageManager: pnpmAdapter,
+    taskRunner: noneTaskRunner,
+    packageName: "@acme/target",
+    packageRoot: "libs/target",
+    projectId: "target",
+    production: ["apps/api/src/feature.ts"],
     dependencies: { runtime: { "@acme/dependency": "workspace:*" }, dev: {}, packageReferences: ["libs/dependency"] },
   });
-  const solution = operations.find(
-    (operation) => operation.kind === "write-file" && operation.path === "libs/target/tsconfig.json",
-  );
+  const solution = operations.find((operation) => operation.kind === "write-file" && operation.path === "libs/target/tsconfig.json");
   if (solution?.kind !== "write-file") throw new Error("missing extended solution tsconfig");
-  expect(JSON.parse(solution.contents).references).toEqual([
-    { path: "./tsconfig.lib.json" },
-    { path: "../dependency" },
-  ]);
+  expect(JSON.parse(solution.contents).references).toEqual([{ path: "./tsconfig.lib.json" }, { path: "../dependency" }]);
 });

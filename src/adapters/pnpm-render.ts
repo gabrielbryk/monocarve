@@ -7,6 +7,7 @@ import {
   EMPTY_MAP,
   IMPORTER_KEY,
   importerBlock,
+  parseImporters,
   pnpmSection,
   type PnpmDependencySection,
   yamlKey,
@@ -27,9 +28,7 @@ function importerSections(input: RenderImporterInput, linkVersion: (from: string
     ["devDependencies", input.devDependencies],
     ["optionalDependencies", input.optionalDependencies ?? {}],
   ];
-  return sections
-    .map(([section, values]) => renderSection(section, values, input, linkVersion))
-    .filter((section): section is string => section !== undefined);
+  return sections.map(([section, values]) => renderSection(section, values, input, linkVersion)).filter((section): section is string => section !== undefined);
 }
 
 function renderSection(
@@ -45,25 +44,43 @@ function renderSection(
   return lines.join("\n");
 }
 
-function renderDependency(
-  name: string,
-  specifier: string,
-  input: RenderImporterInput,
-  linkVersion: (from: string, to: string) => string,
-): string[] {
-  const version = specifier.startsWith("workspace:") ? workspaceVersion(name, input, linkVersion) : dependencyVersion(input.lockfileText, name, specifier);
+function renderDependency(name: string, specifier: string, input: RenderImporterInput, linkVersion: (from: string, to: string) => string): string[] {
+  const version = specifier.startsWith("workspace:")
+    ? workspaceVersion(name, input, linkVersion)
+    : dependencyVersion(input.lockfileText, name, specifier, input.resolutionRoots?.[name] ?? input.packageRoot);
   // pnpm can persist a catalog request as its selected concrete range in an
   // existing importer (notably when an override supplies that selection).
-  // Preserve that byte-level spelling when projecting the same importer; new
-  // importers still render the package.json specifier verbatim.
-  const persistedSpecifier = specifier === "catalog:" ? existingSpecifier(input, name) ?? specifier : specifier;
+  // Preserve that byte-level spelling when projecting the same importer. A
+  // brand-new importer has no block of its own to copy from, but when every
+  // *other* importer in this lockfile already persists the same name as one
+  // consistent concrete range (this workspace does that for every catalog
+  // dependency, always, never the literal `catalog:` text), the new importer
+  // must borrow that same spelling too: `pnpm install --frozen-lockfile`
+  // recomputes the manifest's `catalog:` specifier to its resolved concrete
+  // version and rejects a lockfile entry that still reads `catalog:` verbatim
+  // as a mismatch, the moment any importer in the file changes.
+  const persistedSpecifier =
+    specifier === "catalog:" ? (existingSpecifier(input, name) ?? anyImporterSpecifier(input.lockfileText, name) ?? specifier) : specifier;
   return [`      ${yamlKey(name)}:`, `        specifier: ${yamlValue(persistedSpecifier)}`, `        version: ${version}`];
 }
 
 function existingSpecifier(input: RenderImporterInput, name: string): string | undefined {
   const block = importerBlock(input.lockfileText, input.packageRoot);
   if (block === undefined) return undefined;
-  const lines = block.replace(/\n$/u, "").split("\n");
+  return blockSpecifier(block.replace(/\n$/u, "").split("\n"), name);
+}
+
+function anyImporterSpecifier(lockfileText: string, name: string): string | undefined {
+  const { lines, entries } = parseImporters(lockfileText);
+  const seen = new Map<string, string>();
+  for (const entry of entries) {
+    const specifier = blockSpecifier(lines.slice(entry.start, entry.end), name);
+    if (specifier !== undefined && specifier !== "catalog:") seen.set(specifier, entry.root);
+  }
+  return seen.size === 1 ? [...seen.keys()][0] : undefined;
+}
+
+function blockSpecifier(lines: readonly string[], name: string): string | undefined {
   const dependency = blockDependencies(lines).find((entry) => entry.name === name);
   if (dependency === undefined) return undefined;
   for (const line of lines.slice(dependency.start + 1, dependency.end)) {
@@ -93,11 +110,7 @@ export function addBlockDependency(
   return `${lines.join("\n")}\n`;
 }
 
-export function addBlockDependencies(
-  block: string,
-  input: RenderImporterInput,
-  linkVersion: (from: string, to: string) => string,
-): string {
+export function addBlockDependencies(block: string, input: RenderImporterInput, linkVersion: (from: string, to: string) => string): string {
   let next = block;
   const sections: readonly [ConsumerDependencySection, Readonly<Record<string, string>>][] = [
     ["runtime", input.dependencies],
@@ -109,7 +122,7 @@ export function addBlockDependencies(
       if (blockHasSpecifier(next, name, specifier, section)) continue;
       const version = specifier.startsWith("workspace:")
         ? workspaceVersion(name, input, linkVersion)
-        : dependencyVersion(input.lockfileText, name, specifier);
+        : dependencyVersion(input.lockfileText, name, specifier, input.resolutionRoots?.[name] ?? input.packageRoot);
       next = addBlockDependency(next, name, specifier, version, section);
     }
   }
@@ -120,7 +133,8 @@ function blockHasSpecifier(block: string, name: string, specifier: string, secti
   const lines = expandableLines(block);
   const dependency = blockDependencies(lines).find((entry) => entry.name === name && entry.section === pnpmSection(section));
   if (!dependency) return false;
-  return lines.slice(dependency.start + 1, dependency.end)
+  return lines
+    .slice(dependency.start + 1, dependency.end)
     .some((line) => line.match(/^ {8}specifier:\s*(.+)$/)?.[1]?.replace(/^['"]|['"]$/g, "") === specifier);
 }
 

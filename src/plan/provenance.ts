@@ -1,6 +1,7 @@
 import type { PackageManagerAdapter, TaskRunnerAdapter } from "../adapters/types.ts";
 import { compilerBuildIdentity } from "../build-identity.ts";
 import type { MonocarveConfig, ResolvedExtractionProfile, ScaffoldTemplatesConfig } from "../config.ts";
+import { configDigest } from "../config.ts";
 import { hashJson, type Sha256 } from "../util/hash.ts";
 import type { PlanProvenance } from "./manifest.ts";
 
@@ -15,7 +16,7 @@ export interface PlanProvenanceInput {
 
 export function buildPlanProvenance(input: PlanProvenanceInput): PlanProvenance {
   return {
-    configDigest: hashJson(input.config),
+    configDigest: configDigest(input.config),
     policyDigest: policyDigest(input),
     compiler: compilerBuildIdentity(),
     adapters: {

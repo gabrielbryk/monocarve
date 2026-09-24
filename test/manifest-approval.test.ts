@@ -3,13 +3,13 @@ import { chmodSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { commitManifestApproval, manifestApprovalEvidence } from "../src/approval/manifest.ts";
+import { configDigest } from "../src/config/digest.ts";
 import { serializeManifest } from "../src/plan/build.ts";
 import { createPreparationManifest, serializePreparationManifest } from "../src/prepare/index.ts";
+import { serializePreparerManifest, type PreparerManifest } from "../src/preparer/index.ts";
+import { runIn } from "./support/cli.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, write } from "./support/fixture-repo.ts";
 import { baseManifest, extractionFiles } from "./support/transaction-fixture.ts";
-import { runIn } from "./support/cli.ts";
-import { serializePreparerManifest, type PreparerManifest } from "../src/preparer/index.ts";
-import { hashJson } from "../src/util/hash.ts";
 
 describe("guided manifest approval", () => {
   afterEach(cleanupFixtures);
@@ -47,12 +47,11 @@ describe("guided manifest approval", () => {
   test("rolls back when a commit hook stages different manifest bytes", async () => {
     const fixture = setup();
     const hook = join(fixture.rootDir, ".git/hooks/pre-commit");
-    write(fixture.rootDir, ".git/hooks/pre-commit", [
-      "#!/bin/sh",
-      `printf '%s\\n' '{\"forged\":true}' > ${fixture.manifestPath}`,
-      `git add -- ${fixture.manifestPath}`,
-      "",
-    ].join("\n"));
+    write(
+      fixture.rootDir,
+      ".git/hooks/pre-commit",
+      ["#!/bin/sh", `printf '%s\\n' '{\"forged\":true}' > ${fixture.manifestPath}`, `git add -- ${fixture.manifestPath}`, ""].join("\n"),
+    );
     chmodSync(hook, 0o755);
 
     expect(() => commitManifestApproval(fixture)).toThrow("commit hook changed the reviewed manifest");
@@ -111,10 +110,16 @@ describe("guided manifest approval", () => {
       schemaVersion: 1,
       planId: "preparer-plan",
       createdAt: "2026-08-07T00:00:00.000Z",
-      baseline: { commit: fixture.manifest.baselineCommit, configDigest: hashJson(fixture.config) },
+      baseline: { commit: fixture.manifest.baselineCommit, configDigest: configDigest(fixture.config) },
       extractionPlanId: `standalone-${fixture.manifest.baselineCommit}`,
       preparer: { id: "rewrite-boundary", phase: "pre-extraction", command: "true", commit: { subject: "fix: rewrite boundary" } },
-      binding: { application: "standalone", packageName: "standalone", packageRoot: ".", sourcePath: "apps/api/src/index.ts", targetPath: "apps/api/src/index.ts" },
+      binding: {
+        application: "standalone",
+        packageName: "standalone",
+        packageRoot: ".",
+        sourcePath: "apps/api/src/index.ts",
+        targetPath: "apps/api/src/index.ts",
+      },
       mutations: [],
     } as unknown as PreparerManifest;
     const path = "plans/preparer.json";
@@ -139,7 +144,7 @@ describe("guided manifest approval", () => {
       baseline: {
         commit: fixture.manifest.baselineCommit,
         committerDate: new Date(Number(fixtureGit(fixture.rootDir, "show", "-s", "--format=%ct")) * 1000).toISOString(),
-        configDigest: hashJson(fixture.config),
+        configDigest: configDigest(fixture.config),
       },
       graphDigest: "a".repeat(64),
       declarations: [],

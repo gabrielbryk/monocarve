@@ -1,20 +1,38 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { flagBool, flagNumber, flagString, flagStrings, type ParsedArgs } from "../cli/args.ts";
+import { analyzeDeclarationBatch, BatchAnalysisError } from "../assessment/batch.ts";
+import { defaultAssessmentArguments, loadReplaySnapshot, publishAssessment, reportsForSnapshot } from "../assessment/bundle.ts";
 import { assertEvidenceDestination, EvidenceError } from "../assessment/evidence.ts";
 import { captureAssessmentSnapshot, AssessmentQualificationError } from "../assessment/snapshot.ts";
-import { defaultAssessmentArguments, loadReplaySnapshot, publishAssessment, reportsForSnapshot } from "../assessment/bundle.ts";
-import { analyzeDeclarationBatch, BatchAnalysisError } from "../assessment/batch.ts";
+import { flagBool, flagNumber, flagString, flagStrings, type ParsedArgs } from "../cli/args.ts";
+import type { LoadedConfig } from "../config.ts";
 import { ConfigError, IoError, NotYetPortedError, UsageError } from "../errors.ts";
 import { byCodeUnit } from "../util/hash.ts";
-import type { LoadedConfig } from "../config.ts";
-import type { CommandSpec } from "./types.ts";
 import { load, print } from "./shared.ts";
+import type { CommandSpec } from "./types.ts";
 
 const MUTATION_ONLY_FLAGS = [
-  "plan", "apply", "approve", "simulate", "prepare", "journal", "allow-dirty",
-  "write", "commit", "commit-approval", "resume", "recover", "skip-gates", "force",
-  "replace", "delete", "execute", "target", "package-name", "package-root", "retire-donors",
+  "plan",
+  "apply",
+  "approve",
+  "simulate",
+  "prepare",
+  "journal",
+  "allow-dirty",
+  "write",
+  "commit",
+  "commit-approval",
+  "resume",
+  "recover",
+  "skip-gates",
+  "force",
+  "replace",
+  "delete",
+  "execute",
+  "target",
+  "package-name",
+  "package-root",
+  "retire-donors",
 ] as const;
 
 interface AssessmentInvocation {
@@ -42,7 +60,8 @@ function parseInvocation(args: ParsedArgs): AssessmentInvocation {
   if (application === undefined || destination === undefined) throw new UsageError("assess requires --app <name> and --evidence-dir <path>");
   if (args.positionals.length > 0) throw new UsageError("assess rejects positional targets; use repeated --file or --split-hotspots");
   if (args.flags.has("out")) throw new UsageError("assess rejects --out; use --evidence-dir");
-  if (args.repeated.has("graph")) throw new UsageError("ASSESSMENT_REPLAY_PROVENANCE_REQUIRED: assess refuses bare --graph reports; use --replay with a complete assessment bundle");
+  if (args.repeated.has("graph"))
+    throw new UsageError("ASSESSMENT_REPLAY_PROVENANCE_REQUIRED: assess refuses bare --graph reports; use --replay with a complete assessment bundle");
   const mutation = MUTATION_ONLY_FLAGS.find((name) => args.flags.has(name));
   if (mutation) throw new UsageError(`assess does not accept mutation-only --${mutation}`);
   const files = flagStrings(args, "file");
@@ -54,7 +73,15 @@ function parseInvocation(args: ParsedArgs): AssessmentInvocation {
   const maxBytesRaw = flagString(args, "max-bytes");
   const maxBytes = maxBytesRaw === undefined ? undefined : positiveInteger(Number(maxBytesRaw), "--max-bytes");
   const replay = flagString(args, "replay");
-  return { application, destination, files, limit, ...(hotspotCount === undefined ? {} : { hotspotCount }), ...(maxBytes === undefined ? {} : { maxBytes }), ...(replay === undefined ? {} : { replay }) };
+  return {
+    application,
+    destination,
+    files,
+    limit,
+    ...(hotspotCount === undefined ? {} : { hotspotCount }),
+    ...(maxBytes === undefined ? {} : { maxBytes }),
+    ...(replay === undefined ? {} : { replay }),
+  };
 }
 
 async function runAssessment(args: ParsedArgs, invocation: AssessmentInvocation): Promise<void> {
@@ -63,23 +90,60 @@ async function runAssessment(args: ParsedArgs, invocation: AssessmentInvocation)
   const canonicalDestination = assertEvidenceDestination(loaded.rootDir, invocation.destination, analyticalRoots);
   const replayDestination = replayDestinationFor(loaded.rootDir, invocation.replay, analyticalRoots);
   const excludedRoots = [...new Set([canonicalDestination, ...(replayDestination === undefined ? [] : [replayDestination])])];
-  const snapshot = invocation.replay === undefined
-    ? await captureAssessmentSnapshot({ ...loaded, application: invocation.application, ...(flagBool(args, "allow-empty") ? { allowEmpty: true } : {}), excludedRoots })
-    : await loadReplaySnapshot({ ...loaded, application: invocation.application, bundleDirectory: invocation.replay, excludedRoots });
-  const baseArguments = defaultAssessmentArguments(invocation.application, { limit: invocation.limit, ...(flagBool(args, "full-portfolio") ? { fullPortfolio: true } : {}) });
-  const selection = invocation.files.length > 0 ? { mode: "files" as const, paths: invocation.files }
-    : invocation.hotspotCount === undefined ? undefined : { mode: "hotspots" as const, count: invocation.hotspotCount };
+  const snapshot =
+    invocation.replay === undefined
+      ? await captureAssessmentSnapshot({
+          ...loaded,
+          application: invocation.application,
+          ...(flagBool(args, "allow-empty") ? { allowEmpty: true } : {}),
+          excludedRoots,
+        })
+      : await loadReplaySnapshot({ ...loaded, application: invocation.application, bundleDirectory: invocation.replay, excludedRoots });
+  const baseArguments = defaultAssessmentArguments(invocation.application, {
+    limit: invocation.limit,
+    ...(flagBool(args, "full-portfolio") ? { fullPortfolio: true } : {}),
+  });
+  const selection =
+    invocation.files.length > 0
+      ? { mode: "files" as const, paths: invocation.files }
+      : invocation.hotspotCount === undefined
+        ? undefined
+        : { mode: "hotspots" as const, count: invocation.hotspotCount };
   const batch = selection === undefined ? undefined : analyzeDeclarationBatch(snapshot, selection);
-  const analyticalArguments = selection === undefined ? baseArguments : {
-    ...baseArguments,
-    splitSelection: selection.mode === "files" ? { mode: "files" as const, paths: [...new Set(invocation.files)].sort(byCodeUnit) } : { mode: "hotspots" as const, count: selection.count },
-  };
+  const analyticalArguments =
+    selection === undefined
+      ? baseArguments
+      : {
+          ...baseArguments,
+          splitSelection:
+            selection.mode === "files"
+              ? { mode: "files" as const, paths: [...new Set(invocation.files)].sort(byCodeUnit) }
+              : { mode: "hotspots" as const, count: selection.count },
+        };
   const reports = reportsForSnapshot(snapshot, analyticalArguments, batch);
   const result = publishAssessment({
-    snapshot, reports, destination: canonicalDestination, analyticalRoots, arguments: analyticalArguments,
-    ...(flagBool(args, "replace-generated") ? { replaceGenerated: true } : {}), ...(invocation.maxBytes === undefined ? {} : { maxBytes: invocation.maxBytes }), ...(batch === undefined ? {} : { batch }),
+    snapshot,
+    reports,
+    destination: canonicalDestination,
+    analyticalRoots,
+    arguments: analyticalArguments,
+    ...(flagBool(args, "replace-generated") ? { replaceGenerated: true } : {}),
+    ...(invocation.maxBytes === undefined ? {} : { maxBytes: invocation.maxBytes }),
+    ...(batch === undefined ? {} : { batch }),
   });
-  print({ schemaVersion: 1, status: snapshot.qualification.status, exitCode: snapshot.qualification.exitCode, published: true, overrides: snapshot.qualification.overrides, evidenceDirectory: result.destination, totalBytes: result.totalBytes, diagnostics: snapshot.qualification.diagnostics }, args);
+  print(
+    {
+      schemaVersion: 1,
+      status: snapshot.qualification.status,
+      exitCode: snapshot.qualification.exitCode,
+      published: true,
+      overrides: snapshot.qualification.overrides,
+      evidenceDirectory: result.destination,
+      totalBytes: result.totalBytes,
+      diagnostics: snapshot.qualification.diagnostics,
+    },
+    args,
+  );
   process.exitCode = snapshot.qualification.exitCode;
 }
 
@@ -99,14 +163,25 @@ function replayDestinationFor(rootDir: string, replay: string | undefined, analy
 
 function handleAssessmentFailure(args: ParsedArgs, error: unknown): never | void {
   if (error instanceof BatchAnalysisError) {
-    const failure = { schemaVersion: 1, status: "fatal" as const, exitCode: 1 as const, published: false, code: "SPLIT_ANALYSIS_INCOMPLETE" as const, ...error.aggregate };
+    const failure = {
+      schemaVersion: 1,
+      status: "fatal" as const,
+      exitCode: 1 as const,
+      published: false,
+      code: "SPLIT_ANALYSIS_INCOMPLETE" as const,
+      ...error.aggregate,
+    };
     print(flagBool(args, "json") ? failure : humanBatchFailure(failure), args);
     process.exitCode = 1;
     return;
   }
   if (error instanceof AssessmentQualificationError) return printFatal(args, error.qualification.diagnostics, error.qualification.overrides);
-  if (error instanceof EvidenceError) return printFatal(args, [{ code: error.code, severity: "error", message: error.message, impact: "No new authoritative assessment bundle was published." }]);
-  if (error instanceof ConfigError || error instanceof IoError) return printFatal(args, [{ code: "ASSESSMENT_INPUT_UNREADABLE", severity: "error", message: error.message, impact: "No new authoritative assessment bundle was published." }]);
+  if (error instanceof EvidenceError)
+    return printFatal(args, [{ code: error.code, severity: "error", message: error.message, impact: "No new authoritative assessment bundle was published." }]);
+  if (error instanceof ConfigError || error instanceof IoError)
+    return printFatal(args, [
+      { code: "ASSESSMENT_INPUT_UNREADABLE", severity: "error", message: error.message, impact: "No new authoritative assessment bundle was published." },
+    ]);
   if (error instanceof UsageError || error instanceof NotYetPortedError) throw error;
   throw error;
 }
@@ -132,8 +207,10 @@ function humanBatchFailure(aggregate: { readonly completed: readonly string[]; r
 export const assessmentCommands: Record<string, CommandSpec> = {
   assess: {
     summary: "capture a reproducible architecture assessment",
-    usage: "assess --app <name> --evidence-dir <path> [--file <path> ... | --split-hotspots <n>] [--replay <bundle>] [--allow-empty] [--replace-generated] [--max-bytes <n>] [--limit <n>] [--full-portfolio]",
-    details: "Captures one read-only scanner baseline, derives normalized architecture evidence, and publishes a manifest-bound bundle. Bare --graph replay and mutation-only flags are refused.",
+    usage:
+      "assess --app <name> --evidence-dir <path> [--file <path> ... | --split-hotspots <n>] [--replay <bundle>] [--allow-empty] [--replace-generated] [--max-bytes <n>] [--limit <n>] [--full-portfolio]",
+    details:
+      "Captures one read-only scanner baseline, derives normalized architecture evidence, and publishes a manifest-bound bundle. Bare --graph replay and mutation-only flags are refused.",
     run: assess,
   },
 };

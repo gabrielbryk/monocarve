@@ -309,9 +309,7 @@ export interface MarginalBlocker {
  * result is a lower bound for one-change work, never a prediction that a
  * high-frequency category is a high-value fix.
  */
-export function marginalBlockers(
-  candidates: readonly Pick<PortfolioCandidate, "id" | "lineCount" | "rejectionReasons">[],
-): MarginalBlocker[] {
+export function marginalBlockers(candidates: readonly Pick<PortfolioCandidate, "id" | "lineCount" | "rejectionReasons">[]): MarginalBlocker[] {
   interface Accumulator {
     readonly code: RejectionCode;
     readonly detail: string;
@@ -321,7 +319,12 @@ export function marginalBlockers(
   }
 
   const byBlocker = new Map<string, Accumulator>();
-  const add = (reason: RejectionReason, edge: string | undefined, candidate: Pick<PortfolioCandidate, "id" | "lineCount" | "rejectionReasons">, frees: boolean): void => {
+  const add = (
+    reason: RejectionReason,
+    edge: string | undefined,
+    candidate: Pick<PortfolioCandidate, "id" | "lineCount" | "rejectionReasons">,
+    frees: boolean,
+  ): void => {
     const key = edge === undefined ? `${reason.code}\u0000${reason.detail}` : `${reason.code}\u0000${edge}`;
     let entry = byBlocker.get(key);
     if (entry === undefined) {
@@ -369,8 +372,6 @@ export function marginalBlockers(
  */
 export function blockingHints(candidate: PortfolioCandidate): string[] {
   return candidate.rejectionReasons.flatMap((reason) =>
-    reason.edges.length === 0
-      ? [reason.detail]
-      : [`break ${reason.edges[0]} to unlock ${candidate.id} (${candidate.lineCount} LOC)`],
+    reason.edges.length === 0 ? [reason.detail] : [`break ${reason.edges[0]} to unlock ${candidate.id} (${candidate.lineCount} LOC)`],
   );
 }

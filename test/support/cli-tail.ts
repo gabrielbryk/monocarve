@@ -2,10 +2,8 @@ import { expect, test } from "bun:test";
 import { rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 
+import { FIXTURE, committedWorkspace, configureAllowedDirtyPaths, readFileSync, run, runIn, runJson, runJsonIn, writeFileSync } from "./cli.ts";
 import { fixtureGit } from "./fixture-repo.ts";
-import {
-  FIXTURE, committedWorkspace, configureAllowedDirtyPaths, readFileSync, run, runIn, runJson, runJsonIn, writeFileSync,
-} from "./cli.ts";
 
 interface CandidateSummary {
   readonly id: string;
@@ -74,7 +72,12 @@ export function registerCliTailTests(input: { readonly candidate: () => Candidat
   }, 300_000);
 
   test("backlog explains every blocked candidate with a concrete edge", async () => {
-    const backlog = await runJson<{ totals: PortfolioReport["totals"]; limit: number; truncated: boolean; top: { blocking: { code: string }[]; unblock: string[] }[] }>("backlog");
+    const backlog = await runJson<{
+      totals: PortfolioReport["totals"];
+      limit: number;
+      truncated: boolean;
+      top: { blocking: { code: string }[]; unblock: string[] }[];
+    }>("backlog");
     expect(backlog.top.length).toBeGreaterThan(0);
     expect(backlog.top.every((entry) => entry.blocking.length > 0 && entry.unblock.length > 0)).toBe(true);
     expect(backlog.top.some((entry) => entry.blocking.some((reason) => reason.code === "composition-root"))).toBe(true);
@@ -120,7 +123,10 @@ export function registerCliTailTests(input: { readonly candidate: () => Candidat
 
   test("portfolio --communities is a deterministic read-only diagnostic", async () => {
     const ordinary = await runJson<PortfolioReport>("portfolio");
-    const first = await runJson<{ schema: string; graphDigest: string; parameters: { algorithm: string }; communities: { members: string[] }[] }>("portfolio", "--communities");
+    const first = await runJson<{ schema: string; graphDigest: string; parameters: { algorithm: string }; communities: { members: string[] }[] }>(
+      "portfolio",
+      "--communities",
+    );
     const second = await runJson<typeof first>("portfolio", "--communities");
     expect(first.schema).toBe("portfolio-communities");
     expect(first.parameters.algorithm).toBe("deterministic-louvain-local-move");
@@ -174,7 +180,16 @@ export function registerCliTailTests(input: { readonly candidate: () => Candidat
   }, 300_000);
 
   test("audit reports a schema mismatch instead of crashing", async () => {
-    const written = await runJson<{ output: string }>("plan", "--candidate", input.candidate().id, "--package-name", "@acme/chart", "--write", "--out", ".monocarve/legacy-source.json");
+    const written = await runJson<{ output: string }>(
+      "plan",
+      "--candidate",
+      input.candidate().id,
+      "--package-name",
+      "@acme/chart",
+      "--write",
+      "--out",
+      ".monocarve/legacy-source.json",
+    );
     const legacy = JSON.parse(readFileSync(join(FIXTURE, written.output), "utf8")) as Record<string, unknown>;
     legacy.schemaVersion = 0;
     delete legacy.application;
@@ -182,7 +197,12 @@ export function registerCliTailTests(input: { readonly candidate: () => Candidat
     writeFileSync(join(FIXTURE, legacyPath), `${JSON.stringify(legacy, null, 2)}\n`);
     const audited = await run("audit", "--plan", legacyPath);
     expect(audited.code).toBe(1);
-    const report = JSON.parse(audited.stdout) as { passed: boolean; failures: string[]; unauditable?: string[]; byteFidelity: { passed: boolean; checked: number; failures: string[] } };
+    const report = JSON.parse(audited.stdout) as {
+      passed: boolean;
+      failures: string[];
+      unauditable?: string[];
+      byteFidelity: { passed: boolean; checked: number; failures: string[] };
+    };
     expect(report.passed).toBe(false);
     expect(report.failures).toEqual(["[schema-version] manifest schemaVersion must be 2, 3, or 4"]);
     expect(report.unauditable).toEqual(report.failures);

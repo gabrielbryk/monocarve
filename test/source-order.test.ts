@@ -38,7 +38,7 @@ function entryName(entry: unknown): string {
   return typeof entry === "string" ? entry : String((entry as { name: string }).name);
 }
 
-mock.module("node:fs", () => ({
+await mock.module("node:fs", () => ({
   ...realFs,
   readdirSync: (...args: unknown[]) => {
     const entries = (realReaddir as (...a: unknown[]) => unknown[])(...args);
@@ -79,10 +79,7 @@ afterAll(() => {
 
 describe("source enumeration order", () => {
   test("sourceFiles follows an explicit workspace extension policy", () => {
-    const root = tree({
-      "widget.component": "export const widget = 1;\n",
-      "ignored.ts": "export const ignored = 1;\n",
-    });
+    const root = tree({ "widget.component": "export const widget = 1;\n", "ignored.ts": "export const ignored = 1;\n" });
 
     expect(sourceFiles(root, undefined, [".component"])).toEqual([join(root, "widget.component")]);
   });
@@ -112,9 +109,7 @@ describe("source enumeration order", () => {
     listingOrder = "descending";
     // The stub bites: the walker's own view of the directory is now reversed,
     // so an unsorted walk cannot help but report a different order.
-    expect(realFs.readdirSync(root).map(entryName)).toEqual(
-      ["alpha.ts", "beta", "nested", "node_modules", "notes.md", "zebra.ts"].reverse(),
-    );
+    expect(realFs.readdirSync(root).map(entryName)).toEqual(["alpha.ts", "beta", "nested", "node_modules", "notes.md", "zebra.ts"].reverse());
     expect(sourceFiles(root)).toEqual(expected);
   });
 
@@ -144,20 +139,11 @@ describe("source enumeration order", () => {
         packageRoots: ["libs"],
         firstPartyRoots: ["core"],
         packageScope: "@acme/",
-        scaffoldTemplates: {
-          entrypoint: "src/index.ts",
-          packageJson: { contents: '{ "name": "{package}" }\n' },
-        },
+        scaffoldTemplates: { entrypoint: "src/index.ts", packageJson: { contents: '{ "name": "{package}" }\n' } },
       },
       "<source-order fixture>",
     );
-    const expected = [
-      "apps/web/scripts/fixture.ts",
-      "apps/web/src/main.ts",
-      "apps/web/src/widgets/chart.ts",
-      "core/telemetry.ts",
-      "libs/format/src/index.ts",
-    ];
+    const expected = ["apps/web/scripts/fixture.ts", "apps/web/src/main.ts", "apps/web/src/widgets/chart.ts", "core/telemetry.ts", "libs/format/src/index.ts"];
 
     expect(new WorkspaceContext(config, root).repositorySources()).toEqual(expected);
 

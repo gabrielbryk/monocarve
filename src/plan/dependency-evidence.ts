@@ -31,12 +31,15 @@ function noteDependency(
 }
 
 function sourceSpecifiers(context: WorkspaceContext, graph: DependencyGraph, source: string): string[] {
-  return [...new Set([
-    ...(graph.specifiers.get(source) ?? []),
-    ...context.moduleReferences(source)
-      .map((reference) => reference.specifier)
-      .filter((specifier): specifier is string => specifier !== null),
-  ])];
+  return [
+    ...new Set([
+      ...(graph.specifiers.get(source) ?? []),
+      ...context
+        .moduleReferences(source)
+        .map((reference) => reference.specifier)
+        .filter((specifier): specifier is string => specifier !== null),
+    ]),
+  ];
 }
 
 function recordSpecifiers(
@@ -105,9 +108,7 @@ function recordConfiguredTypes(
     if (!owners.has(applicationOwner(application))) continue;
     const configPath = resolve(context.rootDir, application.tsconfig);
     const read = ts.readConfigFile(configPath, ts.sys.readFile);
-    const configured = read.error === undefined && Array.isArray(read.config?.compilerOptions?.types)
-      ? read.config.compilerOptions.types
-      : [];
+    const configured = read.error === undefined && Array.isArray(read.config?.compilerOptions?.types) ? read.config.compilerOptions.types : [];
     for (const type of configured) {
       const name = context.packageNameOf(type) ?? type;
       if (name === packageName || isBuiltinModule(name)) continue;

@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { baselinePath, judge, readBaseline, report, reportBaselineUpdate, summarizeBaselineUpdate, writeBaseline, type BaselinedFinding } from "./baseline.ts";
+
 export interface LineViolation {
   readonly path: string;
   readonly lines: number;
@@ -10,7 +12,8 @@ export interface LineViolation {
 const EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"];
 
 export function findLineViolations(rootDir: string, targets: readonly string[], limit: number): LineViolation[] {
-  return targets.flatMap((target) => files(resolve(rootDir, target)))
+  return targets
+    .flatMap((target) => files(resolve(rootDir, target)))
     .map((path) => ({ path, lines: lineCount(readFileSync(path, "utf8")), limit }))
     .filter((entry) => entry.lines > limit)
     .map((entry) => ({ ...entry, path: entry.path.slice(resolve(rootDir).length + 1).replaceAll("\\", "/") }))
@@ -33,11 +36,23 @@ function lineCount(text: string): number {
 
 if (import.meta.main) {
   const rootDir = process.cwd();
+  const argv = process.argv.slice(2);
+  const updating = argv.includes("--update-baseline");
+  const targets = argv.filter((arg) => !arg.startsWith("--"));
   const limit = Number(process.env.MAX_FILE_LINES ?? "500");
-  const violations = findLineViolations(rootDir, process.argv.slice(2).length > 0 ? process.argv.slice(2) : ["src", "test", "scripts"], limit);
-  for (const entry of violations) process.stderr.write(`${entry.path}: ${entry.lines} lines (limit ${entry.limit})\n`);
-  if (violations.length > 0) {
-    process.stderr.write(`max-file-lines: ${violations.length} violation(s)\n`);
-    process.exitCode = 1;
+  const findings: BaselinedFinding[] = findLineViolations(rootDir, targets.length > 0 ? targets : ["src", "test", "scripts"], limit).map((entry) => ({
+    path: entry.path,
+    metric: "lines",
+    actual: entry.lines,
+    detail: `${entry.lines} lines (limit ${entry.limit})`,
+  }));
+  const file = baselinePath(rootDir, "max-file-lines");
+  if (updating) {
+    const summary = summarizeBaselineUpdate(findings, readBaseline(file));
+    reportBaselineUpdate("max-file-lines", summary, (text) => process.stderr.write(text));
+    writeBaseline(file, findings);
+    process.stderr.write(`max-file-lines: baseline rewritten with ${findings.length} measurement(s)\n`);
+  } else {
+    process.exitCode = report("max-file-lines", judge(findings, readBaseline(file)), (text) => process.stderr.write(text));
   }
 }

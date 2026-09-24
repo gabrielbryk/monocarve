@@ -9,5 +9,7 @@ export class WorkspaceDiscoveryError extends LockfileError {
     readonly failure: WorkspaceDiscoveryFailure,
     message: string,
     readonly evidence: { readonly patterns?: readonly string[]; readonly paths?: readonly string[] } = {},
-  ) { super(message); }
+  ) {
+    super(message);
+  }
 }

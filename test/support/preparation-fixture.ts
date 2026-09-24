@@ -33,10 +33,7 @@ export function preparationFixture(): PreparationFixture {
   return {
     root,
     config: fixtureConfig(root, {
-      preparation: {
-        gates: { package: [], project: [], workspace: ["true"] },
-        commit: { subject: "refactor: prepare contract types" },
-      },
+      preparation: { gates: { package: [], project: [], workspace: ["true"] }, commit: { subject: "refactor: prepare contract types" } },
     }),
   };
 }

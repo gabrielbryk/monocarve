@@ -35,14 +35,21 @@ test("caught failures after publication restore the prior bundle and remove owne
     publishEvidence(baseOptions(root));
     const before = operationalState(root);
 
-    expect(() => publishEvidence({
-      ...baseOptions(root),
-      artifacts: { "summary.json": "replacement\n" },
-      replaceGenerated: true,
-      ...(failure === "published" ? { failAfter: "published" as const } : {
-        testPhaseHook: (phase: string) => { if (phase === (failure === "before-recovery" ? "published-before-recovery" : failure)) throw new Error("injected evidence failure during cleanup"); },
+    expect(() =>
+      publishEvidence({
+        ...baseOptions(root),
+        artifacts: { "summary.json": "replacement\n" },
+        replaceGenerated: true,
+        ...(failure === "published"
+          ? { failAfter: "published" as const }
+          : {
+              testPhaseHook: (phase: string) => {
+                if (phase === (failure === "before-recovery" ? "published-before-recovery" : failure))
+                  throw new Error("injected evidence failure during cleanup");
+              },
+            }),
       }),
-    })).toThrow("injected evidence failure");
+    ).toThrow("injected evidence failure");
 
     expect(operationalState(root)).toEqual(before);
     expect(readFileSync(join(root, "evidence/summary.json"), "utf8")).toBe("summary\n");
@@ -52,12 +59,18 @@ test("caught failures after publication restore the prior bundle and remove owne
 test("caught first-publication failure after rename leaves no authoritative bundle", () => {
   for (const failure of ["published-renamed-before-sync", "published", "cleanup-before-backup"] as const) {
     const root = scratchDirectory();
-    expect(() => publishEvidence({
-      ...baseOptions(root),
-      ...(failure === "published" ? { failAfter: "published" as const } : {
-        testPhaseHook: (phase: string) => { if (phase === failure) throw new Error("injected evidence failure during cleanup"); },
+    expect(() =>
+      publishEvidence({
+        ...baseOptions(root),
+        ...(failure === "published"
+          ? { failAfter: "published" as const }
+          : {
+              testPhaseHook: (phase: string) => {
+                if (phase === failure) throw new Error("injected evidence failure during cleanup");
+              },
+            }),
       }),
-    })).toThrow("injected evidence failure");
+    ).toThrow("injected evidence failure");
     expect(existsSync(join(root, "evidence"))).toBeFalse();
     expect(operationalState(root)).toEqual({});
   }
@@ -68,10 +81,16 @@ test("caught failures between directory rename and sync restore the prior bundle
     const root = scratchDirectory();
     publishEvidence(baseOptions(root));
     const before = operationalState(root);
-    expect(() => publishEvidence({
-      ...baseOptions(root), artifacts: { "summary.json": "replacement\n" }, replaceGenerated: true,
-      testPhaseHook: (phase) => { if (phase === failure) throw new Error("injected sync failure"); },
-    })).toThrow("injected sync failure");
+    expect(() =>
+      publishEvidence({
+        ...baseOptions(root),
+        artifacts: { "summary.json": "replacement\n" },
+        replaceGenerated: true,
+        testPhaseHook: (phase) => {
+          if (phase === failure) throw new Error("injected sync failure");
+        },
+      }),
+    ).toThrow("injected sync failure");
     expect(operationalState(root)).toEqual(before);
   }
 });
@@ -80,18 +99,26 @@ test("partial or complete backup removal failure preserves the new bundle and re
   for (const failure of ["backup-removal-started", "backup-removed"] as const) {
     const root = scratchDirectory();
     publishEvidence(baseOptions(root));
-    expect(() => publishEvidence({
-      ...baseOptions(root), artifacts: { "summary.json": "replacement\n" }, replaceGenerated: true,
-      testPhaseHook: (phase) => {
-        if (phase !== failure) return;
-        if (phase === "backup-removal-started") unlinkSync(join(root, "evidence.backup/summary.json"));
-        throw new Error("injected backup cleanup failure");
-      },
-    })).toThrow("injected backup cleanup failure");
+    expect(() =>
+      publishEvidence({
+        ...baseOptions(root),
+        artifacts: { "summary.json": "replacement\n" },
+        replaceGenerated: true,
+        testPhaseHook: (phase) => {
+          if (phase !== failure) return;
+          if (phase === "backup-removal-started") unlinkSync(join(root, "evidence.backup/summary.json"));
+          throw new Error("injected backup cleanup failure");
+        },
+      }),
+    ).toThrow("injected backup cleanup failure");
     expect(readFileSync(join(root, "evidence/summary.json"), "utf8")).toBe("replacement\n");
     expect(existsSync(join(root, "evidence.recovery.json"))).toBeTrue();
     let diagnosis = "";
-    try { publishEvidence({ ...baseOptions(root), replaceGenerated: true }); } catch (error) { diagnosis = String(error); }
+    try {
+      publishEvidence({ ...baseOptions(root), replaceGenerated: true });
+    } catch (error) {
+      diagnosis = String(error);
+    }
     expect(diagnosis).toContain(failure === "backup-removal-started" ? "evidence.backup=incomplete-or-invalid" : "evidence.backup=absent");
     if (failure === "backup-removal-started") expect(diagnosis).toContain("matches-recorded-prior-hash");
     expect(diagnosis).toContain("evidence=intact manifest:");
@@ -122,7 +149,11 @@ function operationalState(root: string): Record<string, string | string[]> {
     state[name] = readdirSync(path).sort();
     for (const entry of readdirSync(path)) {
       const nested = join(path, entry);
-      try { state[`${name}/${entry}`] = readFileSync(nested, "utf8"); } catch { /* directory */ }
+      try {
+        state[`${name}/${entry}`] = readFileSync(nested, "utf8");
+      } catch {
+        /* directory */
+      }
     }
   }
   const recovery = join(root, "evidence.recovery.json");

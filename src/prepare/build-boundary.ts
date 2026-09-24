@@ -13,22 +13,22 @@ import { extname, posix, relative, resolve } from "node:path";
 import ts from "typescript";
 
 import { GENERATOR } from "../branding.ts";
-import { triggeredArtifacts, type MonocarveConfig } from "../config.ts";
+import { configDigest, triggeredArtifacts, type MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import { PlanningError } from "../plan/context.ts";
 import { rewritePathReferenceText, scanPathReferenceRewrites } from "../plan/path-reference-rewrites.ts";
 import { resolveCommit, showBaseline } from "../util/git.ts";
-import { byCodeUnit, hashJson, hashText, type FileState, type Sha256 } from "../util/hash.ts";
+import { byCodeUnit, hashText, type FileState, type Sha256 } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";
 import type { TemplateVars } from "../util/template.ts";
 import { planExistingPackageBoundary, type RetainedImporterInput } from "./boundary-imports.ts";
 import { planPortBoundary, type PortConsumerInput } from "./boundary-port.ts";
 import { resolveBoundaries, type ResolvedBoundary } from "./boundary-resolve.ts";
-import { createPreparationManifest, assertPreparationManifestValid, preparationOperationPaths } from "./manifest.ts";
-import type { PreparationManifest, PreparationReplayOperation } from "./manifest-types.ts";
-import { preparationPostJournalRecords } from "./post-journal.ts";
-import { preparationCompilerOptions } from "./compiler-policy.ts";
 import { baselineFileMode, type PreparationManifestRendering } from "./build.ts";
+import { preparationCompilerOptions } from "./compiler-policy.ts";
+import type { PreparationManifest, PreparationReplayOperation } from "./manifest-types.ts";
+import { createPreparationManifest, assertPreparationManifestValid, preparationOperationPaths } from "./manifest.ts";
+import { preparationPostJournalRecords } from "./post-journal.ts";
 
 export interface CompileBoundaryPreparationManifestInput {
   readonly rootDir: string;
@@ -72,14 +72,15 @@ export interface CompileBoundaryPreparationManifestInput {
  * preparation plan carries.
  */
 export function compileBoundaryPreparationManifest(input: CompileBoundaryPreparationManifestInput): PreparationManifest {
-  const boundary = resolveBoundaries({
-    compositionBoundaries: input.config.compositionBoundaries,
-    portPromotions: input.config.portPromotions,
-  }).find((item) => item.id === input.boundaryId);
+  const boundary = resolveBoundaries({ compositionBoundaries: input.config.compositionBoundaries, portPromotions: input.config.portPromotions }).find(
+    (item) => item.id === input.boundaryId,
+  );
   if (!boundary) throw new PlanningError(`unknown boundary id ${input.boundaryId}`);
   const baseline = resolveCommit(input.rootDir, input.baselineCommit);
   if (input.graph.commit !== baseline.commit) {
-    throw new PlanningError(`boundary ${boundary.id} importer graph was scanned at ${input.graph.commit ?? "an unknown commit"}, but the preparation baseline is ${baseline.commit}; rescan before compiling`);
+    throw new PlanningError(
+      `boundary ${boundary.id} importer graph was scanned at ${input.graph.commit ?? "an unknown commit"}, but the preparation baseline is ${baseline.commit}; rescan before compiling`,
+    );
   }
   const retainedText = showBaseline(input.rootDir, baseline.commit, boundary.retained);
   if (retainedText === null) throw new PlanningError(`boundary retained module is absent from baseline: ${boundary.retained}`);
@@ -90,39 +91,50 @@ export function compileBoundaryPreparationManifest(input: CompileBoundaryPrepara
     // resolved a node there), so it cannot prove the shim has zero
     // importers. Retirement fails closed rather than trusting an absence of
     // evidence as evidence of absence.
-    throw new PlanningError(`boundary ${boundary.id} declares retire, but the importer graph has no evidence for ${boundary.retained}; refusing to delete without graph proof`);
+    throw new PlanningError(
+      `boundary ${boundary.id} declares retire, but the importer graph has no evidence for ${boundary.retained}; refusing to delete without graph proof`,
+    );
   }
-  const importerPaths = [...new Set([
-    ...(input.graph.incoming.get(boundary.retained) ?? []),
-    ...(input.graph.testImporters.get(boundary.retained) ?? []),
-  ])].sort(byCodeUnit);
-  const bindings = importerPaths.map((path) => resolveBoundaryImporter(
-    input.rootDir,
-    baseline.commit,
-    compilerOptions,
-    path,
-    boundary.retained,
-    input.moduleSpecifierCalls ?? input.config.moduleSpecifierCalls,
-  ));
-  const boundaryOperations = boundary.strategy === "existing-package"
-    ? planExistingPackageOperations(input, boundary, retainedText, retainedMode, bindings)
-    : planPortOperations(input, boundary, baseline.commit, retainedText, compilerOptions, bindings);
-  const referenceOperations = boundary.strategy === "existing-package" && boundary.retire
-    ? planRetiredBoundaryPathReferences(input, boundary, baseline.commit, compilerOptions)
-    : [];
+  const importerPaths = [
+    ...new Set([...(input.graph.incoming.get(boundary.retained) ?? []), ...(input.graph.testImporters.get(boundary.retained) ?? [])]),
+  ].sort(byCodeUnit);
+  const bindings = importerPaths.map((path) =>
+    resolveBoundaryImporter(
+      input.rootDir,
+      baseline.commit,
+      compilerOptions,
+      path,
+      boundary.retained,
+      input.moduleSpecifierCalls ?? input.config.moduleSpecifierCalls,
+    ),
+  );
+  const boundaryOperations =
+    boundary.strategy === "existing-package"
+      ? planExistingPackageOperations(input, boundary, retainedText, retainedMode, bindings)
+      : planPortOperations(input, boundary, baseline.commit, retainedText, compilerOptions, bindings);
+  const referenceOperations =
+    boundary.strategy === "existing-package" && boundary.retire ? planRetiredBoundaryPathReferences(input, boundary, baseline.commit, compilerOptions) : [];
   const operations = [...boundaryOperations, ...referenceOperations];
   const ordered = [...operations].sort(boundaryOperationOrder);
   const operationPaths = [...new Set(ordered.flatMap(preparationOperationPaths))].sort(byCodeUnit);
-  const generatedArtifacts = triggeredArtifacts(input.config, operationPaths).map((artifact) => ({ path: artifact.path, source: artifact.source,
-    regenerate: artifact.regenerate, regenerateOnApply: true as const, ...(artifact.exemptReason === undefined ? {} : { exemptReason: artifact.exemptReason }) }))
+  const generatedArtifacts = triggeredArtifacts(input.config, operationPaths)
+    .map((artifact) => ({
+      path: artifact.path,
+      source: artifact.source,
+      regenerate: artifact.regenerate,
+      regenerateOnApply: true as const,
+      ...(artifact.exemptReason === undefined ? {} : { exemptReason: artifact.exemptReason }),
+    }))
     .sort((left, right) => byCodeUnit(left.path, right.path));
   const postJournalPreparers = preparationPostJournalRecords(input.config, operationPaths);
-  const changedFiles = [...new Set([...operationPaths, ...generatedArtifacts.map((item) => item.path), ...postJournalPreparers.flatMap((item) => item.outputs)])].sort(byCodeUnit);
+  const changedFiles = [
+    ...new Set([...operationPaths, ...generatedArtifacts.map((item) => item.path), ...postJournalPreparers.flatMap((item) => item.outputs)]),
+  ].sort(byCodeUnit);
   const manifest = createPreparationManifest({
     schemaVersion: 1,
     createdAt: baseline.committedAt,
     generator: { ...GENERATOR },
-    baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: hashJson(input.config) },
+    baseline: { commit: baseline.commit, committerDate: baseline.committedAt, configDigest: configDigest(input.config) },
     graphDigest: input.graphDigest,
     // Neither boundary strategy selects a physical type declaration group:
     // "existing-package" only rewrites specifiers, and "port" copies a
@@ -154,20 +166,12 @@ function planRetiredBoundaryPathReferences(
 ): PreparationReplayOperation[] {
   const settings = input.config.pathReferenceRewrites;
   if (!settings.enabled || settings.roots.length === 0) return [];
-  const resolved = ts.resolveModuleName(
-    boundary.replacementSpecifier,
-    resolve(input.rootDir, boundary.retained),
-    compilerOptions,
-    ts.sys,
-  ).resolvedModule?.resolvedFileName;
+  const resolved = ts.resolveModuleName(boundary.replacementSpecifier, resolve(input.rootDir, boundary.retained), compilerOptions, ts.sys).resolvedModule
+    ?.resolvedFileName;
   if (!resolved) throw new PlanningError(`boundary ${boundary.id} replacement ${boundary.replacementSpecifier} does not resolve to a workspace path`);
   const target = relative(input.rootDir, resolved).replaceAll("\\", "/");
   const moves = [{ source: boundary.retained, target }];
-  const scanSettings = {
-    onAmbiguousMatch: settings.onAmbiguousMatch,
-    matchExtensionless: settings.matchExtensionless,
-    minSegments: settings.minSegments,
-  };
+  const scanSettings = { onAmbiguousMatch: settings.onAmbiguousMatch, matchExtensionless: settings.matchExtensionless, minSegments: settings.minSegments };
   const operations: PreparationReplayOperation[] = [];
   for (const root of settings.roots) {
     for (const absolute of boundaryReferenceFiles(resolve(input.rootDir, root.root), root.extensions).sort()) {
@@ -221,7 +225,9 @@ function planExistingPackageOperations(
   bindings: readonly BoundaryImporterBinding[],
 ): readonly PreparationReplayOperation[] {
   const selectedBindings = boundary.selective
-    ? bindings.filter((binding) => binding.importedSymbols.length > 0 && binding.importedSymbols.every((symbol) => boundary.replacementSymbols.includes(symbol)))
+    ? bindings.filter(
+        (binding) => binding.importedSymbols.length > 0 && binding.importedSymbols.every((symbol) => boundary.replacementSymbols.includes(symbol)),
+      )
     : bindings;
   if (boundary.selective && selectedBindings.length === 0) throw new PlanningError(`selective boundary ${boundary.id} found no fully-covered importers`);
   const importers: RetainedImporterInput[] = selectedBindings.map((binding) => ({
@@ -275,7 +281,8 @@ function planPortOperations(
   bindings: readonly BoundaryImporterBinding[],
 ): readonly PreparationReplayOperation[] {
   if (!input.contractTargetPath) throw new PlanningError(`boundary ${boundary.id} requires an explicit contract target path`);
-  if (input.contractTargetPath === boundary.retained) throw new PlanningError(`boundary ${boundary.id} contract target path must differ from the retained module`);
+  if (input.contractTargetPath === boundary.retained)
+    throw new PlanningError(`boundary ${boundary.id} contract target path must differ from the retained module`);
   workspacePath(input.rootDir, input.contractTargetPath);
   const targetPackage = assertExistingPortTargetPackage(input, boundary, baselineCommit, input.contractTargetPath);
   if (showBaseline(input.rootDir, baselineCommit, input.contractTargetPath) !== null) {
@@ -301,9 +308,7 @@ function planPortOperations(
     ...(input.resolutionExtensions === undefined ? {} : { resolutionExtensions: input.resolutionExtensions }),
     ...(input.cssImportExtensions === undefined ? {} : { cssImportExtensions: input.cssImportExtensions }),
   });
-  const packageExport = boundary.source === "portPromotions"
-    ? planPortPackageExport(boundary, input.contractTargetPath, targetPackage)
-    : undefined;
+  const packageExport = boundary.source === "portPromotions" ? planPortPackageExport(boundary, input.contractTargetPath, targetPackage) : undefined;
   return [result.contract, ...(result.adapter ? [result.adapter] : []), ...result.rewrites, ...(packageExport ? [packageExport] : [])];
 }
 
@@ -323,7 +328,9 @@ function assertExistingPortTargetPackage(
 ): ExistingPortTargetPackage {
   const packageRoot = boundaryTargetRoot(input.config, contractTargetPath);
   if (!packageRoot) {
-    throw new PlanningError(`boundary ${boundary.id} contract target ${contractTargetPath} is outside configured package roots; scaffold ${boundary.targetPackage} first with the standard package lifecycle`);
+    throw new PlanningError(
+      `boundary ${boundary.id} contract target ${contractTargetPath} is outside configured package roots; scaffold ${boundary.targetPackage} first with the standard package lifecycle`,
+    );
   }
   const manifestPath = `${packageRoot}/package.json`;
   const manifestText = showBaseline(input.rootDir, baselineCommit, manifestPath);
@@ -341,9 +348,17 @@ function assertExistingPortTargetPackage(
   }
   const name = typeof manifest === "object" && manifest !== null && "name" in manifest ? (manifest as { name?: unknown }).name : undefined;
   if (name !== boundary.targetPackage) {
-    throw new PlanningError(`boundary ${boundary.id} target path belongs to package ${JSON.stringify(name)}, not configured targetPackage ${JSON.stringify(boundary.targetPackage)}`);
+    throw new PlanningError(
+      `boundary ${boundary.id} target path belongs to package ${JSON.stringify(name)}, not configured targetPackage ${JSON.stringify(boundary.targetPackage)}`,
+    );
   }
-  return { root: packageRoot, manifestPath, manifestText, manifest: manifest as Record<string, unknown>, mode: baselineFileMode(input.rootDir, baselineCommit, manifestPath) };
+  return {
+    root: packageRoot,
+    manifestPath,
+    manifestText,
+    manifest: manifest as Record<string, unknown>,
+    mode: baselineFileMode(input.rootDir, baselineCommit, manifestPath),
+  };
 }
 
 function planPortPackageExport(
@@ -357,7 +372,9 @@ function planPortPackageExport(
   }
   const expectedImport = `${boundary.targetPackage}/${module}`;
   if (boundary.packageImport !== expectedImport) {
-    throw new PlanningError(`boundary ${boundary.id} packageImport ${JSON.stringify(boundary.packageImport)} must equal target package subpath ${JSON.stringify(expectedImport)}`);
+    throw new PlanningError(
+      `boundary ${boundary.id} packageImport ${JSON.stringify(boundary.packageImport)} must equal target package subpath ${JSON.stringify(expectedImport)}`,
+    );
   }
   const exportKey = `./${module}`;
   const relativeTarget = posix.relative(target.root, contractTargetPath);
@@ -417,7 +434,7 @@ function boundaryTargetRoot(config: MonocarveConfig, targetPath: string): string
 
 /** Deterministic operation order: by mutated path, then kind, matching multi-build.ts. */
 function boundaryOperationOrder(left: PreparationReplayOperation, right: PreparationReplayOperation): number {
-  const path = (operation: PreparationReplayOperation) => operation.kind === "extract-type-declarations" ? operation.donor.path : operation.file.path;
+  const path = (operation: PreparationReplayOperation) => (operation.kind === "extract-type-declarations" ? operation.donor.path : operation.file.path);
   return byCodeUnit(path(left), path(right)) || byCodeUnit(left.kind, right.kind);
 }
 

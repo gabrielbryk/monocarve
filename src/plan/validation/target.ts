@@ -1,23 +1,94 @@
-import { applicationOwner, getApplication, renderExtractionProfile, resolveExtractionProfile, scaffoldFor } from "../../config.ts";
 import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../../adapters/registry.ts";
-import { WorkspaceContext } from "../context.ts";
+import {
+  applicationOwner,
+  getApplication,
+  isPackageOwner,
+  packageNameMatcher,
+  renderExtractionProfile,
+  resolveExtractionProfile,
+  scaffoldFor,
+} from "../../config.ts";
+import { showBaseline } from "../../util/git.ts";
+import { hashText } from "../../util/hash.ts";
 import { renderGates } from "../build.ts";
+import { WorkspaceContext } from "../context.ts";
 import { isAnyMove, type ExtractionManifest, type PlanOperation } from "../manifest.ts";
 import { renderPublicModulePaths } from "../public-modules.ts";
 import { sourceExportsFromBaseline } from "../public-surface.ts";
-import { hashText } from "../../util/hash.ts";
-import { showBaseline } from "../../util/git.ts";
 import { packageOperations } from "../scaffold.ts";
 import { packageModulePath } from "../target-layout.ts";
+import { validateIntegrationTestSuite } from "./integration.ts";
 import type { ValidatePlanOptions } from "./shared.ts";
 import { Issues } from "./shared.ts";
 
-/** Re-derive configured subpaths and the source export evidence they carry. */
-export function validatePublicModules(
+/** Resolve and validate the target package shape, returning its identifying fields. */
+export function validateTarget(
   manifest: ExtractionManifest,
   options: ValidatePlanOptions,
   issues: Issues,
+  files: readonly string[],
+  containedPath: (path: string, rule: string) => boolean,
+): {
+  readonly packageName: string;
+  readonly packageRoot: string;
+  readonly entrypoint: string;
+  readonly publicModules: NonNullable<ExtractionManifest["target"]["publicModules"]>;
+} {
+  const target = manifest.target;
+  const packageName = target?.packageName ?? "";
+  const packageRoot = target?.packageRoot ?? "";
+  const entrypoint = target?.entrypoint ?? "";
+  if (!packageNameMatcher(options.config).test(packageName)) {
+    issues.add("target-name", `target package ${JSON.stringify(packageName)} does not match the configured pattern`);
+  }
+  if (!packageRoot || !isPackageOwner(options.config, packageRoot) || packageRoot.includes("..")) {
+    issues.add("target-root", "target.packageRoot must be a directory under a configured package root");
+  } else {
+    containedPath(packageRoot, "target-root");
+  }
+  if (!entrypoint) issues.add("target-entrypoint", "target.entrypoint must be a non-empty string");
+  validateTargetProfile(manifest, options, issues);
+  validateIntegrationTestSuite(manifest, options, issues);
+  for (const entry of target?.requiredExports ?? []) {
+    if (!entry.name || typeof entry.typeOnly !== "boolean") issues.add("target-exports", "each required export needs a name and a boolean typeOnly");
+  }
+  const publicModules = target?.publicModules ?? [];
+  validatePublicModuleShape(publicModules, files, packageName, issues);
+  if (!options.offline) validatePublicModules(manifest, options, issues);
+  return { packageName, packageRoot, entrypoint, publicModules };
+}
+
+function validatePublicModuleShape(
+  publicModules: NonNullable<ExtractionManifest["target"]["publicModules"]>,
+  files: readonly string[],
+  packageName: string,
+  issues: Issues,
 ): void {
+  const publicKeys = new Set<string>();
+  const publicSources = new Set<string>();
+  for (const module of publicModules) {
+    const rootModule = module.exportKey === "." && module.specifier === packageName;
+    if (!files.includes(module.source) || !module.target || (!rootModule && !module.specifier.startsWith(`${packageName}/`))) {
+      issues.add("target-subpaths", `invalid public module mapping for ${module.source}`, { path: module.source });
+    }
+    if ((module.exportKey !== "." && !module.exportKey.startsWith("./")) || !module.exportTarget.startsWith("./")) {
+      issues.add("target-subpaths", `public module paths must be package-relative: ${module.exportKey}`, { path: module.source });
+    }
+    if (publicKeys.has(module.exportKey) || publicSources.has(module.source)) {
+      issues.add("target-subpaths", `duplicate public module mapping: ${module.exportKey}`, { path: module.source });
+    }
+    if (!Array.isArray(module.requiredExports)) {
+      issues.add("target-subpaths", `public module ${module.source} must declare required exports`, { path: module.source });
+    } else if (module.requiredExports.some((entry) => !entry.name || typeof entry.typeOnly !== "boolean")) {
+      issues.add("target-subpaths", `public module ${module.source} has an invalid required export`, { path: module.source });
+    }
+    publicKeys.add(module.exportKey);
+    publicSources.add(module.source);
+  }
+}
+
+/** Re-derive configured subpaths and the source export evidence they carry. */
+export function validatePublicModules(manifest: ExtractionManifest, options: ValidatePlanOptions, issues: Issues): void {
   try {
     const application = getApplication(options.config, manifest.application);
     const templates = manifest.target.profile
@@ -30,7 +101,6 @@ export function validatePublicModules(
       // An explicit planner surface override may intentionally select
       // subpaths for a new package whose repository default is a barrel.
       // Shape validation already enforces unique, package-relative mappings.
-      if (actual.length > 0) return;
       return;
     }
     // An existing package may be extended with an explicit, namespaced
@@ -39,11 +109,7 @@ export function validatePublicModules(
     // there is no extraction template to re-render here.
     if (publicSurface.mode === "barrel" && existingEntrypoint && actual.length > 0 && manifest.modulePromotion === undefined) return;
     const context = new WorkspaceContext(options.config, options.rootDir);
-    const moves = new Map(
-      manifest.operations
-        .filter(isAnyMove)
-        .map((operation) => [operation.source, operation.target]),
-    );
+    const moves = new Map(manifest.operations.filter(isAnyMove).map((operation) => [operation.source, operation.target]));
     const moduleSources = [...manifest.source.files, ...(manifest.source.assets ?? [])];
     const rendered = renderPublicModulePaths(
       publicSurface,
@@ -57,16 +123,16 @@ export function validatePublicModules(
       if (hashText(baseline) !== manifest.sourceBlobs[source]) {
         throw new Error(`baseline source does not match recorded source blob: ${source}`);
       }
-      return [{
-        source,
-        target: moves.get(source),
-        specifier: `${manifest.target.packageName}/${paths.exportKey.slice(2)}`,
-        exportKey: paths.exportKey,
-        exportTarget: paths.exportTarget,
-        requiredExports: index < manifest.source.files.length
-          ? sourceExportsFromBaseline(options.rootDir, manifest.baselineCommit, source)
-          : [],
-      }];
+      return [
+        {
+          source,
+          target: moves.get(source),
+          specifier: `${manifest.target.packageName}/${paths.exportKey.slice(2)}`,
+          exportKey: paths.exportKey,
+          exportTarget: paths.exportTarget,
+          requiredExports: index < manifest.source.files.length ? sourceExportsFromBaseline(options.rootDir, manifest.baselineCommit, source) : [],
+        },
+      ];
     });
     if (manifest.modulePromotion !== undefined) {
       const promotion = manifest.modulePromotion;
@@ -201,13 +267,8 @@ function validateProfilePackageOperations(
         ? { workspaceDependencyRoots: { [application.packageName]: applicationOwner(application) } }
         : {}),
     }).filter((operation) => isProfilePackageOperation(operation, rendered.packageRoot));
-    const actual = manifest.operations.filter(
-      (operation) => isProfilePackageOperation(operation, rendered.packageRoot),
-    );
-    if (
-      expected.length !== actual.length ||
-      expected.some((operation, index) => !sameProfilePackageOperation(operation, actual[index]))
-    ) {
+    const actual = manifest.operations.filter((operation) => isProfilePackageOperation(operation, rendered.packageRoot));
+    if (expected.length !== actual.length || expected.some((operation, index) => !sameProfilePackageOperation(operation, actual[index]))) {
       issues.add("target-profile-scaffold", "profile-derived scaffold or lockfile importer does not match configured bytes");
     }
   } catch (error) {
@@ -228,7 +289,9 @@ function sameProfilePackageOperation(expected: PlanOperation, actual: PlanOperat
     return expected.path === actual.path && expected.generator === actual.generator && expected.contents === actual.contents;
   }
   if (expected.kind === "lockfile-importer" && actual.kind === "lockfile-importer") {
-    return expected.lockfile === actual.lockfile && expected.packageRoot === actual.packageRoot && expected.mode === actual.mode && expected.block === actual.block;
+    return (
+      expected.lockfile === actual.lockfile && expected.packageRoot === actual.packageRoot && expected.mode === actual.mode && expected.block === actual.block
+    );
   }
   return false;
 }

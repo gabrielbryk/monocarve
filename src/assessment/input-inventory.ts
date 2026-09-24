@@ -6,10 +6,10 @@ import ts from "typescript";
 import { createPackageManagerAdapter } from "../adapters/registry.ts";
 import type { LoadedConfig } from "../config.ts";
 import { MonocarveError } from "../errors.ts";
-import { byCodeUnit, hashJson, type Sha256 } from "../util/hash.ts";
-import { headCommit, statusEntries } from "../util/git.ts";
-import { sourceFiles } from "../util/files.ts";
 import type { ScanReport } from "../graph/build.ts";
+import { sourceFiles } from "../util/files.ts";
+import { headCommit, statusEntries } from "../util/git.ts";
+import { byCodeUnit, hashJson, type Sha256 } from "../util/hash.ts";
 import { discoverValidatedEvidenceRoots } from "./evidence-discovery.ts";
 import { compareDirectories, compareEntries, directoryMembership, inside, inventoryEntry, inventoryName } from "./input-inventory-paths.ts";
 
@@ -17,13 +17,26 @@ export { canonicalInputPath } from "./input-inventory-paths.ts";
 
 export class InputInventoryError extends MonocarveError {
   override readonly name = "InputInventoryError";
-  constructor(readonly code: "ASSESSMENT_INPUT_DRIFT" | "ASSESSMENT_INPUT_UNBOUND", message: string, readonly paths: readonly string[]) { super(message); }
+  constructor(
+    readonly code: "ASSESSMENT_INPUT_DRIFT" | "ASSESSMENT_INPUT_UNBOUND",
+    message: string,
+    readonly paths: readonly string[],
+  ) {
+    super(message);
+  }
 }
 
 export type InventoryNamespace = "repository" | "installed" | "external";
 
 export type InventoryEntry =
-  | { readonly namespace: InventoryNamespace; readonly path: string; readonly kind: "file"; readonly sha256: Sha256; readonly size: number; readonly canonicalPath: string }
+  | {
+      readonly namespace: InventoryNamespace;
+      readonly path: string;
+      readonly kind: "file";
+      readonly sha256: Sha256;
+      readonly size: number;
+      readonly canonicalPath: string;
+    }
   | { readonly namespace: InventoryNamespace; readonly path: string; readonly kind: "symlink"; readonly target: string; readonly canonicalPath: string }
   | { readonly namespace: InventoryNamespace; readonly path: string; readonly kind: "missing" };
 
@@ -60,18 +73,14 @@ export interface CaptureInventoryOptions extends Pick<LoadedConfig, "config" | "
 export function captureInputInventory(options: CaptureInventoryOptions): AssessmentInputInventory {
   const rootDir = realpathSync(options.rootDir);
   const analyticalRoots = [
-    ...options.config.applications.flatMap((application) => [
-      application.sourceRoot,
-      ...application.consumerRoots,
-    ]).map((path) => resolve(rootDir, path)),
+    ...options.config.applications.flatMap((application) => [application.sourceRoot, ...application.consumerRoots]).map((path) => resolve(rootDir, path)),
     ...options.config.packageRoots.map((path) => resolve(rootDir, path)),
     ...options.config.firstPartyRoots.map((path) => resolve(rootDir, path)),
     ...options.config.firstPartyPackages.map((pkg) => resolve(rootDir, pkg.root)),
   ];
-  const excluded = [...new Set([
-    ...(options.excludedRoots ?? []).map((path) => resolve(rootDir, path)),
-    ...discoverValidatedEvidenceRoots(rootDir, analyticalRoots, inside),
-  ])];
+  const excluded = [
+    ...new Set([...(options.excludedRoots ?? []).map((path) => resolve(rootDir, path)), ...discoverValidatedEvidenceRoots(rootDir, analyticalRoots, inside)]),
+  ];
   const { paths, directoryRoots } = collectInputPaths(options, rootDir, excluded);
 
   for (const path of [...paths]) {
@@ -110,10 +119,16 @@ export function captureInputInventory(options: CaptureInventoryOptions): Assessm
   return { ...body, digest: hashJson(body) };
 }
 
-function collectInputPaths(options: CaptureInventoryOptions, rootDir: string, excluded: readonly string[]): { paths: Set<string>; directoryRoots: Set<string> } {
+function collectInputPaths(
+  options: CaptureInventoryOptions,
+  rootDir: string,
+  excluded: readonly string[],
+): { paths: Set<string>; directoryRoots: Set<string> } {
   const paths = new Set<string>();
   const directoryRoots = new Set<string>();
-  const add = (path: string): void => { paths.add(resolve(path)); };
+  const add = (path: string): void => {
+    paths.add(resolve(path));
+  };
   const addTree = (path: string): void => {
     const absolute = resolve(path);
     directoryRoots.add(absolute);
@@ -135,11 +150,12 @@ function collectInputPaths(options: CaptureInventoryOptions, rootDir: string, ex
       collectNodeModulesAncestors(sourceRoot, directoryRoots);
     }
     collectTsconfigClosure(resolve(rootDir, app.tsconfig), add);
-    collectProgramInputs(rootDir, app.tsconfig, [
-      ...app.consumerRoots,
-      ...options.config.firstPartyRoots,
-      ...options.config.firstPartyPackages.map((pkg) => pkg.root),
-    ], add);
+    collectProgramInputs(
+      rootDir,
+      app.tsconfig,
+      [...app.consumerRoots, ...options.config.firstPartyRoots, ...options.config.firstPartyPackages.map((pkg) => pkg.root)],
+      add,
+    );
   }
   for (const root of [...options.config.packageRoots, ...options.config.firstPartyRoots, ...options.config.firstPartyPackages.map((pkg) => pkg.root)]) {
     const absolute = resolve(rootDir, root);
@@ -164,16 +180,25 @@ export function verifyInputInventory(options: CaptureInventoryOptions, expected:
   const expectedStates = new Map(expected.entries.map((entry) => [`${entry.namespace}:${entry.path}`, hashJson(entry)]));
   const actualStates = new Map(actual.entries.map((entry) => [`${entry.namespace}:${entry.path}`, hashJson(entry)]));
   const changed = [...new Set([...expectedStates.keys(), ...actualStates.keys()])]
-    .filter((key) => expectedStates.get(key) !== actualStates.get(key)).sort(byCodeUnit);
+    .filter((key) => expectedStates.get(key) !== actualStates.get(key))
+    .sort(byCodeUnit);
   const expectedDirectories = new Map(expected.directories.map((entry) => [`${entry.namespace}:${entry.path}`, hashJson(entry)]));
   const actualDirectories = new Map(actual.directories.map((entry) => [`${entry.namespace}:${entry.path}`, hashJson(entry)]));
-  changed.push(...[...new Set([...expectedDirectories.keys(), ...actualDirectories.keys()])]
-    .filter((key) => expectedDirectories.get(key) !== actualDirectories.get(key)).sort(byCodeUnit));
+  changed.push(
+    ...[...new Set([...expectedDirectories.keys(), ...actualDirectories.keys()])]
+      .filter((key) => expectedDirectories.get(key) !== actualDirectories.get(key))
+      .sort(byCodeUnit),
+  );
   throw new InputInventoryError("ASSESSMENT_INPUT_DRIFT", `assessment inputs changed after capture: ${changed.join(", ")}`, [...new Set(changed)]);
 }
 
 /** Refuse scanner-discovered file reads that were not part of pre-scan authority. */
-export function assertReportsBoundToInventory(rootDir: string, inventory: AssessmentInputInventory, reports: Readonly<Record<string, ScanReport>>, requireObservedBytes = false): void {
+export function assertReportsBoundToInventory(
+  rootDir: string,
+  inventory: AssessmentInputInventory,
+  reports: Readonly<Record<string, ScanReport>>,
+  requireObservedBytes = false,
+): void {
   const authority = new Map<string, InventoryEntry>(inventory.entries.map((entry) => [`${entry.namespace}:${entry.path}`, entry]));
   const memberships = new Map<string, DirectoryMembership>(inventory.directories.map((entry) => [`${entry.namespace}:${entry.path}`, entry]));
   const unbound = new Set<string>();
@@ -197,8 +222,18 @@ export function assertReportsBoundToInventory(rootDir: string, inventory: Assess
       }
     }
   }
-  if (unbound.size > 0) throw new InputInventoryError("ASSESSMENT_INPUT_UNBOUND", `scanner read paths outside captured authority: ${[...unbound].sort(byCodeUnit).join(", ")}`, [...unbound].sort(byCodeUnit));
-  if (driftedReads.size > 0) throw new InputInventoryError("ASSESSMENT_INPUT_DRIFT", `scanner read bytes differed from pre-scan inventory: ${[...driftedReads].sort(byCodeUnit).join(", ")}`, [...driftedReads].sort(byCodeUnit));
+  if (unbound.size > 0)
+    throw new InputInventoryError(
+      "ASSESSMENT_INPUT_UNBOUND",
+      `scanner read paths outside captured authority: ${[...unbound].sort(byCodeUnit).join(", ")}`,
+      [...unbound].sort(byCodeUnit),
+    );
+  if (driftedReads.size > 0)
+    throw new InputInventoryError(
+      "ASSESSMENT_INPUT_DRIFT",
+      `scanner read bytes differed from pre-scan inventory: ${[...driftedReads].sort(byCodeUnit).join(", ")}`,
+      [...driftedReads].sort(byCodeUnit),
+    );
 }
 
 function inventoryKeyForPath(rootDir: string, path: string): string {
@@ -274,8 +309,14 @@ function absenceIsBound(rootDir: string, path: string, memberships: ReadonlyMap<
 
 function walkFiles(path: string, excluded: readonly string[], add: (path: string) => void, directories: Set<string>): void {
   const stat = lstatSync(path, { throwIfNoEntry: false });
-  if (!stat) { add(path); return; }
-  if (stat.isSymbolicLink() || stat.isFile()) { add(path); return; }
+  if (!stat) {
+    add(path);
+    return;
+  }
+  if (stat.isSymbolicLink() || stat.isFile()) {
+    add(path);
+    return;
+  }
   if (!stat.isDirectory() || excluded.some((root) => inside(root, path))) return;
   directories.add(path);
   for (const entry of readdirSync(path, { withFileTypes: true }).sort((a, b) => byCodeUnit(a.name, b.name))) {
@@ -317,7 +358,11 @@ function collectProgramInputs(rootDir: string, tsconfigPath: string, additionalR
   const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, dirname(configPath), undefined, configPath);
   const additionalFiles = additionalRoots.flatMap((root) => sourceFiles(resolve(rootDir, root)));
   const rootNames = [...new Set([...parsed.fileNames, ...additionalFiles])].sort(byCodeUnit);
-  const program = ts.createProgram({ rootNames, options: parsed.options, ...(parsed.projectReferences === undefined ? {} : { projectReferences: parsed.projectReferences }) });
+  const program = ts.createProgram({
+    rootNames,
+    options: parsed.options,
+    ...(parsed.projectReferences === undefined ? {} : { projectReferences: parsed.projectReferences }),
+  });
   for (const file of program.getSourceFiles()) add(file.fileName);
 }
 
@@ -374,20 +419,31 @@ function inspectInstalledPackage(packageRoot: string, add: (path: string) => voi
   if (!lstatSync(manifest, { throwIfNoEntry: false })?.isFile()) return;
   add(manifest);
   let value: { types?: unknown; typings?: unknown; main?: unknown; module?: unknown; exports?: unknown };
-  try { value = JSON.parse(readFileSync(manifest, "utf8")) as typeof value; } catch { return; }
+  try {
+    value = JSON.parse(readFileSync(manifest, "utf8")) as typeof value;
+  } catch {
+    return;
+  }
   const targets = new Set<string>();
   for (const field of [value.types, value.typings, value.main, value.module]) if (typeof field === "string") targets.add(field);
   collectExportTargets(value.exports, targets);
-  for (const target of targets) if (target.startsWith(".")) {
-    const resolved = resolve(packageRoot, target);
-    add(resolved);
-    if (directories) addDirectoryAncestors(resolved, directories, packageRoot);
-  }
+  for (const target of targets)
+    if (target.startsWith(".")) {
+      const resolved = resolve(packageRoot, target);
+      add(resolved);
+      if (directories) addDirectoryAncestors(resolved, directories, packageRoot);
+    }
 }
 
 function collectExportTargets(value: unknown, targets: Set<string>): void {
-  if (typeof value === "string") { targets.add(value); return; }
-  if (Array.isArray(value)) { for (const item of value) collectExportTargets(item, targets); return; }
+  if (typeof value === "string") {
+    targets.add(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectExportTargets(item, targets);
+    return;
+  }
   if (typeof value !== "object" || value === null) return;
   for (const item of Object.values(value)) collectExportTargets(item, targets);
 }
@@ -427,20 +483,32 @@ function packageRootFor(path: string): string | undefined {
 export function collectLocalConfigDependencies(path: string, add: (path: string) => void, seen = new Set<string>()): void {
   const absolute = resolve(path);
   if (seen.has(absolute)) return;
-  seen.add(absolute); add(absolute);
+  seen.add(absolute);
+  add(absolute);
   let text: string;
-  try { text = readFileSync(absolute, "utf8"); } catch { return; }
+  try {
+    text = readFileSync(absolute, "utf8");
+  } catch {
+    return;
+  }
   const source = ts.createSourceFile(absolute, text, ts.ScriptTarget.Latest, true);
   const visit = (node: ts.Node): void => {
-    const reference = (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) ? node.moduleSpecifier
-      : ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword || node.expression.getText(source) === "require") ? node.arguments[0]
-      : undefined;
+    const reference =
+      ts.isImportDeclaration(node) || ts.isExportDeclaration(node)
+        ? node.moduleSpecifier
+        : ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword || node.expression.getText(source) === "require")
+          ? node.arguments[0]
+          : undefined;
     if (reference !== undefined) {
-      if (!ts.isStringLiteral(reference)) throw new InputInventoryError("ASSESSMENT_INPUT_UNBOUND", `config import cannot be inventoried: ${absolute}`, [absolute]);
+      if (!ts.isStringLiteral(reference))
+        throw new InputInventoryError("ASSESSMENT_INPUT_UNBOUND", `config import cannot be inventoried: ${absolute}`, [absolute]);
       if (!reference.text.startsWith("node:")) {
         let target: string;
-        try { target = Bun.resolveSync(reference.text, dirname(absolute)); }
-        catch { throw new InputInventoryError("ASSESSMENT_INPUT_UNBOUND", `config import cannot be resolved: ${reference.text}`, [reference.text]); }
+        try {
+          target = Bun.resolveSync(reference.text, dirname(absolute));
+        } catch {
+          throw new InputInventoryError("ASSESSMENT_INPUT_UNBOUND", `config import cannot be resolved: ${reference.text}`, [reference.text]);
+        }
         collectLocalConfigDependencies(target, add, seen);
       }
     }

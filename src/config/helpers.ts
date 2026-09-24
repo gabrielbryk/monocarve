@@ -1,7 +1,7 @@
 import { ConfigError } from "../errors.ts";
 import type { ApplicationConfig } from "./schema-core.ts";
-import type { MonocarveConfig } from "./schema.ts";
 import type { TestKind } from "./schema-policy.ts";
+import type { MonocarveConfig } from "./schema.ts";
 
 export function getApplication(config: MonocarveConfig, name: string): ApplicationConfig {
   const app = config.applications.find((candidate) => candidate.name === name);
@@ -16,7 +16,9 @@ export function getApplication(config: MonocarveConfig, name: string): Applicati
 export function testMatchers(config: MonocarveConfig): RegExp[] {
   return config.testKinds === undefined
     ? config.testPathPatterns.map((source) => new RegExp(source))
-    : Object.values(config.testKinds).flat().map((source) => new RegExp(source));
+    : Object.values(config.testKinds)
+        .flat()
+        .map((source) => new RegExp(source));
 }
 
 export function isTestPath(config: MonocarveConfig, path: string): boolean {
@@ -59,12 +61,33 @@ export function firstPartyRoots(config: MonocarveConfig): string[] {
   ].sort((left, right) => right.length - left.length);
 }
 
+/**
+ * Directory subtrees that may contain a workspace package's own `node_modules`.
+ *
+ * Deliberately not the workspace inventory: that scans every source file under
+ * every package root to answer a question about directories, which costs far
+ * more than the search it would be bounding. These four config fields name the
+ * same subtrees without reading a single source file, and a consumer may nest
+ * packages inside them to any depth.
+ */
+export function packageContainerRoots(config: MonocarveConfig): string[] {
+  return [
+    ...new Set(
+      [
+        ...config.applications.map(applicationOwner),
+        ...config.packageRoots,
+        ...config.firstPartyRoots,
+        ...config.firstPartyPackages.map((pkg) => pkg.root),
+      ].filter((root) => root !== "" && root !== "."),
+    ),
+  ].sort();
+}
+
 /** Roots a file may be moved OUT of: applications and existing packages. */
 export function movableRoots(config: MonocarveConfig): string[] {
-  return [
-    ...config.applications.map((app) => withSlash(app.sourceRoot)),
-    ...config.packageRoots.map(withSlash),
-  ].sort((left, right) => right.length - left.length);
+  return [...config.applications.map((app) => withSlash(app.sourceRoot)), ...config.packageRoots.map(withSlash)].sort(
+    (left, right) => right.length - left.length,
+  );
 }
 
 function withSlash(path: string): string {

@@ -23,9 +23,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 
+import type { ExtractionManifest } from "../src/plan/manifest.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
 import { hashText } from "../src/util/hash.ts";
-import type { ExtractionManifest } from "../src/plan/manifest.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, read, write } from "./support/fixture-repo.ts";
 
 const DONOR = "apps/api/src/widget/widget.ts";
@@ -72,25 +72,13 @@ function manifestFor(root: string): ExtractionManifest {
     baselineCommit: fixtureGit(root, "rev-parse", "HEAD"),
     graphDigest: hashText("codemod-cache-graph"),
     application: "api",
-    target: {
-      packageName: PACKAGE,
-      packageRoot: PACKAGE_ROOT,
-      entrypoint: "src/index.ts",
-      requiredExports: [{ name: "widgetValue", typeOnly: false }],
-    },
+    target: { packageName: PACKAGE, packageRoot: PACKAGE_ROOT, entrypoint: "src/index.ts", requiredExports: [{ name: "widgetValue", typeOnly: false }] },
     source: { files: [DONOR], tests: [], sccs: { "scc-fixture": [DONOR] } },
     dependencies: { runtime: {}, dev: {}, packageReferences: [] },
     sourceBlobs: { [DONOR]: donorHash },
     operations: [
       { kind: "move", source: DONOR, target: TARGET, preconditionHash: donorHash, resultHash: donorHash },
-      {
-        kind: "write-file",
-        path: ENTRYPOINT,
-        contents: BARREL,
-        preconditionHash: "missing",
-        resultHash: hashText(BARREL),
-        generator: "scaffold:entrypoint",
-      },
+      { kind: "write-file", path: ENTRYPOINT, contents: BARREL, preconditionHash: "missing", resultHash: hashText(BARREL), generator: "scaffold:entrypoint" },
     ],
     consumers: [],
     generatedFiles: [],

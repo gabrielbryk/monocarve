@@ -12,10 +12,7 @@ export const NEGATIVE_SHAPES: readonly WorkspaceShape[] = [
   {
     id: "target-declares-optional-dependencies",
     why: "the third section pnpm writes, after `dependencies` and `devDependencies`; it used to be unrepresentable in `RenderImporterInput` and vanished from the block",
-    packages: [
-      pkg("apps/api", "@acme/api", { dependencies: { "@acme/logger": "workspace:*" } }),
-      pkg("libs/logger", "@acme/logger"),
-    ],
+    packages: [pkg("apps/api", "@acme/api", { dependencies: { "@acme/logger": "workspace:*" } }), pkg("libs/logger", "@acme/logger")],
     target: pkg("libs/analytics", "@acme/analytics", { optionalDependencies: { "@acme/logger": "workspace:*" } }),
     consumers: ["apps/api"],
     expect: "match",
@@ -67,10 +64,7 @@ export const NEGATIVE_SHAPES: readonly WorkspaceShape[] = [
   {
     id: "harness-notices-a-bare-key-instead-of-an-empty-map",
     why: "the renderer writes `  libs/analytics: {}` for a package that declares nothing, on the claim that a bare key is YAML null and the next install would rewrite it; this is that claim, asked of pnpm",
-    packages: [
-      pkg("apps/api", "@acme/api", { dependencies: { "@acme/format": "workspace:*" } }),
-      pkg("libs/format", "@acme/format"),
-    ],
+    packages: [pkg("apps/api", "@acme/api", { dependencies: { "@acme/format": "workspace:*" } }), pkg("libs/format", "@acme/format")],
     target: pkg("libs/analytics", "@acme/analytics"),
     consumers: ["apps/api"],
     mutate: (spliced) => spliced.replace("  libs/analytics: {}", "  libs/analytics:"),
@@ -93,10 +87,7 @@ export const NEGATIVE_SHAPES: readonly WorkspaceShape[] = [
 export const MIS_SORTED_SPLICE: WorkspaceShape = {
   id: "mis-sorted-splice",
   why: "the block is appended past the importer it sorts before, which is the original bug this suite exists for",
-  packages: [
-    pkg("apps/api", "@acme/api", { dependencies: { "@acme/format": "workspace:*" } }),
-    pkg("libs/format", "@acme/format"),
-  ],
+  packages: [pkg("apps/api", "@acme/api", { dependencies: { "@acme/format": "workspace:*" } }), pkg("libs/format", "@acme/format")],
   target: pkg("libs/analytics", "@acme/analytics", { dependencies: { "@acme/format": "workspace:*" } }),
   consumers: ["apps/api"],
   mutate: (spliced) => {
@@ -131,10 +122,7 @@ export const MIS_SORTED_SPLICE: WorkspaceShape = {
 export const ORACLE_BLIND_SPOT: WorkspaceShape = {
   id: "an-importer-entry-with-no-resolution-behind-it",
   why: "a lockfile that is incomplete rather than mis-serialized: it regenerates byte-identically and cannot be installed",
-  packages: [
-    pkg("apps/api", "@acme/api", { dependencies: { "@acme/format": "workspace:*" } }),
-    pkg("libs/format", "@acme/format"),
-  ],
+  packages: [pkg("apps/api", "@acme/api", { dependencies: { "@acme/format": "workspace:*" } }), pkg("libs/format", "@acme/format")],
   target: pkg("libs/analytics", "@acme/analytics", { unrenderedDependencies: { "left-pad": "1.3.0" } }),
   consumers: ["apps/api"],
   mutate: (spliced) =>

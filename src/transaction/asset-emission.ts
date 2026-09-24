@@ -1,12 +1,13 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { AssetEmissionProofConfig, MonocarveConfig } from "../config.ts";
 import { createPackageManagerAdapter } from "../adapters/registry.ts";
+import type { AssetEmissionProofConfig, MonocarveConfig } from "../config.ts";
+import { packageContainerRoots } from "../config.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
 import { byCodeUnit } from "../util/hash.ts";
-import { createWorktree } from "./worktree.ts";
 import { cssRuleSurface } from "./css-surface.ts";
+import { createWorktree } from "./worktree.ts";
 
 export interface AssetEmissionCheck {
   readonly id: string;
@@ -23,7 +24,10 @@ export interface AssetEmissionReport {
   readonly checks: readonly AssetEmissionCheck[];
 }
 
-interface CssSurface { readonly files: number; readonly declarations: ReadonlyMap<string, readonly string[]> }
+interface CssSurface {
+  readonly files: number;
+  readonly declarations: ReadonlyMap<string, readonly string[]>;
+}
 
 export async function compareAssetEmission(input: {
   readonly config: MonocarveConfig;
@@ -36,16 +40,19 @@ export async function compareAssetEmission(input: {
     rootDir: input.rootDir,
     commit: input.manifest.baselineCommit,
     worktreeRoot: input.config.transaction.worktreeRoot,
+    packageRoots: packageContainerRoots(input.config),
     nodeModules: input.config.transaction.nodeModules,
     installCommand: createPackageManagerAdapter(input.config).installCommand(),
     label: `${input.manifest.planId}-asset-baseline`,
   });
   try {
-    const checks = input.config.assetEmissionProofs.map((proof) => compareOne(
-      proof,
-      capture(baseline.workspacePath, proof, input.config.gates.timeoutMs),
-      capture(input.candidateRoot, proof, input.config.gates.timeoutMs),
-    ));
+    const checks = input.config.assetEmissionProofs.map((proof) =>
+      compareOne(
+        proof,
+        capture(baseline.workspacePath, proof, input.config.gates.timeoutMs),
+        capture(input.candidateRoot, proof, input.config.gates.timeoutMs),
+      ),
+    );
     return { passed: checks.every((check) => check.passed), checks };
   } finally {
     await baseline.dispose();
@@ -58,7 +65,8 @@ function capture(root: string, proof: AssetEmissionProofConfig, timeoutMs: numbe
     const output = `${result.stdout.toString()}\n${result.stderr.toString()}`.trim().slice(-2000);
     return `command failed (${result.exitCode ?? 1}): ${proof.command}${output ? `\n${output}` : ""}`;
   }
-  const files = proof.roots.flatMap((configuredRoot) => walk(join(root, configuredRoot)))
+  const files = proof.roots
+    .flatMap((configuredRoot) => walk(join(root, configuredRoot)))
     .filter((path) => proof.extensions.some((extension) => path.endsWith(extension)))
     .sort(byCodeUnit);
   const declarations = new Map<string, readonly string[]>();
@@ -72,17 +80,43 @@ function capture(root: string, proof: AssetEmissionProofConfig, timeoutMs: numbe
 
 function compareOne(proof: AssetEmissionProofConfig, baseline: CssSurface | string, candidate: CssSurface | string): AssetEmissionCheck {
   if (typeof baseline === "string" || typeof candidate === "string") {
-    return { id: proof.id, passed: false, baselineFiles: 0, candidateFiles: 0, missingSelectors: [], changedDeclarationOrder: [], failure: typeof baseline === "string" ? `baseline ${baseline}` : `candidate ${candidate}` };
+    return {
+      id: proof.id,
+      passed: false,
+      baselineFiles: 0,
+      candidateFiles: 0,
+      missingSelectors: [],
+      changedDeclarationOrder: [],
+      failure: typeof baseline === "string" ? `baseline ${baseline}` : `candidate ${candidate}`,
+    };
   }
   if (baseline.files === 0 || candidate.files === 0) {
-    return { id: proof.id, passed: false, baselineFiles: baseline.files, candidateFiles: candidate.files, missingSelectors: [], changedDeclarationOrder: [], failure: "configured asset-emission roots produced no matching files" };
+    return {
+      id: proof.id,
+      passed: false,
+      baselineFiles: baseline.files,
+      candidateFiles: candidate.files,
+      missingSelectors: [],
+      changedDeclarationOrder: [],
+      failure: "configured asset-emission roots produced no matching files",
+    };
   }
   const missingSelectors = [...baseline.declarations.keys()].filter((selector) => !candidate.declarations.has(selector)).sort(byCodeUnit);
-  const changedDeclarationOrder = [...baseline.declarations].filter(([selector, properties]) => {
-    const observed = candidate.declarations.get(selector);
-    return observed !== undefined && observed.join("\n") !== properties.join("\n");
-  }).map(([selector]) => selector).sort(byCodeUnit);
-  return { id: proof.id, passed: missingSelectors.length === 0 && changedDeclarationOrder.length === 0, baselineFiles: baseline.files, candidateFiles: candidate.files, missingSelectors, changedDeclarationOrder };
+  const changedDeclarationOrder = [...baseline.declarations]
+    .filter(([selector, properties]) => {
+      const observed = candidate.declarations.get(selector);
+      return observed !== undefined && observed.join("\n") !== properties.join("\n");
+    })
+    .map(([selector]) => selector)
+    .sort(byCodeUnit);
+  return {
+    id: proof.id,
+    passed: missingSelectors.length === 0 && changedDeclarationOrder.length === 0,
+    baselineFiles: baseline.files,
+    candidateFiles: candidate.files,
+    missingSelectors,
+    changedDeclarationOrder,
+  };
 }
 
 function walk(root: string): string[] {

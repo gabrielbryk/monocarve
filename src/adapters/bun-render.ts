@@ -166,7 +166,12 @@ function renderSections(input: RenderImporterInput): string[] {
   ];
   return declared.flatMap(([section, values]) => {
     const names = Object.keys(values).sort();
-    return names.length === 0 ? [] : sectionLines(section, names.map((name) => [name, values[name]!] as const));
+    return names.length === 0
+      ? []
+      : sectionLines(
+          section,
+          names.map((name) => [name, values[name]!] as const),
+        );
   });
 }
 

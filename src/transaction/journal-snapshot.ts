@@ -1,15 +1,5 @@
 /** Snapshot and restore primitives for a transaction tree. */
-import {
-  chmodSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  readlinkSync,
-  rmdirSync,
-  symlinkSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, lstatSync, mkdirSync, readFileSync, readlinkSync, rmdirSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 import { fileState, isDirectory } from "../util/files.ts";
@@ -68,14 +58,7 @@ function snapshotPath(root: string, path: string): Snapshot {
   }
   if (!stat.isFile()) throw new JournalError(`cannot snapshot unsupported path type: ${path}`);
   const content = readFileSync(absolute);
-  return {
-    exists: true,
-    kind: "file",
-    content,
-    state: hashBytes(content),
-    mode: Number(stat.mode) & 0o777,
-    absentAncestors: absent,
-  };
+  return { exists: true, kind: "file", content, state: hashBytes(content), mode: Number(stat.mode) & 0o777, absentAncestors: absent };
 }
 
 function lstatOrMissing(path: string): ReturnType<typeof lstatSync> | undefined {
@@ -119,13 +102,7 @@ export function restoreSnapshot(root: string, snapshots: ReadonlyMap<string, Sna
   return { restored, failures };
 }
 
-function restorePath(
-  root: string,
-  path: string,
-  snapshot: Snapshot,
-  restored: string[],
-  failures: RestoreFailure[],
-): void {
+function restorePath(root: string, path: string, snapshot: Snapshot, restored: string[], failures: RestoreFailure[]): void {
   const absolute = pathAt(root, path);
   try {
     if (snapshotMismatch(root, path, snapshot) === undefined) return;

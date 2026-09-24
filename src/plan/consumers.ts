@@ -7,9 +7,9 @@
  * resolved paths rather than by string matching on specifiers.
  */
 
-import { byCodeUnit } from "../util/hash.ts";
-import { applicationOwner } from "../config/helpers.ts";
 import type { ConsumerDependencySection } from "../adapters/types.ts";
+import { applicationOwner } from "../config/helpers.ts";
+import { byCodeUnit } from "../util/hash.ts";
 import { PlanningError, type WorkspaceContext } from "./context.ts";
 export { partitionTests } from "./test-relocation.ts";
 
@@ -73,61 +73,63 @@ export function findConsumers(
   const absoluteDonors = donors.map((donor) => context.absolute(donor));
   const donorSet = new Set(donors);
   const index = context.consumerIndex();
-  const candidates = [...new Set(absoluteDonors.flatMap((donor) => index.get(donor) ?? []))].filter(
-    (file) => includeDonorFiles || !donorSet.has(file),
-  );
+  const candidates = [...new Set(absoluteDonors.flatMap((donor) => index.get(donor) ?? []))].filter((file) => includeDonorFiles || !donorSet.has(file));
 
-  return candidates
-    .flatMap((file): Consumer[] => {
-      const references = context
-        .moduleReferences(file)
-        .filter((reference) => reference.specifier && reference.resolved && absoluteDonors.includes(reference.resolved));
-      if (references.length === 0) return [];
-      // Insertion-ordered, so `expectedImporter` stays the first specifier the
-      // file declares and the rewrite list reads in source order.
-      const specifiers = [...new Set(references.map((reference) => reference.specifier!))];
-      const from = specifiers[0]!;
-      const donorsForFile = [
-        ...new Set(
-          references
-            .map((reference) => absoluteDonors.find((donor) => donor === reference.resolved))
-            .filter((donor): donor is string => donor !== undefined)
-            .map((donor) => context.relative(donor)),
-        ),
-      ];
-      return [
-        {
-          package: context.ownerOf(file),
-          file,
-          expectedImporter: from,
-          rewrites: specifiers.map((specifier) => {
-            const reference = references.find((entry) => entry.specifier === specifier)!;
-            const donor = absoluteDonors.find((entry) => entry === reference.resolved);
-            const relativeDonor = donor === undefined ? undefined : context.relative(donor);
-            if (relativeDonor === undefined) {
-              throw new PlanningError(`resolved consumer edge ${file} -> ${specifier} has no selected donor identity`);
-            }
-            const publicSpecifier = relativeDonor === undefined ? undefined : publicSpecifierFor.get(relativeDonor);
-            const resourceSuffix = relativeDonor !== undefined && context.config.assetExtensions.some((extension) => relativeDonor.endsWith(extension))
-              ? (specifier.match(/[?#].*$/u)?.[0] ?? "") : "";
-            return {
-              from: specifier,
-              to: publicSpecifier === undefined ? packageName : `${publicSpecifier}${resourceSuffix}`,
-              // A resolved consumer edge always has a known donor. Keep that
-              // identity even when its public destination is the package root:
-              // one consumer can legitimately target a mix of root and
-              // subpath exports, and journal replay must never have to combine
-              // the old one-target representation with donor-specific edits.
-              donor: relativeDonor,
-            };
-          }),
-          donors: donorsForFile,
-          dependencySection: "runtime",
-        },
-      ];
-    })
-    // This order is the manifest's bytes, so it is by code unit, never by locale.
-    .sort((left, right) => byCodeUnit(left.file, right.file));
+  return (
+    candidates
+      .flatMap((file): Consumer[] => {
+        const references = context
+          .moduleReferences(file)
+          .filter((reference) => reference.specifier && reference.resolved && absoluteDonors.includes(reference.resolved));
+        if (references.length === 0) return [];
+        // Insertion-ordered, so `expectedImporter` stays the first specifier the
+        // file declares and the rewrite list reads in source order.
+        const specifiers = [...new Set(references.map((reference) => reference.specifier!))];
+        const from = specifiers[0]!;
+        const donorsForFile = [
+          ...new Set(
+            references
+              .map((reference) => absoluteDonors.find((donor) => donor === reference.resolved))
+              .filter((donor): donor is string => donor !== undefined)
+              .map((donor) => context.relative(donor)),
+          ),
+        ];
+        return [
+          {
+            package: context.ownerOf(file),
+            file,
+            expectedImporter: from,
+            rewrites: specifiers.map((specifier) => {
+              const reference = references.find((entry) => entry.specifier === specifier)!;
+              const donor = absoluteDonors.find((entry) => entry === reference.resolved);
+              const relativeDonor = donor === undefined ? undefined : context.relative(donor);
+              if (relativeDonor === undefined) {
+                throw new PlanningError(`resolved consumer edge ${file} -> ${specifier} has no selected donor identity`);
+              }
+              const publicSpecifier = relativeDonor === undefined ? undefined : publicSpecifierFor.get(relativeDonor);
+              const resourceSuffix =
+                relativeDonor !== undefined && context.config.assetExtensions.some((extension) => relativeDonor.endsWith(extension))
+                  ? (specifier.match(/[?#].*$/u)?.[0] ?? "")
+                  : "";
+              return {
+                from: specifier,
+                to: publicSpecifier === undefined ? packageName : `${publicSpecifier}${resourceSuffix}`,
+                // A resolved consumer edge always has a known donor. Keep that
+                // identity even when its public destination is the package root:
+                // one consumer can legitimately target a mix of root and
+                // subpath exports, and journal replay must never have to combine
+                // the old one-target representation with donor-specific edits.
+                donor: relativeDonor,
+              };
+            }),
+            donors: donorsForFile,
+            dependencySection: "runtime",
+          },
+        ];
+      })
+      // This order is the manifest's bytes, so it is by code unit, never by locale.
+      .sort((left, right) => byCodeUnit(left.file, right.file))
+  );
 }
 
 /**
@@ -146,18 +148,11 @@ export function consumerDependencyOwners(consumers: readonly Consumer[]): Consum
       sections.set(consumer.package, "dev");
     }
   }
-  return [...sections]
-    .map(([owner, dependencySection]) => ({ owner, dependencySection }))
-    .sort((left, right) => byCodeUnit(left.owner, right.owner));
+  return [...sections].map(([owner, dependencySection]) => ({ owner, dependencySection })).sort((left, right) => byCodeUnit(left.owner, right.owner));
 }
 
 /** Applications among a consumer set — the projects whose gates must be run. */
-export function consumerApplications(
-  context: WorkspaceContext,
-  consumers: readonly { readonly package: string }[],
-): string[] {
-  const applications = new Set(
-    context.config.applications.map(applicationOwner),
-  );
+export function consumerApplications(context: WorkspaceContext, consumers: readonly { readonly package: string }[]): string[] {
+  const applications = new Set(context.config.applications.map(applicationOwner));
   return [...new Set(consumers.map((consumer) => consumer.package).filter((owner) => applications.has(owner)))].sort();
 }

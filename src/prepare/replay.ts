@@ -117,10 +117,7 @@ export function renderTypeOnlyExtraction(input: RenderTypeOnlyExtractionInput): 
   const reExportNames = normalizeReExportNames(input.compatibility.reExportNames, selected);
   const inlineProofs = normalizeInlineImportTypeProofs(input.baselineText, input.baselineHash, selected, input.inlineImportTypeProofs ?? []);
 
-  const moved = selected.map((span) => ({
-    span,
-    text: renderTargetDeclaration(rewriteInlineImportTypes(input.baselineText, span, inlineProofs), span),
-  }));
+  const moved = selected.map((span) => ({ span, text: renderTargetDeclaration(rewriteInlineImportTypes(input.baselineText, span, inlineProofs), span) }));
   const target = renderTarget(targetImports, moved, lineEnding);
   const donorWithoutDeclarations = removeSpans(input.baselineText, selected);
   const donorAppendix = renderDonorAppendix(input.moduleSpecifier, donorImports, reExportNames, lineEnding);
@@ -144,8 +141,15 @@ export function renderTypeOnlyExtraction(input: RenderTypeOnlyExtractionInput): 
   };
 }
 
-function normalizeInlineImportTypeProofs(source: string, baselineHash: Sha256, selected: readonly TypeOnlyExtractionSpan[], proofs: readonly InlineImportTypeRewriteProof[]): InlineImportTypeRewriteProof[] {
-  const sorted = [...proofs].sort((left, right) => left.start - right.start || left.end - right.end || byCodeUnit(left.originalSpecifier, right.originalSpecifier));
+function normalizeInlineImportTypeProofs(
+  source: string,
+  baselineHash: Sha256,
+  selected: readonly TypeOnlyExtractionSpan[],
+  proofs: readonly InlineImportTypeRewriteProof[],
+): InlineImportTypeRewriteProof[] {
+  const sorted = [...proofs].sort(
+    (left, right) => left.start - right.start || left.end - right.end || byCodeUnit(left.originalSpecifier, right.originalSpecifier),
+  );
   let previousEnd = -1;
   for (const proof of sorted) {
     const owner = selected.find((span) => proof.start >= span.start && proof.end <= span.end);
@@ -159,7 +163,12 @@ function normalizeInlineImportTypeProofs(source: string, baselineHash: Sha256, s
     previousEnd = proof.end;
   }
   const expected = collectRelativeInlineImportLiterals(source, selected);
-  if (expected.length !== sorted.length || expected.some((item, index) => item.start !== sorted[index]?.start || item.end !== sorted[index]?.end || item.specifier !== sorted[index]?.originalSpecifier)) {
+  if (
+    expected.length !== sorted.length ||
+    expected.some(
+      (item, index) => item.start !== sorted[index]?.start || item.end !== sorted[index]?.end || item.specifier !== sorted[index]?.originalSpecifier,
+    )
+  ) {
     throw new PreparationReplayError("relative inline import types require exact rewrite proof coverage");
   }
   return sorted;
@@ -170,8 +179,17 @@ function collectRelativeInlineImportLiterals(source: string, selected: readonly 
   for (const span of selected) {
     const file = ts.createSourceFile("inline-type.ts", source.slice(span.start, span.end), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
     const visit = (node: ts.Node): void => {
-      if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && ts.isStringLiteral(node.argument.literal) && node.argument.literal.text.startsWith(".")) {
-        found.push({ start: span.start + node.argument.literal.getStart(file), end: span.start + node.argument.literal.end, specifier: node.argument.literal.text });
+      if (
+        ts.isImportTypeNode(node) &&
+        ts.isLiteralTypeNode(node.argument) &&
+        ts.isStringLiteral(node.argument.literal) &&
+        node.argument.literal.text.startsWith(".")
+      ) {
+        found.push({
+          start: span.start + node.argument.literal.getStart(file),
+          end: span.start + node.argument.literal.end,
+          specifier: node.argument.literal.text,
+        });
       }
       ts.forEachChild(node, visit);
     };
@@ -271,11 +289,7 @@ function declarationName(statement: ts.Statement): string | undefined {
   return undefined;
 }
 
-function normalizeImports(
-  imports: readonly CheckerProvenTypeImport[],
-  baselineHash: Sha256,
-  location: "target" | "donor",
-): CheckerProvenTypeImport[] {
+function normalizeImports(imports: readonly CheckerProvenTypeImport[], baselineHash: Sha256, location: "target" | "donor"): CheckerProvenTypeImport[] {
   const sorted = [...imports].sort(compareImports);
   const bindingKeys = new Set<string>();
   const localBindings = new Set<string>();
@@ -297,10 +311,12 @@ function normalizeImports(
 }
 
 function compareImports(left: CheckerProvenTypeImport, right: CheckerProvenTypeImport): number {
-  return byCodeUnit(left.moduleSpecifier, right.moduleSpecifier)
-    || byCodeUnit(left.kind, right.kind)
-    || byCodeUnit(left.importedName, right.importedName)
-    || byCodeUnit(left.localName, right.localName);
+  return (
+    byCodeUnit(left.moduleSpecifier, right.moduleSpecifier) ||
+    byCodeUnit(left.kind, right.kind) ||
+    byCodeUnit(left.importedName, right.importedName) ||
+    byCodeUnit(left.localName, right.localName)
+  );
 }
 
 function assertDonorImportsTarget(imports: readonly CheckerProvenTypeImport[], targetSpecifier: string): void {
@@ -309,10 +325,7 @@ function assertDonorImportsTarget(imports: readonly CheckerProvenTypeImport[], t
   }
 }
 
-function normalizeReExportNames(
-  names: readonly string[],
-  selected: readonly TypeOnlyExtractionSpan[],
-): string[] {
+function normalizeReExportNames(names: readonly string[], selected: readonly TypeOnlyExtractionSpan[]): string[] {
   const normalized = [...names].sort(byCodeUnit);
   if (new Set(normalized).size !== normalized.length || normalized.some((name) => !isIdentifier(name))) {
     throw new PreparationReplayError("compatibility re-export names must be unique identifiers");
@@ -378,8 +391,10 @@ function renderTarget(
 }
 
 function matchesRenderedDeclaration(statement: ts.Statement, span: TypeOnlyExtractionSpan): boolean {
-  return (span.kind === "interface" && ts.isInterfaceDeclaration(statement) && statement.name.text === span.name)
-    || (span.kind === "type-alias" && ts.isTypeAliasDeclaration(statement) && statement.name.text === span.name);
+  return (
+    (span.kind === "interface" && ts.isInterfaceDeclaration(statement) && statement.name.text === span.name) ||
+    (span.kind === "type-alias" && ts.isTypeAliasDeclaration(statement) && statement.name.text === span.name)
+  );
 }
 
 function renderDonorAppendix(
@@ -417,7 +432,10 @@ function renderImportGroup(moduleSpecifier: string, bindings: readonly CheckerPr
   }
   const defaultPart = defaults[0]?.localName;
   const namespacePart = namespaces[0] === undefined ? undefined : `* as ${namespaces[0].localName}`;
-  const namedPart = named.length === 0 ? undefined : `{ ${named.map(({ importedName, localName }) => importedName === localName ? importedName : `${importedName} as ${localName}`).join(", ")} }`;
+  const namedPart =
+    named.length === 0
+      ? undefined
+      : `{ ${named.map(({ importedName, localName }) => (importedName === localName ? importedName : `${importedName} as ${localName}`)).join(", ")} }`;
   const parts = [defaultPart, namespacePart ?? namedPart].filter((item): item is string => item !== undefined);
   return `import type ${parts.join(", ")} from ${JSON.stringify(moduleSpecifier)};`;
 }

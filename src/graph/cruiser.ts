@@ -19,20 +19,20 @@
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import fs from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
-import { fileURLToPath } from "node:url";
 import { isAbsolute, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
+import { compilerBuildIdentity } from "../build-identity.ts";
 import { getApplication, type MonocarveConfig } from "../config.ts";
 import { MonocarveError } from "../errors.ts";
 import { headCommit } from "../util/git.ts";
 import { byCodeUnit, hashBytes, hashJson, hashText } from "../util/hash.ts";
-import { compilerBuildIdentity } from "../build-identity.ts";
 import { buildDependencyGraph, type ScanReport } from "./build.ts";
 import { buildApplicationGraph, toSccs } from "./components.ts";
 import type { DependencyGraph, Scc } from "./model.ts";
+import { SCANNER_READ_SYMBOL, scannerReadPlugin } from "./scanner-read-plugin.ts";
 import { resetSyntaxCaches } from "./syntax.ts";
 import { resetWorkspaceCaches } from "./workspace.ts";
-import { SCANNER_READ_SYMBOL, scannerReadPlugin } from "./scanner-read-plugin.ts";
 
 export class ScanError extends MonocarveError {
   override readonly name = "ScanError";
@@ -59,9 +59,7 @@ const graphCache = new Map<string, DependencyGraph>();
 /** Build the dependency model for the configured applications. */
 export async function scanDependencyGraph(options: ScanOptions): Promise<DependencyGraph> {
   const { config, rootDir } = options;
-  const applications = options.application
-    ? [getApplication(config, options.application)]
-    : config.applications;
+  const applications = options.application ? [getApplication(config, options.application)] : config.applications;
 
   const commit = safeHead(rootDir);
   const key = `${rootDir}|${applications.map((app) => app.name).join(",")}|${commit ?? "none"}|${hashJson(config)}|${hashJson(compilerBuildIdentity())}`;
@@ -72,12 +70,7 @@ export async function scanDependencyGraph(options: ScanOptions): Promise<Depende
 
   const reports = await scanDependencyReports(options, applications);
 
-  const graph = buildDependencyGraph({
-    config,
-    rootDir,
-    reports,
-    ...(commit === undefined ? {} : { commit }),
-  });
+  const graph = buildDependencyGraph({ config, rootDir, reports, ...(commit === undefined ? {} : { commit }) });
   if (config.graph.cache && options.reports === undefined) graphCache.set(key, graph);
   return graph;
 }
@@ -85,9 +78,7 @@ export async function scanDependencyGraph(options: ScanOptions): Promise<Depende
 /** Capture the raw scanner reports used to build a graph for operator replay. */
 export async function scanDependencyReports(
   options: ScanOptions,
-  applications = options.application
-    ? [getApplication(options.config, options.application)]
-    : options.config.applications,
+  applications = options.application ? [getApplication(options.config, options.application)] : options.config.applications,
 ): Promise<Record<string, ScanReport>> {
   // Application names are schema-valid arbitrary nonempty strings, including
   // legacy object-prototype keys such as "__proto__".  A null-prototype map
@@ -128,17 +119,17 @@ async function cruiseApplication(config: MonocarveConfig, rootDir: string, name:
     const observed = await observeFilesystemReads(async () => {
       const { cruise } = await import("dependency-cruiser");
       const result = await cruise(
-      [app.sourceRoot],
-      {
-        tsPreCompilationDeps: config.graph.tsPreCompilationDeps,
-        doNotFollow: { path: "node_modules" },
-        // Only set when the caller asked for it: an `exclude` entry deletes the
-        // edges pointing at the excluded module, not just the module.
-        ...(config.graph.exclude.length > 0 ? { exclude: { path: config.graph.exclude } } : {}),
-        ...(config.graph.cruiserConfig ? { ruleSet: readRuleSet(rootDir, config.graph.cruiserConfig) } : {}),
-      } as never,
-      { tsConfig: app.tsconfig } as never,
-      undefined,
+        [app.sourceRoot],
+        {
+          tsPreCompilationDeps: config.graph.tsPreCompilationDeps,
+          doNotFollow: { path: "node_modules" },
+          // Only set when the caller asked for it: an `exclude` entry deletes the
+          // edges pointing at the excluded module, not just the module.
+          ...(config.graph.exclude.length > 0 ? { exclude: { path: config.graph.exclude } } : {}),
+          ...(config.graph.cruiserConfig ? { ruleSet: readRuleSet(rootDir, config.graph.cruiserConfig) } : {}),
+        } as never,
+        { tsConfig: app.tsconfig } as never,
+        undefined,
       );
       const output = result.output;
       if (typeof output === "string") throw new ScanError(`scanner returned formatted output for ${name}`);
@@ -175,7 +166,9 @@ function retainObservedRead(rootDir: string, path: string): boolean {
  * public API cannot be given the inventory's filesystem. Interpose on the Node
  * filesystem for the single serialized cruise to capture paths it probes.
  */
-async function observeFilesystemReads<T>(action: () => Promise<T>): Promise<{ readonly value: T; readonly reads: readonly string[]; readonly fileReads: readonly { readonly path: string; readonly sha256: string }[] }> {
+async function observeFilesystemReads<T>(
+  action: () => Promise<T>,
+): Promise<{ readonly value: T; readonly reads: readonly string[]; readonly fileReads: readonly { readonly path: string; readonly sha256: string }[] }> {
   const names = ["accessSync", "existsSync", "lstatSync", "readFile", "readFileSync", "readlinkSync", "readdirSync", "realpathSync", "statSync"] as const;
   const originals = new Map<string, (...args: any[]) => any>();
   const reads = new Set<string>();
@@ -209,7 +202,11 @@ async function observeFilesystemReads<T>(action: () => Promise<T>): Promise<{ re
   }
   syncBuiltinESMExports();
   try {
-    return { value: await action(), reads: [...reads].sort(byCodeUnit), fileReads: fileReads.sort((left, right) => byCodeUnit(left.path, right.path) || byCodeUnit(left.sha256, right.sha256)) };
+    return {
+      value: await action(),
+      reads: [...reads].sort(byCodeUnit),
+      fileReads: fileReads.sort((left, right) => byCodeUnit(left.path, right.path) || byCodeUnit(left.sha256, right.sha256)),
+    };
   } finally {
     if (previousReadHook === undefined) delete globals[SCANNER_READ_SYMBOL];
     else globals[SCANNER_READ_SYMBOL] = previousReadHook;
@@ -234,12 +231,18 @@ let cwdScanTail: Promise<void> = Promise.resolve();
 async function withScannerCwd<T>(rootDir: string, action: () => Promise<T>): Promise<T> {
   const previous = cwdScanTail;
   let release!: () => void;
-  cwdScanTail = new Promise<void>((resolve) => { release = resolve; });
+  cwdScanTail = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   await previous;
   const cwd = process.cwd();
   process.chdir(rootDir);
-  try { return await action(); }
-  finally { process.chdir(cwd); release(); }
+  try {
+    return await action();
+  } finally {
+    process.chdir(cwd);
+    release();
+  }
 }
 
 function readRuleSet(rootDir: string, path: string): unknown {

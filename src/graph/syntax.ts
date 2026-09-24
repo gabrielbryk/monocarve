@@ -45,32 +45,20 @@ function collectImportKinds(parsed: ts.SourceFile): Map<string, ImportKind> {
 
   const record = (specifier: string, typeOnly: boolean, dynamic = false): void => {
     const previous = result.get(specifier);
-    result.set(specifier, {
-      typeOnly: previous ? previous.typeOnly && typeOnly : typeOnly,
-      dynamic: previous?.dynamic === true || dynamic,
-    });
+    result.set(specifier, { typeOnly: previous ? previous.typeOnly && typeOnly : typeOnly, dynamic: previous?.dynamic === true || dynamic });
   };
 
   for (const statement of parsed.statements) {
     if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
       const clause = statement.importClause;
-      const named =
-        clause?.namedBindings && ts.isNamedImports(clause.namedBindings) ? clause.namedBindings.elements : [];
+      const named = clause?.namedBindings && ts.isNamedImports(clause.namedBindings) ? clause.namedBindings.elements : [];
       // `import { type A, type B } from "x"` is type-only in substance even
       // though the clause itself is not marked so.
       const typeOnly =
-        clause?.isTypeOnly === true ||
-        (clause !== undefined &&
-          clause.name === undefined &&
-          named.length > 0 &&
-          named.every((item) => item.isTypeOnly));
+        clause?.isTypeOnly === true || (clause !== undefined && clause.name === undefined && named.length > 0 && named.every((item) => item.isTypeOnly));
       record(statement.moduleSpecifier.text, typeOnly);
     }
-    if (
-      ts.isExportDeclaration(statement) &&
-      statement.moduleSpecifier &&
-      ts.isStringLiteral(statement.moduleSpecifier)
-    ) {
+    if (ts.isExportDeclaration(statement) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)) {
       record(statement.moduleSpecifier.text, statement.isTypeOnly);
     }
   }
@@ -97,8 +85,7 @@ function exportsAnything(parsed: ts.SourceFile | undefined): boolean {
       (statement) =>
         ts.isExportDeclaration(statement) ||
         ts.isExportAssignment(statement) ||
-        (ts.canHaveModifiers(statement) &&
-          (ts.getModifiers(statement) ?? []).some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)),
+        (ts.canHaveModifiers(statement) && (ts.getModifiers(statement) ?? []).some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)),
     ) ?? false
   );
 }
@@ -117,10 +104,7 @@ export function fileExportsAnything(absolute: string, displayPath = absolute): b
  * and parsing each file twice is the difference between a scan that is pleasant
  * to iterate on and one that is not.
  */
-export function fileFacts(
-  absolute: string,
-  displayPath = absolute,
-): { readonly kinds: Map<string, ImportKind>; readonly hasExports: boolean } {
+export function fileFacts(absolute: string, displayPath = absolute): { readonly kinds: Map<string, ImportKind>; readonly hasExports: boolean } {
   const parsed = parse(absolute, displayPath);
   const hasExports = exportsAnything(parsed);
   exportProbeCache.set(absolute, hasExports);

@@ -55,6 +55,8 @@ export interface RenderImporterInput {
    * does not pass them gets a block missing a section its manifest declares.
    */
   readonly optionalDependencies?: Readonly<Record<string, string>>;
+  /** Existing importer roots that supplied each dependency's locked version. */
+  readonly resolutionRoots?: Readonly<Record<string, readonly string[]>>;
   /**
    * Current lockfile text; versions are resolved against it, never invented.
    *
@@ -165,13 +167,7 @@ export interface PackageManagerAdapter {
    * Used to wire a consuming application to the newly created package.
    * Returns the block unchanged when it already declares the dependency.
    */
-  addBlockDependency(
-    block: string,
-    name: string,
-    specifier: string,
-    version: string,
-    section?: ConsumerDependencySection,
-  ): string;
+  addBlockDependency(block: string, name: string, specifier: string, version: string, section?: ConsumerDependencySection): string;
 
   /**
    * Add the declared dependency sets to an existing importer, resolving exact

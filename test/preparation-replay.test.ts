@@ -1,12 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import ts from "typescript";
 
-import {
-  PreparationReplayError,
-  renderTypeOnlyExtraction,
-  type CheckerProvenTypeImport,
-  type TypeOnlyExtractionSpan,
-} from "../src/prepare/replay.ts";
+import { PreparationReplayError, renderTypeOnlyExtraction, type CheckerProvenTypeImport, type TypeOnlyExtractionSpan } from "../src/prepare/replay.ts";
 import { hashText } from "../src/util/hash.ts";
 
 const baseline = [
@@ -25,23 +20,13 @@ const baseline = [
 function span(name: string, kind: TypeOnlyExtractionSpan["kind"]): TypeOnlyExtractionSpan {
   const marker = name === "Item" ? "/** A documented" : "/** A label";
   const start = baseline.indexOf(marker);
-  const end = name === "Item"
-    ? baseline.indexOf("\n\n/** A label", start)
-    : baseline.indexOf("\n\nexport const", start);
+  const end = name === "Item" ? baseline.indexOf("\n\n/** A label", start) : baseline.indexOf("\n\nexport const", start);
   const text = baseline.slice(start, end);
   return { start, end, hash: hashText(text), name, kind, originallyExported: true };
 }
 
 function proven(moduleSpecifier: string, importedName: string, localName = importedName): CheckerProvenTypeImport {
-  return {
-    moduleSpecifier,
-    importedName,
-    localName,
-    kind: "named",
-    originallyTypeOnly: true,
-    requiredAs: "type",
-    proofBaselineHash: hashText(baseline),
-  };
+  return { moduleSpecifier, importedName, localName, kind: "named", originallyTypeOnly: true, requiredAs: "type", proofBaselineHash: hashText(baseline) };
 }
 
 function input(selected: readonly TypeOnlyExtractionSpan[] = [span("Item", "interface"), span("ItemLabel", "type-alias")]) {
@@ -63,23 +48,45 @@ describe("type-only preparation replay", () => {
     const sourceHash = hashText(source);
     const literal = '"./models.ts"';
     const literalStart = source.indexOf(literal);
-    const selected = [{ start: 0, end: source.length - 1, hash: hashText(source.slice(0, -1)), name: "Model", kind: "type-alias" as const, originallyExported: true }];
+    const selected = [
+      { start: 0, end: source.length - 1, hash: hashText(source.slice(0, -1)), name: "Model", kind: "type-alias" as const, originallyExported: true },
+    ];
     const proof = {
-      originalSpecifier: "./models.ts", targetSpecifier: "../../../apps/example/src/models.ts",
-      start: literalStart, end: literalStart + literal.length, sourceHash: hashText(literal), proofBaselineHash: sourceHash,
+      originalSpecifier: "./models.ts",
+      targetSpecifier: "../../../apps/example/src/models.ts",
+      start: literalStart,
+      end: literalStart + literal.length,
+      sourceHash: hashText(literal),
+      proofBaselineHash: sourceHash,
     };
     const result = renderTypeOnlyExtraction({
-      baselineText: source, baselineHash: sourceHash, selected,
-      targetPath: "packages/contracts/src/model.ts", moduleSpecifier: "./model.ts",
-      targetImports: [], inlineImportTypeProofs: [proof],
+      baselineText: source,
+      baselineHash: sourceHash,
+      selected,
+      targetPath: "packages/contracts/src/model.ts",
+      moduleSpecifier: "./model.ts",
+      targetImports: [],
+      inlineImportTypeProofs: [proof],
       compatibility: { reExportNames: ["Model"], donorImports: [] },
     });
     expect(result.target.text).toContain('import("../../../apps/example/src/models.ts").Model');
 
-    const base = { baselineText: source, baselineHash: sourceHash, selected, targetPath: "packages/contracts/src/model.ts", moduleSpecifier: "./model.ts", targetImports: [], compatibility: { reExportNames: ["Model"], donorImports: [] } } as const;
+    const base = {
+      baselineText: source,
+      baselineHash: sourceHash,
+      selected,
+      targetPath: "packages/contracts/src/model.ts",
+      moduleSpecifier: "./model.ts",
+      targetImports: [],
+      compatibility: { reExportNames: ["Model"], donorImports: [] },
+    } as const;
     expect(() => renderTypeOnlyExtraction(base)).toThrow("exact rewrite proof coverage");
-    expect(renderTypeOnlyExtraction({ ...base, inlineImportTypeProofs: [{ ...proof, targetSpecifier: "./models.ts" }] }).target.text).toContain('import("./models.ts").Model');
-    expect(() => renderTypeOnlyExtraction({ ...base, inlineImportTypeProofs: [{ ...proof, sourceHash: hashText("tampered") }] })).toThrow("stale, overlapping, or outside");
+    expect(renderTypeOnlyExtraction({ ...base, inlineImportTypeProofs: [{ ...proof, targetSpecifier: "./models.ts" }] }).target.text).toContain(
+      'import("./models.ts").Model',
+    );
+    expect(() => renderTypeOnlyExtraction({ ...base, inlineImportTypeProofs: [{ ...proof, sourceHash: hashText("tampered") }] })).toThrow(
+      "stale, overlapping, or outside",
+    );
   });
 
   test("moves exact documented declarations while preserving all untouched donor bytes", () => {
@@ -147,13 +154,9 @@ describe("type-only preparation replay", () => {
     const localProof = result.declarations.find((item) => item.name === "Local");
     if (!localProof) throw new Error("missing Local replay proof");
     expect(localProof.synthesizedExport).toBe(true);
-    expect(result.target.text.slice(localProof.targetSpan.start, localProof.targetSpan.end)).toBe(
-      "export interface Local { id: string }",
-    );
+    expect(result.target.text.slice(localProof.targetSpan.start, localProof.targetSpan.end)).toBe("export interface Local { id: string }");
     expect(localProof.targetSpan.hash).not.toBe(localProof.source.hash);
-    expect(result.target.text.slice(localProof.targetExtraction.start, localProof.targetExtraction.end)).toBe(
-      "export interface Local { id: string }",
-    );
+    expect(result.target.text.slice(localProof.targetExtraction.start, localProof.targetExtraction.end)).toBe("export interface Local { id: string }");
   });
 
   test("preserves ambient modifiers on declarations whose JavaScript emit is empty", () => {
@@ -165,7 +168,14 @@ describe("type-only preparation replay", () => {
       baselineHash: hashText(source),
       selected: [
         { start: 0, end: local.length, hash: hashText(local), name: "LocalName", kind: "type-alias", originallyExported: true },
-        { start: source.indexOf(publicShape), end: source.indexOf(publicShape) + publicShape.length, hash: hashText(publicShape), name: "PublicShape", kind: "interface", originallyExported: true },
+        {
+          start: source.indexOf(publicShape),
+          end: source.indexOf(publicShape) + publicShape.length,
+          hash: hashText(publicShape),
+          name: "PublicShape",
+          kind: "interface",
+          originallyExported: true,
+        },
       ],
       targetPath: "packages/contracts/src/public-shape.ts",
       moduleSpecifier: "./public-shape.ts",
@@ -175,19 +185,20 @@ describe("type-only preparation replay", () => {
 
     expect(result.target.text).toContain("export declare type LocalName = string;");
     expect(result.target.text).toContain("export declare interface PublicShape { name: LocalName }");
-    expect(ts.transpileModule(result.target.text, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText)
-      .toBe("export {};\n");
+    expect(ts.transpileModule(result.target.text, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText).toBe("export {};\n");
 
     const global = "declare interface GlobalShape { value: string }";
-    expect(() => renderTypeOnlyExtraction({
-      baselineText: global,
-      baselineHash: hashText(global),
-      selected: [{ start: 0, end: global.length, hash: hashText(global), name: "GlobalShape", kind: "interface", originallyExported: false }],
-      targetPath: "packages/contracts/src/global.ts",
-      moduleSpecifier: "./global.ts",
-      targetImports: [],
-      compatibility: { reExportNames: [], donorImports: [] },
-    })).toThrow("potentially global visibility");
+    expect(() =>
+      renderTypeOnlyExtraction({
+        baselineText: global,
+        baselineHash: hashText(global),
+        selected: [{ start: 0, end: global.length, hash: hashText(global), name: "GlobalShape", kind: "interface", originallyExported: false }],
+        targetPath: "packages/contracts/src/global.ts",
+        moduleSpecifier: "./global.ts",
+        targetImports: [],
+        compatibility: { reExportNames: [], donorImports: [] },
+      }),
+    ).toThrow("potentially global visibility");
   });
 
   test("refuses a compatibility policy that accidentally exposes a private closure type", () => {
@@ -195,25 +206,32 @@ describe("type-only preparation replay", () => {
     const localText = "interface Local { id: string }";
     const publicText = "export interface Public { local: Local }";
     const sourceHash = hashText(source);
-    expect(() => renderTypeOnlyExtraction({
-      baselineText: source,
-      baselineHash: sourceHash,
-      selected: [
-        { start: 0, end: localText.length, hash: hashText(localText), name: "Local", kind: "interface", originallyExported: false },
-        { start: source.indexOf(publicText), end: source.indexOf(publicText) + publicText.length, hash: hashText(publicText), name: "Public", kind: "interface", originallyExported: true },
-      ],
-      targetPath: "packages/contracts/src/public.ts",
-      moduleSpecifier: "./public.ts",
-      targetImports: [],
-      compatibility: { reExportNames: ["Local", "Public"], donorImports: [] },
-    })).toThrow("must exactly match the selected declarations' original public names");
+    expect(() =>
+      renderTypeOnlyExtraction({
+        baselineText: source,
+        baselineHash: sourceHash,
+        selected: [
+          { start: 0, end: localText.length, hash: hashText(localText), name: "Local", kind: "interface", originallyExported: false },
+          {
+            start: source.indexOf(publicText),
+            end: source.indexOf(publicText) + publicText.length,
+            hash: hashText(publicText),
+            name: "Public",
+            kind: "interface",
+            originallyExported: true,
+          },
+        ],
+        targetPath: "packages/contracts/src/public.ts",
+        moduleSpecifier: "./public.ts",
+        targetImports: [],
+        compatibility: { reExportNames: ["Local", "Public"], donorImports: [] },
+      }),
+    ).toThrow("must exactly match the selected declarations' original public names");
   });
 
   test("refuses a stale source span instead of extracting changed bytes", () => {
     const selected = span("Item", "interface");
-    expect(() => renderTypeOnlyExtraction(input([{ ...selected, hash: hashText("different bytes") }]))).toThrow(
-      "selected span for Item is stale",
-    );
+    expect(() => renderTypeOnlyExtraction(input([{ ...selected, hash: hashText("different bytes") }]))).toThrow("selected span for Item is stale");
   });
 
   test("refuses overlapping spans rather than silently deleting an unchecked range", () => {
@@ -224,12 +242,8 @@ describe("type-only preparation replay", () => {
 
   test("refuses value declarations and checker proofs from another donor revision", () => {
     const selected = span("Item", "interface");
-    expect(() => renderTypeOnlyExtraction(input([{ ...selected, kind: "type-alias" }]))).toThrow(
-      "no longer matches its type-only declaration proof",
-    );
-    expect(() => renderTypeOnlyExtraction(input([{ ...selected, originallyExported: false }]))).toThrow(
-      "no longer matches its original export proof",
-    );
+    expect(() => renderTypeOnlyExtraction(input([{ ...selected, kind: "type-alias" }]))).toThrow("no longer matches its type-only declaration proof");
+    expect(() => renderTypeOnlyExtraction(input([{ ...selected, originallyExported: false }]))).toThrow("no longer matches its original export proof");
     const staleProof = { ...input(), targetImports: [{ ...proven("./remote.ts", "Remote"), proofBaselineHash: hashText("old donor") }] };
     expect(() => renderTypeOnlyExtraction(staleProof)).toThrow(PreparationReplayError);
   });

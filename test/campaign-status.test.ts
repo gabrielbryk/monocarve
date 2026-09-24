@@ -1,8 +1,16 @@
 import { describe, expect, test } from "bun:test";
 
-import { appendCampaignChild, completeCampaign, createCampaignLedger, describeCampaignStatus, graphMetricSnapshot, recordCampaignChildApplication, stopCampaign } from "../src/campaign/index.ts";
-import { hashJson } from "../src/util/hash.ts";
+import {
+  appendCampaignChild,
+  completeCampaign,
+  createCampaignLedger,
+  describeCampaignStatus,
+  graphMetricSnapshot,
+  recordCampaignChildApplication,
+  stopCampaign,
+} from "../src/campaign/index.ts";
 import type { PreparationAuditReport } from "../src/prepare/audit.ts";
+import { hashJson } from "../src/util/hash.ts";
 
 const graph = graphMetricSnapshot({ moduleCount: 2 });
 
@@ -17,17 +25,36 @@ function ledger() {
 }
 
 function appliedPreparation() {
-  const planned = appendCampaignChild(ledger(), { id: "prepare-one", planId: "prepare-one", pairId: "pair-one", kind: "preparation", baselineCommit: "baseline" });
+  const planned = appendCampaignChild(ledger(), {
+    id: "prepare-one",
+    planId: "prepare-one",
+    pairId: "pair-one",
+    kind: "preparation",
+    baselineCommit: "baseline",
+  });
   const proof = { passed: true, checked: 1, failures: [] };
   const report: PreparationAuditReport = {
-    planId: "prepare-one", baselineCommit: "baseline", auditedRoot: "/fixture", passed: true,
-    byteReplay: proof, fileModes: proof, renderedReplay: proof, selectorIntegrity: proof,
-    declarationOwnership: proof, compatibilitySurface: proof, targetImportResolution: proof,
-    changedPathScope: proof, typeValueClaims: proof, graphDigest: proof,
-    retainedRootClearance: proof, adapterSurfaceParity: proof, failures: [],
+    planId: "prepare-one",
+    baselineCommit: "baseline",
+    auditedRoot: "/fixture",
+    passed: true,
+    byteReplay: proof,
+    fileModes: proof,
+    renderedReplay: proof,
+    selectorIntegrity: proof,
+    declarationOwnership: proof,
+    compatibilitySurface: proof,
+    targetImportResolution: proof,
+    changedPathScope: proof,
+    typeValueClaims: proof,
+    graphDigest: proof,
+    retainedRootClearance: proof,
+    adapterSurfaceParity: proof,
+    failures: [],
   };
   return recordCampaignChildApplication(planned, {
-    childId: "prepare-one", resultingCommit: "prepared",
+    childId: "prepare-one",
+    resultingCommit: "prepared",
     audit: { kind: "preparation", report, digest: hashJson(report) },
     graph: { before: graph, after: graph },
   });
@@ -35,11 +62,7 @@ function appliedPreparation() {
 
 describe("campaign workflow status", () => {
   test("reports the exact initial action and stale HEAD evidence", () => {
-    expect(describeCampaignStatus(ledger(), "baseline")).toMatchObject({
-      phase: "needs-preparation-review",
-      staleHead: false,
-      expectedCommit: "baseline",
-    });
+    expect(describeCampaignStatus(ledger(), "baseline")).toMatchObject({ phase: "needs-preparation-review", staleHead: false, expectedCommit: "baseline" });
     expect(describeCampaignStatus(ledger(), "different")).toMatchObject({
       phase: "stale-head",
       staleHead: true,
@@ -67,7 +90,11 @@ describe("campaign workflow status", () => {
     const prepared = appliedPreparation();
     expect(describeCampaignStatus(prepared, "prepared").phase).toBe("needs-paired-extraction-review");
     const extraction = appendCampaignChild(prepared, {
-      id: "extract-one", planId: "extract-one", pairId: "pair-one", kind: "extraction", baselineCommit: "prepared",
+      id: "extract-one",
+      planId: "extract-one",
+      pairId: "pair-one",
+      kind: "extraction",
+      baselineCommit: "prepared",
     });
     expect(describeCampaignStatus(extraction, "prepared").phase).toBe("needs-paired-extraction-application");
     expect(describeCampaignStatus(completeCampaign(ledger()), "baseline")).toMatchObject({ phase: "completed", canProceed: false });

@@ -1,10 +1,10 @@
 import { afterEach, expect, test } from "bun:test";
 import { resolve } from "node:path";
 
-import { compilerBuildIdentity, executableBuildIdentity, executableBuildIdentityFor, sourceTreeIntegrity } from "../src/build-identity.ts";
-import { runtimeIdentity } from "../src/assessment/snapshot.ts";
 import { readFileSync } from "node:fs";
 import { buildSourceRevision } from "../scripts/build-stamp.ts";
+import { runtimeIdentity } from "../src/assessment/snapshot.ts";
+import { compilerBuildIdentity, executableBuildIdentity, executableBuildIdentityFor, sourceTreeIntegrity } from "../src/build-identity.ts";
 import { cleanupFixtures, fixtureGit, fixtureRepo, scratchDirectory, write } from "./support/fixture-repo.ts";
 
 afterEach(cleanupFixtures);
@@ -30,12 +30,7 @@ test("source-mode identity is the canonical tool source digest and carries no in
 
 test("rich executable identity composes but never changes behavioral compiler identity", () => {
   const compiler = compilerBuildIdentity();
-  expect(executableBuildIdentity()).toEqual({
-    schemaVersion: 1,
-    semanticVersion: "1.0.0",
-    packagingMode: "source",
-    compiler,
-  });
+  expect(executableBuildIdentity()).toEqual({ schemaVersion: 1, semanticVersion: "1.0.0", packagingMode: "source", compiler });
   expect(executableBuildIdentityFor("dist-source").compiler).toEqual(compiler);
   expect(executableBuildIdentityFor("standalone-bun").compiler).toEqual(compiler);
   expect(Object.keys(compiler).sort()).toEqual(["artifactIntegrity"]);
@@ -49,7 +44,8 @@ test("build revision is exact for Git sources and absent for source archives", (
 
 test("assessment runtime identity records installed versions rather than declared ranges", () => {
   const root = resolve(import.meta.dir, "..");
-  const installed = (name: string): string => (JSON.parse(readFileSync(resolve(root, "node_modules", name, "package.json"), "utf8")) as { version: string }).version;
+  const installed = (name: string): string =>
+    (JSON.parse(readFileSync(resolve(root, "node_modules", name, "package.json"), "utf8")) as { version: string }).version;
   const manifest = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8")) as { dependencies: Record<string, string> };
   expect(runtimeIdentity().dependencies).toEqual({ "dependency-cruiser": installed("dependency-cruiser"), typescript: installed("typescript") });
   expect(runtimeIdentity().dependencies["dependency-cruiser"]).not.toBe(manifest.dependencies["dependency-cruiser"]);

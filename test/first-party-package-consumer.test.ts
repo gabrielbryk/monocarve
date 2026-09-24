@@ -15,11 +15,11 @@ import { fileURLToPath } from "node:url";
 import { loadConfig, parseConfig } from "../src/config.ts";
 import { buildDependencyGraph } from "../src/graph/build.ts";
 import { scanDependencyGraph } from "../src/graph/cruiser.ts";
-import { buildPortfolio } from "../src/portfolio/rank.ts";
+import { boundaryBaselineDigest } from "../src/plan/boundary-baseline.ts";
 import { buildPlanSync, serializeManifest } from "../src/plan/build.ts";
+import { buildPortfolio } from "../src/portfolio/rank.ts";
 import { applyPlan } from "../src/transaction/apply.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
-import { boundaryBaselineDigest } from "../src/plan/boundary-baseline.ts";
 import { cleanupFixtures, fixtureGit, fixtureRepo, scratchDirectory, write } from "./support/fixture-repo.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -27,14 +27,7 @@ const FIXTURE = resolve(here, "../fixtures/basic-monorepo");
 
 const DONOR = "apps/web/src/widgets/chart.ts";
 const SHARED_PACKAGE_JSON = `${JSON.stringify(
-  {
-    name: "@acme/shared",
-    version: "0.0.0",
-    private: true,
-    type: "module",
-    main: "./index.ts",
-    types: "./index.ts",
-  },
+  { name: "@acme/shared", version: "0.0.0", private: true, type: "module", main: "./index.ts", types: "./index.ts" },
   null,
   2,
 )}\n`;
@@ -76,9 +69,7 @@ describe("firstPartyPackages", () => {
   test("infers a workspace dependency on an exact-root first-party package and applies clean", async () => {
     const root = standaloneWorkspace();
 
-    const raw = JSON.parse(readFileSync(join(root, "monocarve.config.json"), "utf8")) as {
-      firstPartyPackages?: unknown;
-    };
+    const raw = JSON.parse(readFileSync(join(root, "monocarve.config.json"), "utf8")) as { firstPartyPackages?: unknown };
     raw.firstPartyPackages = [{ root: "shared", name: "@acme/shared" }];
     write(root, "monocarve.config.json", `${JSON.stringify(raw, null, 2)}\n`);
 
@@ -108,14 +99,7 @@ describe("firstPartyPackages", () => {
     const candidate = portfolio.candidates.find((entry) => entry.eligible && entry.files.includes(DONOR));
     expect(candidate).toBeDefined();
 
-    const manifest = buildPlanSync({
-      config,
-      rootDir: root,
-      graph,
-      candidate: candidate!,
-      baselineCommit: graph.commit!,
-      packageName: "@acme/chart-shared",
-    });
+    const manifest = buildPlanSync({ config, rootDir: root, graph, candidate: candidate!, baselineCommit: graph.commit!, packageName: "@acme/chart-shared" });
 
     // Dependency inference: the declared config identity, not a package.json
     // scan of a `packageRoots` subdirectory, is what resolves the bare
@@ -132,9 +116,7 @@ describe("firstPartyPackages", () => {
     expect(result.failure).toBeUndefined();
     expect(result.ok).toBe(true);
 
-    const packageManifest = JSON.parse(readFileSync(join(root, "libs/chart-shared/package.json"), "utf8")) as {
-      dependencies?: Record<string, string>;
-    };
+    const packageManifest = JSON.parse(readFileSync(join(root, "libs/chart-shared/package.json"), "utf8")) as { dependencies?: Record<string, string> };
     expect(packageManifest.dependencies?.["@acme/shared"]).toBe("workspace:*");
 
     const report = auditPlanSync({ config, rootDir: root, manifest });
@@ -155,9 +137,12 @@ describe("firstPartyPackages", () => {
     const { config } = await loadConfig({ cwd: root });
     const graph = await scanDependencyGraph({ config, rootDir: root, noCache: true });
     const manifest = buildPlanSync({
-      config, rootDir: root, graph,
+      config,
+      rootDir: root,
+      graph,
       candidate: buildPortfolio({ config, graph }).candidates.find((entry) => entry.eligible)!,
-      baselineCommit: graph.commit!, packageName: "@acme/chart-shared-violation",
+      baselineCommit: graph.commit!,
+      packageName: "@acme/chart-shared-violation",
     });
 
     const edge = { file: "shared/index.ts", target: "apps/web/src/widgets/chart.ts" };
@@ -172,11 +157,7 @@ describe("firstPartyPackages", () => {
     // The negative half, in the same tree: the identical edge against a plan
     // that did not record it — every plan compiled before the violation
     // existed — is exactly the failure the rule is for.
-    const withoutBaseline = auditPlanSync({
-      config,
-      rootDir: root,
-      manifest: { ...manifest, boundaryBaseline: { digest: EMPTY_BASELINE_DIGEST, edges: [] } },
-    });
+    const withoutBaseline = auditPlanSync({ config, rootDir: root, manifest: { ...manifest, boundaryBaseline: { digest: EMPTY_BASELINE_DIGEST, edges: [] } } });
     expect(withoutBaseline.failures).toContain("shared/index.ts imports application code: ../apps/web/src/widgets/chart.ts");
     expect(withoutBaseline.passed).toBe(false);
   }, 300_000);

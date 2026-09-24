@@ -12,8 +12,8 @@ import {
 import type { PreparationAuditReport } from "../../src/prepare/audit.ts";
 import type { AuditReport } from "../../src/transaction/audit.ts";
 import { hashJson } from "../../src/util/hash.ts";
-import { fixtureGit } from "./fixture-repo.ts";
 import { committedWorkspace, runJsonIn } from "./cli.ts";
+import { fixtureGit } from "./fixture-repo.ts";
 
 export interface PreparedManifestOutput {
   readonly planId: string;
@@ -35,9 +35,18 @@ export async function reviewedPreparationPlan(): Promise<{ root: string; manifes
   if (!candidate || !group) throw new Error("fixture did not produce a declaration SCC");
   const manifest = await runJsonIn<PreparedManifestOutput>(
     root,
-    "prepare-plan", "--file", source, "--candidate", candidate.id,
-    "--target", "apps/web/src/campaign-preparation-types.ts",
-    "--module-specifier", "./campaign-preparation-types.ts", "--group", group, "--write",
+    "prepare-plan",
+    "--file",
+    source,
+    "--candidate",
+    candidate.id,
+    "--target",
+    "apps/web/src/campaign-preparation-types.ts",
+    "--module-specifier",
+    "./campaign-preparation-types.ts",
+    "--group",
+    group,
+    "--write",
   );
   return { root, manifest, graph: await scanMetrics(root) };
 }
@@ -72,14 +81,24 @@ export async function scanMetrics(root: string): Promise<GraphMetricSnapshot> {
 export function appliedPairLedger(head: string, graph: GraphMetricSnapshot) {
   const preparation: CampaignChildPlan = { id: "prepare", pairId: "fixture-pair", kind: "preparation", planId: "prepare-plan", baselineCommit: head };
   const preparationReport = preparationAudit(preparation);
-  const preparationApplied = recordCampaignChildApplication(appendCampaignChild(createCampaignLedger({
-    campaignId: "terminal-fixture", objective: "finish a complete pair", stopConditions: [], baselineCommit: head, initialGraph: graph,
-  }), preparation), {
-    childId: preparation.id,
-    resultingCommit: head,
-    audit: { kind: "preparation", report: preparationReport, digest: hashJson(preparationReport) },
-    graph: { before: graph, after: graph },
-  });
+  const preparationApplied = recordCampaignChildApplication(
+    appendCampaignChild(
+      createCampaignLedger({
+        campaignId: "terminal-fixture",
+        objective: "finish a complete pair",
+        stopConditions: [],
+        baselineCommit: head,
+        initialGraph: graph,
+      }),
+      preparation,
+    ),
+    {
+      childId: preparation.id,
+      resultingCommit: head,
+      audit: { kind: "preparation", report: preparationReport, digest: hashJson(preparationReport) },
+      graph: { before: graph, after: graph },
+    },
+  );
   const extraction: CampaignChildPlan = { id: "extract", pairId: "fixture-pair", kind: "extraction", planId: "extract-plan", baselineCommit: head };
   const report = extractionAudit(extraction);
   return recordCampaignChildApplication(appendCampaignChild(preparationApplied, extraction), {
@@ -92,21 +111,47 @@ export function appliedPairLedger(head: string, graph: GraphMetricSnapshot) {
 
 function preparationAudit(plan: CampaignChildPlan): PreparationAuditReport {
   return {
-    planId: plan.planId, baselineCommit: plan.baselineCommit, auditedRoot: "/synthetic", passed: true,
-    byteReplay: proof(), fileModes: proof(), selectorIntegrity: proof(), declarationOwnership: proof(), compatibilitySurface: proof(),
-    targetImportResolution: proof(), renderedReplay: proof(), changedPathScope: proof(), typeValueClaims: proof(), graphDigest: proof(),
-    retainedRootClearance: proof(), adapterSurfaceParity: proof(), failures: [],
+    planId: plan.planId,
+    baselineCommit: plan.baselineCommit,
+    auditedRoot: "/synthetic",
+    passed: true,
+    byteReplay: proof(),
+    fileModes: proof(),
+    selectorIntegrity: proof(),
+    declarationOwnership: proof(),
+    compatibilitySurface: proof(),
+    targetImportResolution: proof(),
+    renderedReplay: proof(),
+    changedPathScope: proof(),
+    typeValueClaims: proof(),
+    graphDigest: proof(),
+    retainedRootClearance: proof(),
+    adapterSurfaceParity: proof(),
+    failures: [],
   };
 }
 
 function extractionAudit(plan: CampaignChildPlan): AuditReport {
   return {
-    planId: plan.planId, baselineCommit: plan.baselineCommit, auditedRoot: "/synthetic", passed: true,
-    byteFidelity: proof(), consumerCompleteness: proof(), boundaryRules: proof(), externalConsumerCompile: proof(), codemodReplay: proof(),
-    entrypointClosure: proof(), lockfileIntegrity: proof(), generatedArtifacts: proof(),
+    planId: plan.planId,
+    baselineCommit: plan.baselineCommit,
+    auditedRoot: "/synthetic",
+    passed: true,
+    byteFidelity: proof(),
+    consumerCompleteness: proof(),
+    boundaryRules: proof(),
+    externalConsumerCompile: proof(),
+    codemodReplay: proof(),
+    entrypointClosure: proof(),
+    lockfileIntegrity: proof(),
+    generatedArtifacts: proof(),
     sourceConservation: { ...proof(), plannedFiles: 1, plannedTests: 0, plannedAssets: 0, landedFiles: 1, landedTests: 0, landedAssets: 0 },
-    boundaryBaseline: { recorded: 0, observed: [], cleared: [] }, graphEvidence: { dynamicImportDelta: { added: [], removed: [] }, movedPathEdges: [], passed: true }, failures: [],
+    boundaryBaseline: { recorded: 0, observed: [], cleared: [] },
+    graphEvidence: { dynamicImportDelta: { added: [], removed: [] }, movedPathEdges: [], passed: true },
+    failures: [],
   };
 }
 
-function proof() { return { passed: true, checked: 1, failures: [] }; }
+function proof() {
+  return { passed: true, checked: 1, failures: [] };
+}

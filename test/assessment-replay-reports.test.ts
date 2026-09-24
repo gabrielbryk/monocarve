@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { loadConfig } from "../src/config.ts";
 import { captureAssessmentSnapshot } from "../src/assessment/snapshot.ts";
+import { loadConfig } from "../src/config.ts";
 import { hashBytes } from "../src/util/hash.ts";
-import { fixtureGit, scratchDirectory } from "./support/fixture-repo.ts";
 import { runIn } from "./support/cli.ts";
+import { fixtureGit, scratchDirectory } from "./support/fixture-repo.ts";
 
 function assessmentFixture(): string {
   const root = scratchDirectory();
@@ -15,10 +15,16 @@ function assessmentFixture(): string {
   writeFileSync(join(root, "apps/web/src/main.ts"), 'import { value } from "./types.ts"; export const main = value;\n');
   writeFileSync(join(root, "apps/web/src/types.ts"), "export const value = 1;\n");
   writeFileSync(join(root, "apps/web/package.json"), '{"name":"@acme/web","private":true}\n');
-  writeFileSync(join(root, "apps/web/tsconfig.json"), '{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","allowImportingTsExtensions":true,"noEmit":true,"strict":true},"include":["src/**/*.ts"]}\n');
+  writeFileSync(
+    join(root, "apps/web/tsconfig.json"),
+    '{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","allowImportingTsExtensions":true,"noEmit":true,"strict":true},"include":["src/**/*.ts"]}\n',
+  );
   writeFileSync(join(root, "package.json"), '{"private":true,"workspaces":[]}\n');
   writeFileSync(join(root, "bun.lock"), "{}\n");
-  writeFileSync(join(root, "monocarve.config.json"), `${JSON.stringify({ applications: [{ name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json" }], packageRoots: ["packages"], packageManager: "bun", testPathPatterns: ["\\\\.test\\\\.ts$"], scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\\n' } } }, null, 2)}\n`);
+  writeFileSync(
+    join(root, "monocarve.config.json"),
+    `${JSON.stringify({ applications: [{ name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json" }], packageRoots: ["packages"], packageManager: "bun", testPathPatterns: ["\\\\.test\\\\.ts$"], scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\\n' } } }, null, 2)}\n`,
+  );
   fixtureGit(root, "init", "-q", "-b", "assessment-fixture");
   fixtureGit(root, "config", "user.email", "fixture@example.invalid");
   fixtureGit(root, "config", "user.name", "Fixture");
@@ -28,10 +34,12 @@ function assessmentFixture(): string {
 }
 
 function files(root: string, current = root): Record<string, string> {
-  return Object.fromEntries(readdirSync(current, { withFileTypes: true }).flatMap((entry) => {
-    const absolute = join(current, entry.name);
-    return entry.isDirectory() ? Object.entries(files(root, absolute)) : [[absolute.slice(root.length + 1), readFileSync(absolute, "base64")]];
-  }));
+  return Object.fromEntries(
+    readdirSync(current, { withFileTypes: true }).flatMap((entry) => {
+      const absolute = join(current, entry.name);
+      return entry.isDirectory() ? Object.entries(files(root, absolute)) : [[absolute.slice(root.length + 1), readFileSync(absolute, "base64")]];
+    }),
+  );
 }
 
 async function capture(root: string, evidence = "evidence") {
@@ -58,12 +66,15 @@ test("assessment and replay refuse filesystem-backed TS config before it execute
   const config = readFileSync(join(root, "monocarve.config.json"), "utf8");
   unlinkSync(join(root, "monocarve.config.json"));
   writeFileSync(configDataPath, config);
-  writeFileSync(configPath, [
-    'import { readFileSync, writeFileSync } from "node:fs";',
-    'const value = JSON.parse(readFileSync(new URL("./config-data.json", import.meta.url), "utf8"));',
-    'writeFileSync(new URL("./config-executed", import.meta.url), "yes");',
-    'export default value;',
-  ].join("\n"));
+  writeFileSync(
+    configPath,
+    [
+      'import { readFileSync, writeFileSync } from "node:fs";',
+      'const value = JSON.parse(readFileSync(new URL("./config-data.json", import.meta.url), "utf8"));',
+      'writeFileSync(new URL("./config-executed", import.meta.url), "yes");',
+      "export default value;",
+    ].join("\n"),
+  );
   const assessment = await runIn(root, "assess", "--app", "web", "--evidence-dir", "new-evidence", "--json");
   expect(assessment.code).toBe(1);
   expect(assessment.stdout).toContain("ASSESSMENT_CONFIG_UNBOUND");
@@ -130,9 +141,7 @@ test("replay binds raw report identity to the requested configured application",
   const root = assessmentFixture();
   await capture(root);
   const manifestPath = join(root, "evidence/manifest.json");
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
-    rawReports: Record<string, string>;
-  };
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { rawReports: Record<string, string> };
   const rawPath = manifest.rawReports.web!;
   manifest.rawReports = { "not-configured/application": rawPath };
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
@@ -173,7 +182,9 @@ test("replay rejects executable/runtime identity mismatch and package drift", as
   const executableRoot = assessmentFixture();
   await capture(executableRoot);
   const executableManifestPath = join(executableRoot, "evidence/manifest.json");
-  const executableManifest = JSON.parse(readFileSync(executableManifestPath, "utf8")) as { baseline: { executable: { compiler: { artifactIntegrity: string } } } };
+  const executableManifest = JSON.parse(readFileSync(executableManifestPath, "utf8")) as {
+    baseline: { executable: { compiler: { artifactIntegrity: string } } };
+  };
   executableManifest.baseline.executable.compiler.artifactIntegrity = "0".repeat(64);
   writeFileSync(executableManifestPath, `${JSON.stringify(executableManifest, null, 2)}\n`);
   const executableResult = await runIn(executableRoot, "assess", "--app", "web", "--evidence-dir", "replayed", "--replay", "evidence", "--json");

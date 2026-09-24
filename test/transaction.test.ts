@@ -3,15 +3,28 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { pnpmAdapter } from "../src/adapters/pnpm.ts";
+import type { ExtractionManifest, PlanOperation } from "../src/plan/manifest.ts";
+import { assertPlanValid } from "../src/plan/validate.ts";
 import { applyPlan, preflight } from "../src/transaction/apply.ts";
 import { auditPlanSync } from "../src/transaction/audit.ts";
 import { executeJournal } from "../src/transaction/journal.ts";
 import { simulatePlan } from "../src/transaction/simulate.ts";
-import { assertPlanValid } from "../src/plan/validate.ts";
 import { hashText } from "../src/util/hash.ts";
-import type { ExtractionManifest, PlanOperation } from "../src/plan/manifest.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, read, write } from "./support/fixture-repo.ts";
-import { APP, CONSUMER, DONOR, ENTRYPOINT, IMPORTER_BLOCK, LOCKFILE_APPLIED, PACKAGE_ROOT, TARGET, baseManifest, extractionFiles, landManifest, packageManifest } from "./support/transaction-fixture.ts";
+import {
+  APP,
+  CONSUMER,
+  DONOR,
+  ENTRYPOINT,
+  IMPORTER_BLOCK,
+  LOCKFILE_APPLIED,
+  PACKAGE_ROOT,
+  TARGET,
+  baseManifest,
+  extractionFiles,
+  landManifest,
+  packageManifest,
+} from "./support/transaction-fixture.ts";
 
 describe("extraction transaction against a scratch repository", () => {
   afterEach(cleanupFixtures);
@@ -47,7 +60,11 @@ describe("extraction transaction against a scratch repository", () => {
 
     expect(auditPlanSync({ config, rootDir: root, manifest }).passed).toBe(true);
     expect(auditPlanSync({ config, rootDir: root, manifest }).sourceConservation).toMatchObject({
-      passed: true, plannedFiles: 1, plannedTests: 0, plannedAssets: 0, landedFiles: 1,
+      passed: true,
+      plannedFiles: 1,
+      plannedTests: 0,
+      plannedAssets: 0,
+      landedFiles: 1,
     });
   }, 120_000);
 
@@ -59,10 +76,18 @@ describe("extraction transaction against a scratch repository", () => {
     const approvedHead = fixtureGit(root, "rev-parse", "HEAD");
     const originalRootManifest = read(root, "package.json");
 
-    await expect(applyPlan({
-      config, rootDir: root, manifest, manifestPath, commit: true,
-      testHooks: { beforeRepositoryPostconditions: () => write(root, "package.json", '{"name":"fixture-workspace","dependencies":{"missing":"workspace:*"}}\n') },
-    })).rejects.toThrow("repository postconditions failed");
+    await expect(
+      applyPlan({
+        config,
+        rootDir: root,
+        manifest,
+        manifestPath,
+        commit: true,
+        testHooks: {
+          beforeRepositoryPostconditions: () => write(root, "package.json", '{"name":"fixture-workspace","dependencies":{"missing":"workspace:*"}}\n'),
+        },
+      }),
+    ).rejects.toThrow("repository postconditions failed");
 
     expect(fixtureGit(root, "rev-parse", "HEAD")).toBe(approvedHead);
     expect(read(root, "package.json")).toBe(originalRootManifest);
@@ -72,32 +97,50 @@ describe("extraction transaction against a scratch repository", () => {
   test("emitted-asset proof catches selector and declaration-order loss", async () => {
     const root = fixtureRepo(extractionFiles());
     const config = fixtureConfig(root, {
-      assetEmissionProofs: [{
-        id: "frontend-bundle", analyzer: "css-selectors", command: "mkdir -p dist; if test -f apps/api/src/widget/widget.ts; then printf '.kept{color:red;display:block}.lost{color:blue}' > dist/app.css; else printf '.kept{display:block;color:red}' > dist/app.css; fi",
-        roots: ["dist"], extensions: [".css"],
-      }],
+      assetEmissionProofs: [
+        {
+          id: "frontend-bundle",
+          analyzer: "css-selectors",
+          command:
+            "mkdir -p dist; if test -f apps/api/src/widget/widget.ts; then printf '.kept{color:red;display:block}.lost{color:blue}' > dist/app.css; else printf '.kept{display:block;color:red}' > dist/app.css; fi",
+          roots: ["dist"],
+          extensions: [".css"],
+        },
+      ],
     });
     const result = await simulatePlan({ config, rootDir: root, manifest: baseManifest(root), skipGates: true });
     expect(result.ok).toBeFalse();
-    expect(result.assetEmission?.checks[0]).toMatchObject({
-      passed: false, missingSelectors: [".lost"], changedDeclarationOrder: [".kept"],
-    });
+    expect(result.assetEmission?.checks[0]).toMatchObject({ passed: false, missingSelectors: [".lost"], changedDeclarationOrder: [".kept"] });
     expect(result.failure).toContain("asset-emission proof failed");
   }, 120_000);
 
   test("runs declared preparers after the journal and before audit and gates", async () => {
     const root = fixtureRepo(extractionFiles());
     const config = fixtureConfig(root, {
-      postJournalPreparers: [{
-        id: "path-ratchet", phase: "after-journal-before-gates",
-        command: `test -f ${TARGET} && printf '%s' '${TARGET}' > quality-baseline.txt`,
-        outputs: ["quality-baseline.txt"], verify: `grep -q '${TARGET}' quality-baseline.txt`,
-      }],
+      postJournalPreparers: [
+        {
+          id: "path-ratchet",
+          phase: "after-journal-before-gates",
+          command: `test -f ${TARGET} && printf '%s' '${TARGET}' > quality-baseline.txt`,
+          outputs: ["quality-baseline.txt"],
+          verify: `grep -q '${TARGET}' quality-baseline.txt`,
+        },
+      ],
     });
     const base = baseManifest(root);
     const manifest: ExtractionManifest = {
       ...base,
-      generatedFiles: [{ path: "quality-baseline.txt", source: TARGET, regenerate: config.postJournalPreparers[0]!.command!, regenerateOnApply: true, exemptReason: "fixture post-journal output", preparerId: "path-ratchet", verify: `grep -q '${TARGET}' quality-baseline.txt` }],
+      generatedFiles: [
+        {
+          path: "quality-baseline.txt",
+          source: TARGET,
+          regenerate: config.postJournalPreparers[0]!.command!,
+          regenerateOnApply: true,
+          exemptReason: "fixture post-journal output",
+          preparerId: "path-ratchet",
+          verify: `grep -q '${TARGET}' quality-baseline.txt`,
+        },
+      ],
       changedFiles: [...base.changedFiles, "quality-baseline.txt"].sort(),
     };
     const result = await simulatePlan({ config, rootDir: root, manifest, skipGates: true });
@@ -133,10 +176,7 @@ describe("extraction transaction against a scratch repository", () => {
     const root = fixtureRepo(extractionFiles());
     const base = fixtureConfig(root);
     const config = { ...base, gates: { ...base.gates }, transaction: { ...base.transaction, cleanup: true } };
-    const manifest = {
-      ...baseManifest(root),
-      gates: { package: [], project: [], workspace: ["printf 'full diagnostic'; exit 9"] },
-    };
+    const manifest = { ...baseManifest(root), gates: { package: [], project: [], workspace: ["printf 'full diagnostic'; exit 9"] } };
 
     const result = await simulatePlan({ config, rootDir: root, manifest });
 
@@ -213,11 +253,7 @@ describe("extraction transaction against a scratch repository", () => {
     const twinHash = hashText(twin);
     const manifest: ExtractionManifest = {
       ...base,
-      source: {
-        files: [DONOR, twinA, twinB],
-        tests: [],
-        sccs: { "scc-fixture": [DONOR], "scc-zulu": [twinA], "scc-alfa": [twinB] },
-      },
+      source: { files: [DONOR, twinA, twinB], tests: [], sccs: { "scc-fixture": [DONOR], "scc-zulu": [twinA], "scc-alfa": [twinB] } },
       sourceBlobs: { ...base.sourceBlobs, [twinA]: twinHash, [twinB]: twinHash },
       changedFiles: [...base.changedFiles, twinA, twinB, twinATarget, twinBTarget].sort(),
       metrics: { ...base.metrics, movedFiles: 3, movedLines: 3 },
@@ -234,9 +270,7 @@ describe("extraction transaction against a scratch repository", () => {
     expect(result.ok).toBe(true);
     expect(result.moveCommit).toBeTruthy();
 
-    const reported = fixtureGit(root, "show", "--name-status", "--find-renames=100%", "--format=", "HEAD~1")
-      .split("\n")
-      .filter(Boolean);
+    const reported = fixtureGit(root, "show", "--name-status", "--find-renames=100%", "--format=", "HEAD~1").split("\n").filter(Boolean);
     expect(reported).toHaveLength(3);
     expect(reported.every((line) => line.startsWith("R100"))).toBe(true);
     // The crossing itself. If git ever stops crossing here this line fails,
@@ -275,15 +309,9 @@ describe("extraction transaction against a scratch repository", () => {
       source: {
         files: [DONOR, ...bulk.map((entry) => entry.source)],
         tests: [],
-        sccs: {
-          "scc-fixture": [DONOR],
-          ...Object.fromEntries(bulk.map((entry, index) => [`scc-bulk-${index}`, [entry.source]])),
-        },
+        sccs: { "scc-fixture": [DONOR], ...Object.fromEntries(bulk.map((entry, index) => [`scc-bulk-${index}`, [entry.source]])) },
       },
-      sourceBlobs: {
-        ...base.sourceBlobs,
-        ...Object.fromEntries(bulk.map((entry) => [entry.source, hashText(entry.contents)])),
-      },
+      sourceBlobs: { ...base.sourceBlobs, ...Object.fromEntries(bulk.map((entry) => [entry.source, hashText(entry.contents)])) },
       changedFiles: [...base.changedFiles, ...bulk.flatMap((entry) => [entry.source, entry.target])].sort(),
       metrics: { ...base.metrics, movedFiles: 1 + bulk.length, movedLines: 1 + bulk.length },
       operations: [
@@ -300,9 +328,7 @@ describe("extraction transaction against a scratch repository", () => {
     const result = await applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true });
     expect(result.ok).toBe(true);
 
-    const reported = fixtureGit(root, "show", "--name-status", "--find-renames=100%", "--format=", "HEAD~1")
-      .split("\n")
-      .filter(Boolean);
+    const reported = fixtureGit(root, "show", "--name-status", "--find-renames=100%", "--format=", "HEAD~1").split("\n").filter(Boolean);
     expect(reported).toHaveLength(1 + bulk.length);
     expect(reported.every((line) => line.startsWith("R100"))).toBe(true);
   }, 180_000);
@@ -339,18 +365,9 @@ describe("extraction transaction against a scratch repository", () => {
       changedFiles: [...base.changedFiles, rewriteDonor, rewriteTarget].sort(),
       operations: [
         ...base.operations.map((operation) =>
-          operation.kind === "write-file" && operation.path === ENTRYPOINT
-            ? { ...operation, contents: barrel, resultHash: hashText(barrel) }
-            : operation,
+          operation.kind === "write-file" && operation.path === ENTRYPOINT ? { ...operation, contents: barrel, resultHash: hashText(barrel) } : operation,
         ),
-        {
-          kind: "move-with-rewrite",
-          source: rewriteDonor,
-          target: rewriteTarget,
-          rewrites,
-          preconditionHash: donorHash,
-          resultHash: hashText(rewritten),
-        },
+        { kind: "move-with-rewrite", source: rewriteDonor, target: rewriteTarget, rewrites, preconditionHash: donorHash, resultHash: hashText(rewritten) },
       ],
     };
     expect(() => assertPlanValid(manifest, { config, rootDir: root })).not.toThrow();
@@ -358,9 +375,7 @@ describe("extraction transaction against a scratch repository", () => {
 
     await applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true });
 
-    const moved = fixtureGit(root, "show", "--name-status", "--find-renames=100%", "--format=", "HEAD~1")
-      .split("\n")
-      .filter(Boolean);
+    const moved = fixtureGit(root, "show", "--name-status", "--find-renames=100%", "--format=", "HEAD~1").split("\n").filter(Boolean);
     expect(moved).toHaveLength(1);
     expect(moved[0]).toContain("R100");
     expect(moved[0]).toContain(TARGET);
@@ -380,9 +395,7 @@ describe("extraction transaction against a scratch repository", () => {
     const manifest = baseManifest(root);
     const manifestPath = landManifest(root, manifest);
     await applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true });
-    await expect(
-      applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, resume: true }),
-    ).rejects.toThrow("cannot be re-applied");
+    await expect(applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, resume: true })).rejects.toThrow("cannot be re-applied");
   }, 120_000);
 
   test("preflight identifies the applied boundary through later commits and directs the operator to audit", async () => {
@@ -412,9 +425,7 @@ describe("extraction transaction against a scratch repository", () => {
 
     // `resume` skips the clean-tree gate, so the staged file survives to the
     // move commit's scope assertion — which is the guard under test.
-    await expect(
-      applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, resume: true }),
-    ).rejects.toThrow("R100");
+    await expect(applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, resume: true })).rejects.toThrow("R100");
     expect(fixtureGit(root, "rev-parse", "HEAD")).toBe(head);
     expect(read(root, DONOR)).toBe("export const widgetValue = 1;\n");
   }, 120_000);
@@ -424,9 +435,7 @@ describe("extraction transaction against a scratch repository", () => {
     const config = fixtureConfig(root);
     const manifest = baseManifest(root);
     const manifestPath = landManifest(root, manifest);
-    await expect(applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true })).rejects.toThrow(
-      "guarded branch develop",
-    );
+    await expect(applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true })).rejects.toThrow("guarded branch develop");
   }, 60_000);
 
   test("restores every touched path when a later operation fails", async () => {
@@ -464,14 +473,12 @@ describe("extraction transaction against a scratch repository", () => {
       "scripts/diff-guard.sh": [
         "#!/bin/sh",
         'test -f "' + TARGET + '" || { echo "the move never happened"; exit 1; }',
-        'changed=$(git status --porcelain)',
+        "changed=$(git status --porcelain)",
         '[ -z "$changed" ] || { echo "uncommitted during gates:"; echo "$changed"; exit 1; }',
         "",
       ].join("\n"),
     });
-    const config = fixtureConfig(root, {
-      gates: { package: [], project: [], workspace: ["sh scripts/diff-guard.sh"] },
-    });
+    const config = fixtureConfig(root, { gates: { package: [], project: [], workspace: ["sh scripts/diff-guard.sh"] } });
     const manifest = { ...baseManifest(root), gates: { package: [], project: [], workspace: ["sh scripts/diff-guard.sh"] } };
 
     const result = await simulatePlan({ config, rootDir: root, manifest });

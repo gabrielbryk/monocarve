@@ -29,20 +29,15 @@ export type {
   ResolvedExtractionProfile,
   ScaffoldTemplatesConfig,
 } from "./config/schema-core.ts";
-export {
-  assertPreparationPolicyMatches,
-  renderPreparationPolicy,
-} from "./config/preparation.ts";
-export type {
-  PreparationPolicyRenderInput,
-  RenderedPreparationPolicy,
-} from "./config/preparation.ts";
+export { assertPreparationPolicyMatches, renderPreparationPolicy } from "./config/preparation.ts";
+export type { PreparationPolicyRenderInput, RenderedPreparationPolicy } from "./config/preparation.ts";
 export {
   applicationFor,
   applicationOwner,
   domainFor,
   firstPartyRoots,
   getApplication,
+  packageContainerRoots,
   isApplicationOwner,
   isAssetPath,
   isFirstPartyPackageOwner,
@@ -78,3 +73,4 @@ export type {
 } from "./config/schema-policy.ts";
 export { defineConfig, monocarveConfigSchema } from "./config/schema.ts";
 export type { MonocarveConfig, MonocarveUserConfig } from "./config/schema.ts";
+export { configDigest } from "./config/digest.ts";

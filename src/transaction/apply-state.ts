@@ -1,7 +1,7 @@
+import { randomUUID } from "node:crypto";
 /** Durable ownership and recovery evidence for a committing extraction. */
 import { closeSync, existsSync, linkSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
-import { randomUUID } from "node:crypto";
 
 import { APPLY_LOCK_FILENAME, APPLY_STATE_FILENAME, TOOL_NAME } from "../branding.ts";
 import { PreflightError } from "../errors.ts";
@@ -33,9 +33,14 @@ export function beginApplyTransaction(rootDir: string, manifest: ExtractionManif
   const paths = statePaths(rootDir);
   const ownerToken = randomUUID();
   const initial: ApplyTransactionState = {
-    schema: "apply-transaction-v1", planId: manifest.planId, manifestPath,
-    baselineCommit: manifest.baselineCommit, startHead: headCommit(rootDir),
-    ownerPid: process.pid, ownerToken, phase: "simulating",
+    schema: "apply-transaction-v1",
+    planId: manifest.planId,
+    manifestPath,
+    baselineCommit: manifest.baselineCommit,
+    startHead: headCommit(rootDir),
+    ownerPid: process.pid,
+    ownerToken,
+    phase: "simulating",
   };
   const lockTemporary = `${paths.lock}.${process.pid}.${ownerToken}.tmp`;
   try {
@@ -47,7 +52,9 @@ export function beginApplyTransaction(rootDir: string, manifest: ExtractionManif
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     const active = readApplyTransactionState(rootDir);
     const detail = active === undefined ? "an apply lock exists without readable transaction state" : statusDetail(active);
-    throw new PreflightError(`${detail}; run ${TOOL_NAME} apply-status, then ${TOOL_NAME} apply-recover --plan ${JSON.stringify(manifestPath)} after confirming the owner stopped`);
+    throw new PreflightError(
+      `${detail}; run ${TOOL_NAME} apply-status, then ${TOOL_NAME} apply-recover --plan ${JSON.stringify(manifestPath)} after confirming the owner stopped`,
+    );
   } finally {
     if (existsSync(lockTemporary)) unlinkSync(lockTemporary);
   }
@@ -55,7 +62,9 @@ export function beginApplyTransaction(rootDir: string, manifest: ExtractionManif
   let current = initial;
   let completed = false;
   return {
-    get state() { return current; },
+    get state() {
+      return current;
+    },
     update: (phase, moveCommit) => {
       current = { ...current, phase, ...(moveCommit === undefined ? {} : { moveCommit }) };
       writeState(paths.state, current);
@@ -127,11 +136,18 @@ function removeOwned(path: string, token: string): void {
   try {
     const value = JSON.parse(readFileSync(path, "utf8")) as { ownerToken?: string };
     if (value.ownerToken === token) unlinkSync(path);
-  } catch { /* Foreign or corrupt state is preserved for operator inspection. */ }
+  } catch {
+    /* Foreign or corrupt state is preserved for operator inspection. */
+  }
 }
 
 function processAlive(pid: number): boolean {
-  try { process.kill(pid, 0); return true; } catch { return false; }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function statusDetail(state: ApplyTransactionState): string {

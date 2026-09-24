@@ -20,9 +20,9 @@
 
 import { isFirstPartyPackageOwner, isPackageOwner, type MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
+import { isBuiltinModule, type WorkspaceContext } from "../plan/context.ts";
 import { isSourceModulePath } from "../util/files.ts";
 import { byCodeUnit } from "../util/hash.ts";
-import { isBuiltinModule, type WorkspaceContext } from "../plan/context.ts";
 import type { RewriteEscape } from "./types.ts";
 
 export interface Escape {
@@ -88,11 +88,7 @@ function fileContainment(context: WorkspaceContext, graph: DependencyGraph, file
   return containment;
 }
 
-export function analyzeContainment(
-  context: WorkspaceContext,
-  graph: DependencyGraph,
-  files: readonly string[],
-): ContainmentAnalysis {
+export function analyzeContainment(context: WorkspaceContext, graph: DependencyGraph, files: readonly string[]): ContainmentAnalysis {
   const contained = new Set(files);
   const assets = new Set<string>();
   const unmovableAssets = new Set<string>();
@@ -110,12 +106,7 @@ export function analyzeContainment(
     }
   }
 
-  return {
-    assets: [...assets].sort(),
-    unmovableAssets: [...unmovableAssets].sort(),
-    escapes,
-    external,
-  };
+  return { assets: [...assets].sort(), unmovableAssets: [...unmovableAssets].sort(), escapes, external };
 }
 
 /**
@@ -128,12 +119,7 @@ export function analyzeContainment(
  * surface must cover every binding the importer actually uses — including the
  * namespace import, which `export *` satisfies but a named re-export does not.
  */
-export function exportingPackageFor(
-  config: MonocarveConfig,
-  context: WorkspaceContext,
-  graph: DependencyGraph,
-  escape: Escape,
-): string | undefined {
+export function exportingPackageFor(config: MonocarveConfig, context: WorkspaceContext, graph: DependencyGraph, escape: Escape): string | undefined {
   const target = escape.resolved;
   if (target === undefined) return undefined;
   const owner = context.ownerOf(target);
@@ -177,9 +163,7 @@ export function classifyEscapes(
     // operations themselves are emitted by iterating the plan's sources — but a
     // comparator is one expression and both halves are held to the same rule.
     // See `byCodeUnit`.
-    rewritable: rewritable.sort(
-      (left, right) => byCodeUnit(left.file, right.file) || byCodeUnit(left.specifier, right.specifier),
-    ),
+    rewritable: rewritable.sort((left, right) => byCodeUnit(left.file, right.file) || byCodeUnit(left.specifier, right.specifier)),
     blocking,
   };
 }

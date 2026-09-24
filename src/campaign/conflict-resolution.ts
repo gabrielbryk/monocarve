@@ -1,13 +1,6 @@
 import { byCodeUnit, hashJson } from "../util/hash.ts";
 import { compareAccesses } from "./conflict-accesses.ts";
-import type {
-  CollisionBuckets,
-  ConflictCategory,
-  ConflictDisposition,
-  OperationPathAccess,
-  PlanConflict,
-  Subject,
-} from "./conflict-types.ts";
+import type { CollisionBuckets, ConflictCategory, ConflictDisposition, OperationPathAccess, PlanConflict, Subject } from "./conflict-types.ts";
 
 export function conflictsBetween(left: Subject, right: Subject): PlanConflict[] {
   const buckets = collisionBuckets(left.accesses, right.accesses);
@@ -16,14 +9,15 @@ export function conflictsBetween(left: Subject, right: Subject): PlanConflict[] 
 
 function collisionBuckets(left: readonly OperationPathAccess[], right: readonly OperationPathAccess[]): CollisionBuckets {
   const buckets = new Map<string, { left: OperationPathAccess[]; right: OperationPathAccess[] }>();
-  for (const leftAccess of left) for (const rightAccess of right) {
-    if (!overlaps(leftAccess, rightAccess) || (!writes(leftAccess) && !writes(rightAccess))) continue;
-    const path = overlapPath(leftAccess, rightAccess);
-    const bucket = buckets.get(path) ?? { left: [], right: [] };
-    bucket.left.push(leftAccess);
-    bucket.right.push(rightAccess);
-    buckets.set(path, bucket);
-  }
+  for (const leftAccess of left)
+    for (const rightAccess of right) {
+      if (!overlaps(leftAccess, rightAccess) || (!writes(leftAccess) && !writes(rightAccess))) continue;
+      const path = overlapPath(leftAccess, rightAccess);
+      const bucket = buckets.get(path) ?? { left: [], right: [] };
+      bucket.left.push(leftAccess);
+      bucket.right.push(rightAccess);
+      buckets.set(path, bucket);
+    }
   return buckets;
 }
 
@@ -36,9 +30,11 @@ function conflictFromBucket(
 ): PlanConflict {
   const leftEvidence = uniqueAccesses(leftAccesses);
   const rightEvidence = uniqueAccesses(rightAccesses);
-  const pairs = leftEvidence.flatMap((leftAccess) => rightEvidence
-    .filter((rightAccess) => overlaps(leftAccess, rightAccess) && (writes(leftAccess) || writes(rightAccess)))
-    .map((rightAccess) => [leftAccess, rightAccess] as const));
+  const pairs = leftEvidence.flatMap((leftAccess) =>
+    rightEvidence
+      .filter((rightAccess) => overlaps(leftAccess, rightAccess) && (writes(leftAccess) || writes(rightAccess)))
+      .map((rightAccess) => [leftAccess, rightAccess] as const),
+  );
   const disposition: ConflictDisposition = pairs.length > 0 && pairs.every(([first, second]) => isMergeablePair(first, second)) ? "mergeable" : "hard";
   const category = categoryFor([...leftEvidence, ...rightEvidence]);
   return {
@@ -55,7 +51,9 @@ function conflictFromBucket(
   };
 }
 
-function writes(access: OperationPathAccess): boolean { return access.mode !== "read"; }
+function writes(access: OperationPathAccess): boolean {
+  return access.mode !== "read";
+}
 
 function overlaps(left: OperationPathAccess, right: OperationPathAccess): boolean {
   if (left.scope === "exact" && right.scope === "exact") return left.path === right.path;
@@ -65,7 +63,9 @@ function overlaps(left: OperationPathAccess, right: OperationPathAccess): boolea
   return contains(tree.path, exact.path);
 }
 
-function contains(root: string, path: string): boolean { return root === path || path.startsWith(`${root}/`); }
+function contains(root: string, path: string): boolean {
+  return root === path || path.startsWith(`${root}/`);
+}
 
 function overlapPath(left: OperationPathAccess, right: OperationPathAccess): string {
   if (left.scope === "exact") return left.path;
@@ -84,7 +84,14 @@ function uniqueAccesses(accesses: readonly OperationPathAccess[]): OperationPath
 
 function isMergeablePair(left: OperationPathAccess, right: OperationPathAccess): boolean {
   if (left.role !== right.role || left.keys.length === 0 || right.keys.length === 0) return false;
-  const structured = new Set(["consumer-source", "consumer-manifest", "consumer-project-references", "workspace-registry", "task-registry", "lockfile-importer"]);
+  const structured = new Set([
+    "consumer-source",
+    "consumer-manifest",
+    "consumer-project-references",
+    "workspace-registry",
+    "task-registry",
+    "lockfile-importer",
+  ]);
   return structured.has(left.role) && left.keys.every((key) => !right.keys.includes(key));
 }
 
@@ -110,6 +117,11 @@ function explain(left: string, right: string, path: string, category: ConflictCa
 }
 
 export function compareConflicts(left: PlanConflict, right: PlanConflict): number {
-  return byCodeUnit(left.candidates[0], right.candidates[0]) || byCodeUnit(left.candidates[1], right.candidates[1]) ||
-    byCodeUnit(left.path, right.path) || byCodeUnit(left.category, right.category) || byCodeUnit(left.id, right.id);
+  return (
+    byCodeUnit(left.candidates[0], right.candidates[0]) ||
+    byCodeUnit(left.candidates[1], right.candidates[1]) ||
+    byCodeUnit(left.path, right.path) ||
+    byCodeUnit(left.category, right.category) ||
+    byCodeUnit(left.id, right.id)
+  );
 }

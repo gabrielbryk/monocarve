@@ -2,25 +2,29 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { parseConfig } from "../src/config.ts";
 import { qualifyAssessment } from "../src/assessment/qualification.ts";
 import { qualifyWorkspace } from "../src/assessment/qualify-workspace.ts";
+import { parseConfig } from "../src/config.ts";
 import { inspectConfig } from "../src/doctor/config-doctor.ts";
 import { fixtureGit, scratchDirectory } from "./support/fixture-repo.ts";
 
 describe("assessment qualification", () => {
   test("fatal diagnostics take precedence over degraded and allowed-empty", () => {
-    const qualification = qualifyAssessment({ allowedEmpty: true, diagnostics: [
-      { code: "WORKSPACE_PATTERN_UNMATCHED", severity: "warning", message: "unmatched", impact: "partial" },
-      { code: "WORKSPACE_PACKAGE_DUPLICATE", severity: "error", message: "duplicate", impact: "ambiguous" },
-    ] });
+    const qualification = qualifyAssessment({
+      allowedEmpty: true,
+      diagnostics: [
+        { code: "WORKSPACE_PATTERN_UNMATCHED", severity: "warning", message: "unmatched", impact: "partial" },
+        { code: "WORKSPACE_PACKAGE_DUPLICATE", severity: "error", message: "duplicate", impact: "ambiguous" },
+      ],
+    });
     expect(qualification).toMatchObject({ status: "fatal", exitCode: 1, mayPublish: false, overrides: ["allow-empty"] });
   });
 
   test("allowed-empty plus a supported unmatched pattern is degraded", () => {
-    const qualification = qualifyAssessment({ allowedEmpty: true, diagnostics: [
-      { code: "WORKSPACE_PATTERN_UNMATCHED", severity: "warning", message: "unmatched", impact: "partial" },
-    ] });
+    const qualification = qualifyAssessment({
+      allowedEmpty: true,
+      diagnostics: [{ code: "WORKSPACE_PATTERN_UNMATCHED", severity: "warning", message: "unmatched", impact: "partial" }],
+    });
     expect(qualification).toMatchObject({ status: "degraded", exitCode: 2, mayPublish: true, overrides: ["allow-empty"] });
   });
 
@@ -55,7 +59,12 @@ describe("assessment qualification", () => {
   });
 
   test("degraded qualification keeps graph facts but withholds resolution-dependent fields", () => {
-    const diagnostic = { code: "WORKSPACE_PATTERN_UNMATCHED" as const, severity: "warning" as const, message: "unmatched", impact: "package readiness unavailable" };
+    const diagnostic = {
+      code: "WORKSPACE_PATTERN_UNMATCHED" as const,
+      severity: "warning" as const,
+      message: "unmatched",
+      impact: "package readiness unavailable",
+    };
     const qualification = qualifyAssessment({ diagnostics: [diagnostic] });
     expect(qualification).toMatchObject({ status: "degraded", exitCode: 2, mayPublish: true });
     expect(qualification.diagnostics).toEqual([diagnostic]);

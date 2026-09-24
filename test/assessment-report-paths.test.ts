@@ -2,13 +2,13 @@ import { expect, test } from "bun:test";
 import { cpSync, readFileSync, readdirSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { canonicalizeScanReport, containsAbsoluteReportPath } from "../src/assessment/report-paths.ts";
 import { rawReportPaths } from "../src/assessment/bundle.ts";
-import { stableStringify } from "../src/util/hash.ts";
-import { fixtureRepo, scratchDirectory } from "./support/fixture-repo.ts";
-import { runIn } from "./support/cli.ts";
 import { captureInputInventory } from "../src/assessment/input-inventory.ts";
+import { canonicalizeScanReport, containsAbsoluteReportPath } from "../src/assessment/report-paths.ts";
 import { parseConfig } from "../src/config.ts";
+import { stableStringify } from "../src/util/hash.ts";
+import { runIn } from "./support/cli.ts";
+import { fixtureRepo, scratchDirectory } from "./support/fixture-repo.ts";
 
 test("raw scanner evidence canonicalizes absolute paths without leaking a checkout root", () => {
   const root = scratchDirectory();
@@ -53,11 +53,19 @@ test("published and replayed evidence never exposes an absolute external symlink
   writeFileSync(external, "export const shared = 1;\n");
   const root = fixtureRepo({
     "apps/web/src/main.ts": 'export { shared } from "./shared.ts";\n',
-    "apps/web/tsconfig.json": '{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","allowImportingTsExtensions":true,"noEmit":true},"include":["src/**/*.ts"]}\n',
+    "apps/web/tsconfig.json":
+      '{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","allowImportingTsExtensions":true,"noEmit":true},"include":["src/**/*.ts"]}\n',
     "package.json": '{"private":true,"workspaces":[]}\n',
     "bun.lock": "{}\n",
     "packages/placeholder/package.json": '{"name":"@acme/placeholder","private":true}\n',
-    "monocarve.config.json": JSON.stringify({ applications: [{ name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json" }], packageRoots: ["packages"], packageManager: "bun", testPathPatterns: ["\\.test\\.ts$"], scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } } }) + "\n",
+    "monocarve.config.json":
+      JSON.stringify({
+        applications: [{ name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json" }],
+        packageRoots: ["packages"],
+        packageManager: "bun",
+        testPathPatterns: ["\\.test\\.ts$"],
+        scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
+      }) + "\n",
   });
   symlinkSync(external, join(root, "apps/web/src/shared.ts"));
   const config = parseConfig(JSON.parse(readFileSync(join(root, "monocarve.config.json"), "utf8")));
@@ -84,7 +92,8 @@ test("assessment replay uses the manifest mapping for a filename-hostile applica
   const root = fixtureRepo({
     "apps/web/src/main.ts": "export const main = 1;\n",
     "packages/placeholder/package.json": '{"name":"@acme/placeholder","private":true}\n',
-    "apps/web/tsconfig.json": '{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","allowImportingTsExtensions":true,"noEmit":true,"strict":true},"include":["src/**/*.ts"]}\n',
+    "apps/web/tsconfig.json":
+      '{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","allowImportingTsExtensions":true,"noEmit":true,"strict":true},"include":["src/**/*.ts"]}\n',
     "package.json": '{"private":true,"workspaces":[]}\n',
     "bun.lock": "{}\n",
     "monocarve.config.json": `${JSON.stringify({ applications: [{ name: application, sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json" }], packageRoots: ["packages"], packageManager: "bun", testPathPatterns: ["\\.test\\.ts$"], scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\\n' } } })}\n`,
@@ -104,11 +113,19 @@ test("required raw evidence is byte-identical across checkout roots", async () =
     "apps/web/src/main.ts": 'import { value } from "./value.ts"; export const main = value;\n',
     "apps/web/src/value.ts": "export const value = 1;\n",
     "apps/web/package.json": '{"name":"@acme/web","private":true}\n',
-    "apps/web/tsconfig.json": '{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","allowImportingTsExtensions":true,"noEmit":true},"include":["src/**/*.ts"]}\n',
+    "apps/web/tsconfig.json":
+      '{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","allowImportingTsExtensions":true,"noEmit":true},"include":["src/**/*.ts"]}\n',
     "package.json": '{"private":true,"workspaces":[]}\n',
     "bun.lock": "{}\n",
     "packages/placeholder/package.json": '{"name":"@acme/placeholder","private":true}\n',
-    "monocarve.config.json": JSON.stringify({ applications: [{ name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json" }], packageRoots: ["packages"], packageManager: "bun", testPathPatterns: ["\\.test\\.ts$"], scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } } }) + "\n",
+    "monocarve.config.json":
+      JSON.stringify({
+        applications: [{ name: "web", sourceRoot: "apps/web/src", tsconfig: "apps/web/tsconfig.json" }],
+        packageRoots: ["packages"],
+        packageManager: "bun",
+        testPathPatterns: ["\\.test\\.ts$"],
+        scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
+      }) + "\n",
   });
   const first = join(scratchDirectory(), "checkout-a");
   const second = join(scratchDirectory(), "checkout-b");
@@ -128,8 +145,12 @@ test("required raw evidence is byte-identical across checkout roots", async () =
 }, 30_000);
 
 function bundleFiles(root: string, current = join(root, "evidence")): Record<string, string> {
-  return Object.fromEntries(readdirSync(current, { withFileTypes: true }).flatMap((entry) => {
-    const absolute = join(current, entry.name);
-    return entry.isDirectory() ? Object.entries(bundleFiles(root, absolute)) : [[absolute.slice(join(root, "evidence").length + 1), readFileSync(absolute, "base64")]];
-  }));
+  return Object.fromEntries(
+    readdirSync(current, { withFileTypes: true }).flatMap((entry) => {
+      const absolute = join(current, entry.name);
+      return entry.isDirectory()
+        ? Object.entries(bundleFiles(root, absolute))
+        : [[absolute.slice(join(root, "evidence").length + 1), readFileSync(absolute, "base64")]];
+    }),
+  );
 }

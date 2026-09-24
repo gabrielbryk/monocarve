@@ -18,13 +18,7 @@ describe("consumer dependency sections", () => {
     // The negative case is a mixed owner: choosing the first consumer's section
     // would make a production import a devDependency whenever graph traversal
     // happened to visit a test first.
-    expect(
-      consumerDependencyOwners([
-        consumer("apps/zebra", "dev"),
-        consumer("apps/zebra", "runtime"),
-        consumer("apps/alpha", "dev"),
-      ]),
-    ).toEqual([
+    expect(consumerDependencyOwners([consumer("apps/zebra", "dev"), consumer("apps/zebra", "runtime"), consumer("apps/alpha", "dev")])).toEqual([
       { owner: "apps/alpha", dependencySection: "dev" },
       { owner: "apps/zebra", dependencySection: "runtime" },
     ]);

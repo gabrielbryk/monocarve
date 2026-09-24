@@ -22,8 +22,8 @@
  * left alone — never guessed at, never rewritten.
  */
 
-import ts from "typescript";
 import { dirname, resolve } from "node:path";
+import ts from "typescript";
 
 import { applyReplacements, fitsInLiteral } from "../codemod/imports.ts";
 import { relativePosix } from "../util/paths.ts";
@@ -178,11 +178,7 @@ function identifierIsNodePathNamespace(expression: ts.Expression): boolean {
 /** `resolve(…)` or `path.resolve(…)`, demonstrably Node's `path.resolve` at this use site. */
 function isResolveCallee(expression: ts.Expression): boolean {
   if (ts.isIdentifier(expression)) return expression.text === "resolve" && identifierIsNodePathResolve(expression);
-  return (
-    ts.isPropertyAccessExpression(expression) &&
-    expression.name.text === "resolve" &&
-    identifierIsNodePathNamespace(expression.expression)
-  );
+  return ts.isPropertyAccessExpression(expression) && expression.name.text === "resolve" && identifierIsNodePathNamespace(expression.expression);
 }
 
 function literalTextOf(node: ts.Node): string | null {
@@ -196,7 +192,8 @@ function forOfLiteralBinding(node: ts.Expression): readonly ts.Expression[] | un
   while (parent && !ts.isForOfStatement(parent)) parent = parent.parent;
   if (!parent || !ts.isForOfStatement(parent) || !ts.isVariableDeclarationList(parent.initializer)) return undefined;
   const declaration = parent.initializer.declarations.length === 1 ? parent.initializer.declarations[0] : undefined;
-  if (!declaration || !ts.isIdentifier(declaration.name) || declaration.name.text !== node.text || !ts.isArrayLiteralExpression(parent.expression)) return undefined;
+  if (!declaration || !ts.isIdentifier(declaration.name) || declaration.name.text !== node.text || !ts.isArrayLiteralExpression(parent.expression))
+    return undefined;
   return parent.expression.elements.filter((element): element is ts.Expression => ts.isStringLiteral(element) || ts.isNoSubstitutionTemplateLiteral(element));
 }
 
@@ -262,11 +259,7 @@ export function findStaticFsReferences(source: string, filePath: string): Static
   const record = (node: ts.Node): void => {
     const literal = literalTextOf(node);
     if (literal === null) return;
-    matches.push({
-      literal,
-      resolvedAbsolute: resolve(directory, literal),
-      span: { start: node.getStart(file), end: node.end },
-    });
+    matches.push({ literal, resolvedAbsolute: resolve(directory, literal), span: { start: node.getStart(file), end: node.end } });
   };
 
   const visit = (node: ts.Node): void => {
@@ -302,12 +295,7 @@ export function findStaticFsReferences(source: string, filePath: string): Static
  * replay proof only holds if this is the exact function that produced the
  * bytes it re-derives.
  */
-export function rewriteStaticFsReference(
-  source: string,
-  filePath: string,
-  donorAbsolutePath: string,
-  newLiteral: string,
-): string {
+export function rewriteStaticFsReference(source: string, filePath: string, donorAbsolutePath: string, newLiteral: string): string {
   const replacements = findStaticFsReferences(source, filePath)
     .filter((match) => match.resolvedAbsolute === donorAbsolutePath)
     .map((match) => {

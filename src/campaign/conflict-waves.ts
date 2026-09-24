@@ -17,10 +17,5 @@ export function buildWaves(subjects: readonly Subject[], conflicts: readonly Pla
     }
     waves[index]!.push(subject.candidateId);
   }
-  return waves.map((candidateIds, index) => ({
-    index,
-    candidateIds,
-    requiresReplanAfterPreviousWave: index > 0,
-    execution: "replan-between-every-child",
-  }));
+  return waves.map((candidateIds, index) => ({ index, candidateIds, requiresReplanAfterPreviousWave: index > 0, execution: "replan-between-every-child" }));
 }

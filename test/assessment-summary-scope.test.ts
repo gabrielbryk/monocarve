@@ -20,18 +20,31 @@ test("selected application summary ignores another application's edges and unres
       { name: "one", sourceRoot: "apps/one/src", tsconfig: "apps/one/tsconfig.json" },
       { name: "two", sourceRoot: "apps/two/src", tsconfig: "apps/two/tsconfig.json" },
     ],
-    packageRoots: ["packages"], packageManager: "bun",
+    packageRoots: ["packages"],
+    packageManager: "bun",
     scaffoldTemplates: { packageJson: { contents: '{"name":"{package}"}\n' } },
   });
   const one: ScanReport = { modules: [{ source: "apps/one/src/main.ts", dependencies: [] }] };
   const first = buildDependencyGraph({ config, rootDir: root, reports: { one, two: { modules: [{ source: "apps/two/src/main.ts", dependencies: [] }] } } });
-  const second = buildDependencyGraph({ config, rootDir: root, reports: { one, two: { modules: [
-    { source: "apps/two/src/main.ts", dependencies: [
-      { module: "./child.ts", resolved: "apps/two/src/child.ts", dynamic: true },
-      { module: "./missing.ts", couldNotResolve: true },
-    ] },
-    { source: "apps/two/src/child.ts", dependencies: [] },
-  ] } } });
+  const second = buildDependencyGraph({
+    config,
+    rootDir: root,
+    reports: {
+      one,
+      two: {
+        modules: [
+          {
+            source: "apps/two/src/main.ts",
+            dependencies: [
+              { module: "./child.ts", resolved: "apps/two/src/child.ts", dynamic: true },
+              { module: "./missing.ts", couldNotResolve: true },
+            ],
+          },
+          { source: "apps/two/src/child.ts", dependencies: [] },
+        ],
+      },
+    },
+  });
   expect(normalizedGraphFacts(config, first, "one").facts).toEqual(normalizedGraphFacts(config, second, "one").facts);
   expect(normalizedGraphFacts(config, second, "two").facts).toMatchObject({ edges: 1, dynamicImports: 1, unresolvedImports: 1 });
 });

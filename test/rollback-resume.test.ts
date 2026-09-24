@@ -1,11 +1,20 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { applyPlan } from "../src/transaction/apply.ts";
 import type { ExtractionManifest } from "../src/plan/manifest.ts";
+import { applyPlan } from "../src/transaction/apply.ts";
 import {
-  MANIFEST_PATH, PACKAGE_ROOT, TOKENS_DIR, cleanupFixtures, comparableFiles, expectApplyToFail,
-  expectRestored, fixture, fixtureGit, repoState, withReadOnlyDirectory,
+  MANIFEST_PATH,
+  PACKAGE_ROOT,
+  TOKENS_DIR,
+  cleanupFixtures,
+  comparableFiles,
+  expectApplyToFail,
+  expectRestored,
+  fixture,
+  fixtureGit,
+  repoState,
+  withReadOnlyDirectory,
 } from "./support/rollback-fixture.ts";
 
 describe("--resume converges on the same tree as a clean apply", () => {
@@ -99,9 +108,7 @@ describe("--resume converges on the same tree as a clean apply", () => {
     const before = repoState(root);
 
     await withReadOnlyDirectory(join(root, TOKENS_DIR), async () => {
-      const error = await expectApplyToFail(
-        applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, resume: true }),
-      );
+      const error = await expectApplyToFail(applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, resume: true }));
       expect(error.message).toContain("EACCES");
       expect(error.message).toContain(`[rollback complete: HEAD and index reset to ${before.head}`);
     });
@@ -137,9 +144,7 @@ describe("what rollback prunes, and what it deliberately does not", () => {
 
     process.env.MONOCARVE_FAIL_OPERATION = "4";
     try {
-      await expectApplyToFail(
-        applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, skipSimulation: true }),
-      );
+      await expectApplyToFail(applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, skipSimulation: true }));
     } finally {
       delete process.env.MONOCARVE_FAIL_OPERATION;
     }

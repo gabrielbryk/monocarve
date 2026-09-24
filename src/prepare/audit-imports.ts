@@ -19,11 +19,7 @@ import type { DeleteModuleOperation, ExtractTypeDeclarationsOperation, Preparati
  * check against the landed bytes, so a build-time proof cannot silently go
  * stale between planning and apply.
  */
-export function verifyRetainedRootsClearOfValueImports(
-  rootDir: string,
-  operations: readonly PreparationReplayOperation[],
-  failures: string[],
-): void {
+export function verifyRetainedRootsClearOfValueImports(rootDir: string, operations: readonly PreparationReplayOperation[], failures: string[]): void {
   const deletions = operations.filter((operation): operation is DeleteModuleOperation => operation.kind === "delete-module");
   for (const deletion of deletions) {
     for (const importerPath of deletion.importerProof) verifyImporterClear(rootDir, deletion, importerPath, failures);
@@ -61,10 +57,14 @@ export function verifyTargetImportProofs(
     const compilerOptions = preparationCompilerOptions(rootDir, config, operation.donor.path);
     for (const proof of operation.targetImportProofs) verifyProof(rootDir, compilerOptions, operation, donorImports, targetImports, proof, failures);
     for (const proof of operation.inlineImportTypeProofs ?? []) {
-      if (!inlineImportTypes(operation.donor.path, donor).has(proof.originalSpecifier)) failures.push(`inline import proof names no donor import type: ${operation.donor.path}:${proof.originalSpecifier}`);
-      if (!inlineImportTypes(operation.target.path, target).has(proof.targetSpecifier)) failures.push(`inline import type rewrite is absent: ${operation.target.path}:${proof.targetSpecifier}`);
-      if (resolveRelativeModule(rootDir, compilerOptions, operation.donor.path, proof.originalSpecifier) !== proof.resolvedSourcePath) failures.push(`inline import type proof resolves the donor specifier incorrectly: ${operation.donor.path}:${proof.originalSpecifier}`);
-      if (resolveRelativeModule(rootDir, compilerOptions, operation.target.path, proof.targetSpecifier) !== proof.resolvedSourcePath) failures.push(`inline import type rewrite resolves to a different module: ${operation.target.path}:${proof.targetSpecifier}`);
+      if (!inlineImportTypes(operation.donor.path, donor).has(proof.originalSpecifier))
+        failures.push(`inline import proof names no donor import type: ${operation.donor.path}:${proof.originalSpecifier}`);
+      if (!inlineImportTypes(operation.target.path, target).has(proof.targetSpecifier))
+        failures.push(`inline import type rewrite is absent: ${operation.target.path}:${proof.targetSpecifier}`);
+      if (resolveRelativeModule(rootDir, compilerOptions, operation.donor.path, proof.originalSpecifier) !== proof.resolvedSourcePath)
+        failures.push(`inline import type proof resolves the donor specifier incorrectly: ${operation.donor.path}:${proof.originalSpecifier}`);
+      if (resolveRelativeModule(rootDir, compilerOptions, operation.target.path, proof.targetSpecifier) !== proof.resolvedSourcePath)
+        failures.push(`inline import type rewrite resolves to a different module: ${operation.target.path}:${proof.targetSpecifier}`);
     }
   }
 }
@@ -113,8 +113,11 @@ function textAt(rootDir: string, path: string): string | null {
 
 function moduleImports(path: string, text: string): Set<string> {
   const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
-  return new Set(source.statements.flatMap((statement) =>
-    ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier) ? [statement.moduleSpecifier.text] : []));
+  return new Set(
+    source.statements.flatMap((statement) =>
+      ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier) ? [statement.moduleSpecifier.text] : [],
+    ),
+  );
 }
 
 function resolveRelativeModule(rootDir: string, compilerOptions: ts.CompilerOptions, fromPath: string, specifier: string): string | undefined {

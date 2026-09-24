@@ -19,8 +19,8 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { extname, resolve } from "node:path";
 
-import type { MonocarveConfig } from "../config.ts";
 import { inventoryModuleReferences } from "../codemod/imports.ts";
+import type { MonocarveConfig } from "../config.ts";
 import { byCodeUnit } from "../util/hash.ts";
 import { relativePosix } from "../util/paths.ts";
 
@@ -67,9 +67,7 @@ function lineAt(source: string, offset: number): number {
  */
 function specifierOffset(source: string, start: number, end: number, specifier: string): number {
   const window = source.slice(start, end);
-  const candidates = [`"${specifier}"`, `'${specifier}'`]
-    .map((quoted) => window.indexOf(quoted))
-    .filter((index) => index >= 0);
+  const candidates = [`"${specifier}"`, `'${specifier}'`].map((quoted) => window.indexOf(quoted)).filter((index) => index >= 0);
   if (candidates.length === 0) return start;
   return start + Math.min(...candidates) + 1;
 }
@@ -86,13 +84,7 @@ export function checkImportExtensions(config: MonocarveConfig, rootDir: string):
         const specifier = reference.specifier;
         if (!specifier || !specifier.startsWith(".")) return [];
         if (approved.some((extension) => specifier.endsWith(extension))) return [];
-        return [
-          {
-            file: relativePosix(rootDir, path),
-            line: lineAt(source, specifierOffset(source, reference.start, reference.end, specifier)),
-            specifier,
-          },
-        ];
+        return [{ file: relativePosix(rootDir, path), line: lineAt(source, specifierOffset(source, reference.start, reference.end, specifier)), specifier }];
       });
     })
     .sort((left, right) => byCodeUnit(left.file, right.file) || left.line - right.line);

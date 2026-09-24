@@ -22,10 +22,12 @@ export async function verifyProjectedImporters(input: {
   readonly manifest: ExtractionManifest;
   readonly adapter: PackageManagerAdapter;
 }): Promise<ProjectedImporterVerification> {
-  const roots = [...new Set([
-    ...(input.manifest.target?.packageRoot ? [input.manifest.target.packageRoot] : []),
-    ...input.manifest.operations.flatMap((operation) => operation.kind === "lockfile-importer" ? [operation.packageRoot] : []),
-  ])].sort();
+  const roots = [
+    ...new Set([
+      ...(input.manifest.target?.packageRoot ? [input.manifest.target.packageRoot] : []),
+      ...input.manifest.operations.flatMap((operation) => (operation.kind === "lockfile-importer" ? [operation.packageRoot] : [])),
+    ]),
+  ].sort();
   return verifyPackageImporters(input.workspacePath, input.adapter, roots);
 }
 

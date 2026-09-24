@@ -50,9 +50,7 @@ export function resolveConsolidationPackages(
 function resolveWorkspacePackage(graph: DependencyGraph, name: string, role: "target" | "donor"): { readonly name: string; readonly root: string } {
   const root = graph.workspace.packageNames.get(name);
   if (root === undefined) {
-    throw new ConsolidationSelectorError(
-      `${role} package ${JSON.stringify(name)} is not a workspace package`,
-    );
+    throw new ConsolidationSelectorError(`${role} package ${JSON.stringify(name)} is not a workspace package`);
   }
   return { name, root };
 }
@@ -62,11 +60,7 @@ function resolveWorkspacePackage(graph: DependencyGraph, name: string, role: "ta
  * any donor. A pre-existing collision means the consolidation would overwrite
  * content, which is a safety violation.
  */
-export function assertNoTargetDonorCollision(
-  graph: DependencyGraph,
-  targetRoot: string,
-  donorRoots: readonly string[],
-): void {
+export function assertNoTargetDonorCollision(graph: DependencyGraph, targetRoot: string, donorRoots: readonly string[]): void {
   const targetNode = graph.nodes.get(targetRoot);
   if (targetNode === undefined) return;
   const targetChildren = graph.paths.filter((path) => path.startsWith(`${targetRoot}/`) && path !== targetRoot);

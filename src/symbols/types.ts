@@ -3,14 +3,7 @@ import type { Sha256 } from "../util/hash.ts";
 /** The TypeScript declaration space occupied by a symbol or reference. */
 export type SymbolSpace = "type" | "value" | "both";
 
-export type DeclarationKind =
-  | "class"
-  | "enum"
-  | "function"
-  | "interface"
-  | "namespace"
-  | "type-alias"
-  | "variable";
+export type DeclarationKind = "class" | "enum" | "function" | "interface" | "namespace" | "type-alias" | "variable";
 
 export interface SourceSpan {
   /** Zero-based UTF-16 offsets, matching the TypeScript compiler API. */

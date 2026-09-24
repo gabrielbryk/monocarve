@@ -35,29 +35,31 @@ export async function auditRepositoryPostconditions(input: {
   const duplicateNames: string[] = [];
   for (const pkg of packages) {
     const previous = packageOwners.get(pkg.name);
-    if (previous !== undefined && previous !== pkg.dir) duplicateNames.push(`workspace package name ${pkg.name} is declared by both ${previous} and ${pkg.dir}`);
+    if (previous !== undefined && previous !== pkg.dir)
+      duplicateNames.push(`workspace package name ${pkg.name} is declared by both ${previous} and ${pkg.dir}`);
     packageOwners.set(pkg.name, pkg.dir);
   }
-  const roots = input.packageRoots === undefined
-    ? packages.map(({ dir }) => dir).sort()
-    : [...new Set(input.packageRoots)].sort();
+  const roots = input.packageRoots === undefined ? packages.map(({ dir }) => dir).sort() : [...new Set(input.packageRoots)].sort();
   const checkedPackages = packages.filter(({ dir }) => roots.includes(dir));
   const names = new Set(packages.map(({ name }) => name));
   const failures: string[] = [...duplicateNames];
   for (const pkg of checkedPackages) {
     const manifest = JSON.parse(readFileSync(resolve(input.rootDir, pkg.dir, "package.json"), "utf8")) as Record<string, unknown>;
-    const sections = (["dependencies", "devDependencies", "optionalDependencies"] as const)
-      .map((section) => [section, stringRecord(manifest[section])] as const);
+    const sections = (["dependencies", "devDependencies", "optionalDependencies"] as const).map(
+      (section) => [section, stringRecord(manifest[section])] as const,
+    );
     const owners = new Map<string, string[]>();
-    for (const [section, entries] of sections) for (const [name, version] of Object.entries(entries)) {
-      const declared = owners.get(name) ?? [];
-      declared.push(section);
-      owners.set(name, declared);
-      if (version.startsWith("workspace:") && !names.has(name)) failures.push(`${pkg.dir}/package.json: unresolved workspace dependency ${name}`);
-    }
-    for (const [name, declared] of owners) if (declared.length > 1) {
-      failures.push(`${pkg.dir}/package.json: ${name} appears in conflicting sections ${declared.join(", ")}`);
-    }
+    for (const [section, entries] of sections)
+      for (const [name, version] of Object.entries(entries)) {
+        const declared = owners.get(name) ?? [];
+        declared.push(section);
+        owners.set(name, declared);
+        if (version.startsWith("workspace:") && !names.has(name)) failures.push(`${pkg.dir}/package.json: unresolved workspace dependency ${name}`);
+      }
+    for (const [name, declared] of owners)
+      if (declared.length > 1) {
+        failures.push(`${pkg.dir}/package.json: ${name} appears in conflicting sections ${declared.join(", ")}`);
+      }
   }
   const importerVerification = await verifyPackageImporters(input.rootDir, input.adapter, roots);
   failures.push(...importerVerification.differences.map(({ packageRoot, message }) => `${packageRoot}: ${message}`));

@@ -4,22 +4,16 @@ import { domainFor, packageNameMatcher, scopedPackageName, type MonocarveConfig 
 import { buildApplicationGraph, sccId, transitive, type ApplicationGraph } from "../graph/components.ts";
 import { componentReports, type ComponentReport } from "../graph/layers.ts";
 import type { DependencyGraph, Scc } from "../graph/model.ts";
-import { byCodeUnit, hashText } from "../util/hash.ts";
 import { partitionTests } from "../plan/consumers.ts";
 import { WorkspaceContext } from "../plan/context.ts";
 import { buildPathReferenceIndex, type PathReferenceIndex } from "../plan/path-references.ts";
-import { preparationRecipe } from "./recipe.ts";
+import { byCodeUnit, hashText } from "../util/hash.ts";
+import { estimateCandidateEffort } from "./effort.ts";
 import { groupEquivalentCandidates } from "./groups.ts";
+import { assessCandidate, dedupeReasons, planabilityRejections, protectedPathRejections, sizeRejections } from "./rank-assessment.ts";
+import { preparationRecipe } from "./recipe.ts";
 import { recommendCandidate } from "./recommendation.ts";
 import { detectCompatibilityShims } from "./shims.ts";
-import { estimateCandidateEffort } from "./effort.ts";
-import {
-  assessCandidate,
-  dedupeReasons,
-  planabilityRejections,
-  protectedPathRejections,
-  sizeRejections,
-} from "./rank-assessment.ts";
 import type { ConsumerRef, Portfolio, PortfolioCandidate } from "./types.ts";
 
 export interface PortfolioOptions {
@@ -101,9 +95,10 @@ function candidateFor(
   } catch (error) {
     partitionFailure = error;
   }
-  const assessed = partitionFailure === undefined
-    ? assessCandidate(config, context, pathReferences, graph, report, closure, closureReports, owners, domains, tests)
-    : assessment;
+  const assessed =
+    partitionFailure === undefined
+      ? assessCandidate(config, context, pathReferences, graph, report, closure, closureReports, owners, domains, tests)
+      : assessment;
   const rejections = [...assessed.rejections];
   if (partitionFailure !== undefined) {
     rejections.push({
@@ -187,12 +182,7 @@ function packageDependencies(graph: DependencyGraph, report: ComponentReport): s
   return [...new Set(report.libraryDependencies.map((owner) => ownerToPackage.get(owner) ?? owner))].sort();
 }
 
-export function suggestedPackageName(
-  config: MonocarveConfig,
-  application: string,
-  domains: readonly string[],
-  candidateId: string,
-): string {
+export function suggestedPackageName(config: MonocarveConfig, application: string, domains: readonly string[], candidateId: string): string {
   const slug = (domains[0] ?? application)
     .split(":")
     .at(-1)!
@@ -206,7 +196,8 @@ export function suggestedPackageName(
 export function scoreCandidate(config: MonocarveConfig, candidate: Omit<PortfolioCandidate, "score">): number {
   const weights = config.portfolio.weights;
   const advisoryLineCount = candidate.lineCount - (candidate.compatibilityShims ?? []).reduce((sum, shim) => sum + shim.lineCount, 0);
-  return advisoryLineCount * weights.lineCount +
+  return (
+    advisoryLineCount * weights.lineCount +
     candidate.files.length * weights.fileCount +
     candidate.consumerChurn * weights.consumerCount +
     candidate.coverage * weights.testCoverage +
@@ -215,14 +206,17 @@ export function scoreCandidate(config: MonocarveConfig, candidate: Omit<Portfoli
     candidate.rewriteEscapes.length * weights.rewriteEscape +
     (candidate.domains.length > 1 ? weights.domainCrossing : 0) +
     (candidate.domains.length > 1 ? weights.runtimeCrossing : 0) +
-    (candidate.retainedBlockers?.length ?? 0) * weights.retainedEdge;
+    (candidate.retainedBlockers?.length ?? 0) * weights.retainedEdge
+  );
 }
 
 export function pickNext(portfolio: Portfolio, alreadyExtracted: readonly string[] = []): PortfolioCandidate | null {
   const skip = new Set(alreadyExtracted);
-  return portfolio.candidates
-    .filter((candidate) => candidate.eligible && candidate.recommendation?.status === "recommended" && !skip.has(candidate.id))
-    .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))[0] ?? null;
+  return (
+    portfolio.candidates
+      .filter((candidate) => candidate.eligible && candidate.recommendation?.status === "recommended" && !skip.has(candidate.id))
+      .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))[0] ?? null
+  );
 }
 
 export function candidateById(portfolio: Portfolio, id: string): PortfolioCandidate {

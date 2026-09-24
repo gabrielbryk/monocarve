@@ -86,13 +86,7 @@
 
 import ts from "typescript";
 
-export type EvaluationEffectKind =
-  | "side-effect-import"
-  | "expression-statement"
-  | "top-level-await"
-  | "initializer-call"
-  | "control-flow"
-  | "class-definition";
+export type EvaluationEffectKind = "side-effect-import" | "expression-statement" | "top-level-await" | "initializer-call" | "control-flow" | "class-definition";
 
 export interface EvaluationEffect {
   readonly kind: EvaluationEffectKind;
@@ -168,13 +162,7 @@ function decoratorsOf(node: ts.Node): readonly ts.Decorator[] {
  * through the statement path instead, so descending here would double-report.
  */
 function deferred(node: ts.Node): boolean {
-  return (
-    ts.isFunctionLike(node) ||
-    ts.isTypeNode(node) ||
-    ts.isTypeAliasDeclaration(node) ||
-    ts.isInterfaceDeclaration(node) ||
-    ts.isModuleDeclaration(node)
-  );
+  return ts.isFunctionLike(node) || ts.isTypeNode(node) || ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node) || ts.isModuleDeclaration(node);
 }
 
 /**
@@ -211,9 +199,7 @@ function containsEvaluatedCall(node: ts.Node): boolean {
   const visit = (current: ts.Node): void => {
     if (found) return;
     if (ts.isClassLike(current)) {
-      found =
-        current.members.some(ts.isClassStaticBlockDeclaration) ||
-        definitionTimeParts(current).some((part) => containsEvaluatedCall(part));
+      found = current.members.some(ts.isClassStaticBlockDeclaration) || definitionTimeParts(current).some((part) => containsEvaluatedCall(part));
       return;
     }
     if (deferred(current)) return;
@@ -307,10 +293,7 @@ export function evaluationEffects(source: string, path: string): EvaluationEffec
 
   const record: Emit = (kind, node) => {
     const start = node.getStart(file);
-    found.push({
-      start,
-      effect: { kind, line: file.getLineAndCharacterOfPosition(start).line + 1, text: excerpt(file, node) },
-    });
+    found.push({ start, effect: { kind, line: file.getLineAndCharacterOfPosition(start).line + 1, text: excerpt(file, node) } });
   };
 
   const classify = (statement: ts.Statement): void => {

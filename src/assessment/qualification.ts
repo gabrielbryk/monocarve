@@ -48,21 +48,31 @@ export interface AssessmentQualification {
 }
 
 const FATAL_CODES = new Set<AssessmentDiagnosticCode>([
-  "WORKSPACE_GLOB_UNSUPPORTED", "WORKSPACE_PATH_UNSAFE", "WORKSPACE_PACKAGE_DUPLICATE",
-  "WORKSPACE_DISCOVERY_FAILED", "SOURCE_ROOT_MISSING", "SOURCE_ROOT_EMPTY",
-  "SCAN_UNEXPECTED_EMPTY_GRAPH", "SCAN_TSCONFIG_EXCLUDES_PRODUCTION",
-  "SCAN_CONFIGURATION_EXCLUDES_PRODUCTION", "SCAN_REPORT_MALFORMED",
-  "ASSESSMENT_INPUT_UNBOUND", "ASSESSMENT_INPUT_UNREADABLE", "ASSESSMENT_INPUT_MISSING",
-  "ASSESSMENT_INPUT_DRIFT", "ASSESSMENT_REPLAY_PROVENANCE_REQUIRED",
-  "ASSESSMENT_REPLAY_INPUT_MISMATCH", "SPLIT_ANALYSIS_INCOMPLETE",
-  "EVIDENCE_DESTINATION_BUSY", "EVIDENCE_RECOVERY_REQUIRED", "EVIDENCE_DESTINATION_UNSAFE",
-  "EVIDENCE_REPLACEMENT_REFUSED", "EVIDENCE_BUDGET_EXCEEDED",
+  "WORKSPACE_GLOB_UNSUPPORTED",
+  "WORKSPACE_PATH_UNSAFE",
+  "WORKSPACE_PACKAGE_DUPLICATE",
+  "WORKSPACE_DISCOVERY_FAILED",
+  "SOURCE_ROOT_MISSING",
+  "SOURCE_ROOT_EMPTY",
+  "SCAN_UNEXPECTED_EMPTY_GRAPH",
+  "SCAN_TSCONFIG_EXCLUDES_PRODUCTION",
+  "SCAN_CONFIGURATION_EXCLUDES_PRODUCTION",
+  "SCAN_REPORT_MALFORMED",
+  "ASSESSMENT_INPUT_UNBOUND",
+  "ASSESSMENT_INPUT_UNREADABLE",
+  "ASSESSMENT_INPUT_MISSING",
+  "ASSESSMENT_INPUT_DRIFT",
+  "ASSESSMENT_REPLAY_PROVENANCE_REQUIRED",
+  "ASSESSMENT_REPLAY_INPUT_MISMATCH",
+  "SPLIT_ANALYSIS_INCOMPLETE",
+  "EVIDENCE_DESTINATION_BUSY",
+  "EVIDENCE_RECOVERY_REQUIRED",
+  "EVIDENCE_DESTINATION_UNSAFE",
+  "EVIDENCE_REPLACEMENT_REFUSED",
+  "EVIDENCE_BUDGET_EXCEEDED",
 ]);
 
-export function qualifyAssessment(input: {
-  readonly diagnostics?: readonly AssessmentDiagnostic[];
-  readonly allowedEmpty?: boolean;
-}): AssessmentQualification {
+export function qualifyAssessment(input: { readonly diagnostics?: readonly AssessmentDiagnostic[]; readonly allowedEmpty?: boolean }): AssessmentQualification {
   const diagnostics = [...(input.diagnostics ?? [])].sort(compareDiagnostics);
   const fatal = diagnostics.some((entry) => entry.severity === "error" || FATAL_CODES.has(entry.code));
   const degraded = diagnostics.some((entry) => entry.code === "WORKSPACE_PATTERN_UNMATCHED");
@@ -77,14 +87,19 @@ export function unavailable<T = never>(diagnostics: readonly AssessmentDiagnosti
   return { status: "unavailable", diagnostics: [...diagnostics].sort(compareDiagnostics) };
 }
 
-export type Availability<T> = { readonly status: "available"; readonly value: T }
+export type Availability<T> =
+  | { readonly status: "available"; readonly value: T }
   | { readonly status: "unavailable"; readonly diagnostics: readonly AssessmentDiagnostic[] };
 
-export function available<T>(value: T): Availability<T> { return { status: "available", value }; }
+export function available<T>(value: T): Availability<T> {
+  return { status: "available", value };
+}
 
 function compareDiagnostics(left: AssessmentDiagnostic, right: AssessmentDiagnostic): number {
-  return byCodeUnit(left.code, right.code)
-    || byCodeUnit(left.message, right.message)
-    || byCodeUnit((left.paths ?? []).join("\0"), (right.paths ?? []).join("\0"))
-    || byCodeUnit((left.patterns ?? []).join("\0"), (right.patterns ?? []).join("\0"));
+  return (
+    byCodeUnit(left.code, right.code) ||
+    byCodeUnit(left.message, right.message) ||
+    byCodeUnit((left.paths ?? []).join("\0"), (right.paths ?? []).join("\0")) ||
+    byCodeUnit((left.patterns ?? []).join("\0"), (right.patterns ?? []).join("\0"))
+  );
 }

@@ -29,21 +29,20 @@
  *    not have grown an artifact this plan predates. Either divergence means the
  *    plan no longer describes what an apply would do, and the run stops instead
  *    of quietly doing something else.
+ *
+ * The post-journal preparers — the other, identified shape a generator takes —
+ * live in `./regenerate-preparers.ts`; the subprocess and working-tree
+ * primitives both halves share live in `./regenerate-command.ts`.
  */
 
-import { statSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { triggeredArtifacts, triggeredPostJournalPreparers, type MonocarveConfig } from "../config.ts";
+import { triggeredArtifacts, triggeredPostJournalPreparers, type GeneratedArtifactConfig, type MonocarveConfig } from "../config.ts";
+import { regeneratedArtifacts, type ExtractionManifest, type GeneratedFileRecord } from "../plan/manifest.ts";
 import { fileState } from "../util/files.ts";
-import { hashJson } from "../util/hash.ts";
-import { applyFileCreates, applyTextReplacements } from "../preparer/declarative.ts";
-import { scrubbedGitEnv, statusEntries } from "../util/git.ts";
 import { MISSING, type FileState } from "../util/hash.ts";
-import { regeneratedArtifacts, type ExtractionManifest } from "../plan/manifest.ts";
-
-/** Enough of a generator's output to act on, never its whole log. */
-const OUTPUT_TAIL = 4000;
+import { dirtyPaths, newlyDirtyPaths, run } from "./regenerate-command.ts";
+import { preparerPolicyDrift, replayRecordedPreparer, runConfiguredPreparer, type PreparerContext } from "./regenerate-preparers.ts";
 
 export interface ArtifactRegeneration {
   /** Workspace-relative artifact path. */
@@ -75,6 +74,94 @@ export interface RegenerateOptions {
 }
 
 /**
+ * A configured artifact this extraction triggers that the plan never recorded:
+ * the config gained it after the plan was compiled. Applying now would leave it
+ * stale, and the plan's `changedFiles` would be wrong about it, so the plan has
+ * to be recompiled rather than stretched.
+ */
+function undeclaredArtifactFailure(config: MonocarveConfig, manifest: ExtractionManifest, records: readonly GeneratedFileRecord[]): string | undefined {
+  const declared = new Set(records.map((record) => record.path));
+  const missing = triggeredArtifacts(config, manifest.source?.files ?? [])
+    .map((artifact) => artifact.path)
+    .filter((path) => !declared.has(path));
+  if (missing.length === 0) return undefined;
+  return (
+    `the configured generated artifact(s) ${missing.join(", ")} are triggered by this extraction and the plan ` +
+    "does not declare them; recompile the plan against the current config"
+  );
+}
+
+/** The same staleness check for preparers, which a path rewrite also triggers. */
+function undeclaredPreparerFailure(config: MonocarveConfig, manifest: ExtractionManifest, records: readonly GeneratedFileRecord[]): string | undefined {
+  const declaredPreparerIds = new Set([
+    ...(manifest.postJournalPreparers ?? []).map((record) => record.id),
+    ...records.flatMap((record) => (record.preparerId === undefined ? [] : [record.preparerId])),
+  ]);
+  const rewrittenDocuments = manifest.operations.filter((operation) => operation.kind === "rewrite-path-reference").map((operation) => operation.file);
+  const missingPreparers = triggeredPostJournalPreparers(config, [...(manifest.source?.files ?? []), ...rewrittenDocuments])
+    .filter((preparer) => !declaredPreparerIds.has(preparer.id))
+    .map((preparer) => preparer.id);
+  if (missingPreparers.length === 0) return undefined;
+  return `configured post-journal preparer(s) missing from plan: ${missingPreparers.join(", ")}; recompile the plan`;
+}
+
+/** The plan's command for this artifact must be the configured one, verbatim. */
+function artifactCommandDrift(record: GeneratedFileRecord, artifact: GeneratedArtifactConfig | undefined): string | undefined {
+  if (!artifact) {
+    return `the plan declares a regeneration for ${record.path}, which the config does not declare as a generated artifact`;
+  }
+  if (artifact.regenerate !== record.regenerate) {
+    return (
+      `the plan's regenerate command for ${record.path} is not the configured one: plan ` +
+      `${JSON.stringify(record.regenerate)}, config ${JSON.stringify(artifact.regenerate)}`
+    );
+  }
+  return undefined;
+}
+
+/**
+ * Run one configured artifact's generator. The entry is recorded before any
+ * failure is reported, so a caller always sees what was attempted; an
+ * undeclared edit outranks the command's own exit code, because a generator
+ * that wrote outside its declared path is wrong even when it succeeded.
+ */
+function regenerateConfiguredArtifact(
+  record: GeneratedFileRecord,
+  configured: ReadonlyMap<string, GeneratedArtifactConfig>,
+  context: PreparerContext,
+): string | undefined {
+  const { config, treeRoot, artifacts } = context;
+  const artifact = configured.get(record.path);
+  const drift = artifactCommandDrift(record, artifact);
+  if (drift !== undefined || artifact === undefined) return drift;
+
+  const absolute = resolve(treeRoot, record.path);
+  const before = fileState(absolute);
+  const repositoryBefore = dirtyPaths(treeRoot);
+  const result = run(artifact.regenerate, treeRoot, config.generatedArtifacts.timeoutMs);
+  const after = fileState(absolute);
+  const undeclared = newlyDirtyPaths(treeRoot, repositoryBefore).filter((path) => path !== record.path);
+  const entry: ArtifactRegeneration = {
+    path: record.path,
+    command: artifact.regenerate,
+    exitCode: result.exitCode,
+    durationMs: result.durationMs,
+    changed: before !== after,
+    hash: after,
+    ...(result.exitCode === 0 ? {} : { output: result.output }),
+  };
+  artifacts.push(entry);
+
+  if (undeclared.length > 0)
+    return `generator for ${record.path} changed undeclared output(s): ${undeclared.join(", ")}; declare each output separately and recompile the plan`;
+  if (result.exitCode !== 0) {
+    return `regenerating ${record.path} failed (exit ${result.exitCode}): ${artifact.regenerate}` + `${result.output === "" ? "" : `\n${result.output}`}`;
+  }
+  if (after === MISSING) return `regenerating ${record.path} succeeded but produced no file: ${artifact.regenerate}`;
+  return undefined;
+}
+
+/**
  * Run every regeneration the plan declares, in the given tree.
  *
  * Never throws for a failing generator: a non-zero exit is a result, reported
@@ -87,215 +174,33 @@ export function regenerateArtifacts(options: RegenerateOptions): RegenerationRep
   const configured = new Map(config.generatedArtifacts.artifacts.map((artifact) => [artifact.path, artifact]));
   const configuredPreparers = new Map(config.postJournalPreparers.map((preparer) => [preparer.id, preparer]));
 
-  for (const record of manifest.postJournalPreparers ?? []) {
-    const preparer = configuredPreparers.get(record.id);
-    const configuredPolicy = preparer === undefined ? undefined : {
-      id: preparer.id, ...(preparer.command === undefined ? {} : { command: preparer.command }),
-      outputs: [...new Set([...preparer.outputs, ...(preparer.creates?.map((item) => item.path) ?? [])])].sort(),
-      ...(preparer.replacements === undefined ? {} : { replacements: preparer.replacements.map((item) => ({ ...item })) }),
-      ...(preparer.creates === undefined ? {} : { creates: preparer.creates.map((item) => ({ ...item, mode: item.mode ?? 0o644 })) }),
-      emittedModuleSpecifiers: preparer.emittedModuleSpecifiers.map((item) => ({ ...item })),
-      ...(preparer.verify === undefined ? {} : { verify: preparer.verify }),
-    };
-    const { mutations: _mutations, ...recordPolicy } = record;
-    if (configuredPolicy === undefined || hashJson(configuredPolicy) !== hashJson(recordPolicy)) return { ok: false, artifacts: [], failure: `post-journal preparer ${record.id} differs from current configuration` };
-  }
+  const policyDrift = preparerPolicyDrift(manifest.postJournalPreparers ?? [], configuredPreparers);
+  if (policyDrift !== undefined) return { ok: false, artifacts: [], failure: policyDrift };
 
-  // A configured artifact this extraction triggers that the plan never
-  // recorded: the config gained it after the plan was compiled. Applying now
-  // would leave it stale, and the plan's `changedFiles` would be wrong about
-  // it, so the plan has to be recompiled rather than stretched.
-  const declared = new Set(records.map((record) => record.path));
-  const missing = triggeredArtifacts(config, manifest.source?.files ?? [])
-    .map((artifact) => artifact.path)
-    .filter((path) => !declared.has(path));
-  if (missing.length > 0) {
-    return {
-      ok: false,
-      artifacts: [],
-      failure:
-        `the configured generated artifact(s) ${missing.join(", ")} are triggered by this extraction and the plan ` +
-        "does not declare them; recompile the plan against the current config",
-    };
-  }
-  const declaredPreparerIds = new Set([...(manifest.postJournalPreparers ?? []).map((record) => record.id), ...records.flatMap((record) => record.preparerId === undefined ? [] : [record.preparerId])]);
-  const rewrittenDocuments = manifest.operations
-    .filter((operation) => operation.kind === "rewrite-path-reference")
-    .map((operation) => operation.file);
-  const missingPreparers = triggeredPostJournalPreparers(config, [...manifest.source.files, ...rewrittenDocuments])
-    .filter((preparer) => !declaredPreparerIds.has(preparer.id))
-    .map((preparer) => preparer.id);
-  if (missingPreparers.length > 0) return { ok: false, artifacts: [], failure: `configured post-journal preparer(s) missing from plan: ${missingPreparers.join(", ")}; recompile the plan` };
+  const artifactGap = undeclaredArtifactFailure(config, manifest, records);
+  if (artifactGap !== undefined) return { ok: false, artifacts: [], failure: artifactGap };
+  const preparerGap = undeclaredPreparerFailure(config, manifest, records);
+  if (preparerGap !== undefined) return { ok: false, artifacts: [], failure: preparerGap };
 
   const artifacts: ArtifactRegeneration[] = [];
+  const context: PreparerContext = { config, treeRoot, artifacts };
   const completedPreparers = new Set<string>();
   for (const record of manifest.postJournalPreparers ?? []) {
-    const before = new Map(record.outputs.map((path) => [path, fileState(resolve(treeRoot, path))]));
-    const beforeDirty = dirtyPaths(treeRoot);
-    for (const mutation of record.mutations) {
-      const current = fileState(resolve(treeRoot, mutation.path));
-      if (current !== mutation.preconditionHash && current !== mutation.resultHash) return { ok: false, artifacts, failure: `post-journal preparer ${record.id} precondition differs from manifest: ${mutation.path}` };
-      const rawMode = current === MISSING ? "missing" : statSync(resolve(treeRoot, mutation.path)).mode;
-      const mode = rawMode === "missing" ? "missing" : (rawMode & 0o111 ? 0o755 : 0o644);
-      const expectedMode = current === mutation.resultHash ? mutation.resultMode : mutation.preconditionMode;
-      if (mode !== expectedMode) return { ok: false, artifacts, failure: `post-journal preparer ${record.id} precondition mode differs from manifest: ${mutation.path}` };
-    }
-    try {
-      if (record.replacements !== undefined) applyTextReplacements(treeRoot, record.replacements);
-      if (record.creates !== undefined) applyFileCreates(treeRoot, record.creates.map((item) => ({ ...item, mode: item.mode as 0o644 | 0o755 })));
-    } catch (error) { return { ok: false, artifacts, failure: `post-journal preparer ${record.id} declarative edit failed: ${(error as Error).message}` }; }
-    for (const mutation of record.mutations) {
-      const current = fileState(resolve(treeRoot, mutation.path));
-      if (current !== mutation.resultHash) return { ok: false, artifacts, failure: `post-journal preparer ${record.id} declarative result differs from manifest: ${mutation.path}` };
-    }
-    const started = Date.now();
-    if (record.command !== undefined) {
-      const result = run(record.command, treeRoot, config.generatedArtifacts.timeoutMs);
-      if (result.exitCode !== 0) return { ok: false, artifacts, failure: `post-journal preparer ${record.id} failed (exit ${result.exitCode})${result.output ? `\n${result.output}` : ""}` };
-    }
-    if (record.verify !== undefined) {
-      const verification = run(record.verify, treeRoot, config.generatedArtifacts.timeoutMs);
-      if (verification.exitCode !== 0) return { ok: false, artifacts, failure: `post-journal preparer ${record.id} verification failed (exit ${verification.exitCode})${verification.output ? `\n${verification.output}` : ""}` };
-    }
-    const undeclared = newlyDirtyPaths(treeRoot, beforeDirty).filter((path) => !record.outputs.includes(path));
-    if (undeclared.length > 0) return { ok: false, artifacts, failure: `post-journal preparer ${record.id} changed undeclared output(s): ${undeclared.join(", ")}` };
-    for (const generated of records.filter((item) => item.preparerId === record.id)) {
-      const after = fileState(resolve(treeRoot, generated.path));
-      artifacts.push({ path: generated.path, command: record.command ?? "declarative edits", exitCode: 0, durationMs: Date.now() - started, changed: before.get(generated.path) !== after, hash: after });
-      if (after === MISSING) return { ok: false, artifacts, failure: `post-journal preparer ${record.id} produced no declared output: ${generated.path}` };
-    }
+    const failure = replayRecordedPreparer(record, records, context);
+    if (failure !== undefined) return { ok: false, artifacts, failure };
     completedPreparers.add(record.id);
   }
   for (const record of records) {
     if (record.preparerId !== undefined) {
       if (completedPreparers.has(record.preparerId)) continue;
-      const preparer = configuredPreparers.get(record.preparerId);
-      if (!preparer || preparer.command !== record.regenerate || preparer.verify !== record.verify) {
-        return { ok: false, artifacts, failure: `post-journal preparer ${record.preparerId} differs from current configuration` };
-      }
-      const declared = records.filter((item) => item.preparerId === record.preparerId).map((item) => item.path).sort();
-      if (declared.join("\n") !== [...preparer.outputs].sort().join("\n")) {
-        return { ok: false, artifacts, failure: `post-journal preparer ${record.preparerId} output set differs from current configuration` };
-      }
-      const before = new Map(declared.map((path) => [path, fileState(resolve(treeRoot, path))]));
-      const repositoryBefore = dirtyPaths(treeRoot);
-      const result = run(preparer.command, treeRoot, config.generatedArtifacts.timeoutMs);
-      if (result.exitCode !== 0) return { ok: false, artifacts, failure: `post-journal preparer ${preparer.id} failed (exit ${result.exitCode})${result.output ? `\n${result.output}` : ""}` };
-      const undeclared = newlyDirtyPaths(treeRoot, repositoryBefore).filter((path) => !declared.includes(path));
-      if (undeclared.length > 0) return {
-        ok: false,
-        artifacts,
-        failure: `post-journal preparer ${preparer.id} changed undeclared output(s): ${undeclared.join(", ")}; add every generated output to the preparer configuration and recompile the plan`,
-      };
-      if (preparer.verify !== undefined) {
-        const verification = run(preparer.verify, treeRoot, config.generatedArtifacts.timeoutMs);
-        if (verification.exitCode !== 0) return { ok: false, artifacts, failure: `post-journal preparer ${preparer.id} verification failed (exit ${verification.exitCode})${verification.output ? `\n${verification.output}` : ""}` };
-      }
-      for (const path of declared) {
-        const after = fileState(resolve(treeRoot, path));
-        artifacts.push({ path, command: preparer.command, exitCode: 0, durationMs: result.durationMs, changed: before.get(path) !== after, hash: after });
-        if (after === MISSING) return { ok: false, artifacts, failure: `post-journal preparer ${preparer.id} produced no declared output: ${path}` };
-      }
+      const failure = runConfiguredPreparer(record, record.preparerId, records, configuredPreparers, context);
+      if (failure !== undefined) return { ok: false, artifacts, failure };
       completedPreparers.add(record.preparerId);
       continue;
     }
-    const artifact = configured.get(record.path);
-    if (!artifact) {
-      return {
-        ok: false,
-        artifacts,
-        failure: `the plan declares a regeneration for ${record.path}, which the config does not declare as a generated artifact`,
-      };
-    }
-    if (artifact.regenerate !== record.regenerate) {
-      return {
-        ok: false,
-        artifacts,
-        failure:
-          `the plan's regenerate command for ${record.path} is not the configured one: plan ` +
-          `${JSON.stringify(record.regenerate)}, config ${JSON.stringify(artifact.regenerate)}`,
-      };
-    }
-
-    const absolute = resolve(treeRoot, record.path);
-    const before = fileState(absolute);
-    const repositoryBefore = dirtyPaths(treeRoot);
-    const result = run(artifact.regenerate, treeRoot, config.generatedArtifacts.timeoutMs);
-    const after = fileState(absolute);
-    const undeclared = newlyDirtyPaths(treeRoot, repositoryBefore).filter((path) => path !== record.path);
-    const entry: ArtifactRegeneration = {
-      path: record.path,
-      command: artifact.regenerate,
-      exitCode: result.exitCode,
-      durationMs: result.durationMs,
-      changed: before !== after,
-      hash: after,
-      ...(result.exitCode === 0 ? {} : { output: result.output }),
-    };
-    artifacts.push(entry);
-
-    if (undeclared.length > 0) return {
-      ok: false,
-      artifacts,
-      failure: `generator for ${record.path} changed undeclared output(s): ${undeclared.join(", ")}; declare each output separately and recompile the plan`,
-    };
-
-    if (result.exitCode !== 0) {
-      return {
-        ok: false,
-        artifacts,
-        failure:
-          `regenerating ${record.path} failed (exit ${result.exitCode}): ${artifact.regenerate}` +
-          `${result.output === "" ? "" : `\n${result.output}`}`,
-      };
-    }
-    if (after === MISSING) {
-      return {
-        ok: false,
-        artifacts,
-        failure: `regenerating ${record.path} succeeded but produced no file: ${artifact.regenerate}`,
-      };
-    }
+    const failure = regenerateConfiguredArtifact(record, configured, context);
+    if (failure !== undefined) return { ok: false, artifacts, failure };
   }
 
   return { ok: true, artifacts };
-}
-
-function dirtyPaths(rootDir: string): ReadonlySet<string> {
-  return new Set(statusEntries(rootDir).flatMap((entry) => entry.paths));
-}
-
-function newlyDirtyPaths(rootDir: string, before: ReadonlySet<string>): string[] {
-  return [...dirtyPaths(rootDir)].filter((path) => !before.has(path)).sort();
-}
-
-interface CommandResult {
-  readonly exitCode: number;
-  readonly durationMs: number;
-  readonly output: string;
-}
-
-/**
- * The command, from the workspace root, under the same environment discipline
- * as every other subprocess here: `GIT_INDEX_FILE`, `GIT_DIR` and friends are
- * stripped, because a generator that shells out to git would otherwise write
- * into whatever repository those variables name — which during a simulation is
- * emphatically not the tree it was asked to regenerate.
- */
-function run(command: string, cwd: string, timeoutMs: number): CommandResult {
-  const started = Date.now();
-  const result = Bun.spawnSync(["sh", "-c", command], {
-    cwd,
-    env: scrubbedGitEnv(),
-    stdout: "pipe",
-    stderr: "pipe",
-    timeout: timeoutMs,
-  });
-  // Truthiness, not `!== null`: a process that exited normally reports the
-  // signal as `null` on some paths and `undefined` on others, and a note
-  // reading "killed by undefined" is worse than no note at all.
-  const signal = result.signalCode ? `killed by ${result.signalCode} after ${timeoutMs}ms\n` : "";
-  const exitCode = result.exitCode ?? 1;
-  const output = `${signal}${result.stdout.toString()}${result.stderr.toString()}`.trimEnd().slice(-OUTPUT_TAIL);
-  return { exitCode, durationMs: Date.now() - started, output };
 }

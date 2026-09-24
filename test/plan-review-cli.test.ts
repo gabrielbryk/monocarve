@@ -2,8 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import type { PlanReviewSummary } from "../src/plan/review.ts";
 import { runIn } from "./support/cli.ts";
-import { baseManifest, extractionFiles, PACKAGE_ROOT } from "./support/transaction-fixture.ts";
 import { cleanupFixtures, fixtureConfig, fixtureRepo, write } from "./support/fixture-repo.ts";
+import { baseManifest, extractionFiles, PACKAGE_ROOT } from "./support/transaction-fixture.ts";
 
 afterEach(cleanupFixtures);
 

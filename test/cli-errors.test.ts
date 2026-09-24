@@ -42,11 +42,7 @@ interface RunResult {
 
 async function runIn(cwd: string, ...args: string[]): Promise<RunResult> {
   const child = Bun.spawn(["bun", CLI, "--cwd", cwd, ...args], { cwd: ROOT, stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
+  const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
   return { code, stdout, stderr };
 }
 
@@ -116,10 +112,7 @@ function expectCleanFailure(result: RunResult, mentions: readonly string[]): voi
 const VALID_REPORT = `${JSON.stringify(
   {
     modules: [
-      {
-        source: "apps/web/src/main.ts",
-        dependencies: [{ module: "./widgets/chart.ts", resolved: "apps/web/src/widgets/chart.ts" }],
-      },
+      { source: "apps/web/src/main.ts", dependencies: [{ module: "./widgets/chart.ts", resolved: "apps/web/src/widgets/chart.ts" }] },
       { source: "apps/web/src/widgets/chart.ts", dependencies: [] },
     ],
   },
@@ -206,9 +199,7 @@ describe("cli error reporting", () => {
     const audited = await runIn(root, "audit", "--plan", stranger);
     expect(audited.stderr).toBe("");
     expect(audited.code).toBe(1);
-    expect((JSON.parse(audited.stdout) as { failures: string[] }).failures).toEqual([
-      "[schema-version] manifest schemaVersion must be 2, 3, or 4",
-    ]);
+    expect((JSON.parse(audited.stdout) as { failures: string[] }).failures).toEqual(["[schema-version] manifest schemaVersion must be 2, 3, or 4"]);
   }, 120_000);
 
   /**
@@ -269,8 +260,7 @@ describe("cli error reporting", () => {
     // Replayed rather than cruised, so the only thing that can fail in these two
     // runs is the write.
     const report = write(root, "reports/valid.json", VALID_REPORT);
-    const scan = (out: string): Promise<RunResult> =>
-      runIn(root, "scan", "--app", "web", "--graph", `web=${report}`, "--out", out);
+    const scan = (out: string): Promise<RunResult> => runIn(root, "scan", "--app", "web", "--graph", `web=${report}`, "--out", out);
 
     // A directory cannot be replaced by the atomic output-file rename. This
     // exercises the write failure without asking the CLI to escape its root.
@@ -305,9 +295,7 @@ describe("cli error reporting", () => {
    */
   test("a valid, current-schema invocation still succeeds", async () => {
     const root = workspace();
-    const portfolio = JSON.parse(
-      (await runIn(root, "portfolio", "--json")).stdout,
-    ) as { top: { id: string }[] };
+    const portfolio = JSON.parse((await runIn(root, "portfolio", "--json")).stdout) as { top: { id: string }[] };
     expect(portfolio.top.length).toBeGreaterThan(0);
 
     const planned = await runIn(root, "plan", "--candidate", portfolio.top[0]!.id, "--write", "--out", "plans/ok.json");

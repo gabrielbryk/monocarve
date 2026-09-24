@@ -2,8 +2,8 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { cleanupFixtures } from "./support/fixture-repo.ts";
 import { committedWorkspace, runIn } from "./support/cli.ts";
+import { cleanupFixtures } from "./support/fixture-repo.ts";
 
 afterEach(cleanupFixtures);
 

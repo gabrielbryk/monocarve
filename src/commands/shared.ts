@@ -1,15 +1,15 @@
 /** Shared CLI boundaries: config, graph reports, manifests, and output paths. */
 
-import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, relative, resolve } from "node:path";
 
 import { flagBool, flagString, type ParsedArgs } from "../cli/args.ts";
 import { getApplication, loadConfig, type LoadedConfig, type MonocarveConfig } from "../config.ts";
 import { ConfigError, IoError, MonocarveError, PreflightError, UsageError } from "../errors.ts";
 import { ScanError, scanDependencyGraph, type ScanReport } from "../graph/index.ts";
-import { PlanningError, WorkspaceContext } from "../plan/context.ts";
 import { graphDigest, parseManifest } from "../plan/build.ts";
+import { PlanningError, WorkspaceContext } from "../plan/context.ts";
 import { planSensitivePaths, type ExtractionManifest } from "../plan/manifest.ts";
 import { disallowedDirtyPaths } from "../util/dirty-tree.ts";
 import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
@@ -18,7 +18,10 @@ export function systemReason(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export async function load(args: ParsedArgs, options: { readonly refuseStaticFilesystemImports?: boolean; readonly executionBoundary?: "snapshot" } = {}): Promise<LoadedConfig> {
+export async function load(
+  args: ParsedArgs,
+  options: { readonly refuseStaticFilesystemImports?: boolean; readonly executionBoundary?: "snapshot" } = {},
+): Promise<LoadedConfig> {
   const configPath = flagString(args, "config");
   const cwd = flagString(args, "cwd");
   try {
@@ -30,9 +33,7 @@ export async function load(args: ParsedArgs, options: { readonly refuseStaticFil
     });
   } catch (error) {
     if (error instanceof MonocarveError) throw error;
-    throw new ConfigError(
-      `could not load the config${configPath === undefined ? "" : ` at ${configPath}`}: ${systemReason(error)}`,
-    );
+    throw new ConfigError(`could not load the config${configPath === undefined ? "" : ` at ${configPath}`}: ${systemReason(error)}`);
   }
 }
 
@@ -41,9 +42,7 @@ export function print(value: unknown, args: ParsedArgs): void {
 }
 
 export function renderOutput(value: unknown, args: ParsedArgs): string {
-  return flagBool(args, "json") || typeof value !== "string"
-    ? `${JSON.stringify(value, null, 2)}\n`
-    : `${value}\n`;
+  return flagBool(args, "json") || typeof value !== "string" ? `${JSON.stringify(value, null, 2)}\n` : `${value}\n`;
 }
 
 /** Emit one report to stdout and, when requested, the same complete bytes atomically to disk. */
@@ -196,9 +195,7 @@ export function assertPlannableTree(
     throw new UsageError("--allow-dirty is no longer supported; configure transaction.allowDirtyPaths instead");
   }
   const configPath = relative(loaded.rootDir, loaded.configPath).replaceAll("\\", "/");
-  const disallowed = disallowedDirtyPaths(loaded.rootDir, loaded.config.transaction.allowDirtyPaths, [
-    ...planSensitivePaths(manifest), output, configPath,
-  ]);
+  const disallowed = disallowedDirtyPaths(loaded.rootDir, loaded.config.transaction.allowDirtyPaths, [...planSensitivePaths(manifest), output, configPath]);
   if (disallowed.length === 0) return;
   throw new PreflightError(
     `refusing to plan from a dirty working tree: ${disallowed.join(", ")}\n` +

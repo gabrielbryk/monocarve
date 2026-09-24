@@ -16,25 +16,14 @@
  * simulation covering for a plan that is actually incomplete.
  */
 
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  realpathSync,
-  rmSync,
-  symlinkSync,
-  unlinkSync,
-} from "node:fs";
-import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, unlinkSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { MonocarveError } from "../errors.ts";
-import { failedGateOutput } from "./gate-diagnostics.ts";
+import type { ExtractionManifest } from "../plan/manifest.ts";
 import { isDirectory } from "../util/files.ts";
 import { git, tryGit } from "../util/git.ts";
-import type { ExtractionManifest } from "../plan/manifest.ts";
+import { failedGateOutput } from "./gate-diagnostics.ts";
 
 export class WorktreeError extends MonocarveError {
   override readonly name = "WorktreeError";
@@ -83,12 +72,18 @@ export interface CreateWorktreeOptions {
   readonly installCommand?: readonly string[];
   /** Prefix for the temporary directory name, normally the plan id. */
   readonly label?: string;
+  /**
+   * Workspace-relative subtrees that may hold a package's own `node_modules`,
+   * from `packageContainerRoots`. Supplied by every caller that has a config.
+   * When absent, {@link linkNodeModules} walks the whole repository instead —
+   * correct, but it visits every source directory to find a handful of hits.
+   */
+  readonly packageRoots?: readonly string[];
 }
 
 export async function createWorktree(options: CreateWorktreeOptions): Promise<Worktree> {
-  const parent = isAbsolute(options.worktreeRoot)
-    ? options.worktreeRoot
-    : resolve(options.rootDir, options.worktreeRoot);
+  const parent = isAbsolute(options.worktreeRoot) ? options.worktreeRoot : resolve(options.rootDir, options.worktreeRoot);
+  assertWorktreeRootIsNotNested(options.rootDir, parent);
   mkdirSync(parent, { recursive: true });
 
   const path = realpathSync(mkdtempSync(join(parent, `${options.label ?? "simulation"}-`)));
@@ -101,7 +96,7 @@ export async function createWorktree(options: CreateWorktreeOptions): Promise<Wo
     added = true;
     const workspacePath = prefix === "" ? path : join(path, prefix);
 
-    if (options.nodeModules === "symlink") linkNodeModules(path, repositoryRoot);
+    if (options.nodeModules === "symlink") linkNodeModules(path, repositoryRoot, options.packageRoots);
     if (options.nodeModules === "install") installWorkspaceDependencies(workspacePath, options.installCommand);
 
     return {
@@ -117,6 +112,47 @@ export async function createWorktree(options: CreateWorktreeOptions): Promise<Wo
     else rmSync(path, { recursive: true, force: true });
     throw error;
   }
+}
+
+/**
+ * A linked worktree is a complete checkout. Creating disposable worktrees
+ * beneath one makes them look like nested worktrees on disk, causes discovery
+ * tools to recurse through every checkout, and leaves the owning checkout
+ * unusable while its contents are being removed. The primary worktree is the
+ * one intentional exception: repo-relative `.worktrees/...` destinations
+ * belong there.
+ */
+function assertWorktreeRootIsNotNested(rootDir: string, parent: string): void {
+  const worktrees = git({ cwd: rootDir }, "worktree", "list", "--porcelain")
+    .split("\n")
+    .filter((line) => line.startsWith("worktree "))
+    .map((line) => canonicalPath(line.slice("worktree ".length)));
+  const primary = worktrees[0];
+  if (!primary) return;
+
+  const destination = canonicalPath(parent);
+  const nestedIn = worktrees.slice(1).find((worktree) => isPathInside(worktree, destination));
+  if (nestedIn) {
+    throw new WorktreeError(`worktreeRoot ${parent} is inside registered worktree ${nestedIn}; choose a sibling or an external directory`);
+  }
+}
+
+/** Resolve a path even when its final components have not been created yet. */
+function canonicalPath(path: string): string {
+  const unresolved: string[] = [];
+  let existing = resolve(path);
+  while (!existsSync(existing)) {
+    unresolved.unshift(basename(existing));
+    const next = dirname(existing);
+    if (next === existing) return resolve(path);
+    existing = next;
+  }
+  return resolve(realpathSync(existing), ...unresolved);
+}
+
+function isPathInside(parent: string, candidate: string): boolean {
+  const path = relative(parent, candidate);
+  return path === "" || isInside(path);
 }
 
 /** Run the configured install against the tree as it exists at this moment. */
@@ -174,8 +210,8 @@ function disposeWorktree(rootDir: string, path: string): void {
  * identical in both trees, and copying a store per simulation is the
  * multi-minute install this design exists to avoid.
  */
-function linkNodeModules(worktree: string, root: string): void {
-  for (const directory of nodeModulesDirectories(root, ".", 2)) {
+function linkNodeModules(worktree: string, root: string, packageRoots: readonly string[] | undefined): void {
+  for (const directory of nodeModulesDirectories(root, packageRoots)) {
     const source = resolve(root, directory);
     const target = resolve(worktree, directory);
     if (existsSync(target)) continue;
@@ -231,15 +267,31 @@ function isRealDirectory(path: string): boolean {
   return lstatSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
 }
 
-function nodeModulesDirectories(root: string, relativeDirectory: string, depth: number): string[] {
+/**
+ * Every `node_modules` directory to mirror, workspace-relative.
+ *
+ * Bounded to the configured package-container subtrees, so `docs/`, `scripts/`
+ * and `fixtures/` are never descended — but unbounded in depth *within* them,
+ * because a workspace may nest a package at any depth. A depth-limited walk is
+ * not a cheaper version of this; it is a wrong one, silently dropping the
+ * dependencies of every package below the limit.
+ */
+function nodeModulesDirectories(root: string, packageRoots: readonly string[] | undefined): string[] {
+  if (packageRoots === undefined) return walkForNodeModules(root, ".");
+  // The workspace root's own `node_modules` is checked directly rather than by
+  // walking from ".", which would descend the entire repository again.
+  const found = existsSync(join(root, "node_modules")) ? ["node_modules"] : [];
+  return [...new Set([...found, ...packageRoots.flatMap((directory) => walkForNodeModules(root, directory))])];
+}
+
+function walkForNodeModules(root: string, relativeDirectory: string): string[] {
   const here = join(root, relativeDirectory);
   if (!existsSync(here)) return [];
   const found = existsSync(join(here, "node_modules")) ? [join(relativeDirectory, "node_modules")] : [];
-  if (depth === 0) return found;
   const entries = readdirSync(here, { withFileTypes: true }).filter(
     (entry) => entry.isDirectory() && entry.name !== "node_modules" && !entry.name.startsWith("."),
   );
-  return [...found, ...entries.flatMap((entry) => nodeModulesDirectories(root, join(relativeDirectory, entry.name), depth - 1))];
+  return [...found, ...entries.flatMap((entry) => walkForNodeModules(root, join(relativeDirectory, entry.name)))];
 }
 
 /**
@@ -289,31 +341,61 @@ export function linkPlannedPackage(workspacePath: string, manifest: ExtractionMa
     linkPackage(workspacePath, owner, manifest.target.packageName, resolve(workspacePath, manifest.target.packageRoot));
   }
 
-  const declared = JSON.parse(readFileSync(manifestPath, "utf8")) as {
-    dependencies?: Record<string, string>;
-    devDependencies?: Record<string, string>;
-  };
+  const declared = JSON.parse(readFileSync(manifestPath, "utf8")) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
   const unlinked: string[] = [];
   for (const name of Object.keys({ ...declared.dependencies, ...declared.devDependencies })) {
-    const installed = [...owners, ""]
-      .map((owner) => resolve(workspacePath, owner, "node_modules", name))
-      .find(existsSync);
+    const installed = [...owners, ""].map((owner) => resolve(workspacePath, owner, "node_modules", name)).find(existsSync);
     if (installed) linkPackage(workspacePath, manifest.target.packageRoot, name, realpathSync(installed));
     else unlinked.push(name);
   }
   return unlinked;
 }
 
-/** Remove stale worktrees left behind by an interrupted run. */
-export async function pruneWorktrees(rootDir: string, worktreeRoot: string): Promise<string[]> {
+/**
+ * Remove stale worktrees left behind by an interrupted run.
+ *
+ * A normal run disposes its worktree in a `finally`, and a failed run disposes
+ * it too unless `transaction.cleanup` is off. Neither survives `SIGKILL`, a
+ * crashed host or a closed terminal — which is what leaves these behind, and
+ * what this exists to reclaim.
+ *
+ * `minimumAgeMs` is a concurrency guard, not a convenience. The worktree root
+ * is shared by every run against this repository, so an indiscriminate sweep
+ * would delete the worktree of a simulation running in another terminal right
+ * now. Anything younger than the threshold is reported as skipped rather than
+ * removed.
+ */
+export interface PruneWorktreesOptions {
+  readonly minimumAgeMs?: number;
+}
+
+export interface PrunedWorktrees {
+  readonly removed: string[];
+  /** Left alone for being younger than `minimumAgeMs`, newest first. */
+  readonly skipped: string[];
+}
+
+export async function pruneWorktrees(rootDir: string, worktreeRoot: string, options: PruneWorktreesOptions = {}): Promise<PrunedWorktrees> {
   const parent = isAbsolute(worktreeRoot) ? worktreeRoot : resolve(rootDir, worktreeRoot);
-  if (!existsSync(parent)) return [];
+  if (!existsSync(parent)) return { removed: [], skipped: [] };
+  const minimumAgeMs = options.minimumAgeMs ?? 0;
+  const now = Date.now();
   const removed: string[] = [];
+  const skipped: string[] = [];
   for (const entry of readdirSync(parent, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const path = join(parent, entry.name);
+    if (minimumAgeMs > 0 && now - modifiedAt(path) < minimumAgeMs) {
+      skipped.push(path);
+      continue;
+    }
     disposeWorktree(rootDir, path);
     removed.push(path);
   }
-  return removed;
+  return { removed: removed.sort(), skipped: skipped.sort() };
+}
+
+/** Epoch milliseconds, or 0 when the entry cannot be stat'd (so it is prunable). */
+function modifiedAt(path: string): number {
+  return statSync(path, { throwIfNoEntry: false })?.mtimeMs ?? 0;
 }
