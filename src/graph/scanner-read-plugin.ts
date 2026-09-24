@@ -18,6 +18,15 @@ function linkTypeScript(source: string, path: string): string {
   return source.replace(availability, "typescript: true,");
 }
 
+function linkAcorn(source: string, path: string): string {
+  if (!path.endsWith("/extract/transpile/javascript-wrap.mjs")) return source;
+  // 18.x reads acorn's version through createRequire(import.meta.url), which a
+  // standalone Bun executable cannot resolve. Bind it statically instead.
+  const dynamic = /const require = createRequire\(import\.meta\.url\);\s*return `acorn@\$\{require\("acorn"\)\.version\}`;/u;
+  if (!dynamic.test(source)) return source;
+  return `import { version as __acornVersion } from "acorn";\n${source.replace(dynamic, 'return "acorn@" + __acornVersion;')}`;
+}
+
 /** Instrument dependency-cruiser's own parser read, not Bun's unsynchronized fs binding. */
 export const scannerReadPlugin: BunPlugin = {
   name: `${TOOL_NAME}-scanner-reads`,
@@ -28,7 +37,7 @@ export const scannerReadPlugin: BunPlugin = {
       // package manifest inside a standalone Bun executable. TypeScript is a
       // required dependency here, so bind it statically in the same onLoad
       // pass as the byte-read hook (a second hook would mask this one).
-      const linked = linkTypeScript(source, path);
+      const linked = linkAcorn(linkTypeScript(source, path), path);
       if (!linked.includes("readFileSync") || !linked.includes('from "node:fs"')) return { loader: "js", contents: linked };
       const calls = /(?<![.\w])readFileSync\s*\(/gu;
       if (!calls.test(linked)) return { loader: "js", contents: linked };
