@@ -17,7 +17,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 
 /**
  * Exit codes:
- *   0   success (also bare `monocarve`, `--help`, `--version`)
+ *   0   success (also a bare invocation with no arguments, `--help`, `--version`)
  *   1   an expected failure or refusal (`MonocarveError`)
  *   2   degraded result (set by the assessment commands)
  *   3   the command reached a not-yet-ported seam
