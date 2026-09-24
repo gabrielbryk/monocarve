@@ -28,6 +28,7 @@ const WORKER = [
 ].join("\n");
 
 const SANDBOX_TMP = ".monocarve-config-tmp";
+const UNFINISHED = " <unfinished ...>";
 
 type RuntimeLibrary = { readonly source: string; readonly target: string };
 
@@ -156,18 +157,44 @@ function assertNoFailedConfigReads(trace: string, stderr: string): void {
   } catch {
     throw new ConfigError("ASSESSMENT_CONFIG_UNBOUND: config read trace is unavailable");
   }
-  const start = output.indexOf("ASSESSMENT_CONFIG_EXEC_START");
+  const lines = joinedTraceLines(output);
+  const start = lines.findIndex((line) => line.includes("ASSESSMENT_CONFIG_EXEC_START"));
   if (start < 0) throw new ConfigError(`ASSESSMENT_CONFIG_UNBOUND: config execution trace is incomplete${stderr ? `: ${stderr}` : ""}`);
-  const failed = output
-    .slice(start)
-    .split("\n")
-    .find(
-      (line) =>
-        /\b(?:open|openat|openat2|stat|statx|lstat|newfstatat|access|faccessat|faccessat2|readlink|readlinkat)\(/u.test(line) &&
-        !/\bO_WRONLY\b/u.test(line) &&
-        /= -1 (?:ENOENT|EACCES|EPERM)\b/u.test(line),
-    );
-  if (failed) throw new ConfigError("ASSESSMENT_CONFIG_UNBOUND: config attempted a read outside captured inputs");
+  if (lines.slice(start).some(isFailedFileAccess)) throw new ConfigError("ASSESSMENT_CONFIG_UNBOUND: config attempted a read outside captured inputs");
+}
+
+/**
+ * Rejoin calls that `strace -f` split across threads. A call interrupted by
+ * another thread is logged as `PID name(args <unfinished ...>` and completed
+ * later as `PID <... name resumed>rest) = result`. Checking the halves
+ * separately would miss the result of every concurrent read.
+ */
+function joinedTraceLines(output: string): string[] {
+  const pending = new Map<string, string>();
+  const lines: string[] = [];
+  for (const line of output.split("\n")) {
+    const pid = /^(\d+)\s/u.exec(line)?.[1];
+    if (pid !== undefined && line.endsWith(UNFINISHED)) {
+      pending.set(pid, line.slice(0, -UNFINISHED.length));
+      continue;
+    }
+    const resumed = pid === undefined ? null : /^\d+\s+<\.\.\. [\w]+ resumed>(.*)$/u.exec(line);
+    if (pid !== undefined && resumed) {
+      lines.push(`${pending.get(pid) ?? ""}${resumed[1] ?? ""}`);
+      pending.delete(pid);
+      continue;
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
+/** Any traced file-class call that failed, except the write-only opens Bun's runtime probes. */
+function isFailedFileAccess(line: string): boolean {
+  const call = /^\d+\s+(\w+)\(/u.exec(line)?.[1];
+  if (call === undefined || call === "write") return false;
+  if (/\bO_WRONLY\b/u.test(line)) return false;
+  return /= -1 (?:ENOENT|EACCES|EPERM|ENOTDIR|ELOOP|EROFS|ENAMETOOLONG)\b/u.test(line);
 }
 
 function configInputPaths(configPath: string): string[] {

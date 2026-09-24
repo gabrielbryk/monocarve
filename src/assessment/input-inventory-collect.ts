@@ -1,4 +1,5 @@
 import { lstatSync, readFileSync, readdirSync, type Dirent } from "node:fs";
+import { isBuiltin } from "node:module";
 import { dirname, resolve } from "node:path";
 
 import ts from "typescript";
@@ -262,7 +263,8 @@ function visitConfigDependencyNode(node: ts.Node, source: ts.SourceFile, absolut
   const reference = moduleReferenceOf(node, source);
   if (reference === undefined) return;
   if (!ts.isStringLiteral(reference)) throw new InputInventoryError("ASSESSMENT_INPUT_UNBOUND", `config import cannot be inventoried: ${absolute}`, [absolute]);
-  if (reference.text.startsWith("node:")) return;
+  // `fs` and `node:fs` are the same builtin; neither is a file to capture.
+  if (reference.text.startsWith("node:") || reference.text.startsWith("bun:") || isBuiltin(reference.text)) return;
   const target = resolveConfigImport(reference.text, absolute);
   collectLocalConfigDependencies(target, add, seen);
 }

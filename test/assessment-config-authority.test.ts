@@ -129,3 +129,33 @@ test("assessment CLI accepts a TS config with an imported helper and binds its b
   const inventory = JSON.parse(readFileSync(join(root, "evidence/input-inventory.json"), "utf8")) as { entries: Array<{ path: string; sha256: string }> };
   expect(inventory.entries.some((entry) => entry.path === "config-helper.ts" && entry.sha256 === hashBytes(readFileSync(helper)))).toBeTrue();
 }, 60_000);
+
+test("a concurrent outside read that strace splits across threads still invalidates authority", () => {
+  // A background fs read overlapping main-thread file calls is logged as an
+  // `<unfinished ...>` / `<... resumed>` pair; its failure is on the second line.
+  const { root, path } = config(
+    [
+      'import { promises as fsp, statSync } from "node:fs";',
+      'const own = import.meta.dir + "/package.json";',
+      'let done = false; let code = "pending";',
+      'fsp.readFile("/nonexistent-monocarve-probe/secret").then(() => { code = "hit"; }, (error) => { code = error.code; }).finally(() => { done = true; });',
+      "let spins = 0;",
+      "while (!done && spins < 200000) { statSync(own); spins++; if (spins % 50 === 0) await Promise.resolve(); if (spins % 500 === 0) await new Promise((resolve) => setImmediate(resolve)); }",
+      "export default { code };",
+    ].join("\n"),
+  );
+  writeFileSync(join(root, "package.json"), '{"name":"probe","type":"module"}\n');
+  expect(() => loadSnapshotConfig(path)).toThrow("ASSESSMENT_CONFIG_UNBOUND");
+});
+
+test("a failed outside statfs invalidates authority", () => {
+  const { path } = config(
+    'const fs = process.getBuiltinModule("node:fs"); let ok = true; try { fs.statfsSync("/nonexistent-monocarve-probe") } catch { ok = false } export default { ok };',
+  );
+  expect(() => loadSnapshotConfig(path)).toThrow("ASSESSMENT_CONFIG_UNBOUND");
+});
+
+test("a builtin imported without the node: prefix is not captured as a file", () => {
+  const { path } = config('import { join } from "path"; export default { value: join("a", "b") };');
+  expect(loadSnapshotConfig(path).value).toEqual({ value: "a/b" });
+});
