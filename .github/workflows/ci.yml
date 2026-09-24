@@ -20,6 +20,14 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 11.17.0
+      # Executable-config assessment runs config in a bwrap sandbox traced by
+      # strace. Ubuntu 24.04 restricts unprivileged user namespaces via AppArmor.
+      - name: Install assessment sandbox tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap strace
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          bwrap --unshare-all --ro-bind / / true
       - run: bun install --frozen-lockfile
       - run: bun run check
       - run: bun run build:bundle
