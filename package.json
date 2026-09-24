@@ -59,6 +59,7 @@
     "quality": "bun run max-file-lines && bun run complexity",
     "check": "bun run typecheck && bun run test && bun run quality",
     "verify-package": "bun run ./scripts/verify-package.ts",
+    "verify-standalone": "bun run ./scripts/verify-standalone.ts",
     "prepublishOnly": "bun run build:bundle && bun run verify-package"
   },
   "dependencies": {
