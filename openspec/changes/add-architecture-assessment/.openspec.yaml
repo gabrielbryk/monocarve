@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-09-21
+goal: Produce a trustworthy review-sized decomposition assessment from one
+  read-only scan.
