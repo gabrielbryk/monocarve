@@ -49,14 +49,22 @@ export function classifyLifecycle(evidence: LifecycleEvidence): LifecycleStatus 
   const recordFailures = [...(evidence.receipt?.failures ?? []), ...(evidence.reconciliation?.failures ?? [])];
   if (evidence.receipt?.valid === false || evidence.reconciliation?.valid === false) return status("unknown", recordFailures, verify(path));
   if (chain !== undefined && !chain.valid) return status("drifted", chain.failures, verify(path));
-  if (chain?.phase === "applied" && (evidence.audit?.passed === false || evidence.currentTreeValid === false)) {
+  if (chain?.phase === "applied") return appliedStatus(evidence, chain, path);
+  return unappliedStatus(evidence, path);
+}
+
+/** A valid chain that reached its applied commit: drifted, audited, or applied (with or without later commits). */
+function appliedStatus(evidence: LifecycleEvidence, chain: CommitChainEvidence, path: string | undefined): LifecycleStatus {
+  if (evidence.audit?.passed === false || evidence.currentTreeValid === false) {
     const failures = evidence.audit?.failures ?? ["current tree no longer matches the applied plan"];
     return status("drifted", failures, evidence.audit?.reconcilable ? reconcile(path) : audit(path));
   }
-  if (chain?.phase === "applied") {
-    const state = evidence.receipt?.valid ? "applied-and-audited" : chain.laterCommitCount > 0 ? "applied-with-later-commits" : "applied";
-    return status(state, [], audit(path));
-  }
+  const state = evidence.receipt?.valid ? "applied-and-audited" : chain.laterCommitCount > 0 ? "applied-with-later-commits" : "applied";
+  return status(state, [], audit(path));
+}
+
+function unappliedStatus(evidence: LifecycleEvidence, path: string | undefined): LifecycleStatus {
+  const chain = evidence.chain;
   if (chain?.phase === "post-move") return status("post-move", [], [TOOL_NAME, "apply", "--plan", required(path), "--commit", "--resume"]);
   if (chain?.phase === "approved") return status("approved", [], [TOOL_NAME, "apply", "--plan", required(path), "--commit"]);
   if (evidence.atBaseline && evidence.planWritten) return status("uncommitted-plan", [], [TOOL_NAME, "approve", "--plan", required(path), "--commit"]);

@@ -71,7 +71,7 @@ export function git(options: GitOptions, ...args: string[]): string {
     });
     return typeof output === "string" ? output.trim() : "";
   } catch (error) {
-    throw new GitError(`git ${args.join(" ")} failed in ${options.cwd}: ${(error as Error).message}`);
+    throw new GitError(`git ${args.join(" ")} failed in ${options.cwd}: ${(error as Error).message}`, { cause: error });
   }
 }
 

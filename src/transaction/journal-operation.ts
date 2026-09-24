@@ -144,7 +144,7 @@ function applyFsReferenceRewrite(operation: Extract<PlanOperation, { kind: "rewr
  * this — unlike deriving the move from the recorded `to`, which validated
  * only that the operation agreed with itself — is actually load-bearing.
  */
-function applyPathReferenceRewrite(operation: Extract<PlanOperation, { kind: "rewrite-path-reference" }>, root: string, moves: readonly PathMove[]): void {
+function applyPathReferenceRewrite(operation: PathReferenceOperation, root: string, moves: readonly PathMove[]): void {
   const file = resolve(root, operation.file);
   const text = readFileSync(file, "utf8");
   const liveHash = hashText(text);
@@ -167,22 +167,56 @@ function applyPathReferenceRewrite(operation: Extract<PlanOperation, { kind: "re
  * rewrite that the live rescan cannot reproduce at the same line/column with
  * the same `from`/`to`/`donor` is refused rather than replayed from memory.
  */
-function rederivePathReferenceMatches(
-  operation: Extract<PlanOperation, { kind: "rewrite-path-reference" }>,
+function rederivePathReferenceMatches(operation: PathReferenceOperation, text: string, moves: readonly PathMove[], root: string): PathReferenceRewriteMatch[] {
+  const groups = recordedRewriteGroups(operation);
+  const live = liveRewriteMatches(operation, text, moves, root, groups);
+  if (groups.ordinary.length + groups.based.length + groups.registries.length + groups.emitted.length !== operation.rewrites.length)
+    throw new JournalError(`rewrite-path-reference structured identity is incomplete in ${operation.file}`);
+  return operation.rewrites.map((recorded) => {
+    const found = live.get(`${recorded.line}:${recorded.column}`);
+    if (!found || !reproducesRecordedRewrite(found, recorded)) {
+      throw new JournalError(
+        `rewrite-path-reference replay mismatch in ${operation.file} at ${recorded.line}:${recorded.column}: live rescan does not reproduce the recorded rewrite`,
+      );
+    }
+    return found;
+  });
+}
+
+type PathReferenceOperation = Extract<PlanOperation, { kind: "rewrite-path-reference" }>;
+type RecordedPathRewrite = PathReferenceOperation["rewrites"][number];
+
+/** The recorded rewrites, partitioned by the scanner that must reproduce each. A rewrite in no group is unreplayable. */
+interface RecordedRewriteGroups {
+  readonly registries: readonly RecordedPathRewrite[];
+  readonly emitted: readonly RecordedPathRewrite[];
+  readonly ordinary: readonly RecordedPathRewrite[];
+  readonly based: readonly RecordedPathRewrite[];
+}
+
+/** Neither registry, emitted-specifier, nor resolution-based: scanned as ordinary text, with or without a reference base. */
+function isPlainRewrite(rewrite: RecordedPathRewrite): boolean {
+  return rewrite.jsonPointer === undefined && !rewrite.emittedModuleSpecifier && rewrite.resolutionBase === undefined;
+}
+
+function recordedRewriteGroups(operation: PathReferenceOperation): RecordedRewriteGroups {
+  return {
+    registries: operation.rewrites.filter((rewrite) => rewrite.jsonPointer !== undefined && rewrite.resolutionBase !== undefined),
+    emitted: operation.rewrites.filter((rewrite) => rewrite.emittedModuleSpecifier && rewrite.resolutionBase !== undefined),
+    ordinary: operation.rewrites.filter((rewrite) => isPlainRewrite(rewrite) && rewrite.referenceBase === undefined),
+    based: operation.rewrites.filter((rewrite) => isPlainRewrite(rewrite) && rewrite.referenceBase !== undefined),
+  };
+}
+
+/** Every rewrite a fresh scan of the live text finds, keyed by `line:column`. */
+function liveRewriteMatches(
+  operation: PathReferenceOperation,
   text: string,
   moves: readonly PathMove[],
   root: string,
-): PathReferenceRewriteMatch[] {
-  const registries = operation.rewrites.filter((rewrite) => rewrite.jsonPointer !== undefined && rewrite.resolutionBase !== undefined);
-  const emitted = operation.rewrites.filter((rewrite) => rewrite.emittedModuleSpecifier && rewrite.resolutionBase !== undefined);
-  const ordinary = operation.rewrites.filter(
-    (rewrite) =>
-      rewrite.jsonPointer === undefined && !rewrite.emittedModuleSpecifier && rewrite.resolutionBase === undefined && rewrite.referenceBase === undefined,
-  );
-  const based = operation.rewrites.filter(
-    (rewrite) =>
-      rewrite.jsonPointer === undefined && !rewrite.emittedModuleSpecifier && rewrite.resolutionBase === undefined && rewrite.referenceBase !== undefined,
-  );
+  groups: RecordedRewriteGroups,
+): Map<string, PathReferenceRewriteMatch> {
+  const { ordinary, registries, emitted } = groups;
   const matchExtensionless = ordinary.length > 0 && ordinary.some((rewrite) => !lastSegmentHasExtension(rewrite.from));
   // minSegments: 2 (the schema's own floor) rather than the configured value —
   // this rederive only needs to reproduce a rewrite the plan already recorded,
@@ -191,16 +225,7 @@ function rederivePathReferenceMatches(
   // spuriously reject a legitimately recorded rewrite just because apply time
   // has no access to the planning-time config.
   const scan = scanPathReferenceRewrites(text, operation.file, moves, { onAmbiguousMatch: "skip", matchExtensionless, minSegments: 2 });
-  const basedMatches = [...new Set(based.map((rewrite) => rewrite.referenceBase!))].flatMap(
-    (referenceBase) =>
-      scanPathReferenceRewrites(text, operation.file, moves, {
-        onAmbiguousMatch: "skip",
-        matchExtensionless: based.some((rewrite) => rewrite.referenceBase === referenceBase && !lastSegmentHasExtension(rewrite.from)),
-        minSegments: 2,
-        referenceBase,
-        workspaceRoot: root,
-      }).rewrites,
-  );
+  const basedMatches = referenceBasedMatches(operation, text, moves, root, groups.based);
   const registryMatches = registries.flatMap((rewrite) =>
     scanRuntimeModuleRegistry(
       text,
@@ -216,30 +241,39 @@ function rederivePathReferenceMatches(
   const emittedMatches = emitted.flatMap((rewrite) =>
     scanEmittedModuleSpecifiers(text, { source: operation.file, resolutionBase: rewrite.resolutionBase! }, moves),
   );
-  const live = new Map(
-    [...scan.rewrites, ...basedMatches, ...registryMatches, ...emittedMatches].map((match) => [`${match.line}:${match.column}`, match] as const),
+  return new Map([...scan.rewrites, ...basedMatches, ...registryMatches, ...emittedMatches].map((match) => [`${match.line}:${match.column}`, match] as const));
+}
+
+function referenceBasedMatches(
+  operation: PathReferenceOperation,
+  text: string,
+  moves: readonly PathMove[],
+  root: string,
+  based: readonly RecordedPathRewrite[],
+): PathReferenceRewriteMatch[] {
+  return [...new Set(based.map((rewrite) => rewrite.referenceBase!))].flatMap(
+    (referenceBase) =>
+      scanPathReferenceRewrites(text, operation.file, moves, {
+        onAmbiguousMatch: "skip",
+        matchExtensionless: based.some((rewrite) => rewrite.referenceBase === referenceBase && !lastSegmentHasExtension(rewrite.from)),
+        minSegments: 2,
+        referenceBase,
+        workspaceRoot: root,
+      }).rewrites,
   );
-  if (ordinary.length + based.length + registries.length + emitted.length !== operation.rewrites.length)
-    throw new JournalError(`rewrite-path-reference structured identity is incomplete in ${operation.file}`);
-  return operation.rewrites.map((recorded) => {
-    const found = live.get(`${recorded.line}:${recorded.column}`);
-    if (
-      !found ||
-      found.from !== recorded.from ||
-      found.to !== recorded.to ||
-      found.donor !== recorded.donor ||
-      found.jsonPointer !== recorded.jsonPointer ||
-      found.resolutionBase !== recorded.resolutionBase ||
-      found.strippedPrefix !== recorded.strippedPrefix ||
-      found.emittedModuleSpecifier !== recorded.emittedModuleSpecifier ||
-      found.referenceBase !== recorded.referenceBase
-    ) {
-      throw new JournalError(
-        `rewrite-path-reference replay mismatch in ${operation.file} at ${recorded.line}:${recorded.column}: live rescan does not reproduce the recorded rewrite`,
-      );
-    }
-    return found;
-  });
+}
+
+function reproducesRecordedRewrite(found: PathReferenceRewriteMatch, recorded: RecordedPathRewrite): boolean {
+  return (
+    found.from === recorded.from &&
+    found.to === recorded.to &&
+    found.donor === recorded.donor &&
+    found.jsonPointer === recorded.jsonPointer &&
+    found.resolutionBase === recorded.resolutionBase &&
+    found.strippedPrefix === recorded.strippedPrefix &&
+    found.emittedModuleSpecifier === recorded.emittedModuleSpecifier &&
+    found.referenceBase === recorded.referenceBase
+  );
 }
 
 function lastSegmentHasExtension(rawToken: string): boolean {

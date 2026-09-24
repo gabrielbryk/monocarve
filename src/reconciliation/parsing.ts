@@ -13,7 +13,7 @@ export const parseRecord = {
       assertReconciliationRecordValid(record);
     } catch (error) {
       if (error instanceof ReconciliationValidationError) throw error;
-      throw new ReconciliationValidationError(`invalid reconciliation structure: ${error instanceof Error ? error.message : String(error)}`);
+      throw new ReconciliationValidationError(`invalid reconciliation structure: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
     }
     return record;
   },
@@ -24,7 +24,7 @@ export const parseRecord = {
       assertAppliedPlanReceiptValid(receipt);
     } catch (error) {
       if (error instanceof ReconciliationValidationError) throw error;
-      throw new ReconciliationValidationError(`invalid receipt structure: ${error instanceof Error ? error.message : String(error)}`);
+      throw new ReconciliationValidationError(`invalid receipt structure: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
     }
     return receipt;
   },

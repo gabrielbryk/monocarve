@@ -19,20 +19,24 @@ function parseRange(source: string, start: number, end: number): CssRuleSurface[
     if (open < 0) break;
     const close = matchingBrace(source, open, end);
     if (close < 0) break;
-    const prelude = source.slice(cursor, open).trim();
-    if (prelude.startsWith("@")) {
-      if (isContainerAtRule(prelude)) rules.push(...parseRange(source, open + 1, close));
-    } else if (prelude !== "") {
-      const properties = directProperties(source, open + 1, close);
-      for (const selector of splitTopLevel(prelude, ",")) {
-        const normalized = selector.trim();
-        if (normalized !== "") rules.push({ selector: normalized, properties });
-      }
-      // CSS nesting is legal; nested selectors are additional surface.
-      rules.push(...nestedRules(source, open + 1, close));
-    }
+    rules.push(...blockRules(source, source.slice(cursor, open).trim(), open, close));
     cursor = close + 1;
   }
+  return rules;
+}
+
+/** The surface of one `prelude { ... }` block whose braces sit at `open` and `close`. */
+function blockRules(source: string, prelude: string, open: number, close: number): CssRuleSurface[] {
+  if (prelude.startsWith("@")) return isContainerAtRule(prelude) ? parseRange(source, open + 1, close) : [];
+  if (prelude === "") return [];
+  const properties = directProperties(source, open + 1, close);
+  const rules: CssRuleSurface[] = [];
+  for (const selector of splitTopLevel(prelude, ",")) {
+    const normalized = selector.trim();
+    if (normalized !== "") rules.push({ selector: normalized, properties });
+  }
+  // CSS nesting is legal; nested selectors are additional surface.
+  rules.push(...nestedRules(source, open + 1, close));
   return rules;
 }
 

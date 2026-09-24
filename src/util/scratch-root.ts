@@ -41,6 +41,7 @@ import { homedir, tmpdir } from "node:os";
 import { basename, isAbsolute, join, resolve } from "node:path";
 
 import { SCRATCH_ROOT_ENV, TOOL_NAME } from "../branding.ts";
+import { IoError } from "../errors.ts";
 import { hashText } from "./hash.ts";
 
 /**
@@ -163,7 +164,10 @@ export function ensureScratchDir(prefix: string): string {
   } catch (error) {
     // Explicit override that failed: report it loudly.
     if (override && isAbsolute(override)) {
-      throw new Error(`Failed to create ${SCRATCH_ROOT_ENV} directory at ${root}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+      throw new IoError(`Failed to create ${SCRATCH_ROOT_ENV} directory at ${root}: ${error instanceof Error ? error.message : String(error)}`, {
+        hint: `point ${SCRATCH_ROOT_ENV} at a writable absolute directory, or unset it to use the default cache location`,
+        cause: error,
+      });
     }
 
     // No explicit override: fall back to tmpdir, still checkout-scoped so this

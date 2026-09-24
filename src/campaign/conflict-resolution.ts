@@ -95,19 +95,23 @@ function isMergeablePair(left: OperationPathAccess, right: OperationPathAccess):
   return structured.has(left.role) && left.keys.every((key) => !right.keys.includes(key));
 }
 
+/** First match wins: a conflict takes the category of the most specific role it touches. */
+const CATEGORY_PRECEDENCE: readonly (readonly [ConflictCategory, readonly OperationPathAccess["role"][]])[] = [
+  ["generated-artifact", ["generated-artifact", "generated-source"]],
+  ["moved-path", ["move-source", "move-target"]],
+  ["consumer-source", ["consumer-source"]],
+  ["lockfile-importer", ["lockfile-importer"]],
+  ["workspace-registry", ["workspace-registry"]],
+  ["task-registry", ["task-registry"]],
+  ["path-key-artifact", ["path-key-artifact"]],
+  ["package-manifest", ["package-manifest", "consumer-manifest"]],
+  ["project-references", ["consumer-project-references"]],
+  ["scaffold-output", ["scaffold-output", "entrypoint", "task-file"]],
+];
+
 function categoryFor(accesses: readonly OperationPathAccess[]): ConflictCategory {
   const roles = new Set(accesses.map((access) => access.role));
-  if (roles.has("generated-artifact") || roles.has("generated-source")) return "generated-artifact";
-  if (roles.has("move-source") || roles.has("move-target")) return "moved-path";
-  if (roles.has("consumer-source")) return "consumer-source";
-  if (roles.has("lockfile-importer")) return "lockfile-importer";
-  if (roles.has("workspace-registry")) return "workspace-registry";
-  if (roles.has("task-registry")) return "task-registry";
-  if (roles.has("path-key-artifact")) return "path-key-artifact";
-  if (roles.has("package-manifest") || roles.has("consumer-manifest")) return "package-manifest";
-  if (roles.has("consumer-project-references")) return "project-references";
-  if (roles.has("scaffold-output") || roles.has("entrypoint") || roles.has("task-file")) return "scaffold-output";
-  return "shared-path";
+  return CATEGORY_PRECEDENCE.find(([, triggers]) => triggers.some((role) => roles.has(role)))?.[0] ?? "shared-path";
 }
 
 function explain(left: string, right: string, path: string, category: ConflictCategory, disposition: ConflictDisposition): string {

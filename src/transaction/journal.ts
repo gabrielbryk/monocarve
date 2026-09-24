@@ -65,7 +65,6 @@ export async function executeJournal(options: ExecuteJournalOptions): Promise<Jo
     for (const [index, operation] of options.manifest.operations.entries()) {
       applyJournalEntry({ options, adapter, index, operation, result, moves });
       // Sequential by design: each operation must finish before the next starts.
-      // oxlint-disable-next-line no-await-in-loop
       if (options.afterOperation !== undefined) await options.afterOperation(index);
     }
   } catch (error) {

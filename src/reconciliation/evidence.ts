@@ -33,8 +33,8 @@ function read<T>(rootDir: string, inputPath: string, parse: (value: unknown) => 
   let raw: unknown;
   try {
     raw = JSON.parse(bytes);
-  } catch {
-    throw new ReconciliationValidationError(`evidence is not JSON: ${path}`);
+  } catch (error) {
+    throw new ReconciliationValidationError(`evidence is not JSON: ${path}`, { cause: error });
   }
   const value = parse(raw);
   if (bytes !== serialize(value)) throw new ReconciliationValidationError(`evidence bytes are not canonical: ${path}`);
@@ -51,30 +51,20 @@ export interface ReconciliationLinkOptions {
 }
 
 export function verifyReconciliationLink(options: ReconciliationLinkOptions): { readonly approvalCommit: string } {
-  const { record } = { record: options.evidence.value };
+  const record = options.evidence.value;
   const chain = options.chain;
-  if (!chain.valid || chain.phase !== "applied" || !chain.approvalCommit || !chain.appliedCommit) fail("reconciliation does not link to an applied chain");
-  if (
-    record.plan.planId !== options.manifest.planId ||
-    record.plan.path !== options.manifestPath ||
-    record.plan.digest !== hashText(options.manifestBytes) ||
-    record.plan.baselineCommit !== options.manifest.baselineCommit ||
-    record.plan.approvalCommit !== chain.approvalCommit
-  )
+  if (!isAppliedChain(chain)) fail("reconciliation does not link to an applied chain");
+  if (!planLinkMatches(record.plan, options.manifest, options.manifestPath, options.manifestBytes, chain))
     fail("reconciliation plan linkage does not match the approved manifest");
-  if (
-    record.generator.name !== options.manifest.generator.name ||
-    record.generator.version !== options.manifest.generator.version ||
-    stableStringify(record.provenance) !== stableStringify(options.manifest.provenance)
-  )
-    fail("reconciliation provenance does not match the approved manifest");
-  if (
-    record.application.moveCommit !== chain.moveCommit ||
-    record.application.wiringCommit !== chain.wiringCommit ||
-    record.application.resultingCommit !== chain.appliedCommit
-  ) {
+  if (!provenanceMatches(record, options.manifest)) fail("reconciliation provenance does not match the approved manifest");
+  if (!applicationLinkMatches(record.application, chain)) {
     fail("reconciliation application linkage does not match the exact chain");
   }
+  return { approvalCommit: verifiedApprovalCommit(options, record) };
+}
+
+/** The single commit directly atop the observed head that adds exactly the reviewed record. */
+function verifiedApprovalCommit(options: ReconciliationLinkOptions, record: ReconciliationRecord): string {
   const approval = tryGit({ cwd: options.rootDir }, "rev-parse", `${record.observed.headCommit}^0`);
   if (approval === null) fail("reconciliation observed head does not exist");
   const children = (tryGit({ cwd: options.rootDir }, "rev-list", "--first-parent", "--reverse", `${record.observed.headCommit}..HEAD`) ?? "")
@@ -90,7 +80,7 @@ export function verifyReconciliationLink(options: ReconciliationLinkOptions): { 
   if (paths.length !== 1 || paths[0] !== expectedPath) fail("reconciliation approval does not change exactly the record path");
   if (showBaseline(options.rootDir, commit, options.evidence.path) !== options.evidence.bytes)
     fail("committed reconciliation bytes do not match the reviewed record");
-  return { approvalCommit: commit };
+  return commit;
 }
 
 export function verifyReceiptLink(
@@ -101,29 +91,46 @@ export function verifyReceiptLink(
   chain: CommitChainEvidence,
 ): void {
   const value = receipt.value;
-  if (!chain.valid || chain.phase !== "applied" || !chain.approvalCommit || !chain.appliedCommit) fail("receipt does not link to an applied chain");
-  if (
-    value.plan.planId !== manifest.planId ||
-    value.plan.path !== manifestPath ||
-    value.plan.digest !== hashText(manifestBytes) ||
-    value.plan.baselineCommit !== manifest.baselineCommit ||
-    value.plan.approvalCommit !== chain.approvalCommit
-  )
-    fail("receipt plan linkage does not match the approved manifest");
-  if (
-    value.application.moveCommit !== chain.moveCommit ||
-    value.application.wiringCommit !== chain.wiringCommit ||
-    value.application.resultingCommit !== chain.appliedCommit
-  ) {
+  if (!isAppliedChain(chain)) fail("receipt does not link to an applied chain");
+  if (!planLinkMatches(value.plan, manifest, manifestPath, manifestBytes, chain)) fail("receipt plan linkage does not match the approved manifest");
+  if (!applicationLinkMatches(value.application, chain)) {
     fail("receipt application linkage does not match the exact chain");
   }
-  if (
-    value.generator.name !== manifest.generator.name ||
-    value.generator.version !== manifest.generator.version ||
-    stableStringify(value.provenance) !== stableStringify(manifest.provenance)
-  ) {
+  if (!provenanceMatches(value, manifest)) {
     fail("receipt provenance does not match the manifest");
   }
+}
+
+function isAppliedChain(chain: CommitChainEvidence): boolean {
+  return chain.valid && chain.phase === "applied" && Boolean(chain.approvalCommit) && Boolean(chain.appliedCommit);
+}
+
+function planLinkMatches(
+  plan: ReconciliationRecord["plan"],
+  manifest: ExtractionManifest,
+  manifestPath: string,
+  manifestBytes: string,
+  chain: CommitChainEvidence,
+): boolean {
+  return (
+    plan.planId === manifest.planId &&
+    plan.path === manifestPath &&
+    plan.digest === hashText(manifestBytes) &&
+    plan.baselineCommit === manifest.baselineCommit &&
+    plan.approvalCommit === chain.approvalCommit
+  );
+}
+
+function applicationLinkMatches(application: ReconciliationRecord["application"], chain: CommitChainEvidence): boolean {
+  return application.moveCommit === chain.moveCommit && application.wiringCommit === chain.wiringCommit && application.resultingCommit === chain.appliedCommit;
+}
+
+function provenanceMatches(evidence: Pick<ReconciliationRecord, "generator" | "provenance">, manifest: ExtractionManifest): boolean {
+  return (
+    evidence.generator.name === manifest.generator.name &&
+    evidence.generator.version === manifest.generator.version &&
+    stableStringify(evidence.provenance) === stableStringify(manifest.provenance)
+  );
 }
 
 function fail(message: string): never {

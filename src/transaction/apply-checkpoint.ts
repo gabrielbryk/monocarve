@@ -13,6 +13,7 @@
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
+import { PreflightError } from "../errors.ts";
 import { git, tryGit } from "../util/git.ts";
 import { MISSING, type FileState } from "../util/hash.ts";
 import { errorText } from "./apply-owner.ts";
@@ -80,7 +81,7 @@ function persistedSnapshot(path: string, snapshot: Snapshot): PersistedSnapshot 
 export function readCheckpoint(path: string): PersistedCheckpoint | undefined {
   if (!existsSync(path)) return undefined;
   const value: unknown = JSON.parse(readFileSync(path, "utf8"));
-  if (!isPersistedCheckpoint(value)) throw new Error(`unrecognized apply checkpoint at ${path}`);
+  if (!isPersistedCheckpoint(value)) throw new PreflightError(`unrecognized apply checkpoint at ${path}`);
   return value;
 }
 

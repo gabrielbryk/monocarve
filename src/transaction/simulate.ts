@@ -1,6 +1,6 @@
 import { createPackageManagerAdapter } from "../adapters/registry.ts";
 import { createTaskRunnerAdapter } from "../adapters/registry.ts";
-import type { PackageManagerAdapter } from "../adapters/types.ts";
+import type { PackageManagerAdapter, TaskRunnerAdapter } from "../adapters/types.ts";
 import { SIMULATION_GIT_IDENTITY } from "../branding.ts";
 import { resetCodemodCaches } from "../codemod/imports.ts";
 import type { MonocarveConfig } from "../config.ts";
@@ -19,7 +19,7 @@ import { regenerateArtifacts, type RegenerationReport } from "./regenerate.ts";
 // under the line-count gate; re-exported here so every existing importer of
 // `runGateTiers` from `simulate.ts` keeps working unchanged.
 import { runGateTiers } from "./simulate-gates.ts";
-import { createWorktree, installWorkspaceDependencies, linkPlannedPackage } from "./worktree.ts";
+import { createWorktree, installWorkspaceDependencies, linkPlannedPackage, type Worktree } from "./worktree.ts";
 
 export { runGateTiers } from "./simulate-gates.ts";
 
@@ -111,8 +111,6 @@ export async function simulatePlan(options: SimulateOptions): Promise<Simulation
   const { config, manifest, rootDir } = options;
   const packageManager = createPackageManagerAdapter(config);
   const taskRunner = createTaskRunnerAdapter(config);
-  const gates: GateResult[] = [];
-  let unlinked: readonly string[] = [];
 
   const worktree = await createWorktree({
     rootDir,
@@ -130,194 +128,252 @@ export async function simulatePlan(options: SimulateOptions): Promise<Simulation
 
   let keep = false;
   try {
-    preflightJournal(config, manifest, worktree.workspacePath);
-    const journal = await executeJournal({ config, treeRoot: worktree.workspacePath, manifest });
+    const outcome = await simulateInWorktree({ options, worktree, packageManager, taskRunner, gates: [] });
+    keep = outcome.keep;
+    return outcome.result;
+  } catch (error) {
+    keep = !config.transaction.cleanup;
+    throw new SimulationError(`simulation failed: ${(error as Error).message}`, { cause: error });
+  } finally {
+    if (config.transaction.cleanup && !keep) await worktree.dispose();
+  }
+}
 
-    // Some repository-owned post-journal generators deliberately inventory the
-    // Git index (for example, a source-duplicate ratchet). The journal writes
-    // a faithful filesystem tree, but its moved targets are otherwise
-    // untracked until the later gate setup. Commit that exact journal result
-    // before generators run so each observes the same package boundaries that
-    // the eventual gate will inspect. Generated outputs remain unstaged and
-    // are still audited against their declared post-journal provenance below.
-    commitSimulatedExtraction(worktree.workspacePath, manifest);
+/** Everything one simulation stage needs; `gates` accumulates as tiers run. */
+interface SimulationRun {
+  readonly options: SimulateOptions;
+  readonly worktree: Worktree;
+  readonly packageManager: PackageManagerAdapter;
+  readonly taskRunner: TaskRunnerAdapter;
+  readonly gates: GateResult[];
+}
 
-    // The baseline install cannot see the package/importer the journal creates;
-    // install again against the landed plan, or materialize equivalent links,
-    // before a post-journal generator imports the newly created package.
-    if (config.transaction.nodeModules === "install") {
-      installWorkspaceDependencies(worktree.workspacePath, packageManager.installCommand());
-    } else if (config.transaction.nodeModules === "symlink") {
-      unlinked = linkPlannedPackage(worktree.workspacePath, manifest);
-    }
+/** A finished simulation, and whether its worktree must survive the cleanup in `simulatePlan`. */
+interface SimulationOutcome {
+  readonly result: SimulationResult;
+  readonly keep: boolean;
+}
 
-    const lockfileVerification = maybeVerifyLockfile(options, worktree.workspacePath, packageManager);
-    if (lockfileVerification && !lockfileVerification.ok) {
-      keep = !config.transaction.cleanup;
-      return {
-        ok: false,
-        planId: manifest.planId,
-        ...(keep ? { worktreePath: worktree.path } : {}),
-        operationsApplied: journal.entries.length,
-        gates,
-        lockfileVerification,
-        failure: `${lockfileVerification.lockfile} is not what \`${lockfileVerification.command}\` produces: ${(lockfileVerification.differences ?? []).join(
-          "\n",
-        )}`,
-      };
-    }
+type FailureFields = Omit<SimulationResult, "ok" | "planId" | "worktreePath" | "operationsApplied" | "gates">;
 
-    // Before the audit, and therefore before the gates: generators run only
-    // after package installation/linking and lockfile proof, so their imports
-    // observe the same projected dependency graph as later compilation.
-    const regeneration = regenerateArtifacts({ config, treeRoot: worktree.workspacePath, manifest });
-    if (!regeneration.ok) {
-      keep = !config.transaction.cleanup;
-      return {
-        ok: false,
-        planId: manifest.planId,
-        ...(keep ? { worktreePath: worktree.path } : {}),
-        operationsApplied: journal.entries.length,
-        gates,
-        regeneration,
-        ...(lockfileVerification === undefined ? {} : { lockfileVerification }),
-        failure: regeneration.failure ?? "regeneration failed",
-      };
-    }
+/**
+ * A failed stage. A gate failure always keeps its worktree (the retry command
+ * points into it); every other failure keeps it only when cleanup is off.
+ */
+function failedOutcome(run: SimulationRun, operationsApplied: number, fields: FailureFields, keepAlways = false): SimulationOutcome {
+  const keep = keepAlways || !run.options.config.transaction.cleanup;
+  return {
+    keep,
+    result: {
+      ok: false,
+      planId: run.options.manifest.planId,
+      ...(keep ? { worktreePath: run.worktree.path } : {}),
+      operationsApplied,
+      gates: run.gates,
+      ...fields,
+    },
+  };
+}
 
-    const audit = auditPlanSync({
-      config,
-      rootDir: worktree.workspacePath,
-      manifest,
-      installedRoot: config.transaction.nodeModules === "install" ? worktree.workspacePath : rootDir,
-      regeneratedArtifacts: Object.fromEntries(regeneration.artifacts.map((artifact) => [artifact.path, artifact.hash])),
+async function simulateInWorktree(run: SimulationRun): Promise<SimulationOutcome> {
+  const { options, worktree, packageManager } = run;
+  const { config, manifest } = options;
+  preflightJournal(config, manifest, worktree.workspacePath);
+  const journal = await executeJournal({ config, treeRoot: worktree.workspacePath, manifest });
+  const operationsApplied = journal.entries.length;
+
+  // Some repository-owned post-journal generators deliberately inventory the
+  // Git index (for example, a source-duplicate ratchet). The journal writes
+  // a faithful filesystem tree, but its moved targets are otherwise
+  // untracked until the later gate setup. Commit that exact journal result
+  // before generators run so each observes the same package boundaries that
+  // the eventual gate will inspect. Generated outputs remain unstaged and
+  // are still audited against their declared post-journal provenance below.
+  commitSimulatedExtraction(worktree.workspacePath, manifest);
+  const unlinked = prepareLandedDependencies(run);
+
+  const lockfileVerification = maybeVerifyLockfile(options, worktree.workspacePath, packageManager);
+  if (lockfileVerification && !lockfileVerification.ok)
+    return failedOutcome(run, operationsApplied, { lockfileVerification, failure: lockfileFailure(lockfileVerification) });
+
+  // Before the audit, and therefore before the gates: generators run only
+  // after package installation/linking and lockfile proof, so their imports
+  // observe the same projected dependency graph as later compilation.
+  const regeneration = regenerateArtifacts({ config, treeRoot: worktree.workspacePath, manifest });
+  if (!regeneration.ok)
+    return failedOutcome(run, operationsApplied, {
+      regeneration,
+      ...(lockfileVerification === undefined ? {} : { lockfileVerification }),
+      failure: regeneration.failure ?? "regeneration failed",
     });
-    if (!audit.passed) {
-      keep = !config.transaction.cleanup;
-      return {
-        ok: false,
-        planId: manifest.planId,
-        ...(keep ? { worktreePath: worktree.path } : {}),
-        operationsApplied: journal.entries.length,
-        gates,
-        regeneration,
-        failure: `audit failed in the simulation worktree: ${audit.failures.join("; ")}`,
-      };
-    }
 
-    const repositoryPostconditions = await auditRepositoryPostconditions({
-      rootDir: worktree.workspacePath,
-      adapter: packageManager,
-      // auditPlanSync above already checks the exact planned hash of every
-      // importer rewrite. Re-project only the root and the newly scaffolded
-      // package: an existing consumer can legitimately have ambiguous peer
-      // contexts that are unrelated to this extraction.
-      packageRoots: [".", ...(manifest.target === undefined ? [] : [manifest.target.packageRoot])],
+  const audit = auditLandedPlan(run, regeneration);
+  if (!audit.passed)
+    return failedOutcome(run, operationsApplied, { regeneration, failure: `audit failed in the simulation worktree: ${audit.failures.join("; ")}` });
+
+  const repositoryPostconditions = await landedRepositoryPostconditions(run);
+  const projectedImporterVerification = repositoryPostconditions.importerVerification;
+  if (!repositoryPostconditions.passed)
+    return failedOutcome(run, operationsApplied, {
+      regeneration,
+      projectedImporterVerification,
+      repositoryPostconditions,
+      failure: `repository postconditions failed: ${repositoryPostconditions.failures.join("; ")}`,
     });
-    const projectedImporterVerification = repositoryPostconditions.importerVerification;
-    if (!repositoryPostconditions.passed) {
-      keep = !config.transaction.cleanup;
-      return {
-        ok: false,
-        planId: manifest.planId,
-        ...(keep ? { worktreePath: worktree.path } : {}),
-        operationsApplied: journal.entries.length,
-        gates,
-        regeneration,
-        projectedImporterVerification,
-        repositoryPostconditions,
-        failure: `repository postconditions failed: ${repositoryPostconditions.failures.join("; ")}`,
-      };
-    }
-    let assetEmission: AssetEmissionReport | undefined;
-    if (config.assetEmissionProofs.length > 0) {
-      commitSimulatedExtraction(worktree.workspacePath, manifest);
-      assetEmission = await compareAssetEmission({ config, rootDir, candidateRoot: worktree.workspacePath, manifest });
-      if (!assetEmission.passed) {
-        keep = !config.transaction.cleanup;
-        const failures = assetEmission.checks
-          .filter((check) => !check.passed)
-          .map(
-            (check) =>
-              `${check.id}: ${check.failure ?? `missing selectors [${check.missingSelectors.join(", ")}]; changed declaration order [${check.changedDeclarationOrder.join(", ")}]`}`,
-          );
-        return {
-          ok: false,
-          planId: manifest.planId,
-          ...(keep ? { worktreePath: worktree.path } : {}),
-          operationsApplied: journal.entries.length,
-          gates,
-          regeneration,
-          assetEmission,
-          failure: `asset-emission proof failed: ${failures.join("; ")}`,
-        };
-      }
-    }
 
-    if (!options.skipGates && (options.runGates ?? config.transaction.simulateGates)) {
-      commitSimulatedExtraction(worktree.workspacePath, manifest);
-      // A post-journal preparer may repair a ratchet whose file is not listed
-      // in Moon's task inputs. Reusing a cache entry computed before that
-      // output existed would make the gate judge a stale tree (and can turn a
-      // now-clean extraction into a false failure). Force Moon only when a
-      // declared generator actually changed an output; every other simulation
-      // keeps ordinary cache behaviour.
-      const wrapCommand =
-        regeneration.artifacts.some((artifact) => artifact.changed) && taskRunner.id === "moon"
-          ? (command: string) => taskRunner.wrapGateCommand(`MOON_FORCE=true MOON_CONCURRENCY=1 ${command}`)
-          : taskRunner.wrapGateCommand;
-      const gateRun = await runGateTiers({
-        gates: manifest.gates,
-        maxConcurrency: config.gates.maxConcurrency,
-        cwd: worktree.workspacePath,
-        timeoutMs: config.gates.timeoutMs,
-        retries: config.transaction.gateRetries,
-        wrapCommand,
-        diagnosticsDirectory: `${worktree.path}.diagnostics`,
-      });
-      gates.push(...gateRun.results);
-      if (gateRun.failure) {
-        keep = true;
-        return {
-          ok: false,
-          planId: manifest.planId,
-          ...(keep ? { worktreePath: worktree.path } : {}),
-          operationsApplied: journal.entries.length,
-          gates,
-          failedGate: gateRun.failure,
-          gateRetry: { cwd: worktree.workspacePath, command: gateRun.failure.command },
-          regeneration,
-          ...unlinkedField(unlinked),
-          ...(lockfileVerification === undefined ? {} : { lockfileVerification }),
-          // Also in the message, because `applyPlan` forwards this string and
-          // nothing else: a gate that died on an unresolvable import would
-          // otherwise read as the extraction's fault all the way up.
-          failure: `gate failed (${gateRun.failure.tier}): ${gateRun.failure.command}${
-            unlinked.length > 0 ? ` (unlinked dependencies: ${unlinked.join(", ")})` : ""
-          }${gateRun.failure.output ? `\n${gateRun.failure.output.trimEnd()}` : ""}`,
-        };
-      }
-    }
+  const assetEmission = await proveAssetEmission(run);
+  if (assetEmission !== undefined && !assetEmission.passed)
+    return failedOutcome(run, operationsApplied, {
+      regeneration,
+      assetEmission,
+      failure: `asset-emission proof failed: ${assetEmissionFailures(assetEmission).join("; ")}`,
+    });
 
-    return {
+  const gateFailure = await runSimulationGates(run, regeneration);
+  if (gateFailure !== undefined) return gateFailedOutcome(run, operationsApplied, gateFailure, { regeneration, unlinked, lockfileVerification });
+
+  return {
+    keep: false,
+    result: {
       ok: true,
       planId: manifest.planId,
       ...(config.transaction.cleanup ? {} : { worktreePath: worktree.path }),
-      operationsApplied: journal.entries.length,
-      gates,
+      operationsApplied,
+      gates: run.gates,
       regeneration,
       ...(assetEmission === undefined ? {} : { assetEmission }),
       ...unlinkedField(unlinked),
       ...(lockfileVerification === undefined ? {} : { lockfileVerification }),
       projectedImporterVerification,
       repositoryPostconditions,
-    };
-  } catch (error) {
-    keep = !config.transaction.cleanup;
-    throw new SimulationError(`simulation failed: ${(error as Error).message}`);
-  } finally {
-    if (config.transaction.cleanup && !keep) await worktree.dispose();
+    },
+  };
+}
+
+function auditLandedPlan(run: SimulationRun, regeneration: RegenerationReport): ReturnType<typeof auditPlanSync> {
+  const { config, manifest, rootDir } = run.options;
+  const workspacePath = run.worktree.workspacePath;
+  return auditPlanSync({
+    config,
+    rootDir: workspacePath,
+    manifest,
+    installedRoot: config.transaction.nodeModules === "install" ? workspacePath : rootDir,
+    regeneratedArtifacts: Object.fromEntries(regeneration.artifacts.map((artifact) => [artifact.path, artifact.hash])),
+  });
+}
+
+/** A failed gate always keeps its worktree: the retry command points into it. */
+function gateFailedOutcome(
+  run: SimulationRun,
+  operationsApplied: number,
+  failure: GateResult,
+  evidence: {
+    readonly regeneration: RegenerationReport;
+    readonly unlinked: readonly string[];
+    readonly lockfileVerification: LockfileVerification | undefined;
+  },
+): SimulationOutcome {
+  const { regeneration, unlinked, lockfileVerification } = evidence;
+  return failedOutcome(
+    run,
+    operationsApplied,
+    {
+      failedGate: failure,
+      gateRetry: { cwd: run.worktree.workspacePath, command: failure.command },
+      regeneration,
+      ...unlinkedField(unlinked),
+      ...(lockfileVerification === undefined ? {} : { lockfileVerification }),
+      // Also in the message, because `applyPlan` forwards this string and
+      // nothing else: a gate that died on an unresolvable import would
+      // otherwise read as the extraction's fault all the way up.
+      failure: gateFailureMessage(failure, unlinked),
+    },
+    true,
+  );
+}
+
+/**
+ * The baseline install cannot see the package/importer the journal creates;
+ * install again against the landed plan, or materialize equivalent links,
+ * before a post-journal generator imports the newly created package.
+ */
+function prepareLandedDependencies(run: SimulationRun): readonly string[] {
+  const { options, worktree, packageManager } = run;
+  if (options.config.transaction.nodeModules === "install") {
+    installWorkspaceDependencies(worktree.workspacePath, packageManager.installCommand());
+  } else if (options.config.transaction.nodeModules === "symlink") {
+    return linkPlannedPackage(worktree.workspacePath, options.manifest);
   }
+  return [];
+}
+
+function lockfileFailure(verification: LockfileVerification): string {
+  return `${verification.lockfile} is not what \`${verification.command}\` produces: ${(verification.differences ?? []).join("\n")}`;
+}
+
+function landedRepositoryPostconditions(run: SimulationRun): Promise<RepositoryPostconditionReport> {
+  const { manifest } = run.options;
+  return auditRepositoryPostconditions({
+    rootDir: run.worktree.workspacePath,
+    adapter: run.packageManager,
+    // auditPlanSync already checks the exact planned hash of every
+    // importer rewrite. Re-project only the root and the newly scaffolded
+    // package: an existing consumer can legitimately have ambiguous peer
+    // contexts that are unrelated to this extraction.
+    packageRoots: [".", ...(manifest.target === undefined ? [] : [manifest.target.packageRoot])],
+  });
+}
+
+/** Undefined when no asset-emission proof is configured. */
+async function proveAssetEmission(run: SimulationRun): Promise<AssetEmissionReport | undefined> {
+  const { config, manifest, rootDir } = run.options;
+  if (config.assetEmissionProofs.length === 0) return undefined;
+  commitSimulatedExtraction(run.worktree.workspacePath, manifest);
+  return compareAssetEmission({ config, rootDir, candidateRoot: run.worktree.workspacePath, manifest });
+}
+
+function assetEmissionFailures(report: AssetEmissionReport): string[] {
+  return report.checks
+    .filter((check) => !check.passed)
+    .map(
+      (check) =>
+        `${check.id}: ${check.failure ?? `missing selectors [${check.missingSelectors.join(", ")}]; changed declaration order [${check.changedDeclarationOrder.join(", ")}]`}`,
+    );
+}
+
+/** Runs the manifest's gates when asked to; the authoritative failed gate, if any. */
+async function runSimulationGates(run: SimulationRun, regeneration: RegenerationReport): Promise<GateResult | undefined> {
+  const { options, worktree, taskRunner } = run;
+  const { config, manifest } = options;
+  if (options.skipGates || !(options.runGates ?? config.transaction.simulateGates)) return undefined;
+  commitSimulatedExtraction(worktree.workspacePath, manifest);
+  // A post-journal preparer may repair a ratchet whose file is not listed
+  // in Moon's task inputs. Reusing a cache entry computed before that
+  // output existed would make the gate judge a stale tree (and can turn a
+  // now-clean extraction into a false failure). Force Moon only when a
+  // declared generator actually changed an output; every other simulation
+  // keeps ordinary cache behaviour.
+  const wrapCommand =
+    regeneration.artifacts.some((artifact) => artifact.changed) && taskRunner.id === "moon"
+      ? (command: string) => taskRunner.wrapGateCommand(`MOON_FORCE=true MOON_CONCURRENCY=1 ${command}`)
+      : taskRunner.wrapGateCommand;
+  const gateRun = await runGateTiers({
+    gates: manifest.gates,
+    maxConcurrency: config.gates.maxConcurrency,
+    cwd: worktree.workspacePath,
+    timeoutMs: config.gates.timeoutMs,
+    retries: config.transaction.gateRetries,
+    wrapCommand,
+    diagnosticsDirectory: `${worktree.path}.diagnostics`,
+  });
+  run.gates.push(...gateRun.results);
+  return gateRun.failure;
+}
+
+function gateFailureMessage(failure: GateResult, unlinked: readonly string[]): string {
+  const unlinkedNote = unlinked.length > 0 ? ` (unlinked dependencies: ${unlinked.join(", ")})` : "";
+  const output = failure.output ? `\n${failure.output.trimEnd()}` : "";
+  return `gate failed (${failure.tier}): ${failure.command}${unlinkedNote}${output}`;
 }
 
 /**
