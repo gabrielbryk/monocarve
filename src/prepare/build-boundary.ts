@@ -7,24 +7,23 @@
  * `PreparationManifestRendering` and `baselineFileMode` come from
  * `build-shared.ts`, which both compilers import.
  */
-import { readdirSync, statSync } from "node:fs";
-import { extname, posix, relative, resolve } from "node:path";
+import { posix, relative, resolve } from "node:path";
 
 import ts from "typescript";
 
 import { GENERATOR } from "../branding.ts";
-import { configDigest, triggeredArtifacts, type MonocarveConfig } from "../config.ts";
+import { configDigest, type MonocarveConfig } from "../config.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import { PlanningError } from "../plan/context.ts";
-import { rewritePathReferenceText, scanPathReferenceRewrites } from "../plan/path-reference-rewrites.ts";
 import { resolveCommit, showBaseline } from "../util/git.ts";
 import { byCodeUnit, hashText, type FileState, type Sha256 } from "../util/hash.ts";
 import { workspacePath } from "../util/paths.ts";
 import type { TemplateVars } from "../util/template.ts";
 import { planExistingPackageBoundary, type RetainedImporterInput } from "./boundary-imports.ts";
+import { planRetiredBoundaryPathReferences } from "./boundary-path-references.ts";
 import { planPortBoundary, type PortConsumerInput } from "./boundary-port.ts";
 import { resolveBoundaries, type ResolvedBoundary } from "./boundary-resolve.ts";
-import { baselineFileMode, type PreparationManifestRendering } from "./build-shared.ts";
+import { baselineFileMode, declaredGeneratedArtifacts, sortedGates, type PreparationManifestRendering } from "./build-shared.ts";
 import { preparationCompilerOptions } from "./compiler-policy.ts";
 import type { PreparationManifest, PreparationReplayOperation } from "./manifest-types.ts";
 import { createPreparationManifest, assertPreparationManifestValid, preparationOperationPaths } from "./manifest.ts";
@@ -82,50 +81,9 @@ export function compileBoundaryPreparationManifest(input: CompileBoundaryPrepara
       `boundary ${boundary.id} importer graph was scanned at ${input.graph.commit ?? "an unknown commit"}, but the preparation baseline is ${baseline.commit}; rescan before compiling`,
     );
   }
-  const retainedText = showBaseline(input.rootDir, baseline.commit, boundary.retained);
-  if (retainedText === null) throw new PlanningError(`boundary retained module is absent from baseline: ${boundary.retained}`);
-  const retainedMode = baselineFileMode(input.rootDir, baseline.commit, boundary.retained);
-  const compilerOptions = preparationCompilerOptions(input.rootDir, input.config, boundary.retained);
-  if (boundary.strategy === "existing-package" && boundary.retire && !input.graph.nodes.has(boundary.retained)) {
-    // The graph carries no evidence at all for the retained path (it never
-    // resolved a node there), so it cannot prove the shim has zero
-    // importers. Retirement fails closed rather than trusting an absence of
-    // evidence as evidence of absence.
-    throw new PlanningError(
-      `boundary ${boundary.id} declares retire, but the importer graph has no evidence for ${boundary.retained}; refusing to delete without graph proof`,
-    );
-  }
-  const importerPaths = [
-    ...new Set([...(input.graph.incoming.get(boundary.retained) ?? []), ...(input.graph.testImporters.get(boundary.retained) ?? [])]),
-  ].toSorted(byCodeUnit);
-  const bindings = importerPaths.map((path) =>
-    resolveBoundaryImporter(
-      input.rootDir,
-      baseline.commit,
-      compilerOptions,
-      path,
-      boundary.retained,
-      input.moduleSpecifierCalls ?? input.config.moduleSpecifierCalls,
-    ),
-  );
-  const boundaryOperations =
-    boundary.strategy === "existing-package"
-      ? planExistingPackageOperations(input, boundary, retainedText, retainedMode, bindings)
-      : planPortOperations(input, boundary, baseline.commit, retainedText, compilerOptions, bindings);
-  const referenceOperations =
-    boundary.strategy === "existing-package" && boundary.retire ? planRetiredBoundaryPathReferences(input, boundary, baseline.commit, compilerOptions) : [];
-  const operations = [...boundaryOperations, ...referenceOperations];
-  const ordered = [...operations].toSorted(boundaryOperationOrder);
+  const ordered = [...planBoundaryOperations(input, boundary, baseline.commit)].toSorted(boundaryOperationOrder);
   const operationPaths = [...new Set(ordered.flatMap(preparationOperationPaths))].toSorted(byCodeUnit);
-  const generatedArtifacts = triggeredArtifacts(input.config, operationPaths)
-    .map((artifact) => ({
-      path: artifact.path,
-      source: artifact.source,
-      regenerate: artifact.regenerate,
-      regenerateOnApply: true as const,
-      ...(artifact.exemptReason === undefined ? {} : { exemptReason: artifact.exemptReason }),
-    }))
-    .toSorted((left, right) => byCodeUnit(left.path, right.path));
+  const generatedArtifacts = declaredGeneratedArtifacts(input.config, operationPaths);
   const postJournalPreparers = preparationPostJournalRecords(input.config, operationPaths);
   const changedFiles = [
     ...new Set([...operationPaths, ...generatedArtifacts.map((item) => item.path), ...postJournalPreparers.flatMap((item) => item.outputs)]),
@@ -148,63 +106,42 @@ export function compileBoundaryPreparationManifest(input: CompileBoundaryPrepara
     compatibilityReexports: [],
     changedFiles,
     commits: { prepare: input.rendering.commit },
-    gates: {
-      package: [...input.rendering.gates.package].toSorted(byCodeUnit),
-      project: [...input.rendering.gates.project].toSorted(byCodeUnit),
-      workspace: [...input.rendering.gates.workspace].toSorted(byCodeUnit),
-    },
+    gates: sortedGates(input.rendering),
   });
   assertPreparationManifestValid(manifest);
   return manifest;
 }
 
-function planRetiredBoundaryPathReferences(
+/** Read the retained module at baseline, bind every graph-proven importer, and route to the boundary's strategy. */
+function planBoundaryOperations(
   input: CompileBoundaryPreparationManifestInput,
-  boundary: Extract<ResolvedBoundary, { strategy: "existing-package" }>,
+  boundary: ResolvedBoundary,
   baselineCommit: string,
-  compilerOptions: ts.CompilerOptions,
-): PreparationReplayOperation[] {
-  const settings = input.config.pathReferenceRewrites;
-  if (!settings.enabled || settings.roots.length === 0) return [];
-  const resolved = ts.resolveModuleName(boundary.replacementSpecifier, resolve(input.rootDir, boundary.retained), compilerOptions, ts.sys).resolvedModule
-    ?.resolvedFileName;
-  if (!resolved) throw new PlanningError(`boundary ${boundary.id} replacement ${boundary.replacementSpecifier} does not resolve to a workspace path`);
-  const target = relative(input.rootDir, resolved).replaceAll("\\", "/");
-  const moves = [{ source: boundary.retained, target }];
-  const scanSettings = { onAmbiguousMatch: settings.onAmbiguousMatch, matchExtensionless: settings.matchExtensionless, minSegments: settings.minSegments };
-  const operations: PreparationReplayOperation[] = [];
-  for (const root of settings.roots) {
-    for (const absolute of boundaryReferenceFiles(resolve(input.rootDir, root.root), root.extensions).sort()) {
-      if ((statSync(absolute, { throwIfNoEntry: false })?.size ?? 0) > settings.maxBytes) continue;
-      const path = relative(input.rootDir, absolute).replaceAll("\\", "/");
-      const text = showBaseline(input.rootDir, baselineCommit, path);
-      if (text === null) continue;
-      const scan = scanPathReferenceRewrites(text, path, moves, scanSettings);
-      if (scan.rewrites.length === 0) continue;
-      const contents = rewritePathReferenceText(text, scan.rewrites);
-      operations.push({
-        kind: "write-file",
-        purpose: "wiring",
-        file: {
-          path,
-          preconditionHash: hashText(text),
-          preconditionMode: baselineFileMode(input.rootDir, baselineCommit, path),
-          resultHash: hashText(contents),
-          resultMode: baselineFileMode(input.rootDir, baselineCommit, path),
-        },
-        contents,
-      });
-    }
+): readonly PreparationReplayOperation[] {
+  const retainedText = showBaseline(input.rootDir, baselineCommit, boundary.retained);
+  if (retainedText === null) throw new PlanningError(`boundary retained module is absent from baseline: ${boundary.retained}`);
+  const retainedMode = baselineFileMode(input.rootDir, baselineCommit, boundary.retained);
+  const compilerOptions = preparationCompilerOptions(input.rootDir, input.config, boundary.retained);
+  if (boundary.strategy === "existing-package" && boundary.retire && !input.graph.nodes.has(boundary.retained)) {
+    // The graph carries no evidence at all for the retained path (it never
+    // resolved a node there), so it cannot prove the shim has zero
+    // importers. Retirement fails closed rather than trusting an absence of
+    // evidence as evidence of absence.
+    throw new PlanningError(
+      `boundary ${boundary.id} declares retire, but the importer graph has no evidence for ${boundary.retained}; refusing to delete without graph proof`,
+    );
   }
-  return operations;
-}
-
-function boundaryReferenceFiles(directory: string, extensions: readonly string[]): string[] {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const path = resolve(directory, entry.name);
-    if (entry.isDirectory()) return boundaryReferenceFiles(path, extensions);
-    return extensions.includes(extname(entry.name)) ? [path] : [];
-  });
+  const importerPaths = [
+    ...new Set([...(input.graph.incoming.get(boundary.retained) ?? []), ...(input.graph.testImporters.get(boundary.retained) ?? [])]),
+  ].toSorted(byCodeUnit);
+  const moduleSpecifierCalls = input.moduleSpecifierCalls ?? input.config.moduleSpecifierCalls;
+  const bindings = importerPaths.map((path) =>
+    resolveBoundaryImporter(input.rootDir, baselineCommit, compilerOptions, path, boundary.retained, moduleSpecifierCalls),
+  );
+  if (boundary.strategy !== "existing-package") return planPortOperations(input, boundary, baselineCommit, retainedText, compilerOptions, bindings);
+  const boundaryOperations = planExistingPackageOperations(input, boundary, retainedText, retainedMode, bindings);
+  const referenceOperations = boundary.retire ? planRetiredBoundaryPathReferences(input.rootDir, input.config, boundary, baselineCommit, compilerOptions) : [];
+  return [...boundaryOperations, ...referenceOperations];
 }
 
 interface BoundaryImporterBinding {
@@ -457,19 +394,14 @@ function resolveBoundaryImporter(
   if (text === null) throw new PlanningError(`boundary importer is absent from baseline: ${importerPath}`);
   const mode = baselineFileMode(rootDir, baselineCommit, importerPath);
   const source = ts.createSourceFile(importerPath, text, ts.ScriptTarget.Latest, true, importerPath.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const resolvesToRetained = (specifier: string): boolean => resolvesTo(rootDir, importerPath, specifier, compilerOptions, retainedPath);
   for (const statement of source.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || !statement.moduleSpecifier.text.startsWith(".")) continue;
     const specifier = statement.moduleSpecifier.text;
-    const resolved = ts.resolveModuleName(specifier, resolve(rootDir, importerPath), compilerOptions, ts.sys).resolvedModule?.resolvedFileName;
-    if (resolved === undefined || relative(rootDir, resolved).replaceAll("\\", "/") !== retainedPath) continue;
-    const importedSymbols: string[] = [];
-    const namedBindings = statement.importClause?.namedBindings;
-    if (namedBindings !== undefined && ts.isNamedImports(namedBindings)) {
-      for (const element of namedBindings.elements) importedSymbols.push((element.propertyName ?? element.name).text);
-    }
-    return { path: importerPath, preconditionHash: hashText(text), mode, text, specifier, importedSymbols: [...new Set(importedSymbols)].toSorted(byCodeUnit) };
+    if (!resolvesToRetained(specifier)) continue;
+    return { path: importerPath, preconditionHash: hashText(text), mode, text, specifier, importedSymbols: namedImportSymbols(statement) };
   }
-  const configuredCall = findConfiguredModuleCall(source, rootDir, importerPath, retainedPath, compilerOptions, moduleSpecifierCalls);
+  const configuredCall = findConfiguredModuleCall(source, moduleSpecifierCalls, resolvesToRetained);
   if (configuredCall !== undefined) {
     return {
       path: importerPath,
@@ -484,34 +416,48 @@ function resolveBoundaryImporter(
   throw new PlanningError(`${importerPath} does not import the retained module ${retainedPath} at baseline`);
 }
 
+/** Whether `specifier`, written in `importerPath`, resolves to exactly `targetPath` under the application's compiler policy. */
+function resolvesTo(rootDir: string, importerPath: string, specifier: string, compilerOptions: ts.CompilerOptions, targetPath: string): boolean {
+  const resolved = ts.resolveModuleName(specifier, resolve(rootDir, importerPath), compilerOptions, ts.sys).resolvedModule?.resolvedFileName;
+  return resolved !== undefined && relative(rootDir, resolved).replaceAll("\\", "/") === targetPath;
+}
+
+function namedImportSymbols(statement: ts.ImportDeclaration): string[] {
+  const namedBindings = statement.importClause?.namedBindings;
+  const importedSymbols =
+    namedBindings !== undefined && ts.isNamedImports(namedBindings) ? namedBindings.elements.map((element) => (element.propertyName ?? element.name).text) : [];
+  return [...new Set(importedSymbols)].toSorted(byCodeUnit);
+}
+
 function findConfiguredModuleCall(
   source: ts.SourceFile,
-  rootDir: string,
-  importerPath: string,
-  retainedPath: string,
-  compilerOptions: ts.CompilerOptions,
   configuredCalls: readonly string[],
+  resolvesToRetained: (specifier: string) => boolean,
 ): { readonly call: string; readonly specifier: string } | undefined {
   let found: { call: string; specifier: string } | undefined;
-  const qualifiedName = (node: ts.Expression): string | undefined => {
-    if (ts.isIdentifier(node)) return node.text;
-    if (!ts.isPropertyAccessExpression(node)) return undefined;
-    const parent = qualifiedName(node.expression);
-    return parent === undefined ? undefined : `${parent}.${node.name.text}`;
-  };
   const visit = (node: ts.Node): void => {
     if (found !== undefined) return;
-    if (ts.isCallExpression(node)) {
-      const call = qualifiedName(node.expression);
-      const argument = node.arguments[0];
-      if (call !== undefined && configuredCalls.includes(call) && argument !== undefined && ts.isStringLiteralLike(argument)) {
-        const specifier = argument.text;
-        const resolved = ts.resolveModuleName(specifier, resolve(rootDir, importerPath), compilerOptions, ts.sys).resolvedModule?.resolvedFileName;
-        if (resolved !== undefined && relative(rootDir, resolved).replaceAll("\\", "/") === retainedPath) found = { call, specifier };
-      }
-    }
+    if (ts.isCallExpression(node)) found = configuredCallTo(node, configuredCalls, resolvesToRetained);
     ts.forEachChild(node, visit);
   };
   visit(source);
   return found;
+}
+
+function configuredCallTo(
+  node: ts.CallExpression,
+  configuredCalls: readonly string[],
+  resolvesToRetained: (specifier: string) => boolean,
+): { call: string; specifier: string } | undefined {
+  const call = qualifiedCallName(node.expression);
+  const argument = node.arguments[0];
+  if (call === undefined || !configuredCalls.includes(call) || argument === undefined || !ts.isStringLiteralLike(argument)) return undefined;
+  return resolvesToRetained(argument.text) ? { call, specifier: argument.text } : undefined;
+}
+
+function qualifiedCallName(node: ts.Expression): string | undefined {
+  if (ts.isIdentifier(node)) return node.text;
+  if (!ts.isPropertyAccessExpression(node)) return undefined;
+  const parent = qualifiedCallName(node.expression);
+  return parent === undefined ? undefined : `${parent}.${node.name.text}`;
 }

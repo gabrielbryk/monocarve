@@ -6,7 +6,8 @@ export class PreparationApplyError extends MonocarveError {
   constructor(
     message: string,
     readonly residue: readonly string[] = [],
+    cause?: unknown,
   ) {
-    super(message);
+    super(message, cause === undefined ? undefined : { cause });
   }
 }

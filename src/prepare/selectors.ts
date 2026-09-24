@@ -150,16 +150,17 @@ function collectClosure(graph: SymbolGraph, requested: ReadonlySet<Sha256>): Set
   while (pending.length > 0) {
     const source = pending.shift();
     if (!source) continue;
-    for (const edge of graph.edges.filter((candidate) => candidate.source === source)) {
-      if (edge.space !== "type") throw new PreparationSelectionError(`type-only group ${source} has a value dependency on ${edge.target}`);
-      if (!result.has(edge.target)) {
-        result.add(edge.target);
-        pending.push(edge.target);
-        pending.sort(byCodeUnit);
-      }
-    }
+    for (const edge of graph.edges.filter((candidate) => candidate.source === source)) enqueueTypeDependency(source, edge, result, pending);
   }
   return result;
+}
+
+function enqueueTypeDependency(source: Sha256, edge: SymbolGraph["edges"][number], result: Set<Sha256>, pending: Sha256[]): void {
+  if (edge.space !== "type") throw new PreparationSelectionError(`type-only group ${source} has a value dependency on ${edge.target}`);
+  if (result.has(edge.target)) return;
+  result.add(edge.target);
+  pending.push(edge.target);
+  pending.sort(byCodeUnit);
 }
 
 function groupForId(graph: SymbolGraph, id: Sha256): DeclarationGroup {
@@ -274,34 +275,49 @@ function containsModuleAugmentation(node: ts.Node): boolean {
   return augmentation;
 }
 
+/** Every located top-level statement of every group, in group then declaration order. */
+function groupStatements(groups: readonly DeclarationGroup[], statements: ReadonlyMap<Sha256, ts.Statement>): [DeclarationGroup, ts.Statement][] {
+  return groups.flatMap((group) =>
+    group.declarationIds.flatMap((id): [DeclarationGroup, ts.Statement][] => {
+      const statement = statements.get(id);
+      return statement ? [[group, statement]] : [];
+    }),
+  );
+}
+
 function collectRelativeInlineImportTypes(
   groups: readonly DeclarationGroup[],
   statements: ReadonlyMap<Sha256, ts.Statement>,
   sourceText: string,
 ): RelativeInlineImportType[] {
   const result: RelativeInlineImportType[] = [];
-  for (const group of groups)
-    for (const id of group.declarationIds) {
-      const statement = statements.get(id);
-      if (!statement) continue;
-      const visit = (node: ts.Node): void => {
-        if (ts.isImportTypeNode(node)) {
-          if (node.isTypeOf) throw new PreparationSelectionError(`${group.name} contains a value-space inline import type`);
-          if (!ts.isLiteralTypeNode(node.argument) || !ts.isStringLiteral(node.argument.literal)) {
-            throw new PreparationSelectionError(`${group.name} contains an unsupported inline import type argument`);
-          }
-          const literal = node.argument.literal;
-          if (literal.text.startsWith("./") || literal.text.startsWith("../")) {
-            const start = literal.getStart(statement.getSourceFile());
-            const end = literal.end;
-            result.push({ originalSpecifier: literal.text, start, end, sourceHash: hashText(sourceText.slice(start, end)) });
-          }
-        }
-        ts.forEachChild(node, visit);
-      };
-      visit(statement);
-    }
+  for (const [group, statement] of groupStatements(groups, statements)) {
+    const visit = (node: ts.Node): void => {
+      const item = ts.isImportTypeNode(node) ? relativeInlineImportType(node, group, statement, sourceText) : undefined;
+      if (item) result.push(item);
+      ts.forEachChild(node, visit);
+    };
+    visit(statement);
+  }
   return result.sort((left, right) => left.start - right.start || left.end - right.end || byCodeUnit(left.originalSpecifier, right.originalSpecifier));
+}
+
+/** Refuse value-space or non-literal inline import types; describe a relative one exactly, ignore a bare one. */
+function relativeInlineImportType(
+  node: ts.ImportTypeNode,
+  group: DeclarationGroup,
+  statement: ts.Statement,
+  sourceText: string,
+): RelativeInlineImportType | undefined {
+  if (node.isTypeOf) throw new PreparationSelectionError(`${group.name} contains a value-space inline import type`);
+  if (!ts.isLiteralTypeNode(node.argument) || !ts.isStringLiteral(node.argument.literal)) {
+    throw new PreparationSelectionError(`${group.name} contains an unsupported inline import type argument`);
+  }
+  const literal = node.argument.literal;
+  if (!literal.text.startsWith("./") && !literal.text.startsWith("../")) return undefined;
+  const start = literal.getStart(statement.getSourceFile());
+  const end = literal.end;
+  return { originalSpecifier: literal.text, start, end, sourceHash: hashText(sourceText.slice(start, end)) };
 }
 
 function selectedDeclarations(
@@ -342,19 +358,15 @@ function collectRequiredImports(
 ): RequiredImportBinding[] {
   const bindings = importBindings(sourceFile, checker);
   const result = new Map<string, RequiredImportBinding>();
-  for (const group of groups) {
-    for (const id of group.declarationIds) {
-      const statement = statements.get(id);
-      if (!statement) continue;
-      visitReferences(statement, (identifier) => {
-        const binding = symbolAt(checker, identifier, bindings);
-        if (!binding) return;
-        if (referenceSpace(identifier) !== "type") {
-          throw new PreparationSelectionError(`${group.name} requires imported value ${identifier.text}`);
-        }
-        result.set(`${binding.moduleSpecifier}\0${binding.localName}`, binding);
-      });
-    }
+  for (const [group, statement] of groupStatements(groups, statements)) {
+    visitReferences(statement, (identifier) => {
+      const binding = symbolAt(checker, identifier, bindings);
+      if (!binding) return;
+      if (referenceSpace(identifier) !== "type") {
+        throw new PreparationSelectionError(`${group.name} requires imported value ${identifier.text}`);
+      }
+      result.set(`${binding.moduleSpecifier}\0${binding.localName}`, binding);
+    });
   }
   return [...result.values()].toSorted(compareImport);
 }
@@ -363,43 +375,45 @@ function importBindings(sourceFile: ts.SourceFile, checker: ts.TypeChecker): Map
   const result = new Map<ts.Symbol, RequiredImportBinding>();
   for (const statement of sourceFile.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || !statement.importClause) continue;
-    const moduleSpecifier = statement.moduleSpecifier.text;
-    const clauseTypeOnly = statement.importClause.phaseModifier === ts.SyntaxKind.TypeKeyword;
-    if (statement.importClause.name) {
-      addImport(result, checker, statement.importClause.name, {
-        localName: statement.importClause.name.text,
-        importedName: "default",
-        moduleSpecifier,
-        kind: "default",
-        originallyTypeOnly: clauseTypeOnly,
-        requiredAs: "type",
-      });
-    }
-    const bindings = statement.importClause.namedBindings;
-    if (bindings && ts.isNamespaceImport(bindings)) {
-      addImport(result, checker, bindings.name, {
-        localName: bindings.name.text,
-        importedName: "*",
-        moduleSpecifier,
-        kind: "namespace",
-        originallyTypeOnly: clauseTypeOnly,
-        requiredAs: "type",
-      });
-    }
-    if (bindings && ts.isNamedImports(bindings)) {
-      for (const element of bindings.elements) {
-        addImport(result, checker, element.name, {
-          localName: element.name.text,
-          importedName: element.propertyName?.text ?? element.name.text,
-          moduleSpecifier,
-          kind: "named",
-          originallyTypeOnly: clauseTypeOnly || element.isTypeOnly,
-          requiredAs: "type",
-        });
-      }
-    }
+    addClauseImports(result, checker, statement.importClause, statement.moduleSpecifier.text);
   }
   return result;
+}
+
+function addClauseImports(result: Map<ts.Symbol, RequiredImportBinding>, checker: ts.TypeChecker, clause: ts.ImportClause, moduleSpecifier: string): void {
+  const clauseTypeOnly = clause.phaseModifier === ts.SyntaxKind.TypeKeyword;
+  if (clause.name) {
+    addImport(result, checker, clause.name, {
+      localName: clause.name.text,
+      importedName: "default",
+      moduleSpecifier,
+      kind: "default",
+      originallyTypeOnly: clauseTypeOnly,
+      requiredAs: "type",
+    });
+  }
+  const bindings = clause.namedBindings;
+  if (bindings && ts.isNamespaceImport(bindings)) {
+    addImport(result, checker, bindings.name, {
+      localName: bindings.name.text,
+      importedName: "*",
+      moduleSpecifier,
+      kind: "namespace",
+      originallyTypeOnly: clauseTypeOnly,
+      requiredAs: "type",
+    });
+  }
+  if (!bindings || !ts.isNamedImports(bindings)) return;
+  for (const element of bindings.elements) {
+    addImport(result, checker, element.name, {
+      localName: element.name.text,
+      importedName: element.propertyName?.text ?? element.name.text,
+      moduleSpecifier,
+      kind: "named",
+      originallyTypeOnly: clauseTypeOnly || element.isTypeOnly,
+      requiredAs: "type",
+    });
+  }
 }
 
 function addImport(result: Map<ts.Symbol, RequiredImportBinding>, checker: ts.TypeChecker, name: ts.Identifier, binding: RequiredImportBinding): void {

@@ -43,33 +43,50 @@ export function validatePortPackageExportRecipe(operations: readonly Preparation
   const rewrites = operations
     .filter((operation): operation is RewriteModuleSpecifierOperation => operation.kind === "rewrite-module-specifier")
     .flatMap((operation) => operation.rewrites);
-  for (const operation of packageWrites) {
-    let manifest: Record<string, unknown>;
-    try {
-      manifest = JSON.parse(operation.contents) as Record<string, unknown>;
-    } catch {
-      add("port-package-export", "port package export write must contain valid JSON", operation.file.path);
-      continue;
-    }
-    const name = typeof manifest.name === "string" ? manifest.name : undefined;
-    const exports =
-      manifest.exports && typeof manifest.exports === "object" && !Array.isArray(manifest.exports) ? (manifest.exports as Record<string, unknown>) : {};
-    const packageRoot = posix.dirname(operation.file.path);
-    const matches = contracts.flatMap((contract) => {
-      const target = `./${posix.relative(packageRoot, contract.file.path)}`;
-      return Object.entries(exports)
-        .filter(([, value]) => exportLeavesMatch(value, target))
-        .map(([key]) => ({ key, contract }));
-    });
-    if (!name || matches.length !== 1) {
-      add("port-package-export", "port package export must bind exactly one promoted contract target", operation.file.path);
-      continue;
-    }
-    const specifier = `${name}${matches[0]!.key.slice(1)}`;
-    if (!rewrites.some((rewrite) => rewrite.to === specifier)) {
-      add("port-package-export", `port package export ${matches[0]!.key} has no consumer rewrite to ${specifier}`, operation.file.path);
-    }
+  for (const operation of packageWrites) validatePortPackageWrite(operation, contracts, rewrites, add);
+}
+
+function validatePortPackageWrite(
+  operation: PreparationWriteFileOperation,
+  contracts: readonly PreparationWriteFileOperation[],
+  rewrites: readonly ModuleRewrite[],
+  add: AddManifestIssue,
+): void {
+  const manifest = parsePackageManifest(operation.contents);
+  if (manifest === undefined) {
+    add("port-package-export", "port package export write must contain valid JSON", operation.file.path);
+    return;
   }
+  const name = typeof manifest.name === "string" ? manifest.name : undefined;
+  const exports = packageExports(manifest);
+  const packageRoot = posix.dirname(operation.file.path);
+  const matches = contracts.flatMap((contract) => {
+    const target = `./${posix.relative(packageRoot, contract.file.path)}`;
+    return Object.entries(exports)
+      .filter(([, value]) => exportLeavesMatch(value, target))
+      .map(([key]) => ({ key, contract }));
+  });
+  if (!name || matches.length !== 1) {
+    add("port-package-export", "port package export must bind exactly one promoted contract target", operation.file.path);
+    return;
+  }
+  const specifier = `${name}${matches[0]!.key.slice(1)}`;
+  if (!rewrites.some((rewrite) => rewrite.to === specifier)) {
+    add("port-package-export", `port package export ${matches[0]!.key} has no consumer rewrite to ${specifier}`, operation.file.path);
+  }
+}
+
+function parsePackageManifest(contents: string): Record<string, unknown> | undefined {
+  try {
+    return JSON.parse(contents) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+}
+
+function packageExports(manifest: Record<string, unknown>): Record<string, unknown> {
+  const exports = manifest.exports;
+  return exports && typeof exports === "object" && !Array.isArray(exports) ? (exports as Record<string, unknown>) : {};
 }
 
 function exportLeavesMatch(value: unknown, target: string): boolean {
@@ -126,26 +143,30 @@ function rewriteKey(rewrite: { readonly from: string; readonly to: string; reado
   return `${rewrite.from}\0${rewrite.to}\0${rewrite.moduleSpecifierCall ?? ""}`;
 }
 
-function validateRewriteEntry(
-  path: string,
-  contents: string,
-  rewrite: RewriteModuleSpecifierOperation["rewrites"][number],
-  bindings: ReadonlyMap<string, ReadonlySet<string>>,
-  add: AddManifestIssue,
-): void {
+type ModuleRewrite = RewriteModuleSpecifierOperation["rewrites"][number];
+type SpecifierBindings = ReadonlyMap<string, ReadonlySet<string>>;
+
+function validateRewriteEntry(path: string, contents: string, rewrite: ModuleRewrite, bindings: SpecifierBindings, add: AddManifestIssue): void {
   if (!isModuleSpecifier(rewrite.from) || !isModuleSpecifier(rewrite.to) || rewrite.from === rewrite.to) {
     add("rewrite-specifier", "each rewrite must name two distinct, non-empty module specifiers", path);
   }
   if (rewrite.moduleSpecifierCall !== undefined) {
-    if (rewrite.symbols.length !== 0) add("rewrite-symbols", "a module-specifier call rewrite must not claim imported symbols", path);
-    const calls = collectModuleSpecifierCalls(path, contents);
-    const specifiers = calls.get(rewrite.moduleSpecifierCall);
-    if (!specifiers?.has(rewrite.to))
-      add("rewrite-specifier", `rewritten contents do not call ${rewrite.moduleSpecifierCall} with replacement specifier ${rewrite.to}`, path);
-    if (specifiers?.has(rewrite.from))
-      add("rewrite-specifier", `rewritten contents still call ${rewrite.moduleSpecifierCall} with retired specifier ${rewrite.from}`, path);
+    validateCallRewrite(path, contents, rewrite, rewrite.moduleSpecifierCall, add);
     return;
   }
+  if (!validateMovedSymbols(path, rewrite, bindings, add)) return;
+  validateRetainedSymbols(path, rewrite, bindings, add);
+}
+
+function validateCallRewrite(path: string, contents: string, rewrite: ModuleRewrite, call: string, add: AddManifestIssue): void {
+  if (rewrite.symbols.length !== 0) add("rewrite-symbols", "a module-specifier call rewrite must not claim imported symbols", path);
+  const specifiers = collectModuleSpecifierCalls(path, contents).get(call);
+  if (!specifiers?.has(rewrite.to)) add("rewrite-specifier", `rewritten contents do not call ${call} with replacement specifier ${rewrite.to}`, path);
+  if (specifiers?.has(rewrite.from)) add("rewrite-specifier", `rewritten contents still call ${call} with retired specifier ${rewrite.from}`, path);
+}
+
+/** Returns false when the replacement specifier is not imported at all, which makes the retained checks moot. */
+function validateMovedSymbols(path: string, rewrite: ModuleRewrite, bindings: SpecifierBindings, add: AddManifestIssue): boolean {
   if (rewrite.symbols.length === 0) add("rewrite-symbols", "each rewrite must name at least one moved symbol", path);
   for (const symbol of rewrite.symbols) if (!isIdentifier(symbol)) add("rewrite-symbols", `rewrite symbol ${symbol} is not a valid identifier`, path);
   for (let index = 1; index < rewrite.symbols.length; index += 1) {
@@ -154,12 +175,16 @@ function validateRewriteEntry(
   const bound = bindings.get(rewrite.to);
   if (!bound) {
     add("rewrite-specifier", `rewritten contents do not import the replacement specifier ${rewrite.to}`, path);
-    return;
+    return false;
   }
   for (const symbol of rewrite.symbols) if (!bound.has(symbol)) add("rewrite-symbols", `rewritten contents do not bind ${symbol} from ${rewrite.to}`, path);
   if ([...bound].some((symbol) => !rewrite.symbols.includes(symbol))) {
     add("rewrite-symbols", `rewritten contents bind undeclared symbols from ${rewrite.to}`, path);
   }
+  return true;
+}
+
+function validateRetainedSymbols(path: string, rewrite: ModuleRewrite, bindings: SpecifierBindings, add: AddManifestIssue): void {
   const retainedSymbols = rewrite.retainedSymbols ?? [];
   validateSortedStrings(retainedSymbols, "rewrite-symbols", "retained rewrite symbols", add);
   const retained = bindings.get(rewrite.from);
@@ -181,14 +206,15 @@ function collectModuleSpecifierCalls(path: string, text: string): ReadonlyMap<st
     const parent = qualifiedName(node.expression);
     return parent === undefined ? undefined : `${parent}.${node.name.text}`;
   };
+  const record = (call: string | undefined, specifier: string): void => {
+    if (call === undefined) return;
+    const specifiers = calls.get(call) ?? new Set<string>();
+    specifiers.add(specifier);
+    calls.set(call, specifiers);
+  };
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node) && node.arguments[0] !== undefined && ts.isStringLiteralLike(node.arguments[0])) {
-      const call = qualifiedName(node.expression);
-      if (call !== undefined) {
-        const specifiers = calls.get(call) ?? new Set<string>();
-        specifiers.add(node.arguments[0].text);
-        calls.set(call, specifiers);
-      }
+      record(qualifiedName(node.expression), node.arguments[0].text);
     }
     ts.forEachChild(node, visit);
   };

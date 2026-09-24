@@ -186,6 +186,15 @@ interface PortImportSelection {
   readonly retainedElements: readonly ts.ImportSpecifier[];
 }
 
+interface PortImportAccumulator {
+  readonly allowed: ReadonlySet<string>;
+  readonly moved: Set<string>;
+  readonly movedLocals: Set<string>;
+  readonly retained: Set<string>;
+  readonly retainedLocals: Set<string>;
+  readonly selections: PortImportSelection[];
+}
+
 function portImportBindings(consumer: PortConsumerInput, promoted: readonly string[]): PortImportBindings {
   const source = ts.createSourceFile(
     consumer.path,
@@ -194,63 +203,62 @@ function portImportBindings(consumer: PortConsumerInput, promoted: readonly stri
     true,
     consumer.path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
-  const allowed = new Set(promoted);
-  const moved = new Set<string>();
-  const movedLocals = new Set<string>();
-  const retained = new Set<string>();
-  const retainedLocals = new Set<string>();
-  const selections: PortImportSelection[] = [];
+  const found: PortImportAccumulator = {
+    allowed: new Set(promoted),
+    moved: new Set(),
+    movedLocals: new Set(),
+    retained: new Set(),
+    retainedLocals: new Set(),
+    selections: [],
+  };
   let hasSideEffectImport = false;
   for (const statement of source.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || statement.moduleSpecifier.text !== consumer.specifier) continue;
-    const bindings = statement.importClause?.namedBindings;
-    if (!statement.importClause) {
-      hasSideEffectImport = true;
-      continue;
-    }
-    if (!bindings || !ts.isNamedImports(bindings)) {
-      if (statement.importClause.name) {
-        retained.add("default");
-        retainedLocals.add(statement.importClause.name.text);
-      }
-      if (bindings && ts.isNamespaceImport(bindings)) {
-        retained.add("*");
-        retainedLocals.add(bindings.name.text);
-      }
-      continue;
-    }
-    const promotedElements: ts.ImportSpecifier[] = [];
-    const retainedElements: ts.ImportSpecifier[] = [];
-    for (const element of bindings.elements) {
-      const imported = element.propertyName?.text ?? element.name.text;
-      if (allowed.has(imported)) {
-        moved.add(imported);
-        movedLocals.add(element.name.text);
-        promotedElements.push(element);
-      } else {
-        retained.add(imported);
-        retainedLocals.add(element.name.text);
-        retainedElements.push(element);
-      }
-    }
-    if (statement.importClause?.name) {
-      retained.add("default");
-      retainedLocals.add(statement.importClause.name.text);
-    }
-    if (promotedElements.length > 0) selections.push({ statement, promotedElements, retainedElements });
+    if (statement.importClause) splitPortImport(statement, statement.importClause, found);
+    else hasSideEffectImport = true;
   }
-  if (hasSideEffectImport && selections.length > 0) {
+  if (hasSideEffectImport && found.selections.length > 0) {
     throw new BoundaryPortError(
       `${consumer.path} has a side-effect import from ${consumer.specifier}; a selective port rewrite cannot prove its retained binding identity`,
     );
   }
   return {
-    promoted: [...moved].toSorted(byCodeUnit),
-    promotedLocals: [...movedLocals].toSorted(byCodeUnit),
-    retained: [...retained].toSorted(byCodeUnit),
-    retainedLocals: [...retainedLocals].toSorted(byCodeUnit),
-    selections,
+    promoted: [...found.moved].toSorted(byCodeUnit),
+    promotedLocals: [...found.movedLocals].toSorted(byCodeUnit),
+    retained: [...found.retained].toSorted(byCodeUnit),
+    retainedLocals: [...found.retainedLocals].toSorted(byCodeUnit),
+    selections: found.selections,
   };
+}
+
+/** Sort one import's bindings into promoted and retained; only named imports can be promoted. */
+function splitPortImport(statement: ts.ImportDeclaration, clause: ts.ImportClause, found: PortImportAccumulator): void {
+  const bindings = clause.namedBindings;
+  if (!bindings || !ts.isNamedImports(bindings)) {
+    if (clause.name) retainBinding(found, "default", clause.name.text);
+    if (bindings && ts.isNamespaceImport(bindings)) retainBinding(found, "*", bindings.name.text);
+    return;
+  }
+  const promotedElements: ts.ImportSpecifier[] = [];
+  const retainedElements: ts.ImportSpecifier[] = [];
+  for (const element of bindings.elements) {
+    const imported = element.propertyName?.text ?? element.name.text;
+    if (found.allowed.has(imported)) {
+      found.moved.add(imported);
+      found.movedLocals.add(element.name.text);
+      promotedElements.push(element);
+    } else {
+      retainBinding(found, imported, element.name.text);
+      retainedElements.push(element);
+    }
+  }
+  if (clause.name) retainBinding(found, "default", clause.name.text);
+  if (promotedElements.length > 0) found.selections.push({ statement, promotedElements, retainedElements });
+}
+
+function retainBinding(found: PortImportAccumulator, imported: string, local: string): void {
+  found.retained.add(imported);
+  found.retainedLocals.add(local);
 }
 
 function rewriteSelectedPortImports(consumer: PortConsumerInput, packageImport: string, bindings: PortImportBindings): string {

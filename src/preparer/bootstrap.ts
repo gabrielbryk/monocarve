@@ -134,7 +134,7 @@ function bootstrapGit(rootDir: string, index: string, excludes: string, args: re
       maxBuffer: 256 * 1024 * 1024,
     }).trim();
   } catch (error) {
-    throw new PreparerError(`git ${args.join(" ")} failed during preparer bootstrap: ${(error as Error).message}`);
+    throw new PreparerError(`git ${args.join(" ")} failed during preparer bootstrap: ${(error as Error).message}`, { cause: error });
   }
 }
 

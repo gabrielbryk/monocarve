@@ -19,16 +19,7 @@ export interface CompileMultiFilePreparationInput {
 
 /** Compile several proven donor transforms into one atomic preparation manifest. */
 export function compileMultiFilePreparationManifest(input: CompileMultiFilePreparationInput): PreparationManifest {
-  const candidate = input.multiSeam.candidates.find((item) => item.id === input.candidateId);
-  if (!candidate) throw new PlanningError(`unknown multi-file seam candidate ${input.candidateId}`);
-  if (input.multiSeam.blockers.length > 0 || candidate.blockers.some((item) => item.confidence === "exact"))
-    throw new PlanningError("multi-file seam carries unresolved exact blockers");
-  if (
-    input.multiSeam.edges.some(
-      (edge) => (candidate.groupIds.includes(edge.sourceGroupId) || candidate.groupIds.includes(edge.targetGroupId)) && edge.space !== "type",
-    )
-  )
-    throw new PlanningError("multi-file preparation refuses value-space cross-file edges touching the reviewed candidate");
+  const candidate = reviewedCandidate(input);
   const manifests = input.members.map((member) =>
     compilePreparationManifest({
       ...member,
@@ -38,13 +29,7 @@ export function compileMultiFilePreparationManifest(input: CompileMultiFilePrepa
       graphDigest: input.graphDigest,
     }),
   );
-  const selected = manifests.flatMap((manifest) => manifest.declarations.map((group) => group.groupId)).toSorted(byCodeUnit);
-  const expected = [...candidate.groupIds].toSorted(byCodeUnit);
-  if (selected.length !== expected.length || selected.some((id, index) => id !== expected[index]))
-    throw new PlanningError("multi-file preparation members must exactly cover the reviewed atomic candidate");
-  const sourcePaths = [...new Set(manifests.flatMap((manifest) => manifest.declarations.map((group) => group.sourcePath)))].toSorted(byCodeUnit);
-  if (sourcePaths.length !== candidate.sourcePaths.length || sourcePaths.some((path, index) => path !== candidate.sourcePaths[index]))
-    throw new PlanningError("multi-file preparation members do not cover the candidate source files");
+  assertMembersCoverCandidate(manifests, candidate);
   const operations = manifests.flatMap((item) => item.operations).toSorted(operationOrder);
   const mutationPaths = operations.flatMap((operation) =>
     operation.kind === "extract-type-declarations" ? [operation.donor.path, operation.target.path] : [operation.file.path],
@@ -79,6 +64,33 @@ export function compileMultiFilePreparationManifest(input: CompileMultiFilePrepa
   });
   assertPreparationManifestValid(manifest);
   return manifest;
+}
+
+type MultiSeamCandidate = CompileMultiFilePreparationInput["multiSeam"]["candidates"][number];
+
+/** The reviewed candidate, refused while any exact blocker or value-space edge touches it. */
+function reviewedCandidate(input: CompileMultiFilePreparationInput): MultiSeamCandidate {
+  const candidate = input.multiSeam.candidates.find((item) => item.id === input.candidateId);
+  if (!candidate) throw new PlanningError(`unknown multi-file seam candidate ${input.candidateId}`);
+  if (input.multiSeam.blockers.length > 0 || candidate.blockers.some((item) => item.confidence === "exact"))
+    throw new PlanningError("multi-file seam carries unresolved exact blockers");
+  const touchesCandidate = (edge: CompileMultiFilePreparationInput["multiSeam"]["edges"][number]): boolean =>
+    candidate.groupIds.includes(edge.sourceGroupId) || candidate.groupIds.includes(edge.targetGroupId);
+  if (input.multiSeam.edges.some((edge) => touchesCandidate(edge) && edge.space !== "type"))
+    throw new PlanningError("multi-file preparation refuses value-space cross-file edges touching the reviewed candidate");
+  return candidate;
+}
+
+function assertMembersCoverCandidate(manifests: readonly PreparationManifest[], candidate: MultiSeamCandidate): void {
+  const selected = manifests.flatMap((manifest) => manifest.declarations.map((group) => group.groupId)).toSorted(byCodeUnit);
+  const expected = [...candidate.groupIds].toSorted(byCodeUnit);
+  if (!sameSequence(selected, expected)) throw new PlanningError("multi-file preparation members must exactly cover the reviewed atomic candidate");
+  const sourcePaths = [...new Set(manifests.flatMap((manifest) => manifest.declarations.map((group) => group.sourcePath)))].toSorted(byCodeUnit);
+  if (!sameSequence(sourcePaths, candidate.sourcePaths)) throw new PlanningError("multi-file preparation members do not cover the candidate source files");
+}
+
+function sameSequence(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((item, index) => item === right[index]);
 }
 
 function operationOrder(left: PreparationReplayOperation, right: PreparationReplayOperation): number {

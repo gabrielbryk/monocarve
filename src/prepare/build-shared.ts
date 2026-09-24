@@ -3,9 +3,11 @@
  * `value-split.ts`, `generated-source-adoption.ts`). Kept dependency-free of
  * those compilers so none of them has to import another.
  */
+import { triggeredArtifacts, type MonocarveConfig } from "../config.ts";
 import { PlanningError } from "../plan/context.ts";
 import { git, repositoryPrefix } from "../util/git.ts";
-import type { PreparationCommitSpec, PreparationGates } from "./manifest-types.ts";
+import { byCodeUnit } from "../util/hash.ts";
+import type { PreparationCommitSpec, PreparationGates, PreparationManifest } from "./manifest-types.ts";
 
 export interface PreparationManifestRendering {
   /** Fully rendered repository gates. The compiler never invents commands. */
@@ -23,4 +25,28 @@ export function baselineFileMode(rootDir: string, commit: string, path: string):
     throw new PlanningError(`preparation donor ${path} is not a regular baseline file`);
   }
   return treeMode & 0o777;
+}
+
+/** The rendered gate tiers, each in canonical order. */
+export function sortedGates(rendering: PreparationManifestRendering): PreparationGates {
+  return {
+    package: [...rendering.gates.package].toSorted(byCodeUnit),
+    project: [...rendering.gates.project].toSorted(byCodeUnit),
+    workspace: [...rendering.gates.workspace].toSorted(byCodeUnit),
+  };
+}
+
+/** Every configured generated artifact a change to `operationPaths` triggers, path-sorted. */
+export function declaredGeneratedArtifacts(
+  config: MonocarveConfig,
+  operationPaths: readonly string[],
+): NonNullable<PreparationManifest["generatedArtifacts"]>[number][] {
+  return triggeredArtifacts(config, operationPaths)
+    .map((artifact) =>
+      Object.assign(
+        { path: artifact.path, source: artifact.source, regenerate: artifact.regenerate, regenerateOnApply: true as const },
+        artifact.exemptReason === undefined ? {} : { exemptReason: artifact.exemptReason },
+      ),
+    )
+    .toSorted((left, right) => byCodeUnit(left.path, right.path));
 }

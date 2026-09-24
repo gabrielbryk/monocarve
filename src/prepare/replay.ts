@@ -152,14 +152,7 @@ function normalizeInlineImportTypeProofs(
   );
   let previousEnd = -1;
   for (const proof of sorted) {
-    const owner = selected.find((span) => proof.start >= span.start && proof.end <= span.end);
-    const literal = source.slice(proof.start, proof.end);
-    if (!owner || proof.start < previousEnd || proof.end <= proof.start || proof.proofBaselineHash !== baselineHash || hashText(literal) !== proof.sourceHash) {
-      throw new PreparationReplayError("inline import type rewrite proof is stale, overlapping, or outside the selection");
-    }
-    if (!proof.originalSpecifier.startsWith(".") || !proof.targetSpecifier.startsWith(".") || !isExactStringLiteral(literal, proof.originalSpecifier)) {
-      throw new PreparationReplayError("inline import type rewrite proof does not match a relative string literal rewrite");
-    }
+    assertInlineImportTypeProof(source, baselineHash, selected, proof, previousEnd);
     previousEnd = proof.end;
   }
   const expected = collectRelativeInlineImportLiterals(source, selected);
@@ -172,6 +165,23 @@ function normalizeInlineImportTypeProofs(
     throw new PreparationReplayError("relative inline import types require exact rewrite proof coverage");
   }
   return sorted;
+}
+
+function assertInlineImportTypeProof(
+  source: string,
+  baselineHash: Sha256,
+  selected: readonly TypeOnlyExtractionSpan[],
+  proof: InlineImportTypeRewriteProof,
+  previousEnd: number,
+): void {
+  const owner = selected.find((span) => proof.start >= span.start && proof.end <= span.end);
+  const literal = source.slice(proof.start, proof.end);
+  if (!owner || proof.start < previousEnd || proof.end <= proof.start || proof.proofBaselineHash !== baselineHash || hashText(literal) !== proof.sourceHash) {
+    throw new PreparationReplayError("inline import type rewrite proof is stale, overlapping, or outside the selection");
+  }
+  if (!proof.originalSpecifier.startsWith(".") || !proof.targetSpecifier.startsWith(".") || !isExactStringLiteral(literal, proof.originalSpecifier)) {
+    throw new PreparationReplayError("inline import type rewrite proof does not match a relative string literal rewrite");
+  }
 }
 
 function collectRelativeInlineImportLiterals(source: string, selected: readonly TypeOnlyExtractionSpan[]): { start: number; end: number; specifier: string }[] {
