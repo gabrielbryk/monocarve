@@ -4,7 +4,7 @@
     "typescript(no-unsafe-type-assertion)": 1
   },
   "scripts/quality/baseline.ts": {
-    "typescript(no-unnecessary-condition)": 3,
+    "typescript(no-unnecessary-condition)": 1,
     "typescript(no-unsafe-type-assertion)": 3,
     "unicorn(no-array-sort)": 1
   },
@@ -22,8 +22,7 @@
   },
   "scripts/quality/complexity.ts": {
     "typescript(no-explicit-any)": 9,
-    "typescript(no-non-null-assertion)": 4,
-    "typescript(no-unnecessary-condition)": 1,
+    "typescript(no-non-null-assertion)": 2,
     "typescript(no-unnecessary-type-assertion)": 4,
     "typescript(no-unsafe-argument)": 12,
     "typescript(no-unsafe-assignment)": 13,
@@ -43,7 +42,6 @@
     "unicorn(no-array-sort)": 1
   },
   "scripts/verify-package.ts": {
-    "typescript(no-unnecessary-condition)": 1,
     "typescript(no-unsafe-type-assertion)": 2
   },
   "scripts/verify-standalone.ts": {

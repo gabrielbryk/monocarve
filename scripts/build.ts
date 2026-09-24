@@ -85,6 +85,6 @@ async function build(overrides: Bun.BuildConfig, packagingMode: "dist-source" | 
 }
 
 function run(command: readonly string[]): void {
-  const result = Bun.spawnSync(command, { cwd: root, stdout: "inherit", stderr: "inherit" });
+  const result = Bun.spawnSync([...command], { cwd: root, stdout: "inherit", stderr: "inherit" });
   if (result.exitCode !== 0) throw new Error(`build command failed (${result.exitCode}): ${command.join(" ")}`);
 }
