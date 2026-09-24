@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { readFileSync } from "node:fs";
 import { buildSourceRevision } from "../scripts/build-stamp.ts";
 import { runtimeIdentity } from "../src/assessment/snapshot.ts";
+import { TOOL_VERSION } from "../src/branding.ts";
 import { compilerBuildIdentity, executableBuildIdentity, executableBuildIdentityFor, sourceTreeIntegrity } from "../src/build-identity.ts";
 import { cleanupFixtures, fixtureGit, fixtureRepo, scratchDirectory, write } from "./support/fixture-repo.ts";
 
@@ -30,7 +31,7 @@ test("source-mode identity is the canonical tool source digest and carries no in
 
 test("rich executable identity composes but never changes behavioral compiler identity", () => {
   const compiler = compilerBuildIdentity();
-  expect(executableBuildIdentity()).toEqual({ schemaVersion: 1, semanticVersion: "1.0.0", packagingMode: "source", compiler });
+  expect(executableBuildIdentity()).toEqual({ schemaVersion: 1, semanticVersion: TOOL_VERSION, packagingMode: "source", compiler });
   expect(executableBuildIdentityFor("dist-source").compiler).toEqual(compiler);
   expect(executableBuildIdentityFor("standalone-bun").compiler).toEqual(compiler);
   expect(Object.keys(compiler).sort()).toEqual(["artifactIntegrity"]);
