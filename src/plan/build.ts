@@ -1,5 +1,4 @@
 /** Deterministic compilation of one eligible portfolio candidate. */
-import { statSync } from "node:fs";
 import { createPackageManagerAdapter, createTaskRunnerAdapter } from "../adapters/registry.ts";
 import { GENERATOR } from "../branding.ts";
 import {
@@ -9,17 +8,12 @@ import {
   packageNameOf,
   renderExtractionProfile,
   resolveExtractionProfile,
-  triggeredArtifacts,
-  triggeredPostJournalPreparers,
   type MonocarveConfig,
   type PublicSurfaceConfig,
 } from "../config.ts";
-import { sccId } from "../graph/components.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import type { PortfolioCandidate } from "../portfolio/types.ts";
-import { byCodeUnit, hashText, stableStringify, type Sha256 } from "../util/hash.ts";
-import { renderTemplate } from "../util/template.ts";
-import { boundaryBaselineOf } from "./boundary-baseline.ts";
+import { byCodeUnit, hashText, stableStringify } from "../util/hash.ts";
 import {
   appendConsumerOperations,
   appendStaticFsReferenceOperations,
@@ -28,6 +22,23 @@ import {
   evaluationEffectsFor,
   selectExtractionSources,
 } from "./build-phases.ts";
+import {
+  assessmentSection,
+  boundaryBaselineSection,
+  changedFilesFor,
+  commitsSection,
+  commitVarsFor,
+  consumerRecords,
+  dependencyDecisionsFor,
+  lockfileImporterSection,
+  metricsSection,
+  pathMigrationNoopsSection,
+  profilePlanId,
+  provenanceSection,
+  sourceBlobsFor,
+  sourceSection,
+  targetSection,
+} from "./build-sections.ts";
 import {
   baselineOf,
   derivePackageRoot,
@@ -41,13 +52,11 @@ import {
 import { consumerDependencyOwners } from "./consumers.ts";
 import { PlanningError, WorkspaceContext } from "./context.ts";
 import { inferDependencies } from "./dependencies.ts";
-import { collectDependencyEvidence } from "./dependency-evidence.ts";
 import { composeDonorDependencyPruning, donorDependencyPruningCandidates } from "./donor-pruning.ts";
 import { formatGeneratedText } from "./format-generated.ts";
-import { PLAN_SCHEMA_VERSION, type EscapeRewrite, type ExtractionManifest, type PlanOperation, type PostJournalPreparerRecord } from "./manifest.ts";
+import { PLAN_SCHEMA_VERSION, type EscapeRewrite, type ExtractionManifest, type PlanOperation } from "./manifest.ts";
+import { generatorOwnedOutputs, postJournalRecordsFor } from "./post-journal-records.ts";
 import { assertCompiledOperationInvariants, projectedArtifactEvidence } from "./projected-workspace.ts";
-import { buildPlanProvenance } from "./provenance.ts";
-import { sourceExportsFromFile, type ExportSurface } from "./public-surface.ts";
 import { consumerWiringOperations, packageOperations, projectedLockfile } from "./scaffold.ts";
 import { normalizeTargetSubpath } from "./target-layout.ts";
 
@@ -86,7 +95,7 @@ export function buildPlanSync(options: BuildPlanOptions): ExtractionManifest {
   return buildManifest(state, selection, rewrites, operations);
 }
 
-interface BuildState {
+export interface BuildState {
   readonly options: BuildPlanOptions;
   readonly config: MonocarveConfig;
   readonly graph: DependencyGraph;
@@ -298,12 +307,7 @@ function buildManifest(
   const consumers = consumerAnalysis.consumers;
   const dynamicImportDelta = consumerAnalysis.dynamicImportDelta;
   const dependencies = dependenciesFor(state, selection.sources, rewrites);
-  const pruningCandidates = donorDependencyPruningCandidates({
-    context: state.context,
-    donorRoot: applicationOwner(state.application),
-    movedSources: selection.sources,
-    dependencies,
-  });
+  const pruningCandidates = pruningCandidatesFor(state, selection.sources, dependencies);
   const dependencyDecisions = dependencyDecisionsFor(state, selection.sources, dependencies, pruningCandidates);
   const packageWiringStart = operations.findIndex((operation) => operation.kind === "write-file");
   const packageWiring = packageWiringStart < 0 ? [] : operations.slice(packageWiringStart);
@@ -320,36 +324,10 @@ function buildManifest(
   const sourceBlobs = sourceBlobsFor(state.context, [...selection.sources, ...selection.assets]);
   const consumerOwners = consumerApplications(state.context, consumers);
   const sections = new Map(consumerDependencyOwners(consumers).map((entry) => [entry.owner, entry.dependencySection]));
-  const commitVars = {
-    package: state.packageName,
-    packageRoot: state.packageRoot,
-    app: state.application.name,
-    project: state.projectId,
-    planId: profilePlanId(state.candidate.id, state.profile.name),
-    fileCount: String(selection.sources.length + selection.assets.length),
-  };
-  const lockOperation = operations.find(
-    (operation): operation is Extract<PlanOperation, { kind: "lockfile-importer" }> =>
-      operation.kind === "lockfile-importer" && operation.packageRoot === state.packageRoot,
-  );
-  const currentLockHash = state.context.exists(state.packageManager.lockfileName)
-    ? state.packageManager.lockfileImporterHash(state.context.text(state.packageManager.lockfileName), state.packageRoot)
-    : undefined;
-  const applicationLines = state.graph.paths
-    .filter((path) => state.graph.nodes.get(path)?.application === state.candidate.application)
-    .reduce((total, path) => total + (state.graph.nodes.get(path)?.lineCount ?? 0), 0);
-  const movedLines = selection.production.reduce((total, path) => total + (state.graph.nodes.get(path)?.lineCount ?? 0), 0);
-  const provenance = {
-    ...buildPlanProvenance({
-      config: state.config,
-      profileGates: state.profile.gates,
-      scaffoldTemplates: state.templates,
-      packageManager: state.packageManager,
-      taskRunner: state.taskRunner,
-      ...(state.context.exists("package.json") ? { rootPackageJson: state.context.text("package.json") } : {}),
-    }),
-    ...(state.options.evacuationProvenance === undefined ? {} : { evacuation: state.options.evacuationProvenance }),
-  };
+  const commitVars = commitVarsFor(state, selection);
+  const lockfileImporter = lockfileImporterSection(state, operations);
+  const metrics = metricsSection(state, selection, consumers.length);
+  const provenance = provenanceSection(state);
   return {
     schemaVersion: PLAN_SCHEMA_VERSION,
     planId: profilePlanId(state.candidate.id, state.profile.name),
@@ -359,88 +337,23 @@ function buildManifest(
     baselineCommit: state.baseline.commit,
     graphDigest: graphDigest(state.graph),
     application: state.candidate.application,
-    ...(state.candidate.recommendation === undefined
-      ? {}
-      : {
-          assessment: {
-            status: state.candidate.recommendation.status,
-            cohesion: state.candidate.recommendation.cohesion,
-            reasons: state.candidate.recommendation.reasons,
-            compatibilityShims: (state.candidate.compatibilityShims ?? []).map(
-              ({ path, packageName, replacementSpecifier, productionConsumers, testConsumers }) => ({
-                path,
-                packageName,
-                replacementSpecifier,
-                productionConsumers,
-                testConsumers,
-              }),
-            ),
-            targetOptions: state.candidate.recommendation.targetOptions,
-            selectedTarget: {
-              packageName: state.packageName,
-              packageRoot: state.packageRoot,
-              action: state.graph.workspace.owners.includes(state.packageRoot) ? ("extend" as const) : ("create" as const),
-            },
-          },
-        }),
+    ...assessmentSection(state),
     ...(state.options.modulePromotion === undefined ? {} : { modulePromotion: state.options.modulePromotion }),
-    boundaryBaseline: boundaryBaselineOf({
-      config: state.config,
-      rootDir: state.options.rootDir,
-      files: state.context.repositorySources(),
-      referencesOf: (file) => state.context.moduleReferences(file),
-    }),
-    target: {
-      packageName: state.packageName,
-      packageRoot: state.packageRoot,
-      entrypoint: state.templates.entrypoint,
-      projectId: state.projectId,
-      ...(state.targetSubpath === undefined ? {} : { targetSubpath: state.targetSubpath }),
-      ...(state.profile.name === undefined ? {} : { profile: { name: state.profile.name, candidateName: state.candidateName } }),
-      ...(state.options.publicSurface === undefined ? {} : { publicSurface: state.options.publicSurface }),
-      requiredExports:
-        selection.publicModules.length > 0
-          ? []
-          : dedupeExports(selection.production.flatMap((source) => sourceExportsFromFile(state.context.absolute(source), source))),
-      ...(selection.publicModules.length > 0 ? { publicModules: selection.publicModules } : {}),
-    },
-    source: {
-      files: selection.production,
-      tests: selection.tests,
-      ...(selection.assets.length > 0 ? { assets: selection.assets } : {}),
-      sccs: productionSccs(state.candidate.sccs, selection.production),
-    },
+    boundaryBaseline: boundaryBaselineSection(state),
+    target: targetSection(state, selection),
+    source: sourceSection(state, selection),
     dependencies,
     dependencyDecisions,
     projectedArtifacts: projectedArtifactEvidence(operations),
     ...(pruningCandidates.length === 0 ? {} : { donorDependencyPruning: { mode: state.config.dependencyPruning.mode, candidates: pruningCandidates } }),
     sourceBlobs,
     operations,
-    ...(state.pathMigrationNoops.length === 0
-      ? {}
-      : { pathMigrationNoops: [...state.pathMigrationNoops].toSorted((left, right) => byCodeUnit(left.path, right.path)) }),
-    consumers: consumers.map((consumer) => ({
-      file: consumer.file,
-      owner: consumer.package,
-      expectedImporter: consumer.expectedImporter,
-      specifiers: consumer.rewrites,
-      external: state.graph.nodes.get(consumer.file)?.application !== state.candidate.application,
-      dependencySection: sections.get(consumer.package) ?? "runtime",
-    })),
+    ...pathMigrationNoopsSection(state),
+    consumers: consumerRecords(state, consumers, sections),
     generatedFiles,
     ...(postJournalPreparers.length === 0 ? {} : { postJournalPreparers }),
-    changedFiles: [
-      ...new Set([
-        ...operations.flatMap(operationPathsOf),
-        ...generatedFiles.filter((generated) => generated.regenerateOnApply).map((generated) => generated.path),
-        ...postJournalPreparers.flatMap((preparer) => preparer.outputs),
-      ]),
-    ].toSorted(),
-    ...(lockOperation
-      ? { lockfileImporter: { packageRoot: state.packageRoot, hash: hashText(lockOperation.block) } }
-      : currentLockHash
-        ? { lockfileImporter: { packageRoot: state.packageRoot, hash: currentLockHash } }
-        : {}),
+    changedFiles: changedFilesFor(operations, generatedFiles, postJournalPreparers),
+    ...lockfileImporter,
     expectedDynamicImportDelta: { added: dynamicImportDelta.added.sort(byCodeUnit), removed: dynamicImportDelta.removed.sort(byCodeUnit) },
     evaluationEffects: evaluationEffectsFor({
       config: state.config,
@@ -452,225 +365,24 @@ function buildManifest(
       packageWiring,
       entrypointPath: selection.entrypointPath,
     }),
-    metrics: {
-      movedFiles: selection.sources.length + selection.assets.length,
-      movedLines,
-      applicationLinesBefore: applicationLines,
-      applicationLinesAfter: Math.max(0, applicationLines - movedLines),
-      consumers: consumers.length,
-    },
-    commits: {
-      plan: { subject: renderTemplate(state.config.commitTemplates.plan, commitVars), ...trailer(state.config, commitVars) },
-      move: { subject: renderTemplate(state.config.commitTemplates.move, commitVars), ...trailer(state.config, commitVars) },
-      wiring: { subject: renderTemplate(state.config.commitTemplates.wiring, commitVars), ...trailer(state.config, commitVars) },
-    },
+    metrics,
+    commits: commitsSection(state.config, commitVars),
     gates: renderGates(state.config, state.profile.gates, { ...commitVars, consumerOwners, taskRunner: state.taskRunner, rootDir: state.options.rootDir }),
   };
 }
 
-function productionSccs(
-  candidateSccs: readonly { readonly id: string; readonly members: readonly string[] }[],
-  production: readonly string[],
-): Record<string, readonly string[]> {
-  const selected = new Set(production);
-  const result = new Map<string, readonly string[]>();
-  for (const scc of candidateSccs) {
-    const members = scc.members.filter((member) => selected.has(member));
-    if (members.length > 0) result.set(scc.id, members);
-  }
-  for (const source of production) {
-    if (![...result.values()].some((members) => members.includes(source))) result.set(sccId([source]), [source]);
-  }
-  return Object.fromEntries(result);
+function pruningCandidatesFor(state: BuildState, sources: readonly string[], dependencies: ReturnType<typeof dependenciesFor>) {
+  return donorDependencyPruningCandidates({ context: state.context, donorRoot: applicationOwner(state.application), movedSources: sources, dependencies });
 }
 
-function generatorOwnedOutputs(config: MonocarveConfig, production: readonly string[], operations: readonly PlanOperation[]): ReadonlySet<string> {
-  const documents = operations
-    .filter((operation): operation is Extract<PlanOperation, { kind: "rewrite-path-reference" }> => operation.kind === "rewrite-path-reference")
-    .map((operation) => operation.file);
-  return new Set(triggeredPostJournalPreparers(config, [...production, ...documents]).flatMap((preparer) => preparer.outputs));
-}
-
-function postJournalRecordsFor(
-  config: MonocarveConfig,
-  context: WorkspaceContext,
-  operations: readonly PlanOperation[],
-  triggers: readonly string[],
-): PostJournalPreparerRecord[] {
-  const journalPaths = new Set(operations.flatMap(operationPathsOf));
-  const generatedPaths = new Set(triggeredArtifacts(config, triggers).map((artifact) => artifact.path));
-  const records = triggeredPostJournalPreparers(config, triggers).map((preparer): PostJournalPreparerRecord => {
-    const replacements = preparer.replacements?.map((item) => ({
-      path: item.path,
-      before: item.before,
-      after: item.after,
-      ...(item.prefix === undefined ? {} : { prefix: item.prefix }),
-      ...(item.suffix === undefined ? {} : { suffix: item.suffix }),
-    }));
-    const creates = preparer.creates?.map((item) => ({ ...item, mode: item.mode ?? 0o644 }));
-    const declarativePaths = [...new Set([...(replacements?.map((item) => item.path) ?? []), ...(creates?.map((item) => item.path) ?? [])])];
-    const collision = declarativePaths.find((path) => journalPaths.has(path));
-    if (collision !== undefined)
-      throw new PlanningError(`post-journal preparer ${preparer.id} declarative path collides with a journal operation: ${collision}`);
-    const generatedCollision = declarativePaths.find((path) => generatedPaths.has(path));
-    if (generatedCollision !== undefined)
-      throw new PlanningError(`post-journal preparer ${preparer.id} declarative path collides with a generated artifact: ${generatedCollision}`);
-    const emittedCollision = declarativePaths.find((path) => preparer.emittedModuleSpecifiers.some((item) => item.source === path));
-    if (emittedCollision !== undefined)
-      throw new PlanningError(`post-journal preparer ${preparer.id} declarative path collides with emitted module specifier rewriting: ${emittedCollision}`);
-    const mutations = declarativePaths
-      .map((path) => {
-        const create = creates?.find((item) => item.path === path);
-        if (create !== undefined)
-          return {
-            path,
-            preconditionHash: "missing" as const,
-            preconditionMode: "missing" as const,
-            resultHash: hashText(create.contents),
-            resultMode: create.mode,
-          };
-        if (!context.exists(path)) throw new PlanningError(`post-journal replacement path does not exist at baseline: ${path}`);
-        const before = context.text(path);
-        let after = before;
-        const chain = replacements ?? [];
-        for (const [index, replacement] of chain.entries())
-          if (replacement.path === path) after = applyExactReplacement(after, replacement, chain, index, preparer.id);
-        const mode = statSync(context.absolute(path)).mode & 0o111 ? 0o755 : 0o644;
-        return { path, preconditionHash: hashText(before), preconditionMode: mode, resultHash: hashText(after), resultMode: mode };
-      })
-      .toSorted((left, right) => byCodeUnit(left.path, right.path));
-    const outputs = [...new Set([...preparer.outputs, ...(creates?.map((item) => item.path) ?? [])])].toSorted(byCodeUnit);
-    return {
-      id: preparer.id,
-      ...(preparer.command === undefined ? {} : { command: preparer.command }),
-      outputs,
-      ...(replacements === undefined ? {} : { replacements }),
-      ...(creates === undefined ? {} : { creates }),
-      mutations,
-      emittedModuleSpecifiers: preparer.emittedModuleSpecifiers.map((item) => ({ ...item })),
-      ...(preparer.verify === undefined ? {} : { verify: preparer.verify }),
-    };
-  });
-  return records.sort((left, right) => byCodeUnit(left.id, right.id));
-}
-
-function applyExactReplacement(
-  contents: string,
-  replacement: { readonly path: string; readonly before: string; readonly after: string; readonly prefix?: string; readonly suffix?: string },
-  all: readonly { readonly path: string; readonly before: string; readonly after: string; readonly prefix?: string; readonly suffix?: string }[],
-  index: number,
-  id: string,
-): string {
-  const framed = (text: string) => `${replacement.prefix ?? ""}${text}${replacement.suffix ?? ""}`;
-  const before = framed(replacement.before);
-  const first = contents.indexOf(before);
-  if (first >= 0) {
-    if (contents.indexOf(before, first + before.length) >= 0)
-      throw new PlanningError(`post-journal preparer ${id} replacement ${index + 1} before text is ambiguous in ${replacement.path}`);
-    return `${contents.slice(0, first)}${framed(replacement.after)}${contents.slice(first + before.length)}`;
-  }
-  let terminal = replacement.after;
-  for (const candidate of all.slice(index + 1))
-    if (
-      candidate.path === replacement.path &&
-      candidate.prefix === replacement.prefix &&
-      candidate.suffix === replacement.suffix &&
-      candidate.before === terminal
-    )
-      terminal = candidate.after;
-  const states = [framed(replacement.after), framed(terminal)];
-  if (
-    states.some((state) => {
-      const at = contents.indexOf(state);
-      return at >= 0 && contents.indexOf(state, at + state.length) < 0;
-    })
-  )
-    return contents;
-  throw new PlanningError(`post-journal preparer ${id} replacement ${index + 1} matched neither before nor after text in ${replacement.path}`);
-}
-function dependencyDecisionsFor(
-  state: BuildState,
-  sources: readonly string[],
-  dependencies: ReturnType<typeof dependenciesFor>,
-  pruning: readonly { name: string }[],
-) {
-  const evidence = collectDependencyEvidence(state.context, state.graph, sources, state.packageName);
-  const target = [
-    ...Object.keys(dependencies.runtime).map((name) => ({ name, decision: "target-runtime" as const })),
-    ...Object.keys(dependencies.dev).map((name) => ({ name, decision: "target-dev" as const })),
-  ].map(({ name, decision }) => {
-    const demand = [...(evidence.sources.get(name) ?? [])].toSorted(byCodeUnit);
-    const reasons = [
-      ...new Set(
-        demand.map((source) =>
-          !state.context.isProductionSource(source)
-            ? ("test-import" as const)
-            : decision === "target-dev"
-              ? ("type-only-import" as const)
-              : ("production-import" as const),
-        ),
-      ),
-    ].toSorted(byCodeUnit);
-    if (reasons.length === 0) reasons.push(decision === "target-dev" ? "type-only-import" : "production-import");
-    return { name, decision, sources: demand, reasons };
-  });
-  const donorDecision = state.config.dependencyPruning.mode === "apply" ? ("donor-remove" as const) : ("donor-review" as const);
-  return [
-    ...target,
-    ...pruning.map(({ name }) => ({ name, decision: donorDecision, sources: [] as string[], reasons: ["no-retained-consumer" as const] })),
-  ].toSorted((left, right) => byCodeUnit(left.name, right.name) || byCodeUnit(left.decision, right.decision));
-}
-function sourceBlobsFor(context: WorkspaceContext, paths: readonly string[]): Record<string, Sha256> {
-  const blobs: Record<string, Sha256> = {};
-  for (const path of paths) {
-    const state = context.state(path);
-    if (state === "missing") throw new PlanningError(`selected source does not exist: ${path}`);
-    blobs[path] = state;
-  }
-  return blobs;
-}
-function operationPathsOf(operation: PlanOperation): string[] {
-  switch (operation.kind) {
-    case "move":
-    case "move-with-rewrite":
-      return [operation.source, operation.target];
-    case "rewrite-import":
-    case "rewrite-fs-reference":
-    case "rewrite-path-reference":
-      return [operation.file];
-    case "write-file":
-    case "delete-file":
-      return [operation.path];
-    case "lockfile-importer":
-      return [operation.lockfile];
-    case "migrate-path-keys":
-      return [operation.path];
-  }
-}
 function donorTargetsOf(selection: ReturnType<typeof selectExtractionSources>): Map<string, string> {
   const map = new Map<string, string>();
   selection.sources.forEach((source, index) => map.set(source, selection.targets[index]!));
   selection.assets.forEach((asset, index) => map.set(asset, selection.assetTargets[index]!));
   return map;
 }
-function dedupeExports(entries: readonly ExportSurface[]): ExportSurface[] {
-  const seen = new Set<string>();
-  return entries
-    .filter((entry) => {
-      if (seen.has(entry.name)) return false;
-      seen.add(entry.name);
-      return true;
-    })
-    .toSorted((left, right) => byCodeUnit(left.name, right.name));
-}
-function trailer(config: MonocarveConfig, vars: Record<string, string>): { body?: string } {
-  return config.commitTemplates.trailer ? { body: renderTemplate(config.commitTemplates.trailer, vars) } : {};
-}
 function profileCandidateName(config: MonocarveConfig, suggested: string): string {
   return config.packageScope !== "" && suggested.startsWith(config.packageScope) ? suggested.slice(config.packageScope.length) : suggested;
-}
-function profilePlanId(candidateId: string, profile: string | undefined): string {
-  return profile === undefined ? candidateId : `${candidateId}--${profile}`;
 }
 export { generatedFilesFor, graphDigest, moveOperation, pathMigrationOperations, renderGates } from "./build-support.ts";
 export function serializeManifest(manifest: ExtractionManifest): string {
@@ -680,6 +392,6 @@ export function parseManifest(text: string, source = "<inline>"): ExtractionMani
   try {
     return JSON.parse(text) as ExtractionManifest;
   } catch (error) {
-    throw new PlanningError(`could not parse manifest ${source}: ${(error as Error).message}`);
+    throw new PlanningError(`could not parse manifest ${source}: ${(error as Error).message}`, { cause: error });
   }
 }

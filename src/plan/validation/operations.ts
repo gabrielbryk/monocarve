@@ -1,16 +1,15 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { createPackageManagerAdapter } from "../../adapters/registry.ts";
-import { getApplication, isPackageOwner, packageNameOf, triggeredPathMigrations } from "../../config.ts";
-import { applicationOwner } from "../../config/helpers.ts";
+import { getApplication, packageNameOf } from "../../config.ts";
 import { readManifest } from "../../graph/workspace.ts";
 import { fileState } from "../../util/files.ts";
 import { hashText, isFileState, isSha256 } from "../../util/hash.ts";
 import { relativeWorkspacePath } from "../../util/paths.ts";
 import { isAnyMove, regeneratedArtifactPaths, type ExtractionManifest, type ImportRewrite, type PlanOperation } from "../manifest.ts";
-import { readUtf8Artifact, runPathMigrationCommand } from "../path-migrations.ts";
 import { relativeFsLiteral } from "../static-fs-references.ts";
+import { validateLockfileImporter } from "./lockfile-importer.ts";
+import { validatePathMigrationCoverage } from "./path-migration-noops.ts";
 import { validatePathMigrationOperation } from "./path-migration-operation.ts";
 import { validatePathReferenceRewrite } from "./path-reference.ts";
 import type { ValidatePlanOptions, ValidationIssue } from "./shared.ts";
@@ -83,6 +82,20 @@ function workspacePackageNames(manifest: ExtractionManifest, options: ValidatePl
   return packages;
 }
 
+interface OperationScope {
+  readonly manifest: ExtractionManifest;
+  readonly options: ValidatePlanOptions;
+  readonly issues: Issues;
+  readonly context: OperationContext;
+  readonly moves: readonly MoveOperation[];
+  readonly movePaths: ReadonlySet<string>;
+  readonly moved: Set<string>;
+  readonly mutated: Set<string>;
+  readonly workspacePackages: ReadonlySet<string> | undefined;
+}
+
+type MoveOperation = Extract<PlanOperation, { kind: "move" | "move-with-rewrite" }>;
+
 function validateOperation(
   operation: PlanOperation,
   index: number,
@@ -90,47 +103,30 @@ function validateOperation(
   options: ValidatePlanOptions,
   issues: Issues,
   context: OperationContext,
-  moves: readonly Extract<PlanOperation, { kind: "move" | "move-with-rewrite" }>[],
+  moves: readonly MoveOperation[],
   movePaths: ReadonlySet<string>,
   moved: Set<string>,
   mutated: Set<string>,
   workspacePackages: ReadonlySet<string> | undefined,
 ): void {
+  const scope: OperationScope = { manifest, options, issues, context, moves, movePaths, moved, mutated, workspacePackages };
   switch (operation.kind) {
     case "move":
     case "move-with-rewrite":
       validateMove(operation, index, options, issues, context, moved, mutated, workspacePackages);
       return;
-    case "rewrite-import": {
-      const crossDonorMove = movePaths.has(operation.file) && operation.donors.some((donor) => donor !== operation.file && movePaths.has(donor));
-      if (movePaths.has(operation.file) && !crossDonorMove) {
-        issues.add("multiple-mutations", `multiple operations mutate ${operation.file}`, { operationIndex: index });
-      }
-      validateRewrite(operation, index, issues, context, mutated, crossDonorMove);
+    case "rewrite-import":
+      validateRewriteImportOperation(operation, index, scope);
       return;
-    }
     case "rewrite-fs-reference":
-      if (movePaths.has(operation.file)) {
-        issues.add("multiple-mutations", `multiple operations mutate ${operation.file}`, { operationIndex: index });
-      }
+      flagMovedFile(scope, operation.file, index);
       validateFsReferenceRewrite(operation, index, issues, moves, mutated);
       return;
     case "write-file":
-      if (movePaths.has(operation.path) && !isPromotionCompatibilityWrite(manifest, operation)) {
-        issues.add("multiple-mutations", `multiple operations mutate ${operation.path}`, { operationIndex: index });
-      }
-      validateWrite(operation, index, options, issues, mutated, isPromotionCompatibilityWrite(manifest, operation));
+      validateWriteOperation(operation, index, scope);
       return;
     case "delete-file":
-      if (operation.preconditionHash === "missing")
-        issues.add("invalid-precondition", `cannot delete missing file ${operation.path}`, { operationIndex: index });
-      if (!isFileState(operation.preconditionHash) || !isFileState(operation.resultHash) || operation.resultHash !== "missing")
-        issues.add("delete-hash", "delete result must be the missing file state", {
-          operationIndex: index,
-          operationKind: operation.kind,
-          path: operation.path,
-        });
-      mutated.add(operation.path);
+      validateDelete(operation, index, issues, mutated);
       return;
     case "lockfile-importer":
       validateLockfileImporter(operation, index, options, issues, manifest, mutated);
@@ -139,14 +135,41 @@ function validateOperation(
       validatePathMigrationOperation(operation, index, options, issues, moves, mutated);
       return;
     case "rewrite-path-reference":
-      if (movePaths.has(operation.file)) {
-        issues.add("multiple-mutations", `multiple operations mutate ${operation.file}`, { operationIndex: index });
-      }
+      flagMovedFile(scope, operation.file, index);
       validatePathReferenceRewrite(operation, index, issues, moves, mutated);
       return;
     default:
       issues.add("unknown-operation", `unsupported operation kind ${(operation as { kind: string }).kind}`, { operationIndex: index });
   }
+}
+
+function flagMovedFile(scope: OperationScope, file: string, index: number): void {
+  if (scope.movePaths.has(file)) {
+    scope.issues.add("multiple-mutations", `multiple operations mutate ${file}`, { operationIndex: index });
+  }
+}
+
+function validateRewriteImportOperation(operation: Extract<PlanOperation, { kind: "rewrite-import" }>, index: number, scope: OperationScope): void {
+  const { movePaths } = scope;
+  const crossDonorMove = movePaths.has(operation.file) && operation.donors.some((donor) => donor !== operation.file && movePaths.has(donor));
+  if (movePaths.has(operation.file) && !crossDonorMove) {
+    scope.issues.add("multiple-mutations", `multiple operations mutate ${operation.file}`, { operationIndex: index });
+  }
+  validateRewrite(operation, index, scope.issues, scope.context, scope.mutated, crossDonorMove);
+}
+
+function validateWriteOperation(operation: Extract<PlanOperation, { kind: "write-file" }>, index: number, scope: OperationScope): void {
+  if (scope.movePaths.has(operation.path) && !isPromotionCompatibilityWrite(scope.manifest, operation)) {
+    scope.issues.add("multiple-mutations", `multiple operations mutate ${operation.path}`, { operationIndex: index });
+  }
+  validateWrite(operation, index, scope.options, scope.issues, scope.mutated, isPromotionCompatibilityWrite(scope.manifest, operation));
+}
+
+function validateDelete(operation: Extract<PlanOperation, { kind: "delete-file" }>, index: number, issues: Issues, mutated: Set<string>): void {
+  if (operation.preconditionHash === "missing") issues.add("invalid-precondition", `cannot delete missing file ${operation.path}`, { operationIndex: index });
+  if (!isFileState(operation.preconditionHash) || !isFileState(operation.resultHash) || operation.resultHash !== "missing")
+    issues.add("delete-hash", "delete result must be the missing file state", { operationIndex: index, operationKind: operation.kind, path: operation.path });
+  mutated.add(operation.path);
 }
 
 function validateMoveCoverage(
@@ -160,22 +183,7 @@ function validateMoveCoverage(
   const targets = moves.map((operation) => operation.target);
   if (new Set(targets).size !== targets.length) issues.add("move-targets", "move targets must be unique");
 
-  const migrationOperations = manifest.operations.filter((operation) => operation.kind === "migrate-path-keys");
-  const migrationNoops = manifest.pathMigrationNoops ?? [];
-  const requiredMigrations = triggeredPathMigrations(
-    options.config,
-    moves.map((move) => move.source),
-  );
-  for (const artifact of requiredMigrations) {
-    const operationCount = migrationOperations.filter((operation) => operation.path === artifact.path).length;
-    const noopCount = migrationNoops.filter((proof) => proof.path === artifact.path).length;
-    if (operationCount + noopCount === 0) {
-      issues.add("path-migration-config", `configured path migration is missing from the plan: ${artifact.path}`);
-    } else if (operationCount + noopCount > 1) {
-      issues.add("path-migration-config", `configured path migration has multiple plan records: ${artifact.path}`);
-    }
-  }
-  validatePathMigrationNoops(manifest, options, issues, moves, requiredMigrations);
+  validatePathMigrationCoverage(manifest, options, issues, moves);
 
   const sources = [...context.files, ...context.tests, ...context.assets];
   if (moved.size !== sources.length || sources.some((path) => !moved.has(path))) {
@@ -192,52 +200,6 @@ function validateMoveCoverage(
   for (const file of context.consumers) {
     if (!manifest.operations.some((operation) => operation.kind === "rewrite-import" && operation.file === file)) {
       issues.add("consumer-coverage", `missing rewrite operation for ${file}`);
-    }
-  }
-}
-
-function validatePathMigrationNoops(
-  manifest: ExtractionManifest,
-  options: ValidatePlanOptions,
-  issues: Issues,
-  moves: readonly Extract<PlanOperation, { kind: "move" | "move-with-rewrite" }>[],
-  required: readonly { readonly path: string; readonly command: string }[],
-): void {
-  const proofs = manifest.pathMigrationNoops ?? [];
-  const expectedMoves = moves
-    .map(({ source, target }) => ({ source, target }))
-    .toSorted((left, right) =>
-      left.source < right.source ? -1 : left.source > right.source ? 1 : left.target < right.target ? -1 : left.target > right.target ? 1 : 0,
-    );
-  const seen = new Set<string>();
-  for (const proof of proofs) {
-    const at = { path: proof.path };
-    if (seen.has(proof.path)) issues.add("path-migration-config", `duplicate no-op path migration proof: ${proof.path}`, at);
-    seen.add(proof.path);
-    const configured = required.find((artifact) => artifact.path === proof.path);
-    if (!configured) issues.add("path-migration-config", `plan declares an unconfigured no-op path migration: ${proof.path}`, at);
-    else if (configured.command !== proof.command)
-      issues.add("path-migration-config", `no-op path migration command differs from config for ${proof.path}`, at);
-    if (JSON.stringify(proof.moves) !== JSON.stringify(expectedMoves)) {
-      issues.add("path-migration-moves", `no-op path migration does not carry the exact sorted move map: ${proof.path}`, at);
-    }
-    if (!isSha256(proof.artifactHash)) {
-      issues.add("path-migration-hash", `no-op path migration artifact hash must be SHA-256: ${proof.path}`, at);
-      continue;
-    }
-    if (options.offline) continue;
-    try {
-      const contents = readUtf8Artifact(resolve(options.rootDir, proof.path), proof.path);
-      if (hashText(contents) !== proof.artifactHash) {
-        issues.add("path-migration-hash", `no-op path migration artifact changed since planning: ${proof.path}`, at);
-        continue;
-      }
-      const result = runPathMigrationCommand(options.rootDir, proof, contents, options.config.pathMigrations.timeoutMs);
-      if (hashText(result) !== proof.artifactHash) {
-        issues.add("path-migration-identity", `no-op path migration now changes the artifact: ${proof.path}`, at);
-      }
-    } catch (error) {
-      issues.add("path-migration-proof", (error as Error).message, at);
     }
   }
 }
@@ -454,54 +416,3 @@ function isPromotionCompatibilityWrite(manifest: ExtractionManifest, operation: 
     operation.preconditionHash === "missing"
   );
 }
-
-function validateLockfileImporter(
-  operation: Extract<PlanOperation, { kind: "lockfile-importer" }>,
-  index: number,
-  options: ValidatePlanOptions,
-  issues: Issues,
-  manifest: ExtractionManifest,
-  mutated: Set<string>,
-): void {
-  const at = { operationIndex: index, operationKind: operation.kind, path: operation.packageRoot };
-  const adapter = createPackageManagerAdapter(options.config);
-  const mode = operation.mode ?? "insert";
-  if (operation.lockfile !== adapter.lockfileName) issues.add("lockfile-name", `lockfile importer must target ${adapter.lockfileName}`, at);
-  const isPackage = isPackageOwner(options.config, operation.packageRoot);
-  const isApplicationOwner = options.config.applications.some((app) => applicationOwner(app) === operation.packageRoot);
-  if (!(isPackage || (mode === "replace" && isApplicationOwner)) || operation.packageRoot.includes("..")) {
-    issues.add("lockfile-target", "lockfile importer must target a workspace package", at);
-  }
-  if (!operation.block || !adapter.blockDeclaresImporter(operation.block, operation.packageRoot)) {
-    issues.add("lockfile-block", `lockfile importer block must declare ${operation.packageRoot}`, at);
-  }
-  if (!isFileState(operation.preconditionHash) || !isSha256(operation.resultHash)) issues.add("lockfile-hash", "lockfile importer hashes must be SHA-256", at);
-  if (operation.preconditionHash === operation.resultHash) issues.add("lockfile-identity", "lockfile importer result must differ from precondition", at);
-  if (mode === "replace" && !options.offline) {
-    const lockfile = resolve(options.rootDir, operation.lockfile);
-    const text = existsSync(lockfile) ? readFileSyncSafe(lockfile) : undefined;
-    if (text !== undefined && adapter.importerBlock(text, operation.packageRoot) === undefined) {
-      issues.add("lockfile-replace", `lockfile importer replace has no existing block for ${operation.packageRoot}`, at);
-    }
-  }
-  if (mode === "delete" && !options.offline) {
-    const lockfile = resolve(options.rootDir, operation.lockfile);
-    const text = existsSync(lockfile) ? readFileSyncSafe(lockfile) : undefined;
-    if (text !== undefined && adapter.importerBlock(text, operation.packageRoot) === undefined) {
-      issues.add("lockfile-delete", `lockfile importer delete has no existing block for ${operation.packageRoot}`, at);
-    }
-  }
-  const echo = manifest.lockfileImporter;
-  if (echo && echo.packageRoot === operation.packageRoot && echo.hash !== hashText(operation.block)) {
-    issues.add("lockfile-echo", "lockfileImporter.hash must be the SHA-256 of the declared importer block", at);
-  }
-  mutated.add(operation.lockfile);
-}
-
-const readFileSyncSafe = (path: string): string | undefined => {
-  try {
-    return readFileSync(path, "utf8");
-  } catch {
-    return undefined;
-  }
-};

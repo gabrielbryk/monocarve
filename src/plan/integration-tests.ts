@@ -40,70 +40,22 @@ export interface BuildIntegrationTestPlanOptions {
 
 export function buildIntegrationTestPlanSync(options: BuildIntegrationTestPlanOptions): ExtractionManifest {
   const { config, graph } = options;
-  const suite = config.integrationTestSuites[options.suite];
-  if (!suite) throw new PlanningError(`unknown integration test suite ${JSON.stringify(options.suite)}`);
-  const application = getApplication(config, suite.application);
-  if (!application.packageName)
-    throw new PlanningError(`integration test suite ${options.suite} requires application ${application.name} to declare packageName`);
-  const context = options.context ?? new WorkspaceContext(config, options.rootDir);
-  if (context.manifest(applicationOwner(application)).name !== application.packageName) {
-    throw new PlanningError(`integration test suite ${options.suite} donor application package.json does not declare ${application.packageName}`);
-  }
-  for (const donor of suite.donorImports) {
-    if (publishedDonorTarget(context, applicationOwner(application), application.packageName, donor.specifier) !== donor.source) {
-      throw new PlanningError(`integration test suite ${options.suite} donor surface ${donor.specifier} does not publish ${donor.source}`);
-    }
-  }
-  const profile = resolveExtractionProfile(config, application, suite.profile);
-  if (profile.name === undefined) throw new PlanningError(`integration test suite ${options.suite} requires an explicit extraction profile`);
-  if (profile.kind !== "leaf-test") throw new PlanningError(`integration test suite ${options.suite} requires a leaf-test extraction profile`);
+  const { suite, application, packageName, context } = resolveSuiteDonor(options);
+  const { profile, profileName } = resolveSuiteProfile(config, application, options.suite, suite.profile);
   const rendered = renderExtractionProfile(config, application, profile, options.suite);
   const packageManager = createPackageManagerAdapter(config);
   const taskRunner = createTaskRunnerAdapter(config);
   const baseline = resolveCommit(options.rootDir, options.baselineCommit);
 
   const roots = selectIntegrationTestRoots(context, options.suite, suite);
-  const closure = collectIntegrationTestClosure(context, config, suite, application.packageName, roots);
-  const { tests, assets, rewrites } = closure;
+  const closure = collectIntegrationTestClosure(context, config, suite, packageName, roots);
+  const { tests, assets } = closure;
+  const operations = suiteMoveOperations(context, closure, rendered.packageRoot, suite.sourceRoot);
+  const dependencies = leafTestDependencies(config, inferDependencies(context, graph, tests, rendered.packageName), packageName);
+  const scaffoldInput = leafScaffoldInput({ context, config, application, packageManager, taskRunner, rendered, profile, dependencies, packageName });
+  operations.push(...packageOperations(scaffoldInput));
 
-  const targetOf = (source: string): string => `${rendered.packageRoot}/src/${source.slice(`${suite.sourceRoot}/`.length)}`;
-  const targets = tests.map(targetOf);
-  const assetTargets = assets.map(targetOf);
-  if (new Set(targets).size !== targets.length) throw new PlanningError("two integration tests would land on the same target path");
-  const operations: PlanOperation[] = tests.map((source, index) => moveOperation(context, source, targets[index]!, rewrites.get(source) ?? []));
-  operations.push(...assets.map((source, index) => moveOperation(context, source, assetTargets[index]!, [])));
-
-  const inferred = inferDependencies(context, graph, tests, rendered.packageName);
-  // This package is a test runner leaf.  Even if a workspace forgot to include
-  // its test matcher, none of its imports become production dependencies.
-  const dependencies = {
-    runtime: {} as Record<string, string>,
-    dev: { ...inferred.dev, ...inferred.runtime, [application.packageName]: "workspace:*" },
-    packageReferences: inferred.packageReferences.filter((owner) => isPackageOwner(config, owner) || isFirstPartyPackageOwner(config, owner)),
-  };
-  const scaffoldInput = {
-    context,
-    config,
-    application,
-    packageManager,
-    taskRunner,
-    packageName: rendered.packageName,
-    packageRoot: rendered.packageRoot,
-    projectId: rendered.projectId ?? taskRunner.projectIdFor(rendered.packageName, rendered.packageRoot),
-    templates: profile.scaffoldTemplates,
-    production: [] as string[],
-    dependencies,
-    workspaceDependencyRoots: { [application.packageName]: applicationOwner(application) },
-  };
-  const scaffolding = packageOperations(scaffoldInput);
-  operations.push(...scaffolding);
-
-  const sourceBlobs: Record<string, Sha256> = {};
-  for (const source of [...tests, ...assets]) {
-    const state = context.state(source);
-    if (state === "missing") throw new PlanningError(`integration test source does not exist: ${source}`);
-    sourceBlobs[source] = state;
-  }
+  const sourceBlobs = integrationSourceBlobs(context, [...tests, ...assets]);
   const lockOperation = operations.find(
     (operation): operation is Extract<PlanOperation, { kind: "lockfile-importer" }> =>
       operation.kind === "lockfile-importer" && operation.packageRoot === rendered.packageRoot,
@@ -129,7 +81,7 @@ export function buildIntegrationTestPlanSync(options: BuildIntegrationTestPlanOp
       scaffoldTemplates: profile.scaffoldTemplates,
       packageManager,
       taskRunner,
-      ...(context.exists("package.json") ? { rootPackageJson: context.text("package.json") } : {}),
+      ...rootPackageJson(context),
     }),
     baselineCommit: baseline.commit,
     graphDigest: graphDigest(graph),
@@ -145,17 +97,12 @@ export function buildIntegrationTestPlanSync(options: BuildIntegrationTestPlanOp
       packageRoot: rendered.packageRoot,
       entrypoint: profile.scaffoldTemplates.entrypoint,
       projectId,
-      profile: { name: profile.name, candidateName: options.suite },
+      profile: { name: profileName, candidateName: options.suite },
       requiredExports: [],
     },
     source: { files: [], tests, ...(assets.length > 0 ? { assets } : {}), sccs: {} },
     dependencies,
-    integrationTestSuite: {
-      name: options.suite,
-      sourceRoot: suite.sourceRoot,
-      donorApplication: application.name,
-      donorImports: [...suite.donorImports].toSorted((left, right) => left.source.localeCompare(right.source)),
-    },
+    integrationTestSuite: suiteRecord(options.suite, suite, application.name),
     sourceBlobs,
     operations,
     consumers: [],
@@ -164,20 +111,143 @@ export function buildIntegrationTestPlanSync(options: BuildIntegrationTestPlanOp
     ...(lockOperation ? { lockfileImporter: { packageRoot: rendered.packageRoot, hash: hashText(lockOperation.block) } } : {}),
     expectedDynamicImportDelta: { added: [], removed: [] },
     evaluationEffects: [],
-    metrics: {
-      movedFiles: tests.length,
-      movedLines: tests.reduce((total, path) => total + (graph.nodes.get(path)?.lineCount ?? 0), 0),
-      applicationLinesBefore: 0,
-      applicationLinesAfter: 0,
-      consumers: 0,
-    },
-    commits: {
-      plan: { subject: renderTemplate(config.commitTemplates.plan, commitVars) },
-      move: { subject: renderTemplate(config.commitTemplates.move, commitVars) },
-      wiring: { subject: renderTemplate(config.commitTemplates.wiring, commitVars) },
-    },
+    metrics: suiteMetrics(graph, tests),
+    commits: suiteCommits(config, commitVars),
     gates: renderGates(config, profile.gates, { ...commitVars, consumerOwners: [applicationOwner(application)], taskRunner, rootDir: options.rootDir }),
   };
+}
+
+type SuiteConfig = MonocarveConfig["integrationTestSuites"][string];
+
+/** Move every suite test and asset from under `sourceRoot` to the same relative path under `<packageRoot>/src`. */
+function suiteMoveOperations(
+  context: WorkspaceContext,
+  closure: ReturnType<typeof collectIntegrationTestClosure>,
+  packageRoot: string,
+  sourceRoot: string,
+): PlanOperation[] {
+  const { tests, assets, rewrites } = closure;
+  const targetOf = (source: string): string => `${packageRoot}/src/${source.slice(`${sourceRoot}/`.length)}`;
+  const targets = tests.map(targetOf);
+  const assetTargets = assets.map(targetOf);
+  if (new Set(targets).size !== targets.length) throw new PlanningError("two integration tests would land on the same target path");
+  const operations: PlanOperation[] = tests.map((source, index) => moveOperation(context, source, targets[index]!, rewrites.get(source) ?? []));
+  operations.push(...assets.map((source, index) => moveOperation(context, source, assetTargets[index]!, [])));
+  return operations;
+}
+
+function leafScaffoldInput(input: {
+  readonly context: WorkspaceContext;
+  readonly config: MonocarveConfig;
+  readonly application: Application;
+  readonly packageManager: ReturnType<typeof createPackageManagerAdapter>;
+  readonly taskRunner: ReturnType<typeof createTaskRunnerAdapter>;
+  readonly rendered: ReturnType<typeof renderExtractionProfile>;
+  readonly profile: ReturnType<typeof resolveExtractionProfile>;
+  readonly dependencies: ReturnType<typeof leafTestDependencies>;
+  readonly packageName: string;
+}) {
+  const { context, config, application, packageManager, taskRunner, rendered, profile, dependencies, packageName } = input;
+  return {
+    context,
+    config,
+    application,
+    packageManager,
+    taskRunner,
+    packageName: rendered.packageName,
+    packageRoot: rendered.packageRoot,
+    projectId: rendered.projectId ?? taskRunner.projectIdFor(rendered.packageName, rendered.packageRoot),
+    templates: profile.scaffoldTemplates,
+    production: [] as string[],
+    dependencies,
+    workspaceDependencyRoots: { [packageName]: applicationOwner(application) },
+  };
+}
+
+function suiteRecord(name: string, suite: SuiteConfig, donorApplication: string): NonNullable<ExtractionManifest["integrationTestSuite"]> {
+  return {
+    name,
+    sourceRoot: suite.sourceRoot,
+    donorApplication,
+    donorImports: [...suite.donorImports].toSorted((left, right) => left.source.localeCompare(right.source)),
+  };
+}
+
+function rootPackageJson(context: WorkspaceContext): { rootPackageJson?: string } {
+  return context.exists("package.json") ? { rootPackageJson: context.text("package.json") } : {};
+}
+
+function suiteMetrics(graph: DependencyGraph, tests: readonly string[]): ExtractionManifest["metrics"] {
+  return {
+    movedFiles: tests.length,
+    movedLines: tests.reduce((total, path) => total + (graph.nodes.get(path)?.lineCount ?? 0), 0),
+    applicationLinesBefore: 0,
+    applicationLinesAfter: 0,
+    consumers: 0,
+  };
+}
+
+function suiteCommits(config: MonocarveConfig, vars: Record<string, string>): ExtractionManifest["commits"] {
+  return {
+    plan: { subject: renderTemplate(config.commitTemplates.plan, vars) },
+    move: { subject: renderTemplate(config.commitTemplates.move, vars) },
+    wiring: { subject: renderTemplate(config.commitTemplates.wiring, vars) },
+  };
+}
+type Application = ReturnType<typeof getApplication>;
+
+/** The named suite and its donor application, refused unless the donor publishes every imported surface. */
+function resolveSuiteDonor(options: BuildIntegrationTestPlanOptions): {
+  suite: SuiteConfig;
+  application: Application;
+  packageName: string;
+  context: WorkspaceContext;
+} {
+  const { config } = options;
+  const suite = config.integrationTestSuites[options.suite];
+  if (!suite) throw new PlanningError(`unknown integration test suite ${JSON.stringify(options.suite)}`);
+  const application = getApplication(config, suite.application);
+  const packageName = application.packageName;
+  if (!packageName) throw new PlanningError(`integration test suite ${options.suite} requires application ${application.name} to declare packageName`);
+  const context = options.context ?? new WorkspaceContext(config, options.rootDir);
+  if (context.manifest(applicationOwner(application)).name !== packageName) {
+    throw new PlanningError(`integration test suite ${options.suite} donor application package.json does not declare ${packageName}`);
+  }
+  for (const donor of suite.donorImports) {
+    if (publishedDonorTarget(context, applicationOwner(application), packageName, donor.specifier) !== donor.source) {
+      throw new PlanningError(`integration test suite ${options.suite} donor surface ${donor.specifier} does not publish ${donor.source}`);
+    }
+  }
+  return { suite, application, packageName, context };
+}
+
+function resolveSuiteProfile(config: MonocarveConfig, application: Application, suiteName: string, profileName: string | undefined) {
+  const profile = resolveExtractionProfile(config, application, profileName);
+  if (profile.name === undefined) throw new PlanningError(`integration test suite ${suiteName} requires an explicit extraction profile`);
+  if (profile.kind !== "leaf-test") throw new PlanningError(`integration test suite ${suiteName} requires a leaf-test extraction profile`);
+  return { profile, profileName: profile.name };
+}
+
+/**
+ * This package is a test runner leaf. Even if a workspace forgot to include
+ * its test matcher, none of its imports become production dependencies.
+ */
+function leafTestDependencies(config: MonocarveConfig, inferred: ReturnType<typeof inferDependencies>, donorPackageName: string) {
+  return {
+    runtime: {} as Record<string, string>,
+    dev: { ...inferred.dev, ...inferred.runtime, [donorPackageName]: "workspace:*" },
+    packageReferences: inferred.packageReferences.filter((owner) => isPackageOwner(config, owner) || isFirstPartyPackageOwner(config, owner)),
+  };
+}
+
+function integrationSourceBlobs(context: WorkspaceContext, paths: readonly string[]): Record<string, Sha256> {
+  const sourceBlobs: Record<string, Sha256> = {};
+  for (const source of paths) {
+    const state = context.state(source);
+    if (state === "missing") throw new PlanningError(`integration test source does not exist: ${source}`);
+    sourceBlobs[source] = state;
+  }
+  return sourceBlobs;
 }
 
 function publishedDonorTarget(context: WorkspaceContext, owner: string, packageName: string, specifier: string): string | undefined {

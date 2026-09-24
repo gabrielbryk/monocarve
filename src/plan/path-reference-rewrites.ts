@@ -172,6 +172,8 @@ export function expectedPathReferenceTarget(rawToken: string, moveSource: string
   return buildReplacementSuffix(rawToken, replacementTarget);
 }
 
+type NormalizedToken = NonNullable<ReturnType<typeof normalizeToken>>;
+
 function candidatesForToken(
   rawToken: string,
   span: { readonly start: number; readonly end: number },
@@ -185,35 +187,36 @@ function candidatesForToken(
   const hasExtension = normalized.path.split("/").at(-1)!.includes(".");
   if (!hasExtension && !matchExtensionless) return [];
   const { line, column } = positionAt(lineStarts, span.start);
-  const candidates: Candidate[] = [];
-  for (const move of moves) {
-    const source = hasExtension ? move.source : stripExtension(move.source);
-    const directSuffixLength = referenceBase !== undefined && normalized.absolute ? null : matchedSuffixLength(normalized.path, normalized.absolute, source);
-    const basedSource = referenceBase === undefined || normalized.absolute ? null : posix.normalize(posix.join(referenceBase, normalized.path));
-    const based = basedSource === source && basedSource !== ".." && !basedSource.startsWith("../");
-    const suffixLength = directSuffixLength ?? (based ? normalized.path.split("/").length : null);
-    if (suffixLength === null) continue;
-    const replacementTarget = hasExtension ? move.target : stripExtension(move.target);
-    // Narrow the replaced span to exactly the matched suffix so every byte
-    // before it — a URL scheme, "./", a doubled leading slash, mixed
-    // separators — survives untouched instead of being reconstructed.
-    const suffixStart = span.start + suffixOffsetInRawToken(normalized.path, normalized.prefixLength, suffixLength);
-    const matchedSpan = directSuffixLength === null && based ? span : { start: suffixStart, end: span.end };
-    const to =
-      directSuffixLength === null && based
-        ? basedReplacement(rawToken, referenceBase!, replacementTarget)
-        : buildReplacementSuffix(rawToken, replacementTarget);
-    candidates.push({
-      span: matchedSpan,
-      line,
-      column,
-      from: rawToken,
-      to,
-      donor: move.source,
-      ...(directSuffixLength === null && based ? { referenceBase: referenceBase! } : {}),
-    });
+  return moves.flatMap((move): Candidate[] => {
+    const match = matchMove(rawToken, span, normalized, hasExtension, move, referenceBase);
+    return match === null ? [] : [{ span: match.span, line, column, from: rawToken, to: match.to, donor: move.source, ...match.based }];
+  });
+}
+
+/** How one move's source matches a token — directly by suffix, or through `referenceBase` — or null. */
+function matchMove(
+  rawToken: string,
+  span: { readonly start: number; readonly end: number },
+  normalized: NormalizedToken,
+  hasExtension: boolean,
+  move: PathMove,
+  referenceBase: string | undefined,
+): { span: { start: number; end: number }; to: string; based: { referenceBase?: string } } | null {
+  const source = hasExtension ? move.source : stripExtension(move.source);
+  const directSuffixLength = referenceBase !== undefined && normalized.absolute ? null : matchedSuffixLength(normalized.path, normalized.absolute, source);
+  const basedSource = referenceBase === undefined || normalized.absolute ? null : posix.normalize(posix.join(referenceBase, normalized.path));
+  const based = basedSource === source && basedSource !== ".." && !basedSource.startsWith("../");
+  const suffixLength = directSuffixLength ?? (based ? normalized.path.split("/").length : null);
+  if (suffixLength === null) return null;
+  const replacementTarget = hasExtension ? move.target : stripExtension(move.target);
+  if (directSuffixLength === null && based) {
+    return { span, to: basedReplacement(rawToken, referenceBase!, replacementTarget), based: { referenceBase: referenceBase! } };
   }
-  return candidates;
+  // Narrow the replaced span to exactly the matched suffix so every byte
+  // before it — a URL scheme, "./", a doubled leading slash, mixed
+  // separators — survives untouched instead of being reconstructed.
+  const suffixStart = span.start + suffixOffsetInRawToken(normalized.path, normalized.prefixLength, suffixLength);
+  return { span: { start: suffixStart, end: span.end }, to: buildReplacementSuffix(rawToken, replacementTarget), based: {} };
 }
 
 function basedReplacement(rawToken: string, referenceBase: string, moveTarget: string): string {

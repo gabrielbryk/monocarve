@@ -44,13 +44,56 @@ export function assessCandidate(
 ): Assessment {
   const rejections: RejectionReason[] = [];
   const warnings: string[] = [];
-  const closureSet = new Set(closure);
 
   if (owners.length !== 1) {
     rejections.push({ code: "multiple-owners", detail: `closure spans more than one owner: ${owners.join(", ")}`, edges: [] });
   }
   if (domains.length !== 1) warnings.push(`closure crosses runtime domains: ${domains.join(", ")}`);
+  rejections.push(...closureShapeRejections({ config, context, graph, report, closure, closureReports, tests }));
 
+  const analysis = analyzeContainment(context, graph, [...closure, ...tests]);
+  rejections.push(...containmentRejections(analysis));
+
+  const { rewritable, blocking } = classifyEscapes(config, context, graph, analysis.escapes);
+  if (blocking.length > 0) {
+    rejections.push({
+      code: "closure-escapes-app-code",
+      detail: `${blocking.length} relative import(s) leave the closure for code no package exports`,
+      edges: blocking.map((escape) => `${escape.file} -> ${escape.specifier}`),
+    });
+  }
+  if (rewritable.length > 0) {
+    warnings.push(`closure escapes rewritable to workspace packages: ${rewritable.length} (first: ${rewritable[0]!.file} -> ${rewritable[0]!.package})`);
+  }
+
+  warnings.push(...evaluationWarnings(config, context, graph, closure));
+  pathReferenceWarning(warnings, pathReferences, closure, tests, analysis.assets);
+
+  const blockers = retainedBlockers(context, graph, closure, config.portfolio.retainedRoots);
+  if (blockers.length > 0) {
+    const first = blockers[0]!;
+    warnings.push(`closure reaches ${blockers.length} portfolio.retainedRoots module(s) ` + `(first: ${first.file} -> ${first.target}, a ${first.kind} edge)`);
+  }
+  const classification = classifyCandidate(config, report, domains, blockers);
+
+  return { rejections, warnings, assets: [...analysis.assets], rewriteEscapes: rewritable, retainedBlockers: blockers, classification };
+}
+
+interface ClosureShapeInput {
+  readonly config: MonocarveConfig;
+  readonly context: WorkspaceContext;
+  readonly graph: DependencyGraph;
+  readonly report: ComponentReport;
+  readonly closure: readonly string[];
+  readonly closureReports: readonly ComponentReport[];
+  readonly tests: readonly string[];
+}
+
+/** Rejections decided by the closure's own files, before containment analysis. */
+function closureShapeRejections(input: ClosureShapeInput): RejectionReason[] {
+  const { config, context, graph, report, closure, closureReports, tests } = input;
+  const rejections: RejectionReason[] = [];
+  const closureSet = new Set(closure);
   const unresolved = graph.unresolved.filter((entry) => closureSet.has(entry.source));
   if (unresolved.length > 0) {
     rejections.push({
@@ -98,8 +141,11 @@ export function assessCandidate(
   if (report.inboundNodes.length === 0 && tests.length === 0 && report.testImporterFiles.length === 0 && !hasSurface) {
     rejections.push({ code: "no-exports", detail: "the closure has no exports, no consumers, and no tests", edges: [] });
   }
+  return rejections;
+}
 
-  const analysis = analyzeContainment(context, graph, [...closure, ...tests]);
+function containmentRejections(analysis: ReturnType<typeof analyzeContainment>): RejectionReason[] {
+  const rejections: RejectionReason[] = [];
   if (analysis.external.length > 0) {
     rejections.push({
       code: "uninstalled-package",
@@ -114,30 +160,7 @@ export function assessCandidate(
       edges: [...analysis.unmovableAssets],
     });
   }
-
-  const { rewritable, blocking } = classifyEscapes(config, context, graph, analysis.escapes);
-  if (blocking.length > 0) {
-    rejections.push({
-      code: "closure-escapes-app-code",
-      detail: `${blocking.length} relative import(s) leave the closure for code no package exports`,
-      edges: blocking.map((escape) => `${escape.file} -> ${escape.specifier}`),
-    });
-  }
-  if (rewritable.length > 0) {
-    warnings.push(`closure escapes rewritable to workspace packages: ${rewritable.length} (first: ${rewritable[0]!.file} -> ${rewritable[0]!.package})`);
-  }
-
-  warnings.push(...evaluationWarnings(config, context, graph, closure));
-  pathReferenceWarning(warnings, pathReferences, closure, tests, analysis.assets);
-
-  const blockers = retainedBlockers(context, graph, closure, config.portfolio.retainedRoots);
-  if (blockers.length > 0) {
-    const first = blockers[0]!;
-    warnings.push(`closure reaches ${blockers.length} portfolio.retainedRoots module(s) ` + `(first: ${first.file} -> ${first.target}, a ${first.kind} edge)`);
-  }
-  const classification = classifyCandidate(config, report, domains, blockers);
-
-  return { rejections, warnings, assets: [...analysis.assets], rewriteEscapes: rewritable, retainedBlockers: blockers, classification };
+  return rejections;
 }
 
 /**

@@ -48,36 +48,7 @@ export interface ConsolidationCandidateOptions {
 export function buildConsolidationCandidate(options: ConsolidationCandidateOptions): ConsolidationCandidate {
   const { graph, target, donors } = options;
 
-  // Collect production files from each donor.
-  const allFiles: string[] = [];
-  const allTests: string[] = [];
-  const allAssets: string[] = [];
-
-  for (const donor of donors) {
-    const donorRoot = donor.root.replace(/\/+$/, "");
-    const donorFiles = graph.paths.filter(
-      (path) =>
-        path.startsWith(`${donorRoot}/`) &&
-        path !== donorRoot &&
-        !path.endsWith(".test.ts") &&
-        !path.endsWith(".test.tsx") &&
-        graph.nodes.get(path)?.isAsset !== true,
-    );
-    const donorTests = graph.paths.filter((path) => path.startsWith(`${donorRoot}/`) && (path.endsWith(".test.ts") || path.endsWith(".test.tsx")));
-    const donorAssets = graph.paths.filter(
-      (path) =>
-        path.startsWith(`${donorRoot}/`) && !path.endsWith(".ts") && !path.endsWith(".tsx") && !path.endsWith(".test.ts") && !path.endsWith(".test.tsx"),
-    );
-
-    allFiles.push(...donorFiles);
-    allTests.push(...donorTests);
-    allAssets.push(...donorAssets);
-  }
-
-  // Deduplicate and sort.
-  const files = [...new Set(allFiles)].toSorted(byCodeUnit);
-  const tests = [...new Set(allTests)].toSorted(byCodeUnit);
-  const assets = [...new Set(allAssets)].toSorted(byCodeUnit);
+  const { files, tests, assets } = donorInventory(graph, donors);
 
   // Build SCCs from the production files using the application graph.
   const appGraph = buildApplicationGraph(graph, undefined);
@@ -87,35 +58,53 @@ export function buildConsolidationCandidate(options: ConsolidationCandidateOptio
     .filter((scc) => scc.members.length > 0)
     .toSorted((a, b) => byCodeUnit(a.id, b.id));
 
-  // Collect dependencies (external workspace packages the moved union depends on).
-  const dependencies = new Set<string>();
-  for (const file of files) {
-    const deps = graph.workspaceDependenciesBySource.get(file);
-    if (deps) {
-      for (const dep of deps) {
-        const pkgName = graph.workspace.packageNames.get(dep);
-        if (pkgName) dependencies.add(pkgName);
-      }
-    }
-  }
+  const dependencies = workspaceDependencies(graph, files);
 
   // Collect consumers (files outside the moved union that import into it).
   const consumers = collectConsumers(graph, fileSet, donors);
 
   const lineCount = files.reduce((total, path) => total + (graph.nodes.get(path)?.lineCount ?? 0), 0);
 
+  return { id: consolidationId(target, donors, files), target, donors, files, tests, assets, sccs, dependencies, consumers, lineCount };
+}
+
+type DonorRef = { readonly name: string; readonly root: string };
+
+function isTestPath(path: string): boolean {
+  return path.endsWith(".test.ts") || path.endsWith(".test.tsx");
+}
+
+/** Every donor's production files, tests, and assets, deduplicated and sorted. */
+function donorInventory(graph: DependencyGraph, donors: readonly DonorRef[]): { files: string[]; tests: string[]; assets: string[] } {
+  const allFiles: string[] = [];
+  const allTests: string[] = [];
+  const allAssets: string[] = [];
+
+  for (const donor of donors) {
+    const donorRoot = donor.root.replace(/\/+$/, "");
+    const inDonor = graph.paths.filter((path) => path.startsWith(`${donorRoot}/`));
+    allFiles.push(...inDonor.filter((path) => path !== donorRoot && !isTestPath(path) && graph.nodes.get(path)?.isAsset !== true));
+    allTests.push(...inDonor.filter(isTestPath));
+    allAssets.push(...inDonor.filter((path) => !path.endsWith(".ts") && !path.endsWith(".tsx") && !isTestPath(path)));
+  }
+
   return {
-    id: consolidationId(target, donors, files),
-    target,
-    donors,
-    files,
-    tests,
-    assets,
-    sccs,
-    dependencies: [...dependencies].toSorted(byCodeUnit),
-    consumers,
-    lineCount,
+    files: [...new Set(allFiles)].toSorted(byCodeUnit),
+    tests: [...new Set(allTests)].toSorted(byCodeUnit),
+    assets: [...new Set(allAssets)].toSorted(byCodeUnit),
   };
+}
+
+/** Existing workspace packages the moved union depends on, sorted. */
+function workspaceDependencies(graph: DependencyGraph, files: readonly string[]): string[] {
+  const dependencies = new Set<string>();
+  for (const file of files) {
+    for (const dep of graph.workspaceDependenciesBySource.get(file) ?? []) {
+      const pkgName = graph.workspace.packageNames.get(dep);
+      if (pkgName) dependencies.add(pkgName);
+    }
+  }
+  return [...dependencies].toSorted(byCodeUnit);
 }
 
 function collectConsumers(graph: DependencyGraph, fileSet: Set<string>, donors: readonly { readonly name: string; readonly root: string }[]): ConsumerRef[] {

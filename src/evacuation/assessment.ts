@@ -11,7 +11,7 @@ import { scoreCandidate, suggestedPackageName } from "../portfolio/rank.ts";
 import { preparationRecipe } from "../portfolio/recipe.ts";
 import { recommendCandidate } from "../portfolio/recommendation.ts";
 import { detectCompatibilityShims } from "../portfolio/shims.ts";
-import type { PortfolioCandidate } from "../portfolio/types.ts";
+import type { CompatibilityShim, PortfolioCandidate } from "../portfolio/types.ts";
 import { byCodeUnit } from "../util/hash.ts";
 import type { EvacuationCandidate } from "./candidate.ts";
 import { evacuationBoundaryCuts, type EvacuationBoundaryCut } from "./cuts.ts";
@@ -51,13 +51,9 @@ export function assessEvacuationCandidate(options: AssessEvacuationOptions): Ass
   const aggregate = aggregateReport(graph, evacuation, closureReports, domains, directTests);
   const firstAssessment = assessCandidate(config, context, pathReferences, graph, aggregate, evacuation.files, closureReports, owners, domains, []);
 
-  let tests = directTests;
-  let partitionFailure: unknown;
-  try {
-    tests = partitionTests(context, evacuation.files, directTests, firstAssessment.assets).travelling.slice();
-  } catch (error) {
-    partitionFailure = error;
-  }
+  const partitioned = travellingTests(context, evacuation.files, directTests, firstAssessment.assets);
+  let tests = partitioned.tests;
+  const partitionFailure = partitioned.failure;
   const assessment =
     partitionFailure === undefined
       ? assessCandidate(config, context, pathReferences, graph, aggregate, evacuation.files, closureReports, owners, domains, tests)
@@ -83,10 +79,63 @@ export function assessEvacuationCandidate(options: AssessEvacuationOptions): Ass
 
   const rejectionReasons = dedupeReasons(rejections);
   const compatibilityShims = detectCompatibilityShims(context, graph).filter((shim) => moved.has(shim.path));
-  const base = {
+  const base = candidateBase({
+    config,
+    evacuation,
+    packageName: options.packageName,
+    domains,
+    owners,
+    tests,
+    assessment,
+    rejectionReasons,
+    compatibilityShims,
+  });
+  const recommendation = recommendCandidate(config, context, graph, base, compatibilityShims);
+  const withRecommendation = { ...base, recommendation };
+  const effort = estimateCandidateEffort(withRecommendation);
+  const candidate: PortfolioCandidate = { ...withRecommendation, effort, score: scoreCandidate(config, { ...withRecommendation, effort }) };
+  return {
+    evacuation,
+    candidate,
+    boundaryCuts: evacuationBoundaryCuts(config, context, graph, evacuation),
+    authorizedProtectedRoots: [...(options.authorizedProtectedRoots ?? [])],
+    includedCompositionRoots: [...(options.includedCompositionRoots ?? [])],
+  };
+}
+
+/** Tests that travel with the evacuation, or the failure that prevented partitioning them. */
+function travellingTests(
+  context: WorkspaceContext,
+  files: readonly string[],
+  directTests: readonly string[],
+  assets: readonly string[],
+): { tests: readonly string[]; failure: unknown } {
+  try {
+    return { tests: partitionTests(context, files, directTests, assets).travelling.slice(), failure: undefined };
+  } catch (error) {
+    return { tests: directTests, failure: error };
+  }
+}
+
+interface CandidateBaseInput {
+  readonly config: MonocarveConfig;
+  readonly evacuation: EvacuationCandidate;
+  readonly packageName: string | undefined;
+  readonly domains: readonly string[];
+  readonly owners: readonly string[];
+  readonly tests: readonly string[];
+  readonly assessment: ReturnType<typeof assessCandidate>;
+  readonly rejectionReasons: PortfolioCandidate["rejectionReasons"];
+  readonly compatibilityShims: readonly CompatibilityShim[];
+}
+
+function candidateBase(input: CandidateBaseInput): Omit<PortfolioCandidate, "score" | "recommendation" | "effort"> {
+  const { config, evacuation, domains, owners, tests, assessment, rejectionReasons, compatibilityShims } = input;
+  const moved = new Set(evacuation.files);
+  return {
     id: evacuation.id,
     application: evacuation.application,
-    suggestedPackageName: options.packageName ?? suggestedPackageName(config, evacuation.application, domains, evacuation.id),
+    suggestedPackageName: input.packageName ?? suggestedPackageName(config, evacuation.application, domains, evacuation.id),
     files: evacuation.files,
     tests,
     assets: assessment.assets,
@@ -107,17 +156,6 @@ export function assessEvacuationCandidate(options: AssessEvacuationOptions): Ass
     classification: assessment.classification,
     retainedBlockers: assessment.retainedBlockers,
     recipe: preparationRecipe(config, assessment.retainedBlockers),
-  };
-  const recommendation = recommendCandidate(config, context, graph, base, compatibilityShims);
-  const withRecommendation = { ...base, recommendation };
-  const effort = estimateCandidateEffort(withRecommendation);
-  const candidate: PortfolioCandidate = { ...withRecommendation, effort, score: scoreCandidate(config, { ...withRecommendation, effort }) };
-  return {
-    evacuation,
-    candidate,
-    boundaryCuts: evacuationBoundaryCuts(config, context, graph, evacuation),
-    authorizedProtectedRoots: [...(options.authorizedProtectedRoots ?? [])],
-    includedCompositionRoots: [...(options.includedCompositionRoots ?? [])],
   };
 }
 

@@ -184,34 +184,10 @@ export function buildPathReferenceIndex(context: WorkspaceContext): PathReferenc
   const settings = context.config.pathReferences;
   if (!settings.enabled) return PathReferenceIndex.empty(settings);
 
-  const byPath = new Map<string, Occurrence[]>();
-  const byStem = new Map<string, Occurrence[]>();
+  const indexes: OccurrenceIndexes = { byPath: new Map(), byStem: new Map() };
   const scanned = new Set<string>();
-
-  const record = (raw: string, occurrence: Occurrence, referenceBases: readonly string[] = []): void => {
-    const normalized = normalizeToken(raw, { allowParentSegments: referenceBases.length > 0 });
-    if (normalized === null) return;
-    const segments = normalized.path.split("/");
-    const extended = segments.at(-1)!.includes(".");
-    if (!extended && !settings.matchExtensionless) return;
-    const index = extended ? byPath : byStem;
-    if (!segments.includes("..")) {
-      for (const key of keysFor(segments, normalized.absolute, settings.minSegments)) {
-        const entries = index.get(key) ?? [];
-        entries.push({ ...occurrence, text: normalized.path });
-        index.set(key, entries);
-      }
-    }
-    if (!normalized.absolute) {
-      for (const referenceBase of referenceBases) {
-        const based = posix.normalize(posix.join(referenceBase, normalized.path));
-        if (based === ".." || based.startsWith("../")) continue;
-        const entries = index.get(based) ?? [];
-        entries.push({ ...occurrence, text: normalized.path });
-        index.set(based, entries);
-      }
-    }
-  };
+  const record = (raw: string, occurrence: Occurrence, referenceBases: readonly string[] = []): void =>
+    recordToken(indexes, settings, raw, occurrence, referenceBases);
 
   for (const file of context.repositorySources()) {
     scanned.add(file);
@@ -227,18 +203,50 @@ export function buildPathReferenceIndex(context: WorkspaceContext): PathReferenc
       if (scanned.has(file)) continue;
       if ((statSync(absolute, { throwIfNoEntry: false })?.size ?? 0) > settings.maxBytes) continue;
       scanned.add(file);
-      const referenceBases = context.config.pathReferenceRewrites.enabled
-        ? context.config.pathReferenceRewrites.roots
-            .filter(
-              (root) => root.referenceBase !== undefined && (file === root.root || file.startsWith(root.root + "/")) && root.extensions.includes(extname(file)),
-            )
-            .map((root) => root.referenceBase!)
-        : [];
+      const referenceBases = textReferenceBases(context, file);
       scanText(readFileSync(absolute, "utf8"), file, (raw, occurrence) => record(raw, occurrence, referenceBases));
     }
   }
 
-  return new PathReferenceIndex(byPath, byStem, scanned.size, settings);
+  return new PathReferenceIndex(indexes.byPath, indexes.byStem, scanned.size, settings);
+}
+
+interface OccurrenceIndexes {
+  readonly byPath: Map<string, Occurrence[]>;
+  readonly byStem: Map<string, Occurrence[]>;
+}
+
+function addOccurrence(index: Map<string, Occurrence[]>, key: string, occurrence: Occurrence): void {
+  const entries = index.get(key) ?? [];
+  entries.push(occurrence);
+  index.set(key, entries);
+}
+
+/** Index one path-shaped token under every key it can be looked up by. */
+function recordToken(indexes: OccurrenceIndexes, settings: PathReferencesConfig, raw: string, occurrence: Occurrence, referenceBases: readonly string[]): void {
+  const normalized = normalizeToken(raw, { allowParentSegments: referenceBases.length > 0 });
+  if (normalized === null) return;
+  const segments = normalized.path.split("/");
+  const extended = segments.at(-1)!.includes(".");
+  if (!extended && !settings.matchExtensionless) return;
+  const index = extended ? indexes.byPath : indexes.byStem;
+  if (!segments.includes("..")) {
+    for (const key of keysFor(segments, normalized.absolute, settings.minSegments)) addOccurrence(index, key, { ...occurrence, text: normalized.path });
+  }
+  if (normalized.absolute) return;
+  for (const referenceBase of referenceBases) {
+    const based = posix.normalize(posix.join(referenceBase, normalized.path));
+    if (based === ".." || based.startsWith("../")) continue;
+    addOccurrence(index, based, { ...occurrence, text: normalized.path });
+  }
+}
+
+/** The configured rewrite reference bases that apply to a text-scanned file. */
+function textReferenceBases(context: WorkspaceContext, file: string): string[] {
+  if (!context.config.pathReferenceRewrites.enabled) return [];
+  return context.config.pathReferenceRewrites.roots
+    .filter((root) => root.referenceBase !== undefined && (file === root.root || file.startsWith(root.root + "/")) && root.extensions.includes(extname(file)))
+    .map((root) => root.referenceBase!);
 }
 
 /** Sink the scanners hand every path-shaped token to. */

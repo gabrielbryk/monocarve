@@ -36,12 +36,12 @@ export function validatePathReferenceRewrite(
   mutated.add(operation.file);
 }
 
-function validateRewrites(
-  operation: Extract<PlanOperation, { kind: "rewrite-path-reference" }>,
-  at: { operationIndex: number; operationKind: PlanOperation["kind"]; path: string },
-  issues: Issues,
-  moves: readonly Extract<PlanOperation, { kind: "move" | "move-with-rewrite" }>[],
-): void {
+type RewritePathReference = Extract<PlanOperation, { kind: "rewrite-path-reference" }>;
+type PathReferenceRewrite = RewritePathReference["rewrites"][number];
+type MoveOperation = Extract<PlanOperation, { kind: "move" | "move-with-rewrite" }>;
+type IssueAt = { operationIndex: number; operationKind: PlanOperation["kind"]; path: string };
+
+function validateRewrites(operation: RewritePathReference, at: IssueAt, issues: Issues, moves: readonly MoveOperation[]): void {
   const seen = new Set<string>();
   for (const rewrite of operation.rewrites) {
     const key = `${rewrite.from}:${rewrite.line}:${rewrite.column}`;
@@ -57,39 +57,50 @@ function validateRewrites(
     if (!move) {
       issues.add("path-reference-donor", `rewrite-path-reference donor is not a moved source: ${rewrite.donor}`, at);
     } else {
-      // Cross-check `to` against the manifest's own move for this donor — not
-      // against anything reconstructed from `to` itself — so a forged target
-      // that would otherwise validate against its own say-so is rejected
-      // here, before it ever reaches apply.
-      const expected =
-        rewrite.resolutionBase === undefined
-          ? expectedPathReferenceTarget(rewrite.from, move.source, move.target, rewrite.referenceBase)
-          : rewrite.emittedModuleSpecifier
-            ? expectedEmittedModuleSpecifierTarget(rewrite.resolutionBase, move.target)
-            : expectedRuntimeModuleRegistryTarget(rewrite.resolutionBase, move.target, rewrite.strippedPrefix);
-      const identities = Number(rewrite.jsonPointer !== undefined) + Number(rewrite.emittedModuleSpecifier === true);
-      if ((rewrite.resolutionBase === undefined && identities !== 0) || (rewrite.resolutionBase !== undefined && identities !== 1)) {
-        issues.add("path-reference-structured-identity", `structured rewrite must record resolutionBase and exactly one identity: ${operation.file}`, at);
-      }
-      if (rewrite.strippedPrefix !== undefined && rewrite.resolutionBase === undefined) {
-        issues.add("path-reference-registry-identity", `strippedPrefix requires structured registry identity: ${operation.file}`, at);
-      }
-      if (rewrite.referenceBase !== undefined && rewrite.resolutionBase !== undefined) {
-        issues.add("path-reference-base-identity", `ordinary referenceBase cannot be combined with structured resolutionBase: ${operation.file}`, at);
-      }
-      if (rewrite.strippedPrefix !== undefined && rewrite.emittedModuleSpecifier)
-        issues.add("path-reference-registry-identity", `emitted module specifier cannot carry strippedPrefix: ${operation.file}`, at);
-      if (rewrite.strippedPrefix !== undefined && !rewrite.from.startsWith(rewrite.strippedPrefix)) {
-        issues.add("path-reference-registry-prefix", `structured registry value does not carry its declared strippedPrefix: ${operation.file}`, at);
-      }
-      if (expected === null || expected !== rewrite.to) {
-        issues.add(
-          "path-reference-target",
-          `rewrite-path-reference for ${operation.file} at ${rewrite.line}:${rewrite.column} targets ${JSON.stringify(rewrite.to)}, but donor ${move.source} moves to ${move.target} implying ${JSON.stringify(expected)}`,
-          at,
-        );
-      }
+      validateRewriteAgainstMove(operation.file, rewrite, move, at, issues);
     }
     if (rewrite.from === rewrite.to) issues.add("path-reference-noop", `rewrite-path-reference for ${operation.file} is a no-op`, at);
+  }
+}
+
+function validateRewriteAgainstMove(file: string, rewrite: PathReferenceRewrite, move: MoveOperation, at: IssueAt, issues: Issues): void {
+  // Cross-check `to` against the manifest's own move for this donor — not
+  // against anything reconstructed from `to` itself — so a forged target
+  // that would otherwise validate against its own say-so is rejected
+  // here, before it ever reaches apply.
+  const expected = expectedRewriteTarget(rewrite, move);
+  validateRewriteIdentity(file, rewrite, at, issues);
+  if (expected === null || expected !== rewrite.to) {
+    issues.add(
+      "path-reference-target",
+      `rewrite-path-reference for ${file} at ${rewrite.line}:${rewrite.column} targets ${JSON.stringify(rewrite.to)}, but donor ${move.source} moves to ${move.target} implying ${JSON.stringify(expected)}`,
+      at,
+    );
+  }
+}
+
+function expectedRewriteTarget(rewrite: PathReferenceRewrite, move: MoveOperation): string | null {
+  if (rewrite.resolutionBase === undefined) return expectedPathReferenceTarget(rewrite.from, move.source, move.target, rewrite.referenceBase);
+  return rewrite.emittedModuleSpecifier
+    ? expectedEmittedModuleSpecifierTarget(rewrite.resolutionBase, move.target)
+    : expectedRuntimeModuleRegistryTarget(rewrite.resolutionBase, move.target, rewrite.strippedPrefix);
+}
+
+function validateRewriteIdentity(file: string, rewrite: PathReferenceRewrite, at: IssueAt, issues: Issues): void {
+  const structured = rewrite.resolutionBase !== undefined;
+  const identities = Number(rewrite.jsonPointer !== undefined) + Number(rewrite.emittedModuleSpecifier === true);
+  if (identities !== (structured ? 1 : 0)) {
+    issues.add("path-reference-structured-identity", `structured rewrite must record resolutionBase and exactly one identity: ${file}`, at);
+  }
+  if (rewrite.strippedPrefix !== undefined && !structured) {
+    issues.add("path-reference-registry-identity", `strippedPrefix requires structured registry identity: ${file}`, at);
+  }
+  if (rewrite.referenceBase !== undefined && structured) {
+    issues.add("path-reference-base-identity", `ordinary referenceBase cannot be combined with structured resolutionBase: ${file}`, at);
+  }
+  if (rewrite.strippedPrefix !== undefined && rewrite.emittedModuleSpecifier)
+    issues.add("path-reference-registry-identity", `emitted module specifier cannot carry strippedPrefix: ${file}`, at);
+  if (rewrite.strippedPrefix !== undefined && !rewrite.from.startsWith(rewrite.strippedPrefix)) {
+    issues.add("path-reference-registry-prefix", `structured registry value does not carry its declared strippedPrefix: ${file}`, at);
   }
 }

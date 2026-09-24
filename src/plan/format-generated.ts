@@ -37,7 +37,7 @@ export function formatGeneratedText(rootDir: string, path: string, contents: str
   const executable = prettierExecutable(rootDir);
   if (executable === undefined) return contents;
   const result = spawnSync(javascriptRuntime(), [executable, "--stdin-filepath", path], { cwd: rootDir, input: contents, encoding: "utf8" });
-  if (result.error !== undefined) throw new PlanningError(`Prettier could not format ${path}: ${result.error.message}`);
+  if (result.error !== undefined) throw new PlanningError(`Prettier could not format ${path}: ${result.error.message}`, { cause: result.error });
   if (result.status !== 0) {
     const detail = `${result.stderr ?? ""}`.trim();
     throw new PlanningError(`Prettier could not format ${path}${detail === "" ? "" : `: ${detail}`}`);

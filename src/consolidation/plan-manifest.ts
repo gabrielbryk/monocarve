@@ -23,7 +23,7 @@ import { renderTemplate } from "../util/template.ts";
 import type { ConsolidationCandidate } from "./candidate.ts";
 import { operationPathsOf } from "./plan-support.ts";
 
-export function buildConsolidationManifest(input: {
+export interface ConsolidationManifestInput {
   readonly config: MonocarveConfig;
   readonly rootDir: string;
   readonly graph: DependencyGraph;
@@ -44,7 +44,11 @@ export function buildConsolidationManifest(input: {
   readonly operations: PlanOperation[];
   readonly consumers: readonly Consumer[];
   readonly consumerSections: ReadonlyMap<string, "runtime" | "dev">;
-}): ExtractionManifest {
+}
+
+type CommitVars = Readonly<Record<"package" | "packageRoot" | "app" | "project" | "planId" | "fileCount", string>>;
+
+export function buildConsolidationManifest(input: ConsolidationManifestInput): ExtractionManifest {
   const {
     config,
     rootDir,
@@ -98,40 +102,56 @@ export function buildConsolidationManifest(input: {
     application: application.name,
     boundaryBaseline: boundaryBaselineOf({ config, rootDir, files: context.repositorySources(), referencesOf: (file) => context.moduleReferences(file) }),
     target: { packageName, packageRoot, entrypoint: config.scaffoldTemplates.entrypoint, requiredExports: [], publicModules },
-    source: {
-      files: candidate.files,
-      tests,
-      ...(candidate.assets.length > 0 ? { assets: candidate.assets } : {}),
-      // `candidate.sccs` is an array; Object.keys would count its indices.
-      sccs: candidate.sccs.length > 0 ? Object.fromEntries(candidate.sccs.map((scc) => [scc.id, scc.members])) : { "scc-consolidation": candidate.files },
-    },
+    source: sourceSection(candidate, tests),
     dependencies,
     sourceBlobs,
     operations,
-    consumers: consumers.map((consumer) => ({
-      file: consumer.file,
-      owner: consumer.package,
-      expectedImporter: consumer.expectedImporter,
-      specifiers: consumer.rewrites.map((rewrite) => ({ from: rewrite.from, to: rewrite.to, donor: rewrite.donor })),
-      external: false,
-      dependencySection: consumerSections.get(consumer.package) ?? consumer.dependencySection,
-    })),
+    consumers: manifestConsumers(consumers, consumerSections),
     generatedFiles: [],
     changedFiles: [...new Set(operations.flatMap((op) => operationPathsOf(op)))].toSorted(),
     expectedDynamicImportDelta: { added: [], removed: [] },
     evaluationEffects: [],
-    metrics: {
-      movedFiles: candidate.files.length + tests.length + candidate.assets.length,
-      movedLines: candidate.lineCount,
-      applicationLinesBefore: 0,
-      applicationLinesAfter: 0,
-      consumers: candidate.consumers.length,
-    },
-    commits: {
-      plan: { subject: renderTemplate(config.commitTemplates.plan, commitVars) },
-      move: { subject: renderTemplate(config.commitTemplates.move, commitVars) },
-      wiring: { subject: renderTemplate(config.commitTemplates.wiring, commitVars) },
-    },
+    metrics: manifestMetrics(candidate, tests),
+    commits: manifestCommits(config, commitVars),
     gates: renderGates(config, config.gates, { ...commitVars, consumerOwners, taskRunner, rootDir }),
+  };
+}
+
+function sourceSection(candidate: ConsolidationCandidate, tests: readonly string[]): ExtractionManifest["source"] {
+  return {
+    files: candidate.files,
+    tests,
+    ...(candidate.assets.length > 0 ? { assets: candidate.assets } : {}),
+    // `candidate.sccs` is an array; Object.keys would count its indices.
+    sccs: candidate.sccs.length > 0 ? Object.fromEntries(candidate.sccs.map((scc) => [scc.id, scc.members])) : { "scc-consolidation": candidate.files },
+  };
+}
+
+function manifestConsumers(consumers: readonly Consumer[], consumerSections: ReadonlyMap<string, "runtime" | "dev">): ExtractionManifest["consumers"] {
+  return consumers.map((consumer) => ({
+    file: consumer.file,
+    owner: consumer.package,
+    expectedImporter: consumer.expectedImporter,
+    specifiers: consumer.rewrites.map((rewrite) => ({ from: rewrite.from, to: rewrite.to, donor: rewrite.donor })),
+    external: false,
+    dependencySection: consumerSections.get(consumer.package) ?? consumer.dependencySection,
+  }));
+}
+
+function manifestMetrics(candidate: ConsolidationCandidate, tests: readonly string[]): ExtractionManifest["metrics"] {
+  return {
+    movedFiles: candidate.files.length + tests.length + candidate.assets.length,
+    movedLines: candidate.lineCount,
+    applicationLinesBefore: 0,
+    applicationLinesAfter: 0,
+    consumers: candidate.consumers.length,
+  };
+}
+
+function manifestCommits(config: MonocarveConfig, commitVars: CommitVars): ExtractionManifest["commits"] {
+  return {
+    plan: { subject: renderTemplate(config.commitTemplates.plan, commitVars) },
+    move: { subject: renderTemplate(config.commitTemplates.move, commitVars) },
+    wiring: { subject: renderTemplate(config.commitTemplates.wiring, commitVars) },
   };
 }

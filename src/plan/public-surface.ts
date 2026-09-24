@@ -47,49 +47,67 @@ export function sourceExportsFromBaseline(workspaceRoot: string, commit: string,
   const absolute = resolve(workspaceRoot, path);
   const options = compilerOptions();
   const fallback = ts.createCompilerHost(options);
-  const cache = new Map<string, string | null>();
+  const host = baselineCompilerHost(workspaceRoot, commit, fallback, baselineInventory(workspaceRoot, commit));
+  return sourceExportsFromProgram(absolute, path, ts.createProgram([absolute], options, host));
+}
+
+/** Every workspace-relative file at `commit`, plus every directory that contains one. */
+function baselineInventory(workspaceRoot: string, commit: string): { readonly files: ReadonlySet<string>; readonly directories: ReadonlySet<string> } {
   const prefix = repositoryPrefix(workspaceRoot);
-  const baselineFiles = new Set(
+  const files = new Set(
     git({ cwd: workspaceRoot }, "ls-tree", "-r", "--name-only", commit, "--", prefix || ".")
       .split("\n")
       .filter(Boolean)
       .map((entry) => (prefix && entry.startsWith(prefix) ? entry.slice(prefix.length) : entry)),
   );
-  const baselineDirectories = new Set<string>([""]);
-  for (const file of baselineFiles) {
+  const directories = new Set<string>([""]);
+  for (const file of files) {
     const parts = file.split("/");
-    for (let index = 1; index < parts.length; index += 1) baselineDirectories.add(parts.slice(0, index).join("/"));
+    for (let index = 1; index < parts.length; index += 1) directories.add(parts.slice(0, index).join("/"));
   }
-  const workspacePathOf = (fileName: string): string | null => {
-    const workspacePath = relative(resolve(workspaceRoot), resolve(fileName)).replaceAll("\\", "/");
-    return workspacePath === ".." || workspacePath.startsWith("../") ? null : workspacePath;
-  };
-  const baselineWorkspacePathOf = (fileName: string, known: ReadonlySet<string>): string | null => {
-    const direct = workspacePathOf(fileName);
-    if (direct !== null && known.has(direct)) return direct;
-    try {
-      const physical = workspacePathOf(realpathSync.native(fileName));
-      return physical !== null && known.has(physical) ? physical : null;
-    } catch {
-      return null;
-    }
-  };
+  return { files, directories };
+}
+
+function workspacePathOf(workspaceRoot: string, fileName: string): string | null {
+  const workspacePath = relative(resolve(workspaceRoot), resolve(fileName)).replaceAll("\\", "/");
+  return workspacePath === ".." || workspacePath.startsWith("../") ? null : workspacePath;
+}
+
+/** `fileName` as a workspace path in `known`, directly or through its real path; null otherwise. */
+function baselineWorkspacePathOf(workspaceRoot: string, fileName: string, known: ReadonlySet<string>): string | null {
+  const direct = workspacePathOf(workspaceRoot, fileName);
+  if (direct !== null && known.has(direct)) return direct;
+  try {
+    const physical = workspacePathOf(workspaceRoot, realpathSync.native(fileName));
+    return physical !== null && known.has(physical) ? physical : null;
+  } catch {
+    return null;
+  }
+}
+
+function baselineCompilerHost(
+  workspaceRoot: string,
+  commit: string,
+  fallback: ts.CompilerHost,
+  inventory: { readonly files: ReadonlySet<string>; readonly directories: ReadonlySet<string> },
+): ts.CompilerHost {
+  const cache = new Map<string, string | null>();
   const baselinePathText = (workspacePath: string): string | null => {
     if (!cache.has(workspacePath)) cache.set(workspacePath, showBaseline(workspaceRoot, commit, workspacePath));
     return cache.get(workspacePath) ?? null;
   };
   const baselineText = (fileName: string): string | null => {
-    const workspacePath = baselineWorkspacePathOf(fileName, baselineFiles);
+    const workspacePath = baselineWorkspacePathOf(workspaceRoot, fileName, inventory.files);
     return workspacePath !== null ? baselinePathText(workspacePath) : null;
   };
-  const host: ts.CompilerHost = {
+  return {
     ...fallback,
     getCurrentDirectory: () => workspaceRoot,
     // Directory traversal may follow a workspace-package symlink out of
     // node_modules. File reads remain pinned to Git below, so admitting a live
     // directory can only help TypeScript locate immutable baseline files.
     directoryExists: (directoryName) => {
-      const workspacePath = baselineWorkspacePathOf(directoryName, baselineDirectories);
+      const workspacePath = baselineWorkspacePathOf(workspaceRoot, directoryName, inventory.directories);
       return workspacePath !== null || (fallback.directoryExists?.(directoryName) ?? false);
     },
     fileExists: (fileName) => baselineText(fileName) !== null || fallback.fileExists(fileName),
@@ -99,7 +117,6 @@ export function sourceExportsFromBaseline(workspaceRoot: string, commit: string,
       return contents === null ? fallback.getSourceFile(fileName, languageVersion) : ts.createSourceFile(fileName, contents, languageVersion, true);
     },
   };
-  return sourceExportsFromProgram(absolute, path, ts.createProgram([absolute], options, host));
 }
 
 function compilerOptions(): ts.CompilerOptions {

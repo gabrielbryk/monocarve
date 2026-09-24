@@ -4,6 +4,7 @@
  * describes observed coupling, while extraction still requires hard proofs.
  */
 
+import { UsageError } from "../errors.ts";
 import type { DependencyGraph } from "../graph/model.ts";
 import { byCodeUnit, hashJson, type Sha256 } from "../util/hash.ts";
 
@@ -80,7 +81,7 @@ export function analyzeCommunities(graph: DependencyGraph, options: CommunityAna
 }
 
 function positiveInteger(value: number, name: string): number {
-  if (!Number.isSafeInteger(value) || value < 1) throw new Error(`${name} must be a positive integer`);
+  if (!Number.isSafeInteger(value) || value < 1) throw new UsageError(`${name} must be a positive integer, got ${value}`);
   return value;
 }
 
@@ -112,39 +113,64 @@ function adjacencyFor(nodes: readonly string[], edges: readonly (readonly [strin
   return new Map(nodes.map((node) => [node, [...(mutable.get(node) ?? [])].toSorted(byCodeUnit)]));
 }
 
+interface LouvainState {
+  readonly adjacency: ReadonlyMap<string, readonly string[]>;
+  readonly membership: Map<string, string>;
+  readonly degrees: ReadonlyMap<string, number>;
+  readonly totals: Map<string, number>;
+  readonly edgeCount: number;
+}
+
 function louvainLocalMove(nodes: readonly string[], adjacency: ReadonlyMap<string, readonly string[]>, maximumPasses: number): ReadonlyMap<string, string> {
   const membership = new Map(nodes.map((node) => [node, node]));
   const degrees = new Map(nodes.map((node) => [node, adjacency.get(node)?.length ?? 0]));
   const totals = new Map(nodes.map((node) => [node, degrees.get(node) ?? 0]));
   const edgeCount = [...degrees.values()].reduce((sum, degree) => sum + degree, 0) / 2;
   if (edgeCount === 0) return membership;
+  const state: LouvainState = { adjacency, membership, degrees, totals, edgeCount };
   for (let pass = 0; pass < maximumPasses; pass += 1) {
     let changed = false;
     for (const node of nodes) {
-      const old = membership.get(node)!;
-      const degree = degrees.get(node) ?? 0;
-      totals.set(old, (totals.get(old) ?? 0) - degree);
-      const counts = new Map<string, number>();
-      for (const neighbor of adjacency.get(node) ?? []) {
-        const group = membership.get(neighbor)!;
-        counts.set(group, (counts.get(group) ?? 0) + 1);
-      }
-      let best = old;
-      let bestGain = 0;
-      for (const group of [...counts.keys()].toSorted(byCodeUnit)) {
-        const gain = (counts.get(group) ?? 0) / edgeCount - ((totals.get(group) ?? 0) * degree) / (2 * edgeCount * edgeCount);
-        if (gain > bestGain || (gain === bestGain && gain > 0 && byCodeUnit(group, best) < 0)) {
-          best = group;
-          bestGain = gain;
-        }
-      }
-      membership.set(node, best);
-      totals.set(best, (totals.get(best) ?? 0) + degree);
-      if (best !== old) changed = true;
+      if (moveNode(state, node)) changed = true;
     }
     if (!changed) break;
   }
   return membership;
+}
+
+/** Move one node to its best neighboring community; true when it changed community. */
+function moveNode(state: LouvainState, node: string): boolean {
+  const { membership, totals } = state;
+  const old = membership.get(node)!;
+  const degree = state.degrees.get(node) ?? 0;
+  totals.set(old, (totals.get(old) ?? 0) - degree);
+  const best = bestCommunity(state, neighborCommunityCounts(state, node), old, degree);
+  membership.set(node, best);
+  totals.set(best, (totals.get(best) ?? 0) + degree);
+  return best !== old;
+}
+
+function neighborCommunityCounts(state: LouvainState, node: string): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>();
+  for (const neighbor of state.adjacency.get(node) ?? []) {
+    const group = state.membership.get(neighbor)!;
+    counts.set(group, (counts.get(group) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function bestCommunity(state: LouvainState, counts: ReadonlyMap<string, number>, old: string, degree: number): string {
+  const { edgeCount, totals } = state;
+  let best = old;
+  let bestGain = 0;
+  for (const group of [...counts.keys()].toSorted(byCodeUnit)) {
+    const gain = (counts.get(group) ?? 0) / edgeCount - ((totals.get(group) ?? 0) * degree) / (2 * edgeCount * edgeCount);
+    if (gain > bestGain || (gain === bestGain && gain > 0 && byCodeUnit(group, best) < 0)) {
+      best = group;
+      bestGain = gain;
+    }
+  }
+  return best;
 }
 
 function renderCommunities(
@@ -163,15 +189,7 @@ function renderCommunities(
   return [...groups.values()]
     .map((unsorted) => {
       const members = unsorted.sort(byCodeUnit);
-      const memberSet = new Set(members);
-      let internalEdges = 0;
-      let externalEdges = 0;
-      for (const [left, right] of edges) {
-        const leftInside = memberSet.has(left);
-        const rightInside = memberSet.has(right);
-        if (leftInside && rightInside) internalEdges += 1;
-        else if (leftInside || rightInside) externalEdges += 1;
-      }
+      const { internalEdges, externalEdges } = edgeCounts(new Set(members), edges);
       return {
         id: `community-${hashJson(members).slice(0, 10)}`,
         members,
@@ -181,6 +199,18 @@ function renderCommunities(
       };
     })
     .toSorted((left, right) => right.members.length - left.members.length || right.internalEdges - left.internalEdges || byCodeUnit(left.id, right.id));
+}
+
+function edgeCounts(memberSet: ReadonlySet<string>, edges: readonly (readonly [string, string])[]): { internalEdges: number; externalEdges: number } {
+  let internalEdges = 0;
+  let externalEdges = 0;
+  for (const [left, right] of edges) {
+    const leftInside = memberSet.has(left);
+    const rightInside = memberSet.has(right);
+    if (leftInside && rightInside) internalEdges += 1;
+    else if (leftInside || rightInside) externalEdges += 1;
+  }
+  return { internalEdges, externalEdges };
 }
 
 function tupleCompare(left: readonly string[], right: readonly string[]): number {
