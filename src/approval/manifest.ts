@@ -177,3 +177,12 @@ function nulFields(bytes: Uint8Array): string[] {
     .split("\0")
     .filter((value) => value.length > 0);
 }
+
+/**
+ * The approval step every plan-writing command ends with: commit the approval
+ * when the operator asked for it (`--commit-approval`), otherwise only prove the
+ * written bytes and report the next actions.
+ */
+export function recordManifestApproval(options: ManifestApprovalOptions, commit: boolean): ManifestApprovalEvidence | ManifestApprovalCommit {
+  return commit ? commitManifestApproval(options) : manifestApprovalEvidence(options);
+}

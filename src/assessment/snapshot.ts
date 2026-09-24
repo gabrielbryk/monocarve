@@ -2,9 +2,10 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { TOOL_NAME } from "../branding.ts";
 import { executableBuildIdentity, type ExecutableBuildIdentity } from "../build-identity.ts";
 import type { LoadedConfig } from "../config.ts";
-import { MonocarveError } from "../errors.ts";
+import { MonocarveError, toError } from "../errors.ts";
 import { resetGraphCaches, ScanError, scanDependencyReports } from "../graph/cruiser.ts";
 import { buildDependencyGraph, type DependencyGraph, type ScanReport } from "../graph/index.ts";
 import { graphDigest } from "../plan/build.ts";
@@ -52,8 +53,7 @@ function fatal(code: AssessmentQualification["diagnostics"][number]["code"], mes
 
 function rethrowInput(error: unknown): never {
   if (error instanceof InputInventoryError) throw fatal(error.code, error.message, error.paths);
-  if (error instanceof Error) throw error;
-  throw new Error(String(error));
+  throw toError(error);
 }
 
 function assertConfigSnapshotBound(input: LoadedConfig, inventory: AssessmentInputInventory): void {
@@ -365,7 +365,7 @@ function installedVersion(name: string): string {
       /* Ascend to the installed package root. */
     }
     const parent = dirname(current);
-    if (parent === current) throw new Error(`could not identify installed ${name} version`);
+    if (parent === current) throw new Error(`invariant: could not identify the installed ${name} version; the ${TOOL_NAME} installation is incomplete`);
     current = parent;
   }
 }

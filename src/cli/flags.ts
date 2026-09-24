@@ -68,7 +68,7 @@ export function flagsFromUsage(usage: string): FlagSpec[] {
       const previous = kinds.get(name);
       if (previous === undefined || previous === kind) kinds.set(name, kind);
       else if (isValueKind(previous) && isValueKind(kind)) kinds.set(name, "repeatable");
-      else throw new Error(`usage declares --${name} both as a switch and as taking a value: ${usage}`);
+      else throw new Error(`invariant: usage declares --${name} both as a switch and as taking a value: ${usage}`);
     }
   }
   return [...kinds].map(([name, kind]) => ({ name, kind }));
@@ -84,25 +84,25 @@ export function commandFlags(usage: string, overrides: FlagOverrides = {}): Flag
   const add = (spec: FlagSpec, source: string): void => {
     const existing = table.get(spec.name);
     if (existing && existing.kind !== spec.kind) {
-      throw new Error(`--${spec.name} is declared as ${existing.kind} and as ${spec.kind} (${source}) for: ${usage}`);
+      throw new Error(`invariant: --${spec.name} is declared as ${existing.kind} and as ${spec.kind} (${source}) for: ${usage}`);
     }
     table.set(spec.name, spec);
   };
   for (const spec of flagsFromUsage(usage)) add(spec, "usage");
   for (const name of overrides.repeatable ?? []) {
     const existing = table.get(name);
-    if (!existing || !isValueKind(existing.kind)) throw new Error(`repeatable override --${name} is not a value flag in: ${usage}`);
+    if (!existing || !isValueKind(existing.kind)) throw new Error(`invariant: repeatable override --${name} is not a value flag in: ${usage}`);
     table.set(name, { name, kind: "repeatable" });
   }
   for (const spec of overrides.extra ?? []) add(spec, "extra");
   for (const name of overrides.refused ?? []) {
-    if (table.has(name)) throw new Error(`--${name} cannot be both accepted and refused in: ${usage}`);
+    if (table.has(name)) throw new Error(`invariant: --${name} cannot be both accepted and refused in: ${usage}`);
     table.set(name, { name, kind: "refused" });
   }
   for (const global of GLOBAL_FLAGS) {
     const existing = table.get(global.name);
     if (existing && existing.kind !== global.kind) {
-      throw new Error(`--${global.name} is a global ${global.kind} flag but is declared ${existing.kind} in: ${usage}`);
+      throw new Error(`invariant: --${global.name} is a global ${global.kind} flag but is declared ${existing.kind} in: ${usage}`);
     }
   }
   return [...table.values()];

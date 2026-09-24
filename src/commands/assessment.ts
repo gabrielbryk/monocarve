@@ -1,40 +1,16 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { analyzeDeclarationBatch, BatchAnalysisError } from "../assessment/batch.ts";
+import { analyzeDeclarationBatch } from "../assessment/batch.ts";
 import { loadReplaySnapshot } from "../assessment/bundle-replay.ts";
 import { defaultAssessmentArguments, publishAssessment, reportsForSnapshot } from "../assessment/bundle.ts";
-import { assertEvidenceDestination, EvidenceError } from "../assessment/evidence.ts";
-import { captureAssessmentSnapshot, AssessmentQualificationError } from "../assessment/snapshot.ts";
+import { assertEvidenceDestination } from "../assessment/evidence.ts";
+import { captureAssessmentSnapshot } from "../assessment/snapshot.ts";
 import { flagBool, flagNumber, flagString, flagStrings, type ParsedArgs } from "../cli/args.ts";
-import type { LoadedConfig } from "../config.ts";
-import { ConfigError, IoError, NotYetPortedError, UsageError } from "../errors.ts";
+import { UsageError } from "../errors.ts";
 import { byCodeUnit } from "../util/hash.ts";
+import { analyticalRootsFor, handleAssessmentFailure, MUTATION_ONLY_FLAGS, positiveInteger, setQualificationExitCode } from "./assessment-outcome.ts";
 import { load, print } from "./shared.ts";
 import type { CommandSpec } from "./types.ts";
-
-const MUTATION_ONLY_FLAGS = [
-  "plan",
-  "apply",
-  "approve",
-  "simulate",
-  "prepare",
-  "journal",
-  "allow-dirty",
-  "write",
-  "commit",
-  "commit-approval",
-  "resume",
-  "recover",
-  "skip-gates",
-  "force",
-  "replace",
-  "delete",
-  "execute",
-  "target",
-  "package-name",
-  "package-root",
-  "retire-donors",
-] as const;
 
 interface AssessmentInvocation {
   readonly application: string;
@@ -51,7 +27,10 @@ async function assess(args: ParsedArgs): Promise<void> {
   try {
     await runAssessment(args, invocation);
   } catch (error) {
-    handleAssessmentFailure(args, error);
+    handleAssessmentFailure(args, error, {
+      impact: "No new authoritative assessment bundle was published.",
+      batchFailureHeadline: "Declaration batch incomplete; no assessment evidence was published.",
+    });
   }
 }
 
@@ -145,65 +124,12 @@ async function runAssessment(args: ParsedArgs, invocation: AssessmentInvocation)
     },
     args,
   );
-  process.exitCode = snapshot.qualification.exitCode;
-}
-
-function analyticalRootsFor(loaded: LoadedConfig): string[] {
-  return [
-    ...loaded.config.applications.flatMap((entry) => [entry.sourceRoot, ...entry.consumerRoots]),
-    ...loaded.config.packageRoots,
-    ...loaded.config.firstPartyRoots,
-    ...loaded.config.firstPartyPackages.map((entry) => entry.root),
-  ];
+  setQualificationExitCode(snapshot.qualification);
 }
 
 function replayDestinationFor(rootDir: string, replay: string | undefined, analyticalRoots: readonly string[]): string | undefined {
   if (replay === undefined || !existsSync(resolve(rootDir, replay))) return replay;
   return assertEvidenceDestination(rootDir, replay, analyticalRoots);
-}
-
-function handleAssessmentFailure(args: ParsedArgs, error: unknown): never | void {
-  if (error instanceof BatchAnalysisError) {
-    const failure = {
-      schemaVersion: 1,
-      status: "fatal" as const,
-      exitCode: 1 as const,
-      published: false,
-      code: "SPLIT_ANALYSIS_INCOMPLETE" as const,
-      ...error.aggregate,
-    };
-    print(flagBool(args, "json") ? failure : humanBatchFailure(failure), args);
-    process.exitCode = 1;
-    return;
-  }
-  if (error instanceof AssessmentQualificationError) return printFatal(args, error.qualification.diagnostics, error.qualification.overrides);
-  if (error instanceof EvidenceError)
-    return printFatal(args, [{ code: error.code, severity: "error", message: error.message, impact: "No new authoritative assessment bundle was published." }]);
-  if (error instanceof ConfigError || error instanceof IoError)
-    return printFatal(args, [
-      { code: "ASSESSMENT_INPUT_UNREADABLE", severity: "error", message: error.message, impact: "No new authoritative assessment bundle was published." },
-    ]);
-  if (error instanceof UsageError || error instanceof NotYetPortedError) throw error;
-  if (error instanceof Error) throw error;
-  throw new Error(String(error));
-}
-
-function printFatal(args: ParsedArgs, diagnostics: readonly unknown[], overrides: readonly string[] = []): void {
-  print({ schemaVersion: 1, status: "fatal", exitCode: 1, published: false, overrides, diagnostics }, args);
-  process.exitCode = 1;
-}
-
-function positiveInteger(value: number, name: string): number {
-  if (!Number.isSafeInteger(value) || value <= 0) throw new UsageError(`${name} must be a positive integer`);
-  return value;
-}
-
-function humanBatchFailure(aggregate: { readonly completed: readonly string[]; readonly failed: readonly string[] }): string {
-  return [
-    "Declaration batch incomplete; no assessment evidence was published.",
-    `Completed (${aggregate.completed.length}): ${aggregate.completed.length === 0 ? "none" : aggregate.completed.join(", ")}`,
-    `Failed (${aggregate.failed.length}): ${aggregate.failed.length === 0 ? "none" : aggregate.failed.join(", ")}`,
-  ].join("\n");
 }
 
 export const assessmentCommands: Record<string, CommandSpec> = {

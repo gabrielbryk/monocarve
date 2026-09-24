@@ -1,6 +1,8 @@
 import { constants, closeSync, fstatSync, ftruncateSync, fsyncSync, lstatSync, openSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
+import { EvidenceError } from "./evidence-error.ts";
+
 interface FileIdentity {
   readonly device: number;
   readonly inode: number;
@@ -18,7 +20,7 @@ export function writeRecoveryFile(path: string, bytes: Uint8Array, expected?: Fi
   try {
     const stat = fstatSync(fd);
     if (expected !== undefined && (stat.dev !== expected.device || stat.ino !== expected.inode || stat.mode !== expected.mode)) {
-      throw new Error("EVIDENCE_REPLACEMENT_REFUSED: recovery record changed during publication");
+      throw new EvidenceError("EVIDENCE_REPLACEMENT_REFUSED", "recovery record changed during publication");
     }
     ftruncateSync(fd, 0);
     writeFileSync(fd, bytes);

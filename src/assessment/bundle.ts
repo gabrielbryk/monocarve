@@ -295,6 +295,6 @@ function json(value: unknown): string {
 }
 export function rawReportPaths(applications: readonly string[]): Record<string, string> {
   const names = [...new Set(applications)].toSorted(byCodeUnit);
-  if (names.some((name) => name.length === 0)) throw new Error("application names must be non-empty");
+  if (names.some((name) => name.length === 0)) throw new Error("invariant: application names must be non-empty");
   return Object.fromEntries(names.map((name, index) => [name, `raw/application-${index}.json`])) as Record<string, string>;
 }

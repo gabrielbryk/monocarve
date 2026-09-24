@@ -1,4 +1,3 @@
-import { TOOL_NAME } from "../branding.ts";
 import {
   advanceCampaign,
   createCampaignLedger,
@@ -11,10 +10,7 @@ import { flagBool, flagNumber, flagString, flagStrings, type ParsedArgs } from "
 import { domainFor, getApplication, renderPreparationPolicy } from "../config.ts";
 import { UsageError } from "../errors.ts";
 import { parseManifest } from "../plan/build.ts";
-import { buildPlanSync, serializeManifest } from "../plan/build.ts";
 import type { ExtractionManifest } from "../plan/manifest.ts";
-import { formatPlanReview, summarizePlanReview } from "../plan/review.ts";
-import { buildPortfolio } from "../portfolio/index.ts";
 import { applyPreparation } from "../prepare/apply.ts";
 import { auditPreparation } from "../prepare/audit.ts";
 import { compilePreparationManifest } from "../prepare/build.ts";
@@ -28,14 +24,15 @@ import { hashJson } from "../util/hash.ts";
 import { parseJsonObject } from "../util/json.ts";
 import { relativeWorkspacePath } from "../util/paths.ts";
 import { campaignLedgerPath, createCampaignLedgerFile, loadCampaignLedger, persistCampaignLedger } from "./campaign-ledger-file.ts";
-import { assertPlannableTree, graphDigest, load, loadGraph, outputPath, print, writeOutput, type LoadedGraph } from "./shared.ts";
+import { graphDigest, load, loadGraph, outputPath, print, writeOutput, type LoadedGraph } from "./shared.ts";
 export { writeCampaignLedgerAtomically } from "./campaign-ledger-file.ts";
 import { campaignOptimize } from "./campaign-optimize.ts";
+import { campaignResolve } from "./campaign-resolve.ts";
 import { boundaryCommandSpec } from "./preparation-boundary.ts";
 import { preparationCommandSpecs } from "./preparation-command-specs.ts";
 import { graphSnapshot } from "./preparation-graph.ts";
 import { loadPreparationManifest, readWorkspaceText, relativeTypeSpecifier, requiredFlag } from "./preparation-io.ts";
-import { validateMultiPreparationSpec, validateStableCampaignSpec, type StableCampaignSpec } from "./preparation-specs.ts";
+import { validateMultiPreparationSpec, type MultiPreparationSpec } from "./preparation-specs.ts";
 
 async function campaignInit(args: ParsedArgs): Promise<void> {
   if (args.flags.has("graph")) throw new UsageError("campaign init refuses --graph; it must scan the native checkout at a stable HEAD");
@@ -57,15 +54,16 @@ async function campaignInit(args: ParsedArgs): Promise<void> {
     initialGraph: graphSnapshot(scanned),
   });
   const path = campaignLedgerPath(rootDir, config, requiredFlag(args, "campaign"));
-  if (flagBool(args, "write"))
-    createCampaignLedgerFile(rootDir, path, ledger, () => {
-      const afterPublish = headCommit(rootDir);
-      if (afterPublish !== baselineCommit)
-        throw new UsageError(
-          `checkout changed from ${baselineCommit} to ${afterPublish} during campaign publication; the new ledger was removed; retry from one stable HEAD`,
-        );
-    });
+  if (flagBool(args, "write")) createCampaignLedgerFile(rootDir, path, ledger, () => assertHeadUnchangedDuringPublication(rootDir, baselineCommit));
   print({ schema: "campaign-init", campaign: ledger, campaignPath: path, written: flagBool(args, "write") }, args);
+}
+
+function assertHeadUnchangedDuringPublication(rootDir: string, baselineCommit: string): void {
+  const afterPublish = headCommit(rootDir);
+  if (afterPublish === baselineCommit) return;
+  throw new UsageError(
+    `checkout changed from ${baselineCommit} to ${afterPublish} during campaign publication; the new ledger was removed; retry from one stable HEAD`,
+  );
 }
 
 async function campaignShowStatus(args: ParsedArgs): Promise<void> {
@@ -74,105 +72,6 @@ async function campaignShowStatus(args: ParsedArgs): Promise<void> {
   print({ schema: "campaign-status", campaignPath: loaded.path, ...describeCampaignStatus(loaded.campaign, headCommit(rootDir)) }, args);
 }
 
-/** Re-resolve stable source paths against one fresh HEAD and compile only the first remaining target. */
-async function campaignResolve(args: ParsedArgs): Promise<void> {
-  if (args.flags.has("graph")) throw new UsageError("campaign resolve refuses --graph; it must rescan the native checkout at a stable HEAD");
-  const { rootDir } = await load(args);
-  const specPath = relativeWorkspacePath(rootDir, requiredFlag(args, "targets"));
-  const spec = validateStableCampaignSpec(parseJsonObject(readWorkspaceText(rootDir, specPath, "campaign target list"), specPath, "campaign target list"));
-  const scanArgs: ParsedArgs = { ...args, flags: new Map(args.flags).set("app", spec.application).set("no-cache", true) };
-  const loaded = await loadGraph(scanArgs);
-  const portfolio = buildPortfolio({ config: loaded.config, graph: loaded.graph, context: loaded.context, application: spec.application });
-  const statuses: { path: string; packageName: string; outcome: string; candidateId?: string; detail?: string }[] = [];
-  let selected: { target: StableCampaignSpec["targets"][number]; candidate: (typeof portfolio.candidates)[number] } | undefined;
-  for (const target of spec.targets) {
-    const path = relativeWorkspacePath(rootDir, target.path);
-    const matches = portfolio.candidates.filter((candidate) => candidate.seed.members.includes(path));
-    if (matches.length === 0) {
-      const existsInApplication = loaded.graph.nodes.get(path)?.application === spec.application;
-      statuses.push({
-        path,
-        packageName: target.packageName,
-        outcome: existsInApplication ? "unresolved" : "already-extracted",
-        detail: existsInApplication ? "no principal candidate currently resolves this path" : "path is no longer application-owned",
-      });
-      if (existsInApplication) break;
-      continue;
-    }
-    if (matches.length > 1) {
-      statuses.push({
-        path,
-        packageName: target.packageName,
-        outcome: "ambiguous",
-        detail: matches
-          .map(({ id }) => id)
-          .toSorted()
-          .join(", "),
-      });
-      break;
-    }
-    const candidate = matches[0]!;
-    if (!candidate.eligible) {
-      statuses.push({
-        path,
-        packageName: target.packageName,
-        outcome: "blocked",
-        candidateId: candidate.id,
-        detail: candidate.rejectionReasons.map(({ detail }) => detail).join("; "),
-      });
-      break;
-    }
-    statuses.push({ path, packageName: target.packageName, outcome: "ready", candidateId: candidate.id });
-    selected = { target, candidate };
-    break;
-  }
-  if (!selected) {
-    print(
-      {
-        schema: "target-campaign",
-        application: spec.application,
-        baselineCommit: loaded.graph.commit,
-        targets: statuses,
-        outcome: statuses.every(({ outcome }) => outcome === "already-extracted") ? "completed" : "stopped",
-      },
-      args,
-    );
-    return;
-  }
-  const manifest = buildPlanSync({
-    config: loaded.config,
-    rootDir,
-    graph: loaded.graph,
-    context: loaded.context,
-    candidate: selected.candidate,
-    baselineCommit: loaded.graph.commit ?? "HEAD",
-    packageName: selected.target.packageName,
-    ...(selected.target.packageRoot === undefined ? {} : { packageRoot: selected.target.packageRoot }),
-  });
-  const out = outputPath(rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
-  assertPlannableTree(loaded, manifest, out, args);
-  const written = flagBool(args, "write");
-  if (written) writeOutput(rootDir, out, serializeManifest(manifest), { exclusive: true });
-  const result = {
-    schema: "target-campaign",
-    application: spec.application,
-    baselineCommit: loaded.graph.commit,
-    targets: statuses,
-    outcome: "review-required",
-    manifest,
-    output: out,
-    written,
-    next: written ? `${TOOL_NAME} apply --plan ${JSON.stringify(out)} --commit` : `${TOOL_NAME} campaign resolve --targets ${JSON.stringify(specPath)} --write`,
-  };
-  if (flagBool(args, "json")) print(result, args);
-  else {
-    const review = summarizePlanReview(manifest, {
-      baselinePaths: loaded.graph.workspace.owners.includes(manifest.target.packageRoot) ? [`${manifest.target.packageRoot}/package.json`] : [],
-      manifestPath: out,
-    });
-    print(`${formatPlanReview(review).trimEnd()}\n\nNext: ${result.next}`, args);
-  }
-}
 async function seams(args: ParsedArgs): Promise<void> {
   const loaded = await loadGraph(args);
   const candidateId = flagString(args, "candidate");
@@ -195,24 +94,11 @@ async function multiFileSeams(args: ParsedArgs): Promise<void> {
   const loaded = await loadGraph(args);
   const files = flagStrings(args, "file").map((path) => relativeWorkspacePath(loaded.rootDir, path));
   if (files.length < 2) throw new UsageError("at least two --file <path> values are required");
-  const applications = files.map((path) => {
-    const node = loaded.graph.nodes.get(path);
-    if (!node || node.zone !== "application" || node.application === undefined) {
-      throw new UsageError(`${path} is not a source file in a configured application`);
-    }
-    return node.application;
-  });
-  if (new Set(applications).size !== 1) throw new UsageError("multi-file seam sources must belong to one configured application");
-  const application = getApplication(loaded.config, applications[0]!);
-  print(
-    planMultiFileSeams({
-      rootDir: loaded.rootDir,
-      tsconfigPath: application.tsconfig,
-      sourcePaths: files,
-      affinityForPath: (path) => loaded.graph.nodes.get(path)?.domain ?? domainFor(loaded.config, path),
-    }),
-    args,
-  );
+  const applications = new Set(files.map((path) => applicationOf(loaded, path)));
+  const [name] = applications;
+  if (name === undefined || applications.size !== 1) throw new UsageError("multi-file seam sources must belong to one configured application");
+  const application = getApplication(loaded.config, name);
+  print(planMultiFileSeams({ rootDir: loaded.rootDir, tsconfigPath: application.tsconfig, sourcePaths: files, affinityForPath: affinityFor(loaded) }), args);
 }
 
 async function preparePlan(args: ParsedArgs): Promise<void> {
@@ -234,18 +120,9 @@ async function preparePlan(args: ParsedArgs): Promise<void> {
     targetModuleSpecifier,
     reviewedGroupIds,
     rendering: renderPreparationPolicy(loaded.config, { sourcePath: seam.sourcePath, targetPath, targetModuleSpecifier }),
-    rewriteRelativeTypeImport: ({ donorPath, targetPath: target, originalSpecifier }) => {
-      const resolvedSourcePath = loaded.context.resolveRelative(donorPath, originalSpecifier);
-      if (resolvedSourcePath === undefined) {
-        throw new UsageError(`could not resolve required relative type import ${originalSpecifier} from ${donorPath}`);
-      }
-      return { resolvedSourcePath, targetSpecifier: relativeTypeSpecifier(target, resolvedSourcePath, originalSpecifier) };
-    },
+    rewriteRelativeTypeImport: relativeTypeImportRewriter(loaded),
   });
-  const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
-  const written = flagBool(args, "write");
-  if (written) writeOutput(loaded.rootDir, out, serializePreparationManifest(manifest), { exclusive: true });
-  print({ ...manifest, output: out, written }, args);
+  printPreparationManifest(args, loaded, manifest);
 }
 
 async function prepareMultiPlan(args: ParsedArgs): Promise<void> {
@@ -255,51 +132,15 @@ async function prepareMultiPlan(args: ParsedArgs): Promise<void> {
     parseJsonObject(readWorkspaceText(loaded.rootDir, specPath, "multi-file preparation spec"), specPath, "multi-file preparation spec"),
   );
   const files = spec.members.map((member) => relativeWorkspacePath(loaded.rootDir, member.file));
-  const applicationNames = files.map((file) => loaded.graph.nodes.get(file)?.application);
-  if (applicationNames.some((name) => name === undefined) || new Set(applicationNames).size !== 1)
-    throw new UsageError("multi-file preparation members must belong to one configured application");
-  const application = getApplication(loaded.config, applicationNames[0]!);
+  const applicationNames = new Set(files.map((file) => loaded.graph.nodes.get(file)?.application));
+  const [name] = applicationNames;
+  if (name === undefined || applicationNames.size !== 1) throw new UsageError("multi-file preparation members must belong to one configured application");
+  const application = getApplication(loaded.config, name);
   const multiSeam = planMultiFileSeams({
     rootDir: loaded.rootDir,
     tsconfigPath: application.tsconfig,
     sourcePaths: files,
-    affinityForPath: (path) => loaded.graph.nodes.get(path)?.domain ?? domainFor(loaded.config, path),
-  });
-  const members = spec.members.map((member) => {
-    const file = relativeWorkspacePath(loaded.rootDir, member.file);
-    const targetPath = relativeWorkspacePath(loaded.rootDir, member.target);
-    const analysis = analyzeWorkspaceSymbols({
-      rootDir: loaded.rootDir,
-      tsconfigPath: application.tsconfig,
-      sourcePath: file,
-      affinityForPath: (path) => loaded.graph.nodes.get(path)?.domain ?? domainFor(loaded.config, path),
-    });
-    const seam = planSeam({
-      analysis,
-      sourceText: readWorkspaceText(loaded.rootDir, file, "multi-file seam source"),
-      candidateId: member.candidate,
-      targetPath,
-    });
-    return {
-      seam,
-      targetPath,
-      targetModuleSpecifier: member.moduleSpecifier,
-      reviewedGroupIds: member.groups,
-      rendering: renderPreparationPolicy(loaded.config, { sourcePath: file, targetPath, targetModuleSpecifier: member.moduleSpecifier }),
-      rewriteRelativeTypeImport: ({
-        donorPath,
-        targetPath: target,
-        originalSpecifier,
-      }: {
-        donorPath: string;
-        targetPath: string;
-        originalSpecifier: string;
-      }) => {
-        const resolvedSourcePath = loaded.context.resolveRelative(donorPath, originalSpecifier);
-        if (!resolvedSourcePath) throw new UsageError(`could not resolve required relative type import ${originalSpecifier} from ${donorPath}`);
-        return { resolvedSourcePath, targetSpecifier: relativeTypeSpecifier(target, resolvedSourcePath, originalSpecifier) };
-      },
-    };
+    affinityForPath: affinityFor(loaded),
   });
   const manifest = compileMultiFilePreparationManifest({
     rootDir: loaded.rootDir,
@@ -308,12 +149,52 @@ async function prepareMultiPlan(args: ParsedArgs): Promise<void> {
     graphDigest: graphDigest(loaded.graph),
     multiSeam,
     candidateId: spec.candidate,
-    members,
+    members: spec.members.map((member) => multiPreparationMember(loaded, application.tsconfig, member)),
   });
+  printPreparationManifest(args, loaded, manifest);
+}
+
+/** One donor of a multi-file preparation: its seam plus the reviewed target and rendering policy. */
+function multiPreparationMember(loaded: LoadedGraph, tsconfigPath: string, member: MultiPreparationSpec["members"][number]) {
+  const file = relativeWorkspacePath(loaded.rootDir, member.file);
+  const targetPath = relativeWorkspacePath(loaded.rootDir, member.target);
+  const analysis = analyzeWorkspaceSymbols({ rootDir: loaded.rootDir, tsconfigPath, sourcePath: file, affinityForPath: affinityFor(loaded) });
+  const seam = planSeam({ analysis, sourceText: readWorkspaceText(loaded.rootDir, file, "multi-file seam source"), candidateId: member.candidate, targetPath });
+  return {
+    seam,
+    targetPath,
+    targetModuleSpecifier: member.moduleSpecifier,
+    reviewedGroupIds: member.groups,
+    rendering: renderPreparationPolicy(loaded.config, { sourcePath: file, targetPath, targetModuleSpecifier: member.moduleSpecifier }),
+    rewriteRelativeTypeImport: relativeTypeImportRewriter(loaded),
+  };
+}
+
+/** Domain affinity for a path: the scanned node's domain, else the configured one. */
+function affinityFor(loaded: LoadedGraph): (path: string) => string {
+  return (path) => loaded.graph.nodes.get(path)?.domain ?? domainFor(loaded.config, path);
+}
+
+/** Rewrite a donor's relative type import so it resolves from the preparation target. */
+function relativeTypeImportRewriter(loaded: LoadedGraph) {
+  return ({ donorPath, targetPath, originalSpecifier }: { readonly donorPath: string; readonly targetPath: string; readonly originalSpecifier: string }) => {
+    const resolvedSourcePath = loaded.context.resolveRelative(donorPath, originalSpecifier);
+    if (!resolvedSourcePath) throw new UsageError(`could not resolve required relative type import ${originalSpecifier} from ${donorPath}`);
+    return { resolvedSourcePath, targetSpecifier: relativeTypeSpecifier(targetPath, resolvedSourcePath, originalSpecifier) };
+  };
+}
+
+function printPreparationManifest(args: ParsedArgs, loaded: LoadedGraph, manifest: PreparationManifest): void {
   const out = outputPath(loaded.rootDir, flagString(args, "out") ?? `${loaded.config.planDir}/${manifest.planId}.json`);
   const written = flagBool(args, "write");
   if (written) writeOutput(loaded.rootDir, out, serializePreparationManifest(manifest), { exclusive: true });
   print({ ...manifest, output: out, written }, args);
+}
+
+function applicationOf(loaded: LoadedGraph, path: string): string {
+  const node = loaded.graph.nodes.get(path);
+  if (!node || node.zone !== "application" || node.application === undefined) throw new UsageError(`${path} is not a source file in a configured application`);
+  return node.application;
 }
 
 async function prepareAudit(args: ParsedArgs): Promise<void> {
@@ -422,17 +303,8 @@ function workspaceAnalysisFor(args: ParsedArgs, loaded: LoadedGraph) {
   const file = flagString(args, "file") ?? args.positionals[0];
   if (file === undefined) throw new UsageError("--file <path> is required");
   const sourcePath = relativeWorkspacePath(loaded.rootDir, file);
-  const node = loaded.graph.nodes.get(sourcePath);
-  if (!node || node.zone !== "application" || node.application === undefined) {
-    throw new UsageError(`${sourcePath} is not a source file in a configured application`);
-  }
-  const application = getApplication(loaded.config, node.application);
-  return analyzeWorkspaceSymbols({
-    rootDir: loaded.rootDir,
-    tsconfigPath: application.tsconfig,
-    sourcePath,
-    affinityForPath: (path) => loaded.graph.nodes.get(path)?.domain ?? domainFor(loaded.config, path),
-  });
+  const application = getApplication(loaded.config, applicationOf(loaded, sourcePath));
+  return analyzeWorkspaceSymbols({ rootDir: loaded.rootDir, tsconfigPath: application.tsconfig, sourcePath, affinityForPath: affinityFor(loaded) });
 }
 
 interface PlannedChildWithGraph extends CampaignChildPlan {

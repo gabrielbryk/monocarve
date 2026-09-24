@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 
 import ts from "typescript";
 
-import { CONFIG_FILENAMES } from "../branding.ts";
+import { CONFIG_FILENAMES, TOOL_NAME } from "../branding.ts";
 import { ConfigError } from "../errors.ts";
 import { monocarveConfigSchema, type MonocarveConfig } from "./schema.ts";
 import { loadSnapshotConfig, type ConfigSnapshotFile } from "./snapshot-loader.ts";
@@ -53,7 +53,9 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Loade
   const configPath = options.configPath ? resolve(cwd, options.configPath) : findConfigFile(cwd);
 
   if (!configPath) {
-    throw new ConfigError(`no config found in ${cwd} or any parent directory (looked for ${CONFIG_FILENAMES.join(", ")})`);
+    throw new ConfigError(`no config found in ${cwd} or any parent directory (looked for ${CONFIG_FILENAMES.join(", ")})`, {
+      hint: `create monocarve.config.ts exporting \`defineConfig({ ... })\` from "${TOOL_NAME}/config" (or pass --config <path>), then run \`${TOOL_NAME} config-doctor\``,
+    });
   }
   if (!existsSync(configPath)) {
     throw new ConfigError(`config not found: ${configPath}`);

@@ -220,16 +220,10 @@
   "src/commands/lifecycle.ts": {
     "typescript(no-unsafe-type-assertion)": 2
   },
-  "src/commands/planning.ts": {
-    "typescript(no-non-null-assertion)": 4,
-    "typescript(no-unnecessary-template-expression)": 1,
-    "typescript(no-unsafe-type-assertion)": 1
-  },
   "src/commands/preparation-io.ts": {
     "typescript(no-unsafe-type-assertion)": 1
   },
   "src/commands/preparation.ts": {
-    "typescript(no-non-null-assertion)": 3,
     "typescript(no-unsafe-type-assertion)": 1
   },
   "src/commands/preparers.ts": {
@@ -273,17 +267,13 @@
   },
   "src/consolidation/plan-support.ts": {
     "typescript(consistent-return)": 1,
-    "typescript(no-non-null-assertion)": 3,
-    "typescript(no-unnecessary-type-assertion)": 1,
-    "typescript(no-unsafe-type-assertion)": 1
+    "typescript(no-non-null-assertion)": 3
   },
   "src/consolidation/selectors.ts": {
     "unicorn(no-array-sort)": 1
   },
   "src/doctor/config-doctor.ts": {
-    "typescript(no-unnecessary-condition)": 1,
-    "typescript(no-unnecessary-type-assertion)": 1,
-    "typescript(no-unsafe-type-assertion)": 3
+    "typescript(no-unsafe-type-assertion)": 1
   },
   "src/evacuation/assessment.ts": {
     "typescript(no-non-null-assertion)": 1
@@ -316,10 +306,6 @@
     "typescript(no-non-null-assertion)": 6,
     "unicorn(no-array-sort)": 2
   },
-  "src/graph/syntax.ts": {
-    "typescript(no-unsafe-assignment)": 1,
-    "typescript(no-unsafe-return)": 1
-  },
   "src/graph/workspace.ts": {
     "typescript(no-unsafe-type-assertion)": 1
   },
@@ -344,11 +330,9 @@
     "unicorn(no-array-sort)": 1
   },
   "src/plan/build.ts": {
-    "oxc(no-map-spread)": 1,
-    "typescript(consistent-return)": 1,
     "typescript(no-non-null-assertion)": 5,
     "typescript(no-unsafe-type-assertion)": 2,
-    "unicorn(no-array-sort)": 3
+    "unicorn(no-array-sort)": 2
   },
   "src/plan/consumers.ts": {
     "typescript(no-non-null-assertion)": 3,
@@ -434,7 +418,6 @@
     "typescript(no-unsafe-type-assertion)": 1
   },
   "src/plan/static-fs-references.ts": {
-    "typescript(no-non-null-assertion)": 1,
     "typescript(no-unnecessary-condition)": 4,
     "typescript(no-unnecessary-template-expression)": 1
   },
@@ -470,7 +453,7 @@
   "src/plan/validation/operations.ts": {
     "typescript(consistent-type-imports)": 1,
     "typescript(no-unnecessary-condition)": 2,
-    "typescript(no-unsafe-type-assertion)": 2
+    "typescript(no-unsafe-type-assertion)": 1
   },
   "src/plan/validation/path-migration-operation.ts": {
     "typescript(consistent-type-imports)": 1,
@@ -527,7 +510,6 @@
     "typescript(no-non-null-assertion)": 1
   },
   "src/portfolio/shims.ts": {
-    "typescript(no-non-null-assertion)": 1,
     "unicorn(no-array-sort)": 1
   },
   "src/portfolio/types.ts": {
@@ -546,28 +528,25 @@
   "src/prepare/audit-replay.ts": {
     "typescript(no-unsafe-type-assertion)": 1
   },
+  "src/prepare/audit-selectors.ts": {
+    "typescript(no-unnecessary-condition)": 1
+  },
   "src/prepare/audit-surface.ts": {
     "typescript(no-non-null-assertion)": 2,
     "typescript(no-unsafe-type-assertion)": 1
   },
-  "src/prepare/audit.ts": {
-    "typescript(no-non-null-assertion)": 1,
-    "typescript(no-unnecessary-condition)": 1
-  },
   "src/prepare/boundary-port.ts": {
     "eslint(no-useless-concat)": 1,
-    "typescript(no-unnecessary-condition)": 1,
     "unicorn(no-array-sort)": 1
   },
   "src/prepare/boundary-resolve.ts": {
     "typescript(no-non-null-assertion)": 3
   },
   "src/prepare/build-boundary.ts": {
-    "oxc(no-map-spread)": 2,
+    "oxc(no-map-spread)": 1,
     "typescript(no-unsafe-assignment)": 2,
     "typescript(no-unsafe-type-assertion)": 3,
-    "unicorn(consistent-function-scoping)": 2,
-    "unicorn(no-array-sort)": 1
+    "unicorn(consistent-function-scoping)": 1
   },
   "src/prepare/build.ts": {
     "oxc(no-map-spread)": 1,
@@ -575,8 +554,7 @@
     "typescript(no-unnecessary-boolean-literal-compare)": 1
   },
   "src/prepare/generated-source-adoption.ts": {
-    "oxc(no-map-spread)": 1,
-    "typescript(no-non-null-assertion)": 6,
+    "typescript(no-non-null-assertion)": 3,
     "unicorn(no-array-sort)": 1
   },
   "src/prepare/journal.ts": {
@@ -594,7 +572,6 @@
     "typescript(no-redundant-type-constituents)": 4
   },
   "src/prepare/manifest.ts": {
-    "typescript(no-non-null-assertion)": 10,
     "typescript(no-unnecessary-boolean-literal-compare)": 2,
     "typescript(no-unnecessary-condition)": 21,
     "typescript(restrict-template-expressions)": 1
@@ -727,12 +704,10 @@
     "unicorn(no-array-sort)": 2
   },
   "src/transaction/audit-helpers.ts": {
-    "eslint(no-shadow)": 1,
     "oxc(no-map-spread)": 1,
     "typescript(no-non-null-assertion)": 1,
     "typescript(no-unnecessary-type-assertion)": 1,
-    "typescript(no-unsafe-type-assertion)": 11,
-    "unicorn(consistent-function-scoping)": 1
+    "typescript(no-unsafe-type-assertion)": 4
   },
   "src/transaction/audit-target-surface.ts": {
     "typescript(no-unsafe-type-assertion)": 4
@@ -752,7 +727,6 @@
     "typescript(no-non-null-assertion)": 1
   },
   "src/transaction/generator-evolution.ts": {
-    "eslint(no-shadow)": 1,
     "oxc(no-map-spread)": 1,
     "typescript(no-non-null-assertion)": 3,
     "typescript(no-unnecessary-type-assertion)": 1,
@@ -767,6 +741,9 @@
     "typescript(no-non-null-assertion)": 3,
     "typescript(no-unnecessary-type-conversion)": 1,
     "typescript(no-unsafe-type-assertion)": 2
+  },
+  "src/transaction/journal.ts": {
+    "eslint(no-await-in-loop)": 1
   },
   "src/transaction/lockfile-verify.ts": {
     "typescript(no-unnecessary-condition)": 1
@@ -800,7 +777,7 @@
     "unicorn(no-new-array)": 1
   },
   "src/transaction/simulate.ts": {
-    "typescript(no-unnecessary-condition)": 2,
+    "typescript(no-unnecessary-condition)": 1,
     "typescript(no-unsafe-type-assertion)": 1,
     "typescript(unbound-method)": 1
   },
@@ -826,6 +803,9 @@
   "src/visualization/server.ts": {
     "typescript(no-unsafe-argument)": 3,
     "typescript(no-unsafe-type-assertion)": 1
+  },
+  "test/apply-recovery.test.ts": {
+    "eslint(no-await-in-loop)": 2
   },
   "test/apply-state.test.ts": {
     "typescript(no-unsafe-type-assertion)": 1

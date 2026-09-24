@@ -1,36 +1,13 @@
-import { analyzeDeclarationBatch, BatchAnalysisError } from "../assessment/batch.ts";
+import { analyzeDeclarationBatch } from "../assessment/batch.ts";
 import { loadReplaySnapshot } from "../assessment/bundle-replay.ts";
 import { defaultAssessmentArguments, publishDeclarationBatch } from "../assessment/bundle.ts";
-import { assertEvidenceDestination, EvidenceError } from "../assessment/evidence.ts";
-import { AssessmentQualificationError, captureAssessmentSnapshot } from "../assessment/snapshot.ts";
+import { assertEvidenceDestination } from "../assessment/evidence.ts";
+import { captureAssessmentSnapshot } from "../assessment/snapshot.ts";
 import { flagBool, flagString, flagStrings, type ParsedArgs } from "../cli/args.ts";
-import { ConfigError, IoError, UsageError } from "../errors.ts";
+import { UsageError } from "../errors.ts";
 import { byCodeUnit } from "../util/hash.ts";
+import { analyticalRootsFor, handleAssessmentFailure, MUTATION_ONLY_FLAGS, positiveInteger, setQualificationExitCode } from "./assessment-outcome.ts";
 import { load, print } from "./shared.ts";
-
-const MUTATION_ONLY_FLAGS = [
-  "plan",
-  "apply",
-  "approve",
-  "simulate",
-  "prepare",
-  "journal",
-  "allow-dirty",
-  "write",
-  "commit",
-  "commit-approval",
-  "resume",
-  "recover",
-  "skip-gates",
-  "force",
-  "replace",
-  "delete",
-  "execute",
-  "target",
-  "package-name",
-  "package-root",
-  "retire-donors",
-] as const;
 
 interface BatchInvocation {
   readonly application: string;
@@ -58,7 +35,10 @@ export async function runDeclarationBatch(args: ParsedArgs): Promise<void> {
   try {
     await executeDeclarationBatch(args, invocation);
   } catch (error) {
-    handleBatchFailure(args, error);
+    handleAssessmentFailure(args, error, {
+      impact: "No new authoritative declaration batch bundle was published.",
+      batchFailureHeadline: "Declaration batch incomplete; no evidence was published.",
+    });
   }
 }
 
@@ -91,12 +71,7 @@ function parseBatchInvocation(args: ParsedArgs): BatchInvocation {
 
 async function executeDeclarationBatch(args: ParsedArgs, invocation: BatchInvocation): Promise<void> {
   const loaded = await load(args, { refuseStaticFilesystemImports: true, executionBoundary: "snapshot" });
-  const analyticalRoots = [
-    ...loaded.config.applications.flatMap((entry) => [entry.sourceRoot, ...entry.consumerRoots]),
-    ...loaded.config.packageRoots,
-    ...loaded.config.firstPartyRoots,
-    ...loaded.config.firstPartyPackages.map((entry) => entry.root),
-  ];
+  const analyticalRoots = analyticalRootsFor(loaded);
   const canonicalDestination = assertEvidenceDestination(loaded.rootDir, invocation.destination, analyticalRoots);
   if (invocation.replay !== undefined) assertEvidenceDestination(loaded.rootDir, invocation.replay, analyticalRoots);
   const excludedRoots = [...new Set([canonicalDestination, ...(invocation.replay === undefined ? [] : [invocation.replay])])];
@@ -140,50 +115,7 @@ async function executeDeclarationBatch(args: ParsedArgs, invocation: BatchInvoca
       : humanBatch(batch.aggregate, result.destination),
     args,
   );
-  process.exitCode = snapshot.qualification.exitCode;
-}
-
-function handleBatchFailure(args: ParsedArgs, error: unknown): never | void {
-  if (error instanceof BatchAnalysisError) {
-    const failure = {
-      schemaVersion: 1,
-      status: "fatal" as const,
-      exitCode: 1 as const,
-      published: false,
-      code: "SPLIT_ANALYSIS_INCOMPLETE" as const,
-      ...error.aggregate,
-    };
-    print(flagBool(args, "json") ? failure : humanBatchFailure(failure), args);
-    process.exitCode = 1;
-    return;
-  }
-  if (error instanceof AssessmentQualificationError) return printFatal(args, error.qualification.diagnostics, error.qualification.overrides);
-  if (error instanceof EvidenceError)
-    return printFatal(args, [
-      { code: error.code, severity: "error", message: error.message, impact: "No new authoritative declaration batch bundle was published." },
-    ]);
-  if (error instanceof ConfigError || error instanceof IoError)
-    return printFatal(args, [
-      {
-        code: "ASSESSMENT_INPUT_UNREADABLE",
-        severity: "error",
-        message: error.message,
-        impact: "No new authoritative declaration batch bundle was published.",
-      },
-    ]);
-  if (error instanceof Error) throw error;
-  throw new Error(String(error));
-}
-
-function printFatal(args: ParsedArgs, diagnostics: readonly unknown[], overrides: readonly string[] = []): void {
-  print({ schemaVersion: 1, status: "fatal", exitCode: 1, published: false, overrides, diagnostics }, args);
-  process.exitCode = 1;
-}
-
-function positiveInteger(value: string, name: string): number {
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed <= 0) throw new UsageError(`${name} must be a positive integer`);
-  return parsed;
+  setQualificationExitCode(snapshot.qualification);
 }
 
 function humanBatch(
@@ -194,13 +126,5 @@ function humanBatch(
     `Declaration batch: ${aggregate.completed.length} complete, ${aggregate.failed.length} failed`,
     ...aggregate.entries.map((entry) => `  ${entry.sourcePath}: ${entry.splitCandidateCount} split candidates`),
     `Evidence: ${destination}`,
-  ].join("\n");
-}
-
-function humanBatchFailure(aggregate: { readonly completed: readonly string[]; readonly failed: readonly string[] }): string {
-  return [
-    "Declaration batch incomplete; no evidence was published.",
-    `Completed (${aggregate.completed.length}): ${aggregate.completed.length === 0 ? "none" : aggregate.completed.join(", ")}`,
-    `Failed (${aggregate.failed.length}): ${aggregate.failed.length === 0 ? "none" : aggregate.failed.join(", ")}`,
   ].join("\n");
 }

@@ -1,25 +1,4 @@
 {
-  "src/commands/preparation.ts": {
-    "lines": 508
-  },
-  "src/consolidation/plan-support.ts": {
-    "lines": 511
-  },
-  "src/plan/build.ts": {
-    "lines": 685
-  },
-  "src/plan/scaffold-package.ts": {
-    "lines": 583
-  },
-  "src/plan/validation/operations.ts": {
-    "lines": 507
-  },
-  "src/prepare/build-boundary.ts": {
-    "lines": 517
-  },
-  "src/prepare/manifest.ts": {
-    "lines": 606
-  },
   "test/assessment-evidence-publication.test.ts": {
     "lines": 574
   }
