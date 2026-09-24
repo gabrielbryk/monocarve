@@ -142,7 +142,7 @@ describe("end to end", () => {
     expect(created.exports["./types"]).toBe("./src/types.ts");
     expect(readFileSync(join(root, "libs/chart/src/index.ts"), "utf8")).toBe("");
     expect(JSON.parse(readFileSync(join(root, "libs/chart/tsconfig.json"), "utf8")).references).toEqual([{ path: "../format" }]);
-    expect(JSON.parse(readFileSync(join(root, appTsconfigPath), "utf8")).references).toEqual([{ path: "../../libs/chart" }]);
+    expect(JSON.parse(readFileSync(join(root, appTsconfigPath), "utf8")).references).toEqual([{ path: "../../libs/chart/tsconfig.json" }]);
 
     // The consumer moved to the package specifier, and the asset travelled.
     const consumerText = readFileSync(join(root, "apps/web/src/main.ts"), "utf8");
