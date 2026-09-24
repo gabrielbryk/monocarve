@@ -16,6 +16,13 @@ turbo adapter seams refuse with a `not yet ported` error.
 
 ### Added
 
+- `assess`: captures one input-authoritative scanner baseline and derives the
+  summary, layers, portfolio, backlog, and optional declaration splits from it.
+  It publishes them atomically as a hash-verified evidence bundle that
+  `assess --replay` re-verifies against the current inputs. The standalone
+  `split-candidates` batch mode reuses the same authority. Executable TS/ESM
+  config for these commands runs in a `bwrap` sandbox from copied bytes, and
+  any other file access fails closed (Linux; requires `bwrap` and `strace`).
 - `prune-worktrees` command, reclaiming simulation worktrees left behind by
   interrupted runs. A run disposes its own worktree on success and on failure
   alike, but no `finally` survives `SIGKILL` or a closed terminal, so leftovers
