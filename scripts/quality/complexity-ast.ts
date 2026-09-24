@@ -7,7 +7,9 @@ export function lineIndexer(src: string) {
       hi = nl.length - 1;
     while (lo < hi) {
       const m = (lo + hi + 1) >> 1;
-      if (nl[m] <= off) lo = m;
+      const boundary = nl[m];
+      if (boundary === undefined) throw new Error(`invariant: nl[${m}] out of bounds (len=${nl.length})`);
+      if (boundary <= off) lo = m;
       else hi = m - 1;
     }
     return lo + 1;

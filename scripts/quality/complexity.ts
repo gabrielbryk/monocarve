@@ -177,15 +177,28 @@ function analyzeFile(path: string, src: string) {
     );
     const ubiq = new Set([...freq].filter(([, c]) => c >= Math.max(3, Math.ceil(cls.methods.length * 0.4))).map(([f]) => f));
     const spec = cls.methods.map((m) => new Set([...m.fields].filter((f) => !methodNames.has(f) && !ubiq.has(f))));
-    const idx = cls.methods.map((_, i) => i).filter((i) => spec[i].size > 0);
+    const specAt = (i: number): Set<string> => {
+      const s = spec[i];
+      if (s === undefined) throw new Error(`invariant: spec[${i}] out of bounds (len=${spec.length})`);
+      return s;
+    };
+    const idx = cls.methods.map((_, i) => i).filter((i) => specAt(i).size > 0);
     const parent = new Map<number, number>();
     idx.forEach((i) => parent.set(i, i));
-    const find = (x: number): number => (parent.get(x) === x ? x : (parent.set(x, find(parent.get(x)!)), parent.get(x)!));
+    const find = (x: number): number => {
+      const px = parent.get(x);
+      if (px === undefined) throw new Error(`invariant: parent[${x}] missing`);
+      if (px === x) return x;
+      const root = find(px);
+      parent.set(x, root);
+      return root;
+    };
     for (let a = 0; a < idx.length; a++)
       for (let b = a + 1; b < idx.length; b++) {
-        const i = idx[a],
-          j = idx[b];
-        if ([...spec[i]].some((d) => spec[j].has(d))) parent.set(find(i), find(j));
+        const i = idx[a];
+        const j = idx[b];
+        if (i === undefined || j === undefined) throw new Error(`invariant: idx[${a}]/idx[${b}] out of bounds`);
+        if ([...specAt(i)].some((d) => specAt(j).has(d))) parent.set(find(i), find(j));
       }
     responsibilities = new Set(idx.map((i) => find(i))).size;
   }
@@ -230,7 +243,7 @@ function analyzeFile(path: string, src: string) {
     avgCognitive: +avgCognitive.toFixed(1),
     ctorParams,
     archetype,
-    percentiles: {} as Record<string, number>,
+    percentiles: { structuralScore: 0, maxCognitive: 0, maxNest: 0, fanOut: 0, responsibilities: 0, maxMethodLoc: 0 },
     lever: "none",
     leverReason: "",
   };
@@ -312,6 +325,7 @@ function diagnoseLever(r: Result): { lever: string; leverReason: string } {
     { name: "fanOut", pct: p.fanOut },
   ].sort((a, b) => b.pct - a.pct);
   const top = drivers[0];
+  if (top === undefined) throw new Error("invariant: drivers is non-empty");
 
   if (r.responsibilities >= 2 && p.responsibilities > 60)
     return { lever: "split-service", leverReason: `${r.responsibilities} responsibility clusters (p${p.responsibilities})` };
