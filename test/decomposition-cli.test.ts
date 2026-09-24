@@ -110,6 +110,6 @@ test("conflicts refuses mixed baselines as an expected domain error", async () =
   writeFileSync(bravo, `${JSON.stringify(parsed)}\n`);
   const result = await run(root, "conflicts", "--plan", `alpha=${alpha}`, "--plan", `bravo=${bravo}`);
   expect(result.code).toBe(1);
-  expect(result.stderr).toContain("CampaignConflictAnalysisError: plans do not share a baseline commit");
+  expect(result.stderr).toContain("monocarve: plans do not share a baseline commit");
   expect(result.stderr).not.toContain("Internal error");
 });

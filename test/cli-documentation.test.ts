@@ -2,14 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { COMMANDS, GLOBAL_OPTIONS, USAGE, commandHelp } from "../src/commands/index.ts";
+import { COMMAND_NAME_WIDTH, COMMANDS, GLOBAL_OPTIONS, USAGE, commandHelp } from "../src/commands/index.ts";
 
 const reference = readFileSync(resolve(import.meta.dir, "../docs/cli-reference.md"), "utf8");
 
 describe("CLI documentation", () => {
   test("top-level help is derived from every registered command", () => {
     for (const [name, spec] of Object.entries(COMMANDS)) {
-      expect(USAGE).toContain(`${name.padEnd(16)} ${spec.summary}`);
+      expect(USAGE).toContain(`  ${name.padEnd(COMMAND_NAME_WIDTH)}  ${spec.summary}`);
     }
     expect(USAGE).toContain(GLOBAL_OPTIONS);
   });

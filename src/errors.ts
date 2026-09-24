@@ -1,7 +1,18 @@
 /** Error taxonomy. Every failure mode the CLI reports maps to one of these. */
 
+export interface MonocarveErrorOptions extends ErrorOptions {
+  /** One actionable next step, printed on its own `hint:` line under the message. */
+  readonly hint?: string;
+}
+
 export class MonocarveError extends Error {
   override readonly name: string = "MonocarveError";
+  readonly hint: string | undefined;
+
+  constructor(message?: string, options?: MonocarveErrorOptions) {
+    super(message, options);
+    this.hint = options?.hint;
+  }
 }
 
 /**
@@ -57,9 +68,9 @@ export class PreflightError extends MonocarveError {
   override readonly name = "PreflightError";
 }
 
-/** Bad CLI invocation. The CLI prints usage and exits non-zero. */
+/** Bad CLI invocation. The CLI prints usage and exits 64. */
 export class UsageError extends MonocarveError {
-  override readonly name = "UsageError";
+  override readonly name: string = "UsageError";
 }
 
 /**
