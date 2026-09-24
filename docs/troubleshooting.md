@@ -139,7 +139,9 @@ approval commit, move to a feature branch, and run `verify` again.
 If a committing apply is interrupted by Ctrl-C (`SIGINT`) or `SIGTERM`, it
 rolls back in-process, releases its lock, and exits with 130 or 143. It
 prints `apply interrupted by <signal>; <outcome>`. If the outcome says the
-restore failed, follow its instruction.
+restore failed or the transaction was kept, the lock stays held: run
+`apply-status`, then `apply-recover`, as below. A failed rollback after an
+ordinary apply error (`…; transaction kept for recovery: run monocarve apply-recover --plan "<path>"`) works the same way.
 
 After `SIGKILL`, a closed terminal, a crash, or a shell timeout, the next apply
 refuses:
@@ -147,6 +149,11 @@ refuses:
 ```text
 monocarve: apply transaction <planId> is <phase> under process <pid>; run monocarve apply-status, then monocarve apply-recover --plan "<path>" after confirming the owner stopped
 ```
+
+When the owner stopped on its own after a failed restore, the message reads
+`apply transaction <planId> stopped at phase <phase> without restoring the checkout and awaits recovery; …`.
+`apply-status` then shows `"released": true` and `ownerAlive: false`, and
+`apply-recover` does not wait for that process to exit.
 
 1. Run `monocarve apply-status`. It is read-only and shows the plan, phase,
    owner PID, and the recovery command.
@@ -167,6 +174,20 @@ monocarve: apply transaction <planId> is <phase> under process <pid>; run monoca
 - `active transaction belongs to plan <a>, not <b>`. Pass the plan named in
   the message.
 - `apply-recover could not restore the interrupted apply: …; transaction files kept for retry`. Resolve the reported paths and run it again.
+- `refusing to restore the interrupted apply: <n> path(s) changed after it stopped and would be overwritten: <path> (working tree), <path> (staged), …`.
+  Something other than the apply changed those paths or staged those index
+  entries after the interruption. Save or commit that work elsewhere and run
+  `apply-recover` again, or add `--discard-changes` to overwrite it with the
+  pre-apply state. The result's `restored.discarded` lists what was overwritten.
+
+A new apply also refuses while an earlier transaction is unrecovered, even
+when its lock is gone:
+
+- `apply transaction <planId> … ; it was never recovered (its lock is gone, its state remains); run monocarve apply-status, then monocarve apply-recover --plan "<path>"`.
+- `an apply checkpoint from an unrecovered transaction exists at <path>; …`.
+  `apply-status` reports it as `orphanedCheckpoint`, and
+  `apply-recover --plan <path>` restores it. If that apply is known to have
+  completed, inspect the file and delete it instead.
 
 Don't reset the branch while an owner is alive, and don't stage part of a
 journal by hand.

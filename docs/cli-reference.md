@@ -580,7 +580,7 @@ and commit a fresh manifest afterward.
 Resolve a stable source path and review its current plan.
 
 ```text
-monocarve scope --path <source> --package-name <name> [--app <name>] [--package-root <path>] [--target-subpath <dir>] [--include-extracted] [--verify-lockfile] [--out <path>] [--write] [--json]
+monocarve scope --path <source> --package-name <name> [--app <name>] [--package-root <path>] [--target-subpath <dir>] [--include-extracted] [--force] [--verify-lockfile] [--out <path>] [--write] [--json]
 ```
 
 Resolves the current principal SCC candidate from a stable source path. It requires an intentional target, prints a concise review by default, and never writes unless --write is explicit. --target-subpath names the destination directory inside an existing package, overriding the structure-preserving default.
@@ -593,6 +593,7 @@ Resolves the current principal SCC candidate from a stable source path. It requi
 | `--package-root <path>`  | value  |
 | `--target-subpath <dir>` | value  |
 | `--include-extracted`    | switch |
+| `--force`                | switch |
 | `--verify-lockfile`      | switch |
 | `--out <path>`           | value  |
 | `--write`                | switch |
@@ -866,15 +867,16 @@ Takes no command options.
 Release a stopped apply owner for verified resume.
 
 ```text
-monocarve apply-recover --plan <path> [--force-corrupt-lock]
+monocarve apply-recover --plan <path> [--force-corrupt-lock] [--discard-changes]
 ```
 
-Refuses a live or unverifiable owner or a different plan. An owner stopped mid-journal (phase applying) is first rolled back from its durable checkpoint: HEAD, index, and every journal path are restored and verified, and nothing is released if verification fails. Otherwise it never changes Git state; it releases only the stopped owner's lock and prints the exact apply or --resume command whose normal preflight proves the repository boundary. --force-corrupt-lock is accepted only when the lock is unparseable: it asserts no apply is running, moves the unreadable lock/state aside, and restores this plan's checkpoint if one exists.
+Refuses a live or unverifiable owner or a different plan. An owner stopped mid-journal (phase applying) is first rolled back from its durable checkpoint: HEAD, index, and every journal path are restored and verified, and nothing is released if verification fails. Otherwise it never changes Git state; it releases only the stopped owner's lock and prints the exact apply or --resume command whose normal preflight proves the repository boundary. --force-corrupt-lock is accepted only when the lock is unparseable: it asserts no apply is running, moves the unreadable lock/state aside, and restores this plan's checkpoint if one exists. Before restoring, every journal path and index entry must match its pre-apply bytes or a state this apply produced; a path edited or staged after the interruption makes recovery refuse and list it, and --discard-changes restores anyway, reporting what it overwrote.
 
 | flag                   | form   |
 | ---------------------- | ------ |
 | `--plan <path>`        | value  |
 | `--force-corrupt-lock` | switch |
+| `--discard-changes`    | switch |
 
 ### `doctor`
 
@@ -1064,7 +1066,7 @@ Only explicitly reviewed, safely type-only groups are accepted. Commit the writt
 Compile one atomic multi-file type preparation.
 
 ```text
-monocarve prepare-multi-plan --spec <path> [--out <path>] [--write]
+monocarve prepare-multi-plan --spec <path> [--app <name>] [--out <path>] [--write]
 ```
 
 The JSON spec names one reviewed multi-file candidate plus per-donor candidate, groups, target, and module specifier. Compilation requires exact atomic coverage and emits one replayable manifest; it never edits source.
@@ -1072,6 +1074,7 @@ The JSON spec names one reviewed multi-file candidate plus per-donor candidate, 
 | flag            | form   |
 | --------------- | ------ |
 | `--spec <path>` | value  |
+| `--app <name>`  | value  |
 | `--out <path>`  | value  |
 | `--write`       | switch |
 

@@ -10,13 +10,14 @@
  * git common dir. `apply-recover` restores it and verifies the restore; the
  * interrupt guard restores the in-memory copy on SIGINT/SIGTERM.
  */
-import { closeSync, existsSync, fsyncSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import { closeSync, existsSync, fsyncSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { basename, dirname, resolve } from "node:path";
 
 import { PreflightError } from "../errors.ts";
 import { git, tryGit } from "../util/git.ts";
 import { MISSING, type FileState } from "../util/hash.ts";
-import { errorText } from "./apply-owner.ts";
+import { errorText, systemProcessProbe, type ProcessProbe } from "./apply-owner.ts";
 import { restoreSnapshot, snapshotMismatch, type Snapshot } from "./journal.ts";
 import type { RollbackPoint } from "./rollback.ts";
 
@@ -31,6 +32,12 @@ export interface PersistedCheckpoint {
   readonly staged: boolean;
   readonly indexTree?: string;
   readonly snapshots: readonly PersistedSnapshot[];
+  /**
+   * States of snapshotted paths the apply observed at its own stage boundaries
+   * (after the journal, after regeneration). Regenerated artifacts have no
+   * declared result, so this is how recovery tells them from later user edits.
+   */
+  readonly observed?: Readonly<Record<string, readonly FileState[]>>;
 }
 
 interface PersistedSnapshot {
@@ -50,7 +57,12 @@ export interface CheckpointRestoreResult {
   readonly message: string;
 }
 
-export function persistCheckpoint(path: string, identity: { ownerToken: string; planId: string; rootDir: string }, point: RollbackPoint): void {
+export function persistCheckpoint(
+  path: string,
+  identity: { ownerToken: string; planId: string; rootDir: string },
+  point: RollbackPoint,
+  observed?: Readonly<Record<string, readonly FileState[]>>,
+): void {
   const record: PersistedCheckpoint = {
     schema: "apply-checkpoint-v1",
     ownerToken: identity.ownerToken,
@@ -61,6 +73,7 @@ export function persistCheckpoint(path: string, identity: { ownerToken: string; 
     staged: point.staged,
     ...(point.indexTree === undefined ? {} : { indexTree: point.indexTree }),
     snapshots: [...point.snapshots].map(([snapshotPath, snapshot]) => persistedSnapshot(snapshotPath, snapshot)),
+    ...(observed === undefined ? {} : { observed }),
   };
   writeDurably(path, `${JSON.stringify(record)}\n`);
 }
@@ -192,8 +205,13 @@ export function removeCheckpoint(path: string, ownerToken: string): void {
   }
 }
 
-function writeDurably(path: string, text: string): void {
-  const temporary = `${path}.${process.pid}.tmp`;
+/**
+ * Atomic, durable replace. The temporary name carries this process's PID and
+ * a random suffix, so a temporary left by a killed process whose PID was
+ * later reused can never collide with a new write (`wx` would fail EEXIST).
+ */
+export function writeDurably(path: string, text: string): void {
+  const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
   const descriptor = openSync(temporary, "wx", 0o600);
   try {
     writeFileSync(descriptor, text);
@@ -208,4 +226,37 @@ function writeDurably(path: string, text: string): void {
   } finally {
     closeSync(directory);
   }
+}
+
+/**
+ * Remove temporaries of `path` (`<path>.<pid>[.<suffix>].tmp`) whose writer
+ * is provably gone. A temporary of a live or unverifiable process is kept: it
+ * may be mid-write, and a leftover temporary is harmless with unique names.
+ */
+export function removeStaleTemporaries(path: string, probe: ProcessProbe = systemProcessProbe): string[] {
+  const name = basename(path);
+  const directory = dirname(path);
+  const pattern = new RegExp(`^${escapeRegExp(name)}\\.(\\d+)(?:\\.[^/]+)?\\.tmp$`, "u");
+  const removed: string[] = [];
+  let entries: string[];
+  try {
+    entries = readdirSync(directory);
+  } catch {
+    return removed;
+  }
+  for (const entry of entries) {
+    const pid = Number(pattern.exec(entry)?.[1]);
+    if (!Number.isSafeInteger(pid) || pid <= 0 || pid === process.pid || probe.signal(pid) !== "missing") continue;
+    try {
+      unlinkSync(resolve(directory, entry));
+      removed.push(entry);
+    } catch {
+      /* Already gone, or not ours to remove. */
+    }
+  }
+  return removed;
+}
+
+function escapeRegExp(text: string): string {
+  return text.replaceAll(/[$()*+.?[\\\]^{|}]/gu, String.raw`\$&`);
 }

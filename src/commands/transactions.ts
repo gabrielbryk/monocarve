@@ -7,7 +7,7 @@ import { UsageError } from "../errors.ts";
 import { validatePlan } from "../plan/validate.ts";
 import { assertPreparerManifest } from "../preparer/core-validate.ts";
 import type { PreparerManifest } from "../preparer/manifest.ts";
-import { applyTransactionStatus, FORCE_CORRUPT_LOCK_FLAG, recoverApplyTransaction } from "../transaction/apply-state.ts";
+import { applyTransactionStatus, DISCARD_CHANGES_FLAG, FORCE_CORRUPT_LOCK_FLAG, recoverApplyTransaction } from "../transaction/apply-state.ts";
 import { applyPlan, preflight } from "../transaction/apply.ts";
 import { auditPlanSync } from "../transaction/audit.ts";
 import { inspectGateEffects } from "../transaction/gate-inspection.ts";
@@ -50,7 +50,13 @@ async function applyStatus(args: ParsedArgs): Promise<void> {
 async function applyRecover(args: ParsedArgs): Promise<void> {
   const { rootDir } = await load(args);
   const { manifest } = await loadManifest(args, rootDir);
-  print(recoverApplyTransaction(rootDir, manifest, flagBool(args, FORCE_CORRUPT_LOCK_FLAG) ? { forceCorruptLock: true } : {}), args);
+  print(
+    recoverApplyTransaction(rootDir, manifest, {
+      ...(flagBool(args, FORCE_CORRUPT_LOCK_FLAG) ? { forceCorruptLock: true } : {}),
+      ...(flagBool(args, DISCARD_CHANGES_FLAG) ? { discardChanges: true } : {}),
+    }),
+    args,
+  );
 }
 
 async function approve(args: ParsedArgs): Promise<void> {
@@ -190,9 +196,9 @@ export const transactionCommands: Record<string, CommandSpec> = {
   "apply-recover": {
     summary: "release a stopped apply owner for verified resume",
     category: "Extraction execution",
-    usage: "apply-recover --plan <path> [--force-corrupt-lock]",
+    usage: "apply-recover --plan <path> [--force-corrupt-lock] [--discard-changes]",
     details:
-      "Refuses a live or unverifiable owner or a different plan. An owner stopped mid-journal (phase applying) is first rolled back from its durable checkpoint: HEAD, index, and every journal path are restored and verified, and nothing is released if verification fails. Otherwise it never changes Git state; it releases only the stopped owner's lock and prints the exact apply or --resume command whose normal preflight proves the repository boundary. --force-corrupt-lock is accepted only when the lock is unparseable: it asserts no apply is running, moves the unreadable lock/state aside, and restores this plan's checkpoint if one exists.",
+      "Refuses a live or unverifiable owner or a different plan. An owner stopped mid-journal (phase applying) is first rolled back from its durable checkpoint: HEAD, index, and every journal path are restored and verified, and nothing is released if verification fails. Otherwise it never changes Git state; it releases only the stopped owner's lock and prints the exact apply or --resume command whose normal preflight proves the repository boundary. --force-corrupt-lock is accepted only when the lock is unparseable: it asserts no apply is running, moves the unreadable lock/state aside, and restores this plan's checkpoint if one exists. Before restoring, every journal path and index entry must match its pre-apply bytes or a state this apply produced; a path edited or staged after the interruption makes recovery refuse and list it, and --discard-changes restores anyway, reporting what it overwrote.",
     run: applyRecover,
   },
   doctor: {

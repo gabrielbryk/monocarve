@@ -5,14 +5,16 @@
  * worktree byte are back where the apply found them.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 
 import { APPLY_LOCK_FILENAME, APPLY_STATE_FILENAME, TOOL_NAME } from "../src/branding.ts";
 import type { MonocarveConfig } from "../src/config.ts";
-import type { ExtractionManifest } from "../src/plan/manifest.ts";
-import { applyTransactionStatus, recoverApplyTransaction } from "../src/transaction/apply-state.ts";
+import { manifestPaths, type ExtractionManifest } from "../src/plan/manifest.ts";
+import { guardInterrupts, type InterruptRuntime } from "../src/transaction/apply-interrupt.ts";
+import { applyTransactionStatus, beginApplyTransaction, recoverApplyTransaction } from "../src/transaction/apply-state.ts";
 import { applyPlan } from "../src/transaction/apply.ts";
+import { snapshotPaths } from "../src/transaction/journal.ts";
 import { cleanupFixtures, fixtureConfig, fixtureGit, fixtureRepo, scratchDirectory } from "./support/fixture-repo.ts";
 import { baseManifest, DONOR, extractionFiles, landManifest, TARGET } from "./support/transaction-fixture.ts";
 
@@ -184,4 +186,171 @@ describe("interrupted committing apply", () => {
     expect(transactionFiles(root)).toEqual([]);
     expect(checkout(root)).toEqual(before);
   }, 180_000);
+});
+
+/**
+ * In-process twin of an apply whose restore failed: checkpoint, phase
+ * `applying`, the journal's first move landed, then the owner releases
+ * without completing — what apply.ts and the interrupt guard do on residue.
+ */
+function abandonMidJournal({ root, manifest, manifestPath }: Prepared): void {
+  const indexTree = fixtureGit(root, "write-tree");
+  const transaction = beginApplyTransaction(root, manifest, manifestPath);
+  transaction.checkpoint({
+    headCommit: fixtureGit(root, "rev-parse", "HEAD"),
+    branch: fixtureGit(root, "rev-parse", "--abbrev-ref", "HEAD"),
+    snapshots: snapshotPaths(root, manifestPaths(manifest)),
+    staged: true,
+    indexTree,
+  });
+  transaction.update("applying");
+  mkdirSync(dirname(join(root, TARGET)), { recursive: true });
+  fixtureGit(root, "mv", "--", DONOR, TARGET);
+  transaction.release();
+}
+
+async function applyRefusal(prepared: Prepared, resume: boolean): Promise<unknown> {
+  const { root, config, manifest, manifestPath } = prepared;
+  return applyPlan({ config, rootDir: root, manifest, manifestPath, commit: true, ...(resume ? { resume: true } : {}) }).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+}
+
+describe("unrecovered transaction after a failed restore", () => {
+  test("keeps its lock, so neither apply --commit nor --resume can orphan the checkpoint; apply-recover restores it", async () => {
+    const prepared = prepare();
+    const { root, manifest, manifestPath, before } = prepared;
+    abandonMidJournal(prepared);
+    const checkpoint = readFileSync(join(root, ".git", CHECKPOINT_FILENAME), "utf8");
+
+    const expectRefusedAndUntouched = (refusal: unknown): void => {
+      expect(refusal).toBeInstanceOf(Error);
+      expect(String(refusal)).toContain("awaits recovery");
+      expect(String(refusal)).toContain("apply-recover");
+      expect(transactionFiles(root)).toEqual([APPLY_LOCK_FILENAME, APPLY_STATE_FILENAME, CHECKPOINT_FILENAME]);
+      expect(readFileSync(join(root, ".git", CHECKPOINT_FILENAME), "utf8")).toBe(checkpoint);
+    };
+    expectRefusedAndUntouched(await applyRefusal(prepared, false));
+    expectRefusedAndUntouched(await applyRefusal(prepared, true));
+    expect(applyTransactionStatus(root)).toMatchObject({
+      active: true,
+      ownerAlive: false,
+      checkpointed: true,
+      state: { phase: "applying", released: true },
+      next: [TOOL_NAME, "apply-recover", "--plan", manifestPath],
+    });
+
+    const recovered = recoverApplyTransaction(root, manifest);
+    expect(recovered.restored).toMatchObject({ headCommit: before.head, indexTree: before.index });
+    expect(recovered.restored?.discarded).toBeUndefined();
+    expect(checkout(root)).toEqual(before);
+    expect(transactionFiles(root)).toEqual([]);
+    expect(applyTransactionStatus(root)).toEqual({ active: false, ownerAlive: false });
+  });
+
+  test("state or checkpoint left without a lock blocks a new apply and stays recoverable", () => {
+    const prepared = prepare();
+    const { root, manifest, manifestPath, before } = prepared;
+    abandonMidJournal(prepared);
+    unlinkSync(join(root, ".git", APPLY_LOCK_FILENAME));
+    expect(() => beginApplyTransaction(root, manifest, manifestPath)).toThrow("never recovered");
+    unlinkSync(join(root, ".git", APPLY_STATE_FILENAME));
+    expect(() => beginApplyTransaction(root, manifest, manifestPath)).toThrow("unrecovered transaction");
+    expect(transactionFiles(root)).toEqual([CHECKPOINT_FILENAME]);
+    expect(applyTransactionStatus(root)).toMatchObject({ active: true, checkpointed: true, orphanedCheckpoint: join(root, ".git", CHECKPOINT_FILENAME) });
+
+    expect(() => recoverApplyTransaction(root, { ...manifest, planId: "other-plan" })).toThrow("belongs to plan");
+    const recovered = recoverApplyTransaction(root, manifest);
+    expect(recovered.restored).toMatchObject({ headCommit: before.head, indexTree: before.index });
+    expect(checkout(root)).toEqual(before);
+    expect(transactionFiles(root)).toEqual([]);
+  });
+});
+
+function editAfterInterruption(root: string): void {
+  writeFileSync(join(root, TARGET), "export const widgetValue = 42; // developer edit\n");
+  writeFileSync(join(root, "NOTES.md"), "unrelated staged work\n");
+  fixtureGit(root, "add", "--", "NOTES.md");
+}
+
+describe("apply-recover over changes made after the interruption", () => {
+  test("refuses by default and names every changed or staged path", () => {
+    const prepared = prepare();
+    const { root, manifest } = prepared;
+    abandonMidJournal(prepared);
+    editAfterInterruption(root);
+
+    const refusal = (() => {
+      try {
+        recoverApplyTransaction(root, manifest);
+        return "";
+      } catch (error) {
+        return String(error);
+      }
+    })();
+    expect(refusal).toContain("changed after it stopped");
+    expect(refusal).toContain(`${TARGET} (working tree)`);
+    expect(refusal).toContain("NOTES.md (staged)");
+    expect(refusal).toContain("--discard-changes");
+    expect(refusal).not.toContain(DONOR);
+    expect(readFileSync(join(root, TARGET), "utf8")).toContain("developer edit");
+    expect(fixtureGit(root, "diff", "--cached", "--name-only")).toContain("NOTES.md");
+    expect(transactionFiles(root)).toEqual([APPLY_LOCK_FILENAME, APPLY_STATE_FILENAME, CHECKPOINT_FILENAME]);
+  });
+
+  test("--discard-changes restores over them and reports what was discarded", () => {
+    const prepared = prepare();
+    const { root, manifest, before } = prepared;
+    abandonMidJournal(prepared);
+    editAfterInterruption(root);
+
+    const recovered = recoverApplyTransaction(root, manifest, { discardChanges: true });
+    expect(recovered.restored?.discarded).toEqual([`${TARGET} (working tree)`, "NOTES.md (staged)"]);
+    const after = checkout(root);
+    expect(after.head).toBe(before.head);
+    expect(after.index).toBe(before.index);
+    expect(after.files[DONOR]).toBe(before.files[DONOR]);
+    expect(existsSync(join(root, TARGET))).toBeFalse();
+    expect(transactionFiles(root)).toEqual([]);
+  });
+});
+
+function fakeRuntime(): InterruptRuntime & { fire(signal: "SIGINT" | "SIGTERM"): void; reports: string[]; codes: number[] } {
+  const listeners = new Map<string, () => void>();
+  const reports: string[] = [];
+  const codes: number[] = [];
+  return {
+    reports,
+    codes,
+    on: (signal, listener) => listeners.set(signal, listener),
+    off: (signal) => listeners.delete(signal),
+    exit: (code) => codes.push(code),
+    report: (text) => reports.push(text),
+    fire: (signal) => listeners.get(signal)?.(),
+  };
+}
+
+describe("interrupt outside the mutating window", () => {
+  test("before the checkpoint nothing was mutated: the lock is released with an accurate message", () => {
+    const { root, manifest, manifestPath } = prepare();
+    const runtime = fakeRuntime();
+    guardInterrupts(root, beginApplyTransaction(root, manifest, manifestPath), runtime);
+    runtime.fire("SIGTERM");
+    expect(runtime.reports.join("")).toContain("no checkout mutation had started; lock released");
+    expect(runtime.codes).toEqual([143]);
+    expect(transactionFiles(root)).toEqual([]);
+  });
+
+  test("an unarmed interrupt past the simulating phase keeps the transaction for apply-recover", () => {
+    const { root, manifest, manifestPath } = prepare();
+    const runtime = fakeRuntime();
+    const transaction = beginApplyTransaction(root, manifest, manifestPath);
+    guardInterrupts(root, transaction, runtime);
+    transaction.update("move-committed");
+    runtime.fire("SIGINT");
+    expect(runtime.reports.join("")).toContain("transaction kept; run monocarve apply-status, then monocarve apply-recover");
+    expect(transactionFiles(root)).toEqual([APPLY_LOCK_FILENAME, APPLY_STATE_FILENAME]);
+    expect(applyTransactionStatus(root)).toMatchObject({ active: true, ownerAlive: false, state: { released: true } });
+  });
 });

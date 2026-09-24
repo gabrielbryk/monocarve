@@ -5,8 +5,11 @@
  * for a committing apply means mid-journal with the lock still held. While the
  * checkout is being mutated the guard is armed with the same rollback point
  * that was durably checkpointed; an interrupt restores it synchronously,
- * releases the lock, and exits with 128 + the signal number. Outside the
- * mutating window it only releases the lock. A handler is a JavaScript
+ * releases the lock, and exits with 128 + the signal number. Before the
+ * mutating window (phase simulating) it only releases the lock. When the
+ * restore fails, or the checkout was left mid-transaction, the lock, state,
+ * and checkpoint are all kept (state marked released) so apply-recover is the
+ * only way forward and no retried apply can take the checkout over. A handler is a JavaScript
  * callback, so it runs at the next event-loop turn; the journal yields after
  * every operation to make that turn arrive between operations.
  */
@@ -55,7 +58,7 @@ export function guardInterrupts(rootDir: string, transaction: ApplyTransactionHa
     try {
       outcome = armed === undefined ? settleUnarmed(transaction) : restoreArmed(rootDir, transaction, armed);
     } catch (error) {
-      outcome = `interrupt recovery failed (${errorText(error)}); run ${TOOL_NAME} apply-status`;
+      outcome = `interrupt recovery failed (${errorText(error)}); ${recoverHint(transaction)}`;
     }
     try {
       transaction.release();
@@ -92,10 +95,10 @@ function restoreArmed(rootDir: string, transaction: ApplyTransactionHandle, poin
     transaction.complete();
     return `rolled back: ${result.message}`;
   }
-  // Keep the state and checkpoint, marked as an interrupted journal, so
-  // apply-recover retries exactly this restore.
+  // Keep the lock, state, and checkpoint, marked as an interrupted journal,
+  // so apply-recover retries exactly this restore.
   transaction.update("applying");
-  return `${result.message}; run ${TOOL_NAME} apply-recover --plan ${JSON.stringify(transaction.state.manifestPath)}`;
+  return `${result.message}; ${recoverHint(transaction)}`;
 }
 
 function settleUnarmed(transaction: ApplyTransactionHandle): string {
@@ -103,5 +106,9 @@ function settleUnarmed(transaction: ApplyTransactionHandle): string {
     transaction.complete();
     return "no checkout mutation had started; lock released";
   }
-  return `checkout left at phase ${transaction.state.phase}; run ${TOOL_NAME} apply-status`;
+  return `checkout left at phase ${transaction.state.phase}; transaction kept; ${recoverHint(transaction)}`;
+}
+
+function recoverHint(transaction: ApplyTransactionHandle): string {
+  return `run ${TOOL_NAME} apply-status, then ${TOOL_NAME} apply-recover --plan ${JSON.stringify(transaction.state.manifestPath)}`;
 }
