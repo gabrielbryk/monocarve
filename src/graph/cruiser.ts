@@ -115,7 +115,7 @@ async function cruiseApplication(config: MonocarveConfig, rootDir: string, name:
   }
 
   return withScannerCwd(rootDir, async () => {
-    ensureScannerReadPlugin();
+    await ensureScannerReadPlugin();
     const observed = await observeFilesystemReads(async () => {
       const { cruise } = await import("dependency-cruiser");
       const result = await cruise(
@@ -144,9 +144,9 @@ async function cruiseApplication(config: MonocarveConfig, rootDir: string, name:
 }
 
 let scannerPluginInstalled = false;
-function ensureScannerReadPlugin(): void {
+async function ensureScannerReadPlugin(): Promise<void> {
   if (scannerPluginInstalled) return;
-  Bun.plugin(scannerReadPlugin);
+  await Bun.plugin(scannerReadPlugin);
   scannerPluginInstalled = true;
 }
 
@@ -170,7 +170,7 @@ async function observeFilesystemReads<T>(
   action: () => Promise<T>,
 ): Promise<{ readonly value: T; readonly reads: readonly string[]; readonly fileReads: readonly { readonly path: string; readonly sha256: string }[] }> {
   const names = ["accessSync", "existsSync", "lstatSync", "readFile", "readFileSync", "readlinkSync", "readdirSync", "realpathSync", "statSync"] as const;
-  const originals = new Map<string, (...args: any[]) => any>();
+  const originals = new Map<string, (...args: unknown[]) => unknown>();
   const reads = new Set<string>();
   const fileReads: { path: string; sha256: string }[] = [];
   const record = (value: unknown): void => {
@@ -187,9 +187,9 @@ async function observeFilesystemReads<T>(
     previousReadHook?.(path, result);
   };
   for (const name of names) {
-    const original = fs[name] as unknown as (...args: any[]) => any;
+    const original = fs[name] as unknown as (...args: unknown[]) => unknown;
     originals.set(name, original);
-    (fs as unknown as Record<string, unknown>)[name] = function observedFilesystemCall(this: unknown, path: unknown, ...args: any[]): unknown {
+    (fs as unknown as Record<string, unknown>)[name] = function observedFilesystemCall(this: unknown, path: unknown, ...args: unknown[]): unknown {
       record(path);
       if (name === "readFile") {
         const callback = args.at(-1) as (error: Error | null, data?: string | Uint8Array) => void;
