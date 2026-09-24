@@ -7,6 +7,7 @@ import ts from "typescript";
 
 import { CONFIG_FILENAMES, TOOL_NAME } from "../branding.ts";
 import { ConfigError } from "../errors.ts";
+import { isConfigFacadeSpecifier, isErasedModuleDeclaration } from "./config-facade.ts";
 import { monocarveConfigSchema, type MonocarveConfig } from "./schema.ts";
 import { loadSnapshotConfig, type ConfigSnapshotFile } from "./snapshot-loader.ts";
 
@@ -98,8 +99,11 @@ function configDependencies(path: string): string[] {
   const dependencies: string[] = [];
   while (nodes.length > 0) {
     const node = nodes.pop()!;
+    // Type-only declarations are erased: nothing in them is ever loaded.
+    if (isErasedModuleDeclaration(node)) continue;
     const specifier = configSpecifier(node, source, path);
-    if (specifier !== undefined) {
+    // The tool's own facade is trusted runtime identity, served by the sandbox.
+    if (specifier !== undefined && !isConfigFacadeSpecifier(specifier)) {
       const dependency = resolveConfigDependency(specifier, path);
       if (dependency !== undefined) dependencies.push(dependency);
     }

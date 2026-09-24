@@ -6,6 +6,7 @@ import { byCodeUnit, hashBytes, type Sha256 } from "../util/hash.ts";
 import { isPathInside } from "../util/paths.ts";
 import { ensureScratchDir } from "../util/scratch-root.ts";
 import { collectLocalConfigDependencies } from "./config-dependencies.ts";
+import { CONFIG_FACADE_SOURCE, configFacadeSpecifiers } from "./config-facade.ts";
 import { PACKAGE_MANAGER_FILES } from "./workspace-files.ts";
 
 export interface ConfigSnapshotFile {
@@ -19,8 +20,12 @@ export interface ConfigSnapshotResult {
   readonly files: readonly ConfigSnapshotFile[];
 }
 
+// The tool's own config facade is served as a virtual module from bytes held
+// by the running executable; it is never resolved from the workspace.
 const WORKER = [
   'import { pathToFileURL } from "node:url";',
+  `const facade = ${JSON.stringify(CONFIG_FACADE_SOURCE)};`,
+  `Bun.plugin({ name: "monocarve-config-facade", setup(build) { for (const specifier of ${JSON.stringify(configFacadeSpecifiers())}) build.module(specifier, () => ({ contents: facade, loader: "js" })); } });`,
   'process.stderr.write("ASSESSMENT_CONFIG_EXEC_START\\n");',
   "const loaded = await import(pathToFileURL(process.argv[1]).href);",
   'if (loaded.default === undefined) throw new Error("config has no default export");',
