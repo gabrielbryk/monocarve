@@ -13,13 +13,14 @@ import { visualizationCommands } from "./visualization.ts";
 import { evacuationCommands } from "./evacuation.ts";
 import { consolidationCommands } from "./consolidation.ts";
 import type { CommandSpec } from "./types.ts";
+import { assessmentCommands } from "./assessment.ts";
 
 function qualify(spec: CommandSpec): CommandSpec {
   return { ...spec, usage: `${TOOL_NAME} ${spec.usage}` };
 }
 
 export const COMMANDS: Record<string, CommandSpec> = Object.fromEntries(
-  Object.entries({ ...discoveryCommands, ...evacuationCommands, ...consolidationCommands, ...configDoctorCommands, ...planningCommands, ...preparationCommands, ...preparerCommands, ...transactionCommands, ...lifecycleCommands, ...reconciliationCommands, ...visualizationCommands })
+  Object.entries({ ...discoveryCommands, ...assessmentCommands, ...evacuationCommands, ...consolidationCommands, ...configDoctorCommands, ...planningCommands, ...preparationCommands, ...preparerCommands, ...transactionCommands, ...lifecycleCommands, ...reconciliationCommands, ...visualizationCommands })
     .map(([name, spec]) => [name, qualify(spec)]),
 );
 
@@ -29,7 +30,7 @@ export const GLOBAL_OPTIONS = `global options:
   --graph <app>=<file>  replay a captured scanner report (repeatable)
   --json, -j            machine-readable output
   --help, -h            show help
-  --version, -v         print version`;
+  --version, -v         print version (--verbose includes executable identity)`;
 
 const commandLines = Object.entries(COMMANDS)
   .map(([name, spec]) => `  ${name.padEnd(16)} ${spec.summary}`)

@@ -1,10 +1,11 @@
 import { afterAll, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { findComplexityViolations } from "../scripts/quality/complexity-check.ts";
+import { findComplexityRegressions, findComplexityViolations } from "../scripts/quality/complexity-check.ts";
 import { findLineViolations } from "../scripts/quality/max-file-lines.ts";
-import { cleanupFixtures, scratchDirectory } from "./support/fixture-repo.ts";
+import { cleanupFixtures, fixtureGit, scratchDirectory } from "./support/fixture-repo.ts";
 
 afterAll(cleanupFixtures);
 
@@ -39,6 +40,34 @@ test("complexity gate fails each regressed metric independently", () => {
   expect(findComplexityViolations([{ ...record, structuralScore: 100, maxCognitive: 25, maxNest: 8, maxCyclo: 15, maxMethodLoc: 80 }])).toEqual([]);
 });
 
+test("complexity ratchet permits legacy debt but rejects new and worsened metrics", () => {
+  const legacy = complexityRecord("src/legacy.ts", { maxCyclo: 20 });
+  expect(findComplexityRegressions([legacy], [legacy])).toEqual([]);
+  expect(findComplexityRegressions([{ ...legacy, maxCyclo: 21 }], [legacy])).toEqual([
+    expect.objectContaining({ path: "src/legacy.ts", metric: "maxCyclo", actual: 21, limit: 20 }),
+  ]);
+  expect(findComplexityRegressions([complexityRecord("src/new.ts", { maxCyclo: 16 })], [])).toEqual([
+    expect.objectContaining({ path: "src/new.ts", metric: "maxCyclo", actual: 16, limit: 15 }),
+  ]);
+});
+
+test("complexity ratchet accepts an all-new directory without a HEAD baseline", () => {
+  const root = join(scratchDirectory(), "complexity-new-directory");
+  mkdirSync(root, { recursive: true });
+  writeFileSync(join(root, "README.md"), "complexity fixture\n");
+  fixtureGit(root, "init", "-q", "-b", "main");
+  fixtureGit(root, "config", "user.email", "fixture@example.invalid");
+  fixtureGit(root, "config", "user.name", "Complexity Fixture");
+  fixtureGit(root, "add", "-A");
+  fixtureGit(root, "commit", "-qm", "test: seed complexity fixture");
+  mkdirSync(join(root, "src", "all-new"), { recursive: true });
+  writeFileSync(join(root, "src", "all-new", "module.ts"), "export const value = 1;\nexport const next = 2;\n");
+  const checker = join(import.meta.dir, "../scripts/quality/complexity-check.ts");
+  const result = spawnSync(process.execPath, [checker, "src/all-new"], { cwd: root, encoding: "utf8" });
+  expect(result.status).toBe(0);
+  expect(result.stderr).not.toContain("baseline complexity analyzer failed");
+});
+
 test("runtime branding literals remain confined to branding.ts", () => {
   const src = join(import.meta.dir, "../src");
   const offenders = walk(src).filter((path) => !path.endsWith("/branding.ts")).filter((path) =>
@@ -60,4 +89,12 @@ function walk(directory: string): string[] {
     const path = join(directory, entry.name);
     return entry.isDirectory() ? walk(path) : entry.name.endsWith(".ts") ? [path] : [];
   });
+}
+
+function complexityRecord(path: string, override: Partial<ReturnType<typeof complexityRecordShape>> = {}) {
+  return { ...complexityRecordShape(path), ...override };
+}
+
+function complexityRecordShape(path: string) {
+  return { path, structuralScore: 10, maxCognitive: 2, maxNest: 1, maxCyclo: 2, maxMethodLoc: 5, lever: "none", leverReason: "fixture" };
 }

@@ -1,4 +1,5 @@
 import type { DependencyGraph } from "../graph/model.ts";
+import { byCodeUnit } from "../util/hash.ts";
 import type { Portfolio, PortfolioCandidate } from "./types.ts";
 
 export interface CouplingHotspot {
@@ -43,7 +44,7 @@ export function analyzeCouplingHotspots(graph: DependencyGraph, portfolio: Portf
       suggestedAction: action(inbound, fanOut, crossDomainClosures),
       candidateIds: closures.map((candidate) => candidate.id).sort(),
     }];
-  }).sort((left, right) => right.pressureScore - left.pressureScore || left.path.localeCompare(right.path));
+  }).sort((left, right) => right.pressureScore - left.pressureScore || byCodeUnit(left.path, right.path));
 }
 
 function representativeCandidates(portfolio: Portfolio): PortfolioCandidate[] {

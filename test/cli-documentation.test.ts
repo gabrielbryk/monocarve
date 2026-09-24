@@ -49,4 +49,25 @@ describe("CLI documentation", () => {
     expect(help).toContain("do not run it immediately before a committed apply");
     expect(help).toContain("no simulation evidence is cached");
   });
+
+  test("assessment and batch signatures preserve their documented authority boundaries", () => {
+    const assess = commandHelp(COMMANDS.assess!);
+    const split = commandHelp(COMMANDS["split-candidates"]!);
+    const normalizedReference = reference.replace(/\s+/gu, " ");
+    expect(assess).toContain("usage: monocarve assess --app <name> --evidence-dir <path>");
+    expect(assess).toContain("--replay <bundle>");
+    expect(assess).toContain("--file <path> ... | --split-hotspots <n>");
+    expect(assess).toContain("Bare --graph replay and mutation-only flags are refused");
+    expect(split).toContain("monocarve split-candidates --file <path> [--out <path>]");
+    expect(split).toContain("--app <name> --evidence-dir <path>");
+    expect(split).toContain("The legacy single-file form is unchanged");
+    for (const phrase of [
+      "Assessment qualification has four outcomes",
+      "mandatory raw scanner reports",
+      "`--graph` reports are intentionally refused",
+      "conservative completeness rule",
+      "It does not steal stale locks or perform",
+      "does not alter plan identity",
+    ]) expect(normalizedReference).toContain(phrase);
+  });
 });

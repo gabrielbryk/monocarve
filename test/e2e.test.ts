@@ -53,8 +53,12 @@ describe("end to end", () => {
       keyTemplate: "./{pathNoExtension}",
       targetTemplate: "./src/{path}",
     };
+    const appTsconfigPath = "apps/web/tsconfig.json";
+    const appTsconfig = JSON.parse(readFileSync(join(root, appTsconfigPath), "utf8")) as Record<string, unknown>;
+    appTsconfig.references = [];
     write(root, "monocarve.config.json", `${JSON.stringify(raw, null, 2)}\n`);
-    fixtureGit(root, "add", "--", "monocarve.config.json");
+    write(root, appTsconfigPath, `${JSON.stringify(appTsconfig, null, 2)}\n`);
+    fixtureGit(root, "add", "--", "monocarve.config.json", appTsconfigPath);
     fixtureGit(root, "commit", "-qm", "test: publish module subpaths");
     const { config } = await loadConfig({ cwd: root });
 
@@ -165,6 +169,7 @@ describe("end to end", () => {
     expect(JSON.parse(readFileSync(join(root, "libs/chart/tsconfig.json"), "utf8")).references).toEqual([
       { path: "../format" },
     ]);
+    expect(JSON.parse(readFileSync(join(root, appTsconfigPath), "utf8")).references).toEqual([{ path: "../../libs/chart" }]);
 
     // The consumer moved to the package specifier, and the asset travelled.
     const consumerText = readFileSync(join(root, "apps/web/src/main.ts"), "utf8");

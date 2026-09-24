@@ -27,9 +27,15 @@ import { analyzePreparationImpact } from "../impact/index.ts";
 import { analyzeCapabilityPartitions, analyzeTypeScriptSource, analyzeWorkspaceSymbols } from "../symbols/index.ts";
 import { relativeWorkspacePath, workspacePath } from "../util/paths.ts";
 import { scanDependencyReports } from "../graph/cruiser.ts";
+import { scanDependencyGraph } from "../graph/cruiser.ts";
+import { qualifyWorkspace } from "../assessment/qualify-workspace.ts";
+import { available, unavailable } from "../assessment/qualification.ts";
+import { executableBuildIdentity } from "../build-identity.ts";
+import { normalizedGraphFacts } from "../assessment/reports.ts";
 import type { CommandSpec } from "./types.ts";
 import { loadPreparationManifest } from "./preparation.ts";
-import { graphDigest, load, loadGraph, print, printReport, systemReason, writeOutput, type LoadedGraph } from "./shared.ts";
+import { graphDigest, load, loadGraph, print, printReport, suppliedReports, systemReason, writeOutput, type LoadedGraph } from "./shared.ts";
+import { isDeclarationBatchArgs, runDeclarationBatch } from "./declaration-batch.ts";
 
 function portfolioFor(args: ParsedArgs, loaded: LoadedGraph) {
   const application = flagString(args, "app");
@@ -88,18 +94,37 @@ function portfolioView(result: ReturnType<typeof portfolioFor>, args: ParsedArgs
 }
 
 async function scan(args: ParsedArgs): Promise<void> {
-  const { graph, rootDir } = await loadGraph(args);
-  const summary = { ...summarizeGraph(graph), digest: graphDigest(graph), commit: graph.commit ?? null };
+  const { config, rootDir } = await load(args);
+  const application = flagString(args, "app");
+  const selected = application === undefined ? undefined : getApplication(config, application).name;
+  const supplied = suppliedReports(args, rootDir);
+  const reports = supplied ?? await scanDependencyReports({ config, rootDir, ...(selected === undefined ? {} : { application: selected }), ...(flagBool(args, "no-cache") ? { noCache: true } : {}) });
+  const graph = await scanDependencyGraph({ config, rootDir, reports, ...(selected === undefined ? {} : { application: selected }), ...(flagBool(args, "no-cache") ? { noCache: true } : {}) });
+  const qualified = await qualifyWorkspace({ config, rootDir, reports, ...(selected === undefined ? {} : { application: selected }), ...(flagBool(args, "allow-empty") ? { allowEmpty: true } : {}) });
+  const packageReadiness = qualified.workspaceResolution === "resolved" &&
+    (qualified.qualification.status === "qualified" || qualified.qualification.status === "allowed-empty")
+    ? available({ workspacePackages: qualified.packages.length })
+    : unavailable(qualified.qualification.diagnostics);
+  const normalized = normalizedGraphFacts(config, graph, selected);
+  const legacy = summarizeGraph(graph);
+  const summary = {
+    schemaVersion: 1,
+    ...legacy, moduleCount: normalized.facts.firstPartyModules, edgeCount: normalized.facts.edges,
+    unresolvedCount: normalized.facts.unresolvedImports, dynamicImportCount: normalized.facts.dynamicImports,
+    digest: graphDigest(graph), commit: graph.commit ?? null,
+    architectureSummary: { schemaVersion: 1, graph: normalized.facts, qualification: qualified.qualification, packageReadiness },
+    executableIdentity: executableBuildIdentity(), qualification: qualified.qualification, packageReadiness,
+  };
   const out = flagString(args, "out");
   if (out) writeOutput(rootDir, out, `${JSON.stringify(summary, null, 2)}\n`);
   const reportOut = flagString(args, "report-out");
   if (reportOut !== undefined) {
-    const application = flagString(args, "app");
     if (application === undefined) throw new UsageError("--report-out requires --app <name>");
-    const reports = await scanDependencyReports({ config: (await load(args)).config, rootDir, application, ...(flagBool(args, "no-cache") ? { noCache: true } : {}) });
     writeOutput(rootDir, reportOut, `${JSON.stringify(reports[application], null, 2)}\n`);
   }
   print(summary, args);
+  // `scan` is a legacy read-only surface. Qualification is additive report
+  // data here; preserve its historical zero exit for a completed scan.
 }
 
 async function layers(args: ParsedArgs): Promise<void> {
@@ -128,6 +153,7 @@ async function symbols(args: ParsedArgs): Promise<void> {
 }
 
 async function splitCandidates(args: ParsedArgs): Promise<void> {
+  if (isDeclarationBatchArgs(args)) return runDeclarationBatch(args);
   const loaded = await loadGraph(args);
   const input = flagString(args, "file") ?? args.positionals[0];
   if (input === undefined) throw new UsageError("--file <path> is required");
@@ -297,10 +323,10 @@ async function impact(args: ParsedArgs): Promise<void> {
 }
 
 export const discoveryCommands: Record<string, CommandSpec> = {
-  scan: { summary: "build the dependency model", usage: "scan [--app <name>] [--no-cache] [--include-extracted] [--out <path>] [--report-out <path>]", details: "Reads configured applications without changing the workspace. --include-extracted keeps already-extracted paths in the model. --report-out writes the raw scanner report for the selected --app so it can be replayed with --graph.", run: scan },
+  scan: { summary: "build the dependency model", usage: "scan [--app <name>] [--no-cache] [--allow-empty] [--include-extracted] [--out <path>] [--report-out <path>]", details: "Reads configured applications without changing the workspace. --allow-empty permits only a verified existing source root with no configured production files. --include-extracted keeps already-extracted paths in the model. --report-out writes the raw scanner report for the selected --app so it can be replayed with --graph.", run: scan },
   layers: { summary: "report domains, components, and dependency layers", usage: "layers [--app <name>] [--out <path>]", details: "Read-only architecture report derived from the current or captured graph.", run: layers },
   symbols: { summary: "analyze one file's declaration and symbol graph", usage: "symbols --file <path> [--out <path>]", details: "Reports declarations, type/value spaces, exact references, merged groups, and SCCs; never edits the file.", run: symbols },
-  "split-candidates": { summary: "rank symbol split suggestions for one file", usage: "split-candidates --file <path> [--app <name>] [--out <path>]", details: "Ranks declaration SCCs using cross-file consumers and configured domain affinity.", run: splitCandidates },
+  "split-candidates": { summary: "rank symbol split suggestions for one file or an explicit batch", usage: "split-candidates --file <path> [--out <path>] | --app <name> --evidence-dir <path> (--file <path> ... | --split-hotspots <n>)", details: "The legacy single-file form is unchanged. Repeated files, hotspot selection, or --evidence-dir selects a strict snapshot-bound batch with atomic evidence.", run: splitCandidates },
   portfolio: { summary: "rank eligible extraction candidates", usage: "portfolio [--app <name>] [--limit <n>] [--recommendation <status>] [--strategy <cohesive|max-loc|low-risk|campaign|preparation>] [--include-extracted] [--communities] [--hub-inbound-threshold <n>] [--out <path>]", details: "Shows one representative per near-equivalent group. Recommended, cohesive candidates are the default; --recommendation all exposes the complete mechanically eligible set.", run: portfolio },
   candidates: { summary: "inspect and filter extraction candidates", usage: "candidates [--candidate <id> | --equivalence-group <id>] [--path <path>] [--eligibility <all|eligible|blocked>] [--app <name>] [--include-extracted] [--out <path>]", details: "Shows a compact table by default. --equivalence-group accepts either a group id or its representative candidate id and expands every variant. --json emits stable full details including the closure, SCCs, blockers, recommendation, shims, and target options.", run: candidates },
   conflicts: { summary: "compare same-baseline plan conflicts", usage: "conflicts --plan <candidate>=<manifest> [--plan <candidate>=<manifest> ...]", details: "Classifies hard and replan-mergeable path conflicts. Reported waves still require rescan and replan between applied children.", run: conflicts },

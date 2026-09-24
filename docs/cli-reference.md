@@ -15,14 +15,15 @@ where supported.
 | `--graph <app>=<file>` | Replay a captured scanner report; repeat for multiple applications. Campaign commands that require fresh evidence refuse it. |
 | `--json`, `-j` | Request machine-readable output. |
 | `--help`, `-h` | Show top-level or command help. |
-| `--version`, `-v` | Print the CLI version. |
+| `--version`, `-v` | Print the CLI version; add `--verbose` for versioned executable/compiler identity and packaging mode. |
 
 ## Discovery and diagnosis
 
 | command | usage and boundary |
 | --- | --- |
 | `plan` | `plan --candidate <id> [--source <path> ...] [--profile <name> | --package-name <name> [--package-root <path>]] [--target-subpath <dir>] [--public-surface subpaths] [--force] [--verify-lockfile] [--out <path>] [--write [--commit-approval]] [--json | --verbose]` — compile deterministically; terminals get the concise review while pipes and explicit machine modes retain the complete manifest. `--target-subpath` overrides where moved files land inside an existing package. `--public-surface subpaths` exports each entry as its own subpath instead of one barrel. |
-| `scan` | `scan [--app <name>] [--no-cache] [--include-extracted] [--out <path>] [--report-out <path>]` — build the configured dependency model without editing the workspace; `--report-out` writes the raw scanner report for the selected app for later `--graph` replay. |
+| `scan` | `scan [--app <name>] [--no-cache] [--allow-empty] [--include-extracted] [--out <path>] [--report-out <path>]` — build the configured dependency model without editing the workspace; qualification and executable identity are additive fields. `--allow-empty` permits only an existing root with no configured production files. `--report-out` remains legacy raw-report replay evidence for discovery commands, not assessment replay authority. |
+| `assess` | `assess --app <name> --evidence-dir <path> [--file <path> ... \| --split-hotspots <n>] [--replay <bundle>] [--allow-empty] [--replace-generated] [--max-bytes <n>] [--limit <n>] [--full-portfolio]` — capture one input-authoritative scanner baseline and atomically publish normalized summary, raw reports, input inventory, bounded architecture reports, optional declaration splits, findings, and manifest. It is strictly read-only outside the evidence transaction. |
 | `visualize` | `visualize [--app <name>] [--port <number>] [--no-open] [--no-cache] [--include-extracted]` — serve the current SCC-level dependency graph as an interactive loopback-only web UI. Search and edge-kind filters are local; Rescan rebuilds the read-only graph. |
 | `layers` | `layers [--app <name>] [--out <path>]` — report domains, components, and dependency-first layers. |
 | `portfolio` | `portfolio [--app <name>] [--limit <n>] [--recommendation <status>] [--strategy <cohesive\|max-loc\|low-risk\|campaign\|preparation>] [--include-extracted] [--communities] [--hub-inbound-threshold <n>] [--out <path>]` — show one representative per near-equivalent group; defaults to architecturally recommended candidates. |
@@ -33,7 +34,7 @@ where supported.
 | `config-doctor` | `config-doctor` — report the discovered config and root, effective value provenance, application and package resolution, adapter availability, compiler profiles, generated and path-keyed artifacts, configured module calls, protected and dirty paths, and preparation coverage. It is strictly read-only: no gates, generators, installers, or preparers run. JSON configs report `explicit` versus `default` provenance; dynamically loaded configs report `unknown` where the original shape is not safely recoverable. |
 | `explain` | `explain --plan <path> (--dependency <name> \| --artifact <path>) [--json]` — read persisted provenance for one dependency decision or the exact operation chain and final hash for one artifact. |
 | `symbols` | `symbols --file <path> [--out <path>]` — declaration graph, type/value spaces, merged groups, exact references, and SCCs for one file. |
-| `split-candidates` | `split-candidates --file <path> [--app <name>] [--out <path>]` — rank declaration SCCs using external consumers and domain affinity. |
+| `split-candidates` | `split-candidates --file <path> [--out <path>]` preserves the legacy report. Repeated `--file`, `--split-hotspots <n>`, or `--evidence-dir` selects batch mode: `split-candidates --app <name> --evidence-dir <path> (--file <path> ... \| --split-hotspots <n>) [--replay <assessment-bundle>] [--replace-generated] [--max-bytes <n>] [--allow-empty]`. Batch mode reuses one complete application program and publishes atomically. |
 | `capabilities` | `capabilities --file <path> --type <interface> [--out <path>]` — group context properties by real TypeScript consumer affinity. |
 | `lazy-registry` | `lazy-registry --file <path> [--app <name>] [--out <path>]` — map resolved dynamic imports to domains and candidate targets. |
 | `hotspots` | `hotspots [--app <name>] [--limit <n>] [--out <path>]` — rank closure-inflating modules and preparation levers. |
@@ -42,6 +43,79 @@ where supported.
 | `seams-multi` | `seams-multi --file <path> --file <path> [--app <name>]` — analyze exact symbol edges and SCCs across at least two explicit files. |
 | `conflicts` | `conflicts --plan <candidate>=<manifest> [--plan <candidate>=<manifest> ...]` — compare same-baseline path ownership. Every wave still requires replan between applied children. |
 | `check` | `check import-extensions` — run the configured package import-extension policy. |
+
+## Architecture assessment evidence
+
+Assessment qualification has four outcomes. `qualified` and a verified
+`allowed-empty` exit 0; `degraded` exits 2 and publishes a bundle that marks
+package-dependent claims unavailable; `fatal` exits 1 and publishes no new
+authoritative bundle. Fatal conditions win over both the empty override and
+degraded discovery. A supported positive workspace pattern with no package
+manifest is degraded. Unsupported glob syntax, unsafe paths, duplicate package
+identities, missing inputs, unexpected empty scanner output, drift, replay
+mismatch, incomplete requested split analysis, publication conflicts, and byte
+budget failures are fatal.
+
+Executable TypeScript/ESM config for assessment, replay, and declaration batch
+runs in a private Linux filesystem namespace from copied configuration inputs.
+Imported helpers, package manifests, and lockfiles are copied first and bound
+into the assessment input inventory. A failed read outside that copy is
+refused. The boundary requires `bwrap`, `strace`, and unprivileged user
+namespaces. Without them, executable config fails closed; JSON config and other
+commands are unaffected. The sandbox's own `/proc`, a minimal `/dev`, and the
+Bun runtime are not workspace inputs. A config that derives values from them is
+nondeterministic.
+
+The supported workspace dialect is exact paths and single-segment `*` at any
+segment (for example `apps/*/ui`), plus exact negations and recursive segment
+exclusions such as `!**/dist/**`. Other wildcard syntax fails with
+`WORKSPACE_GLOB_UNSUPPORTED`; it is never approximated.
+
+`assess --replay` accepts only a verified assessment directory containing its
+manifest, mandatory raw scanner reports, and versioned input inventory. It
+requires matching source/consumer bytes, directory membership, TypeScript
+configuration/program closure, workspace/package resolution inputs, commit,
+configuration, executable packaging identity, and runtime identity. Bare
+`--graph` reports are intentionally refused on assessment and new batch
+surfaces, while existing discovery replay remains compatible.
+
+Bundles always retain raw reports and the input inventory. Full portfolio
+evidence is optional and bounded evidence records its total, limit, omissions,
+and deeper command. `--max-bytes` is a positive integer covering every final
+artifact plus the manifest; mandatory replay evidence is never silently
+omitted. `--replace-generated` replaces only a complete prior bundle whose
+manifest and artifact hashes still match and which contains no unrelated file.
+
+Publication owns the canonical destination exclusively and uses staged
+directory renames. An ordinary caught failure restores a preserved prior
+bundle where possible. Abrupt termination may leave sibling `.staging`,
+`.backup`, `.recovery.json`, or `.lock` state; the next invocation fails with
+`EVIDENCE_RECOVERY_REQUIRED` (or refuses uncertain ownership) and preserves
+that state for manual inspection. It does not steal stale locks or perform
+automatic recovery.
+
+The destination lock protects cooperating Monocarve publishers. Processes
+running as the same operating-system user that deliberately bypass this
+protocol and race filesystem operations are outside the threat model. If
+cleanup detects a changed owned path or unexpected quarantined contents, it
+fails closed and preserves the quarantine and recovery record. Further
+publication refuses with `EVIDENCE_RECOVERY_REQUIRED` until an operator
+inspects and resolves that residue; the publisher does not guess which bytes
+to remove or restore.
+
+New declaration batches apply a conservative completeness rule: configuration,
+options, global, syntactic, and semantic diagnostics are collected across the
+whole selected application program. Any TypeScript error, missing target, or
+unsupported/unresolved analyzer relationship fails with
+`SPLIT_ANALYSIS_INCOMPLETE`; warnings, suggestions, and messages remain visible
+without failing completeness. The legacy one-file stdout/JSON and `--out`
+surface does not adopt this stricter envelope.
+
+Assessment evidence is not a plan. It runs no gates, compiles no mutation
+manifest, approves no package boundary, and changes no source or Git state.
+The rich executable identity is evidence authority only: extraction plans keep
+the existing behavioral compiler identity, so packaging mode does not alter
+plan identity or same-build distribution/standalone interoperability.
 
 ## Extraction planning
 

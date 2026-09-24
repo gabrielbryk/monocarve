@@ -15,3 +15,14 @@ test("ranks a high-inbound cross-domain module above leaf modules", () => {
   const portfolio = { rootDir: "/repo", candidates, selected: [], equivalenceGroups: candidates.map((item) => ({ id: `g-${item.id}`, representativeId: item.id, candidateIds: [item.id], sharedFileCount: item.files.length, similarity: 1 })) } satisfies Portfolio;
   expect(analyzeCouplingHotspots(graph, portfolio)[0]).toMatchObject({ path: paths[0], suggestedAction: "split-capabilities", largestClosureLines: 5000 });
 });
+
+test("breaks equal-pressure hotspot ties by code unit", () => {
+  const paths = ["apps/web/src/a.ts", "apps/web/src/Z.ts"];
+  const graph = { paths, nodes: new Map(paths.map((path) => [path, { path, zone: "application", owner: "apps/web", application: "web", domain: "web", lineCount: 10 }])), incoming: new Map(), outgoing: new Map(), edges: [], testImporters: new Map(), workspace: { owners: [], packageNames: new Map() }, rootDir: "/repo" } as unknown as DependencyGraph;
+  const candidates = paths.map((path, index) => candidate(`candidate-${index}`, [path], 10, ["web"]));
+  const portfolio = { rootDir: "/repo", candidates, selected: [], equivalenceGroups: candidates.map((item) => ({ id: `g-${item.id}`, representativeId: item.id, candidateIds: [item.id], sharedFileCount: 1, similarity: 1 })) } satisfies Portfolio;
+  expect(analyzeCouplingHotspots(graph, portfolio).map((entry) => entry.path)).toEqual([
+    "apps/web/src/Z.ts",
+    "apps/web/src/a.ts",
+  ]);
+});
