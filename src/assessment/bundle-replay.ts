@@ -288,7 +288,8 @@ function rawReportMappingIssue(value: AssessmentManifest): string | undefined {
     .filter((entry) => entry.path.startsWith("raw/") && entry.path.endsWith(".json"))
     .map((entry) => entry.path)
     .toSorted(byCodeUnit);
-  if (stableStringify(rawPaths) !== stableStringify(Object.values(expected).toSorted(byCodeUnit))) return "raw report mapping does not bind exactly its artifacts";
+  if (stableStringify(rawPaths) !== stableStringify(Object.values(expected).toSorted(byCodeUnit)))
+    return "raw report mapping does not bind exactly its artifacts";
   return undefined;
 }
 

@@ -79,7 +79,7 @@ async function inspectOne(
       cwd: worktree.workspacePath,
       timeoutMs: config.gates.timeoutMs,
       retries: config.transaction.gateRetries,
-      wrapCommand: taskRunner.wrapGateCommand,
+      wrapCommand: (gateCommand) => taskRunner.wrapGateCommand(gateCommand),
       diagnosticsDirectory: `${worktree.path}.diagnostics`,
     });
     const result = run.results[0]!;

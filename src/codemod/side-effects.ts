@@ -241,7 +241,7 @@ function evaluatedAwaits(node: ts.Node): ts.Node[] {
 function isBindinglessImport(node: ts.ImportDeclaration): boolean {
   const clause = node.importClause;
   if (!clause) return true;
-  if (clause.isTypeOnly || clause.name) return false;
+  if (clause.phaseModifier === ts.SyntaxKind.TypeKeyword || clause.name) return false;
   const bindings = clause.namedBindings;
   return bindings !== undefined && ts.isNamedImports(bindings) && bindings.elements.length === 0;
 }

@@ -87,7 +87,7 @@ function compareOne(proof: AssetEmissionProofConfig, baseline: CssSurface | stri
       candidateFiles: 0,
       missingSelectors: [],
       changedDeclarationOrder: [],
-      failure: typeof baseline === "string" ? `baseline ${baseline}` : `candidate ${candidate}`,
+      failure: typeof baseline === "string" ? `baseline ${baseline}` : typeof candidate === "string" ? `candidate ${candidate}` : "",
     };
   }
   if (baseline.files === 0 || candidate.files === 0) {

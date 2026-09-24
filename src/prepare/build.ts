@@ -162,7 +162,9 @@ export function compilePreparationManifest(input: CompilePreparationManifestInpu
   const groups: PreparationDeclarationGroupSelector[] = [...declarations.values()]
     .map((group) => ({
       ...group,
-      declarations: [...group.declarations].toSorted((left, right) => left.span.start - right.span.start || byCodeUnit(left.declarationId, right.declarationId)),
+      declarations: [...group.declarations].toSorted(
+        (left, right) => left.span.start - right.span.start || byCodeUnit(left.declarationId, right.declarationId),
+      ),
     }))
     .toSorted((left, right) => left.declarations[0]!.span.start - right.declarations[0]!.span.start || byCodeUnit(left.groupId, right.groupId));
   const targetImportProofs = new Map<string, PreparationTargetImportProof>();

@@ -405,7 +405,7 @@ function isTypeOnlyStatement(statement: ts.Statement): boolean {
 function importIsTypeOnly(statement: ts.ImportDeclaration): boolean {
   const clause = statement.importClause;
   if (!clause) return false;
-  if (clause.isTypeOnly) return true;
+  if (clause.phaseModifier === ts.SyntaxKind.TypeKeyword) return true;
   return (
     clause.name === undefined &&
     clause.namedBindings !== undefined &&

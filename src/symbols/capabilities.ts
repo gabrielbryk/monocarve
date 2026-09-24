@@ -74,7 +74,11 @@ export function analyzeCapabilityPartitions(input: {
     grouped.set(key, group);
   }
   const partitions = [...grouped.values()]
-    .map((group) => ({ affinities: group.affinities, properties: group.properties.sort(byCodeUnit), declarations: [...group.declarations].toSorted(byCodeUnit) }))
+    .map((group) => ({
+      affinities: group.affinities,
+      properties: group.properties.sort(byCodeUnit),
+      declarations: [...group.declarations].toSorted(byCodeUnit),
+    }))
     .toSorted(
       (left, right) => byCodeUnit(left.affinities.join("/"), right.affinities.join("/")) || byCodeUnit(left.properties.join("/"), right.properties.join("/")),
     );

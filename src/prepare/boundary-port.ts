@@ -278,8 +278,8 @@ function selectedImportEdit(
   }
   const factory = ts.factory;
   const retainedNamed = retainedElements.length > 0 ? factory.createNamedImports(retainedElements) : undefined;
-  const retainedClause = factory.updateImportClause(clause, clause.isTypeOnly, clause.name, retainedNamed);
-  const promotedClause = factory.updateImportClause(clause, clause.isTypeOnly, undefined, factory.createNamedImports(promotedElements));
+  const retainedClause = factory.updateImportClause(clause, clause.phaseModifier, clause.name, retainedNamed);
+  const promotedClause = factory.updateImportClause(clause, clause.phaseModifier, undefined, factory.createNamedImports(promotedElements));
   const retainedImport = factory.updateImportDeclaration(statement, statement.modifiers, retainedClause, statement.moduleSpecifier, statement.attributes);
   const promotedImport = factory.updateImportDeclaration(
     statement,

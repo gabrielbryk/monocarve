@@ -107,7 +107,7 @@ function recordConfiguredTypes(
   for (const application of context.config.applications) {
     if (!owners.has(applicationOwner(application))) continue;
     const configPath = resolve(context.rootDir, application.tsconfig);
-    const read = ts.readConfigFile(configPath, ts.sys.readFile);
+    const read = ts.readConfigFile(configPath, (path) => ts.sys.readFile(path));
     const configured = read.error === undefined && Array.isArray(read.config?.compilerOptions?.types) ? read.config.compilerOptions.types : [];
     for (const type of configured) {
       const name = context.packageNameOf(type) ?? type;

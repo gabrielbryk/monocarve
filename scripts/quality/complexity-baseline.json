@@ -17,10 +17,9 @@
     "maxMethodLoc": 94
   },
   "src/commands/preparation.ts": {
-    "maxCognitive": 28,
-    "maxCyclo": 17,
-    "maxMethodLoc": 104,
-    "structuralScore": 101.6
+    "maxCognitive": 27,
+    "maxCyclo": 16,
+    "maxMethodLoc": 98
   },
   "src/commands/reconciliation.ts": {
     "maxCyclo": 22
@@ -55,12 +54,12 @@
   "src/graph/syntax.ts": {
     "maxCognitive": 30,
     "maxCyclo": 24,
-    "structuralScore": 100.6
+    "structuralScore": 100.7
   },
   "src/plan/build-support.ts": {
     "maxCognitive": 41,
     "maxCyclo": 25,
-    "structuralScore": 122.8
+    "structuralScore": 123
   },
   "src/plan/build.ts": {
     "maxCognitive": 36,
@@ -161,8 +160,8 @@
   "src/prepare/build.ts": {
     "maxCognitive": 32,
     "maxCyclo": 34,
-    "maxMethodLoc": 259,
-    "structuralScore": 109.3
+    "maxMethodLoc": 261,
+    "structuralScore": 109.5
   },
   "src/prepare/generated-source-adoption.ts": {
     "maxCognitive": 30,
@@ -216,7 +215,7 @@
     "maxCognitive": 45,
     "maxCyclo": 22,
     "maxNest": 11,
-    "structuralScore": 165.7
+    "structuralScore": 166.1
   },
   "src/symbols/declarations.ts": {
     "maxNest": 9

@@ -104,6 +104,7 @@ function writeRole(generator: string | undefined): PathAccessRole {
       return "entrypoint";
     case "scaffold:task-file":
       return "task-file";
+    case undefined:
     default:
       return generator?.startsWith("scaffold:") === true ? "scaffold-output" : "operation-output";
   }
@@ -118,6 +119,7 @@ function writeKeys(plan: CampaignPlan, generator: string | undefined): string[] 
       return [plan.manifest.target.projectId ?? plan.manifest.target.packageRoot];
     case "wiring:consumer-dependency":
       return [plan.manifest.target.packageName];
+    case undefined:
     default:
       return [];
   }

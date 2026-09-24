@@ -122,8 +122,8 @@ function validateImporterProof(paths: readonly string[], path: string, add: AddM
   }
 }
 
-function rewriteKey(rewrite: { readonly from: string; readonly to: string }): string {
-  return `${rewrite.from}\0${rewrite.to}\0${"moduleSpecifierCall" in rewrite ? String(rewrite.moduleSpecifierCall ?? "") : ""}`;
+function rewriteKey(rewrite: { readonly from: string; readonly to: string; readonly moduleSpecifierCall?: string }): string {
+  return `${rewrite.from}\0${rewrite.to}\0${rewrite.moduleSpecifierCall ?? ""}`;
 }
 
 function validateRewriteEntry(
