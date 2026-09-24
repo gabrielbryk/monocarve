@@ -85,9 +85,6 @@
   "src/adapters/pnpm-resolutions.ts": {
     "typescript(no-non-null-assertion)": 4
   },
-  "src/adapters/pnpm.ts": {
-    "typescript(unbound-method)": 2
-  },
   "src/adapters/registry.ts": {
     "typescript(consistent-return)": 2
   },
@@ -176,7 +173,6 @@
   },
   "src/campaign/conflict-accesses.ts": {
     "typescript(consistent-return)": 1,
-    "typescript(switch-exhaustiveness-check)": 2,
     "unicorn(no-array-sort)": 1
   },
   "src/campaign/conflict-waves.ts": {
@@ -204,16 +200,11 @@
   "src/cli.ts": {
     "typescript(no-base-to-string)": 1
   },
-  "src/cli/args.ts": {
-    "typescript(no-unnecessary-condition)": 1
-  },
   "src/codemod/imports.ts": {
-    "typescript(no-deprecated)": 1,
     "typescript(no-non-null-assertion)": 1,
     "typescript(no-unsafe-type-assertion)": 2
   },
   "src/codemod/side-effects.ts": {
-    "typescript(no-deprecated)": 1,
     "unicorn(no-array-sort)": 1
   },
   "src/commands/campaign-ledger-file.ts": {
@@ -247,11 +238,7 @@
   "src/commands/preparation.ts": {
     "import(no-cycle)": 1,
     "typescript(no-non-null-assertion)": 3,
-    "typescript(no-unnecessary-condition)": 2,
-    "typescript(no-unsafe-argument)": 5,
-    "typescript(no-unsafe-assignment)": 4,
-    "typescript(no-unsafe-member-access)": 14,
-    "typescript(no-unsafe-type-assertion)": 4
+    "typescript(no-unsafe-type-assertion)": 2
   },
   "src/commands/preparers.ts": {
     "typescript(no-non-null-assertion)": 1
@@ -303,7 +290,6 @@
     "typescript(no-unsafe-type-assertion)": 4
   },
   "src/evacuation/assessment.ts": {
-    "typescript(no-base-to-string)": 1,
     "typescript(no-non-null-assertion)": 1
   },
   "src/evacuation/candidate.ts": {
@@ -335,7 +321,6 @@
     "unicorn(no-array-sort)": 2
   },
   "src/graph/syntax.ts": {
-    "typescript(no-deprecated)": 1,
     "typescript(no-unsafe-assignment)": 1,
     "typescript(no-unsafe-return)": 1
   },
@@ -380,8 +365,7 @@
     "typescript(no-unnecessary-condition)": 1,
     "typescript(no-unsafe-argument)": 1,
     "typescript(no-unsafe-assignment)": 1,
-    "typescript(no-unsafe-member-access)": 2,
-    "typescript(unbound-method)": 1
+    "typescript(no-unsafe-member-access)": 2
   },
   "src/plan/dependency-resolution.ts": {
     "typescript(no-non-null-assertion)": 2
@@ -446,7 +430,6 @@
     "typescript(no-unsafe-assignment)": 3,
     "typescript(no-unsafe-member-access)": 2,
     "typescript(no-unsafe-type-assertion)": 8,
-    "typescript(unbound-method)": 2,
     "unicorn(no-useless-fallback-in-spread)": 1
   },
   "src/plan/scaffold-shared.ts": {
@@ -544,7 +527,6 @@
   },
   "src/portfolio/rank.ts": {
     "typescript(consistent-type-imports)": 1,
-    "typescript(no-base-to-string)": 1,
     "typescript(no-non-null-assertion)": 2
   },
   "src/portfolio/retained.ts": {
@@ -575,18 +557,13 @@
     "typescript(no-unsafe-type-assertion)": 1
   },
   "src/prepare/audit.ts": {
-    "typescript(no-deprecated)": 1,
     "typescript(no-non-null-assertion)": 1,
     "typescript(no-unnecessary-condition)": 1
   },
   "src/prepare/boundary-port.ts": {
     "eslint(no-useless-concat)": 1,
-    "typescript(no-deprecated)": 4,
     "typescript(no-unnecessary-condition)": 1,
     "unicorn(no-array-sort)": 1
-  },
-  "src/prepare/boundary-proofs.ts": {
-    "typescript(no-deprecated)": 1
   },
   "src/prepare/boundary-resolve.ts": {
     "typescript(no-non-null-assertion)": 3
@@ -605,9 +582,6 @@
     "typescript(no-non-null-assertion)": 2,
     "typescript(no-unnecessary-boolean-literal-compare)": 1
   },
-  "src/prepare/compiler-policy.ts": {
-    "typescript(unbound-method)": 1
-  },
   "src/prepare/generated-source-adoption.ts": {
     "oxc(no-map-spread)": 1,
     "typescript(no-non-null-assertion)": 6,
@@ -619,7 +593,6 @@
     "unicorn(no-array-reverse)": 1
   },
   "src/prepare/manifest-recipe.ts": {
-    "typescript(no-base-to-string)": 1,
     "typescript(no-non-null-assertion)": 10,
     "typescript(no-unnecessary-condition)": 2,
     "typescript(no-unsafe-type-assertion)": 3,
@@ -650,7 +623,6 @@
     "unicorn(no-array-sort)": 1
   },
   "src/prepare/selectors.ts": {
-    "typescript(no-deprecated)": 1,
     "typescript(no-redundant-type-constituents)": 2,
     "unicorn(no-array-sort)": 2
   },
@@ -658,8 +630,7 @@
     "typescript(consistent-type-imports)": 1,
     "typescript(no-non-null-assertion)": 5,
     "typescript(no-unnecessary-type-assertion)": 1,
-    "typescript(no-unsafe-type-assertion)": 1,
-    "typescript(unbound-method)": 1
+    "typescript(no-unsafe-type-assertion)": 1
   },
   "src/prepare/value-split.ts": {
     "typescript(no-non-null-assertion)": 3,
@@ -669,7 +640,6 @@
     "import(no-cycle)": 1
   },
   "src/preparer/bootstrap.ts": {
-    "eslint(no-unsafe-finally)": 1,
     "typescript(no-non-null-assertion)": 1,
     "typescript(no-unsafe-type-assertion)": 1
   },
@@ -700,7 +670,6 @@
     "typescript(no-unnecessary-condition)": 2
   },
   "src/reconciliation/evidence.ts": {
-    "typescript(unbound-method)": 2,
     "unicorn(prefer-array-find)": 1
   },
   "src/reconciliation/overlay.ts": {
@@ -718,7 +687,6 @@
     "typescript(no-non-null-assertion)": 5,
     "typescript(no-unnecessary-condition)": 3,
     "typescript(no-unsafe-type-assertion)": 3,
-    "typescript(unbound-method)": 1,
     "unicorn(no-array-sort)": 4
   },
   "src/seams/plan.ts": {
@@ -748,16 +716,14 @@
   },
   "src/transaction/apply-state.ts": {
     "typescript(no-unnecessary-condition)": 1,
-    "typescript(no-unsafe-type-assertion)": 3
+    "typescript(no-unsafe-type-assertion)": 2
   },
   "src/transaction/apply.ts": {
     "typescript(no-unnecessary-condition)": 1,
     "typescript(no-unsafe-type-assertion)": 4
   },
   "src/transaction/asset-emission.ts": {
-    "typescript(no-base-to-string)": 1,
-    "typescript(no-unnecessary-condition)": 2,
-    "typescript(restrict-template-expressions)": 1
+    "typescript(no-unnecessary-condition)": 2
   },
   "src/transaction/audit-byte-fidelity.ts": {
     "eslint(no-useless-concat)": 1
@@ -769,7 +735,6 @@
     "typescript(no-unsafe-type-assertion)": 1
   },
   "src/transaction/audit-graph.ts": {
-    "typescript(no-deprecated)": 1,
     "unicorn(consistent-function-scoping)": 1,
     "unicorn(no-array-sort)": 2
   },
@@ -788,21 +753,15 @@
     "typescript(consistent-return)": 1
   },
   "src/transaction/external-consumer.ts": {
-    "typescript(no-deprecated)": 1,
     "typescript(no-unsafe-assignment)": 1,
-    "typescript(no-unsafe-member-access)": 1,
-    "typescript(unbound-method)": 1
-  },
-  "src/transaction/external-consumer/dependency-paths.ts": {
-    "typescript(no-deprecated)": 5
+    "typescript(no-unsafe-member-access)": 1
   },
   "src/transaction/external-consumer/package-exports.ts": {
     "typescript(no-unsafe-type-assertion)": 4
   },
   "src/transaction/gate-inspection.ts": {
     "eslint(no-await-in-loop)": 1,
-    "typescript(no-non-null-assertion)": 1,
-    "typescript(unbound-method)": 1
+    "typescript(no-non-null-assertion)": 1
   },
   "src/transaction/generator-evolution.ts": {
     "eslint(no-shadow)": 1,
@@ -822,7 +781,6 @@
     "typescript(no-unsafe-type-assertion)": 2
   },
   "src/transaction/journal.ts": {
-    "typescript(only-throw-error)": 1,
     "unicorn(no-array-reverse)": 1
   },
   "src/transaction/lockfile-verify.ts": {
@@ -1122,7 +1080,7 @@
   },
   "test/gate-concurrency.test.ts": {
     "promise(always-return)": 1,
-    "typescript(no-non-null-assertion)": 13
+    "typescript(no-non-null-assertion)": 16
   },
   "test/gate-inspection.test.ts": {
     "typescript(no-non-null-assertion)": 3
@@ -1306,6 +1264,9 @@
     "typescript(no-unnecessary-type-assertion)": 1,
     "typescript(no-unsafe-type-assertion)": 4,
     "unicorn(no-array-reverse)": 1
+  },
+  "test/preparer-bootstrap-errors.test.ts": {
+    "typescript(no-unsafe-type-assertion)": 9
   },
   "test/preparer-cli.test.ts": {
     "typescript(no-unsafe-argument)": 1,

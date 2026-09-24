@@ -364,7 +364,7 @@ function importBindings(sourceFile: ts.SourceFile, checker: ts.TypeChecker): Map
   for (const statement of sourceFile.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || !statement.importClause) continue;
     const moduleSpecifier = statement.moduleSpecifier.text;
-    const clauseTypeOnly = statement.importClause.isTypeOnly;
+    const clauseTypeOnly = statement.importClause.phaseModifier === ts.SyntaxKind.TypeKeyword;
     if (statement.importClause.name) {
       addImport(result, checker, statement.importClause.name, {
         localName: statement.importClause.name.text,

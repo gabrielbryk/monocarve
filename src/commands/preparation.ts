@@ -36,6 +36,7 @@ import { boundaryCommandSpec } from "./preparation-boundary.ts";
 import { preparationCommandSpecs } from "./preparation-command-specs.ts";
 import { graphSnapshot } from "./preparation-graph.ts";
 import { parseJsonObject, readWorkspaceText, relativeTypeSpecifier } from "./preparation-io.ts";
+import { validateMultiPreparationSpec, validateStableCampaignSpec, type StableCampaignSpec } from "./preparation-specs.ts";
 export { readWorkspaceText } from "./preparation-io.ts";
 
 async function campaignInit(args: ParsedArgs): Promise<void> {
@@ -75,23 +76,12 @@ async function campaignShowStatus(args: ParsedArgs): Promise<void> {
   print({ schema: "campaign-status", campaignPath: loaded.path, ...describeCampaignStatus(loaded.campaign, headCommit(rootDir)) }, args);
 }
 
-interface StableCampaignSpec {
-  readonly application: string;
-  readonly targets: readonly { readonly path: string; readonly packageName: string; readonly packageRoot?: string }[];
-}
-
 /** Re-resolve stable source paths against one fresh HEAD and compile only the first remaining target. */
 async function campaignResolve(args: ParsedArgs): Promise<void> {
   if (args.flags.has("graph")) throw new UsageError("campaign resolve refuses --graph; it must rescan the native checkout at a stable HEAD");
   const { rootDir } = await load(args);
   const specPath = relativeWorkspacePath(rootDir, requiredFlag(args, "targets"));
-  let spec: StableCampaignSpec;
-  try {
-    spec = JSON.parse(readWorkspaceText(rootDir, specPath, "campaign target list")) as StableCampaignSpec;
-  } catch (error) {
-    throw new UsageError(`could not parse campaign target list ${specPath}: ${systemReason(error)}`);
-  }
-  validateStableCampaignSpec(spec);
+  const spec = validateStableCampaignSpec(parseJsonObject(readWorkspaceText(rootDir, specPath, "campaign target list"), specPath, "campaign target list"));
   const scanArgs: ParsedArgs = { ...args, flags: new Map(args.flags).set("app", spec.application).set("no-cache", true) };
   const loaded = await loadGraph(scanArgs);
   const portfolio = buildPortfolio({ config: loaded.config, graph: loaded.graph, context: loaded.context, application: spec.application });
@@ -185,22 +175,6 @@ async function campaignResolve(args: ParsedArgs): Promise<void> {
     print(`${formatPlanReview(review).trimEnd()}\n\nNext: ${result.next}`, args);
   }
 }
-
-function validateStableCampaignSpec(spec: StableCampaignSpec): void {
-  if (!spec || typeof spec.application !== "string" || !Array.isArray(spec.targets) || spec.targets.length === 0) {
-    throw new UsageError("campaign target list requires application and a non-empty targets array");
-  }
-  const identities = new Set<string>();
-  for (const [index, target] of spec.targets.entries()) {
-    if (!target || typeof target.path !== "string" || typeof target.packageName !== "string" || !target.path || !target.packageName) {
-      throw new UsageError(`campaign target ${index} requires non-empty path and packageName`);
-    }
-    if (identities.has(target.path)) throw new UsageError(`duplicate campaign target path: ${target.path}`);
-    identities.add(target.path);
-  }
-}
-
-/** Compile a read-only, declaration-SCC seam proposal for one configured source file. */
 async function seams(args: ParsedArgs): Promise<void> {
   const loaded = await loadGraph(args);
   const candidateId = flagString(args, "candidate");
@@ -276,22 +250,12 @@ async function preparePlan(args: ParsedArgs): Promise<void> {
   print({ ...manifest, output: out, written }, args);
 }
 
-interface MultiPreparationSpec {
-  readonly candidate: string;
-  readonly members: readonly { file: string; candidate: string; target: string; moduleSpecifier: string; groups: readonly string[] }[];
-}
-
 async function prepareMultiPlan(args: ParsedArgs): Promise<void> {
   const loaded = await loadGraph(args);
   const specPath = relativeWorkspacePath(loaded.rootDir, requiredFlag(args, "spec"));
-  let spec: MultiPreparationSpec;
-  try {
-    spec = JSON.parse(readWorkspaceText(loaded.rootDir, specPath, "multi-file preparation spec")) as MultiPreparationSpec;
-  } catch (error) {
-    throw new UsageError(`could not parse multi-file preparation spec ${specPath}: ${systemReason(error)}`);
-  }
-  if (!spec || typeof spec.candidate !== "string" || !Array.isArray(spec.members) || spec.members.length < 2)
-    throw new UsageError("multi-file preparation spec requires candidate and at least two members");
+  const spec = validateMultiPreparationSpec(
+    parseJsonObject(readWorkspaceText(loaded.rootDir, specPath, "multi-file preparation spec"), specPath, "multi-file preparation spec"),
+  );
   const files = spec.members.map((member) => relativeWorkspacePath(loaded.rootDir, member.file));
   const applicationNames = files.map((file) => loaded.graph.nodes.get(file)?.application);
   if (applicationNames.some((name) => name === undefined) || new Set(applicationNames).size !== 1)

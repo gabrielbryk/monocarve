@@ -103,7 +103,7 @@ function candidateFor(
   if (partitionFailure !== undefined) {
     rejections.push({
       code: "unplannable",
-      detail: `test relocation: ${partitionFailure instanceof Error ? partitionFailure.message : String(partitionFailure)}`,
+      detail: `test relocation: ${partitionFailure instanceof Error ? partitionFailure.message : JSON.stringify(partitionFailure)}`,
       edges: [],
     });
     tests = directTests;

@@ -277,7 +277,9 @@ function isSplitSelection(selection: AssessmentAnalyticalArguments["splitSelecti
 
 function isCanonicalFileSelection(paths: readonly string[]): boolean {
   return (
-    Array.isArray(paths) && paths.every((path) => typeof path === "string") && stableStringify(paths) === stableStringify([...new Set(paths)].toSorted(byCodeUnit))
+    Array.isArray(paths) &&
+    paths.every((path) => typeof path === "string") &&
+    stableStringify(paths) === stableStringify([...new Set(paths)].toSorted(byCodeUnit))
   );
 }
 

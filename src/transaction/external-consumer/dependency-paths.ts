@@ -40,7 +40,7 @@ function addOwnerDependencies(paths: Record<string, string[]>, installedRoot: st
   }
 }
 
-function addDependency(paths: Record<string, string[]>, require: NodeRequire, dependency: string): void {
+function addDependency(paths: Record<string, string[]>, require: NodeJS.Require, dependency: string): void {
   try {
     const resolved = require.resolve(dependency);
     const packageRoot = packageRootFromResolved(resolved, dependency);
@@ -64,7 +64,7 @@ function packageRootFromResolved(resolved: string, packageName: string): string 
 }
 
 function rootDependencyEntry(
-  require: NodeRequire,
+  require: NodeJS.Require,
   dependency: string,
   packageRoot: string,
   manifest: ReturnType<typeof readManifest>,
@@ -103,7 +103,7 @@ function adjacentDeclaration(runtimeEntry: string): string | undefined {
 
 function addDependencySubpaths(
   paths: Record<string, string[]>,
-  require: NodeRequire,
+  require: NodeJS.Require,
   dependency: string,
   packageRoot: string,
   manifest: ReturnType<typeof readManifest>,
@@ -116,7 +116,7 @@ function addDependencySubpaths(
   }
 }
 
-function dependencySubpathEntry(require: NodeRequire, dependency: string, subpath: string, packageRoot: string, exported: unknown): string | undefined {
+function dependencySubpathEntry(require: NodeJS.Require, dependency: string, subpath: string, packageRoot: string, exported: unknown): string | undefined {
   const declared = typesCondition(exported);
   const typed = declared === undefined ? undefined : resolve(packageRoot, declared);
   if (typed !== undefined && existsSync(typed)) return typed;
@@ -132,7 +132,7 @@ function dependencySubpathEntry(require: NodeRequire, dependency: string, subpat
   return definitelyTypedEntry(require, dependency, subpath) ?? adjacentDeclaration(runtimeTarget ?? "") ?? runtimeTarget;
 }
 
-function definitelyTypedEntry(require: NodeRequire, dependency: string, subpath?: string): string | undefined {
+function definitelyTypedEntry(require: NodeJS.Require, dependency: string, subpath?: string): string | undefined {
   const mangled = dependency.startsWith("@") ? `@types/${dependency.slice(1).replace("/", "__")}` : `@types/${dependency}`;
   let root: string;
   try {

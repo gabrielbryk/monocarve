@@ -76,8 +76,8 @@ export interface ResolveBoundariesInput {
 
 /** Normalize both config surfaces into one deterministically ordered list. */
 export function resolveBoundaries(config: ResolveBoundariesInput): readonly ResolvedBoundary[] {
-  const resolved = [...config.compositionBoundaries.map(resolveCompositionBoundary), ...config.portPromotions.map(resolvePortPromotion)].toSorted((left, right) =>
-    byCodeUnit(left.id, right.id),
+  const resolved = [...config.compositionBoundaries.map(resolveCompositionBoundary), ...config.portPromotions.map(resolvePortPromotion)].toSorted(
+    (left, right) => byCodeUnit(left.id, right.id),
   );
   const seen = new Set<string>();
   for (const boundary of resolved) {

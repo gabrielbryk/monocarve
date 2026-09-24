@@ -121,7 +121,11 @@ describe("post-journal declarative edits", () => {
       ],
       emittedModuleSpecifiers: [],
     } as const;
-    const manifest: ExtractionManifest = { ...base, postJournalPreparers: [record], changedFiles: [...base.changedFiles, "tools/module-registry.ts"].toSorted() };
+    const manifest: ExtractionManifest = {
+      ...base,
+      postJournalPreparers: [record],
+      changedFiles: [...base.changedFiles, "tools/module-registry.ts"].toSorted(),
+    };
     const tampered: ExtractionManifest = { ...manifest, postJournalPreparers: [{ ...record, replacements: [{ ...replacement, after: '"other"' }] }] };
     expect((await simulatePlan({ config, rootDir: root, manifest: tampered, skipGates: true })).failure).toContain("differs from current configuration");
     const missingReplacement = { ...replacement, before: '"absent"' };

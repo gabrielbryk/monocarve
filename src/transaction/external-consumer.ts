@@ -101,7 +101,7 @@ function typeOnlyImportDiagnostics(program: ts.Program, fixture: string): string
   const checker = program.getTypeChecker();
   const diagnostics: string[] = [];
   for (const statement of source.statements) {
-    if (!ts.isImportDeclaration(statement) || statement.importClause?.isTypeOnly !== true) continue;
+    if (!ts.isImportDeclaration(statement) || statement.importClause?.phaseModifier !== ts.SyntaxKind.TypeKeyword) continue;
     const bindings = statement.importClause.namedBindings;
     const names = [
       ...(statement.importClause.name === undefined ? [] : [statement.importClause.name]),
@@ -238,7 +238,7 @@ function configuredAmbientDeclarationFiles(rootDir: string, tsconfig: string): s
 }
 
 function configuredCompilerOption(rootDir: string, tsconfig: string, name: string): unknown[] {
-  const read = ts.readConfigFile(resolve(rootDir, tsconfig), ts.sys.readFile);
+  const read = ts.readConfigFile(resolve(rootDir, tsconfig), (path) => ts.sys.readFile(path));
   const value = read.error === undefined ? read.config?.compilerOptions?.[name] : undefined;
   return Array.isArray(value) ? value : [];
 }

@@ -235,7 +235,9 @@ function splitCandidates(graph: SymbolGraph, consumers: readonly ExternalSymbolC
       const relevant = consumers.filter((consumer) => groupSet.has(consumer.groupId));
       const affinityCounts: Record<string, number> = {};
       for (const consumer of relevant) affinityCounts[consumer.affinity] = (affinityCounts[consumer.affinity] ?? 0) + consumer.referenceCount;
-      const sortedAffinities = Object.entries(affinityCounts).toSorted(([leftName, left], [rightName, right]) => right - left || byCodeUnit(leftName, rightName));
+      const sortedAffinities = Object.entries(affinityCounts).toSorted(
+        ([leftName, left], [rightName, right]) => right - left || byCodeUnit(leftName, rightName),
+      );
       const total = sortedAffinities.reduce((sum, [, count]) => sum + count, 0);
       const dominantAffinity = sortedAffinities[0]?.[0];
       const concentration = total === 0 ? 0 : (sortedAffinities[0]?.[1] ?? 0) / total;

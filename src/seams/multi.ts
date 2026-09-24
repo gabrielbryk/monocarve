@@ -269,7 +269,7 @@ function normalizedTarget(path: string): string {
 }
 function createProgram(root: string, config: string): ts.Program {
   const path = workspacePath(root, relativeWorkspacePath(root, config));
-  const read = ts.readConfigFile(path, ts.sys.readFile);
+  const read = ts.readConfigFile(path, (file) => ts.sys.readFile(file));
   if (read.error) throw new SeamPlanningError(`cannot read TypeScript config ${config}`);
   const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, dirname(path), undefined, path);
   if (parsed.errors.length) throw new SeamPlanningError(`cannot build TypeScript program from ${config}`);

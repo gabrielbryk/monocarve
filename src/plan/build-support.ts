@@ -212,7 +212,9 @@ export function pathReferenceRewriteOperations(
   }
   return [...byFile.entries()]
     .map(([file, entry]) => {
-      const rewrites = [...entry.rewrites].toSorted((left, right) => left.line - right.line || left.column - right.column || byCodeUnit(left.donor, right.donor));
+      const rewrites = [...entry.rewrites].toSorted(
+        (left, right) => left.line - right.line || left.column - right.column || byCodeUnit(left.donor, right.donor),
+      );
       const positions = new Set<string>();
       for (const rewrite of rewrites) {
         const position = `${rewrite.line}:${rewrite.column}`;

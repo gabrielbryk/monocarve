@@ -284,7 +284,7 @@ export async function simulatePreparation(options: SimulatePreparationOptions): 
       const wrapCommand =
         preparation.changed && taskRunner.id === "moon"
           ? (command: string) => taskRunner.wrapGateCommand(`MOON_FORCE=true MOON_CONCURRENCY=1 ${command}`)
-          : taskRunner.wrapGateCommand;
+          : (command: string) => taskRunner.wrapGateCommand(command);
       const gateRun = await runGateTiers({
         gates: manifest.gates,
         maxConcurrency: config.gates.maxConcurrency,

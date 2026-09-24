@@ -9,7 +9,7 @@ export function preparationCompilerOptions(rootDir: string, config: MonocarveCon
   const application = applicationFor(config, sourcePath);
   if (!application) throw new Error(`no configured application owns ${sourcePath}`);
   const configPath = workspacePath(rootDir, application.tsconfig);
-  const read = ts.readConfigFile(configPath, ts.sys.readFile);
+  const read = ts.readConfigFile(configPath, (path) => ts.sys.readFile(path));
   if (read.error) throw new Error(`cannot read TypeScript config ${application.tsconfig}`);
   const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, dirname(configPath), undefined, configPath);
   if (parsed.errors.some((item) => item.category === ts.DiagnosticCategory.Error)) {

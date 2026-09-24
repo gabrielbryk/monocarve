@@ -37,6 +37,7 @@ export async function commitPreparerBootstrap(
     manifest.mutations.map((item) => item.path),
   );
   let committed = false;
+  let outcome: BootstrapOutcome;
   try {
     temporary.run("add", "-f", "--", bootstrap.path, path);
     temporary.run("commit", "-m", subject);
@@ -49,16 +50,48 @@ export async function commitPreparerBootstrap(
     // the new two-file commit before restoring those outputs in the worktree.
     git({ cwd: rootDir, quiet: true }, "reset", "--mixed", result);
     assertApprovedPreparerManifest(rootDir, path, manifest);
-    return result;
+    outcome = { kind: "success", result };
   } catch (error) {
     if (committed && git({ cwd: rootDir }, "rev-parse", "HEAD^") === baseline) git({ cwd: rootDir, quiet: true }, "reset", "--mixed", baseline);
-    throw error;
-  } finally {
-    temporary.dispose();
-    const restored = rollbackCompletedPreparationJournal(journal.recovery);
-    if (restored.failures.length > 0)
-      throw new PreparerError(`bootstrap output rollback was incomplete: ${restored.failures.map((item) => item.path).join(", ")}`);
+    outcome = { kind: "failure", error };
   }
+
+  // Cleanup always runs, but a cleanup failure must never mask a body failure.
+  temporary.dispose();
+  const restored = rollbackCompletedPreparationJournal(journal.recovery);
+  return reconcileBootstrapOutcome(
+    outcome,
+    restored.failures.map((item) => item.path),
+  );
+}
+
+/** Outcome of the guarded body of {@link commitPreparerBootstrap}. */
+export type BootstrapOutcome = { readonly kind: "success"; readonly result: string } | { readonly kind: "failure"; readonly error: unknown };
+
+/**
+ * Reconciles the bootstrap body's outcome with any output-rollback failures
+ * discovered during cleanup. A cleanup failure must never mask a body
+ * failure: when both fail, the body's error is what surfaces, with the
+ * cleanup failure attached as its `cause`. A cleanup failure after a
+ * successful body is still reported, since nothing else would report it.
+ *
+ * Exported for direct unit testing; production callers do not need it.
+ */
+export function reconcileBootstrapOutcome(outcome: BootstrapOutcome, cleanupFailurePaths: readonly string[]): string {
+  if (cleanupFailurePaths.length > 0) {
+    const cleanupError = new PreparerError(`bootstrap output rollback was incomplete: ${cleanupFailurePaths.join(", ")}`);
+    if (outcome.kind === "failure") {
+      const error = asError(outcome.error);
+      // Keep the body's error primary; record the cleanup failure without
+      // overwriting a cause the error already carries.
+      if (error.cause === undefined) error.cause = cleanupError;
+      throw error;
+    }
+    throw cleanupError;
+  }
+
+  if (outcome.kind === "failure") throw asError(outcome.error);
+  return outcome.result;
 }
 
 function assertInitialState(rootDir: string, path: string, manifest: PreparerManifest): void {
@@ -131,4 +164,9 @@ function state(root: string, path: string): { readonly hash: ReturnType<typeof f
 
 function unique(items: readonly string[]): string[] {
   return [...new Set(items)].toSorted(byCodeUnit);
+}
+
+/** Rethrow Errors as themselves; wrap anything else so callers get a message and stack. */
+function asError(value: unknown): Error {
+  return value instanceof Error ? value : new Error(String(value), { cause: value });
 }

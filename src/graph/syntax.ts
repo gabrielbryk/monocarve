@@ -55,7 +55,8 @@ function collectImportKinds(parsed: ts.SourceFile): Map<string, ImportKind> {
       // `import { type A, type B } from "x"` is type-only in substance even
       // though the clause itself is not marked so.
       const typeOnly =
-        clause?.isTypeOnly === true || (clause !== undefined && clause.name === undefined && named.length > 0 && named.every((item) => item.isTypeOnly));
+        clause?.phaseModifier === ts.SyntaxKind.TypeKeyword ||
+        (clause !== undefined && clause.name === undefined && named.length > 0 && named.every((item) => item.isTypeOnly));
       record(statement.moduleSpecifier.text, typeOnly);
     }
     if (ts.isExportDeclaration(statement) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)) {

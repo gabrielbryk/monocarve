@@ -65,7 +65,12 @@ export function assertNoRetainedValueImport(
 ): void {
   const file = ts.createSourceFile(importerPath, rewrittenText, ts.ScriptTarget.Latest, true, scriptKind(importerPath));
   for (const statement of file.statements) {
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || statement.importClause?.isTypeOnly) continue;
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      statement.importClause?.phaseModifier === ts.SyntaxKind.TypeKeyword
+    )
+      continue;
     const specifier = statement.moduleSpecifier.text;
     if (!retainedRoots.some((root) => underRetainedRoot(importerPath, specifier, root))) continue;
     const namedBindings = statement.importClause?.namedBindings;

@@ -16,11 +16,11 @@ export interface ReadEvidence<T> {
 }
 
 export function readReconciliationRecord(rootDir: string, inputPath: string): ReadEvidence<ReconciliationRecord> {
-  return read(rootDir, inputPath, parseRecord.reconciliation, canonical);
+  return read(rootDir, inputPath, (value) => parseRecord.reconciliation(value), canonical);
 }
 
 export function readAppliedPlanReceipt(rootDir: string, inputPath: string): ReadEvidence<AppliedPlanReceipt> {
-  return read(rootDir, inputPath, parseRecord.receipt, canonical);
+  return read(rootDir, inputPath, (value) => parseRecord.receipt(value), canonical);
 }
 
 function canonical(value: unknown): string {

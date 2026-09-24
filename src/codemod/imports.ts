@@ -312,7 +312,7 @@ export function inventoryModuleReferences(
 
   const visit = (node: ts.Node): void => {
     if (ts.isImportDeclaration(node)) {
-      add("static-import", node, node.moduleSpecifier, node.importClause?.isTypeOnly ?? false, false);
+      add("static-import", node, node.moduleSpecifier, node.importClause?.phaseModifier === ts.SyntaxKind.TypeKeyword, false);
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier) {
       add("static-export", node, node.moduleSpecifier, node.isTypeOnly, false);
     } else if (ts.isImportTypeNode(node)) {

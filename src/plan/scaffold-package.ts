@@ -308,14 +308,14 @@ function rootTsconfigOperation(
 
 function ambientCompilerTypes(input: ScaffoldInput): string[] {
   const configPath = resolve(input.context.rootDir, input.application.tsconfig);
-  const read = ts.readConfigFile(configPath, ts.sys.readFile);
+  const read = ts.readConfigFile(configPath, (path) => ts.sys.readFile(path));
   const types = read.error === undefined ? read.config?.compilerOptions?.types : undefined;
   return Array.isArray(types) ? types.filter((type): type is string => typeof type === "string") : [];
 }
 
 function ambientCompilerOption(input: ScaffoldInput, name: string): unknown {
   const configPath = resolve(input.context.rootDir, input.application.tsconfig);
-  const read = ts.readConfigFile(configPath, ts.sys.readFile);
+  const read = ts.readConfigFile(configPath, (path) => ts.sys.readFile(path));
   return read.error === undefined ? read.config?.compilerOptions?.[name] : undefined;
 }
 

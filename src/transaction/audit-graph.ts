@@ -31,7 +31,7 @@ export function evaluatedModuleKeys(source: string, path: string): Set<string> {
   const keys = new Set<string>();
   for (const statement of file.statements) {
     const specifier =
-      ts.isImportDeclaration(statement) && statement.importClause?.isTypeOnly !== true
+      ts.isImportDeclaration(statement) && statement.importClause?.phaseModifier !== ts.SyntaxKind.TypeKeyword
         ? statement.moduleSpecifier
         : ts.isExportDeclaration(statement) && !statement.isTypeOnly
           ? statement.moduleSpecifier

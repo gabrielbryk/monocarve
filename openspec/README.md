@@ -4,13 +4,13 @@ These changes turn observed agent usage friction into separable product work. Th
 
 The user selected `streamline-extraction-workflow` as the first implementation target. Its first slice is read-only move guidance followed by review of the actual diff in the existing worktree; it does not require transaction setup.
 
-| Order | Change | User outcome | Dependency |
-| --- | --- | --- | --- |
-| 1 | `streamline-extraction-workflow` | Move files in the current worktree with useful Monocarve guidance and honest diff review | Existing graph and consumer analysis |
-| 2 | `improve-extraction-readiness` | Detect host/setup blockers early and see where transaction time went | Existing transaction diagnostics |
-| 3 | `improve-extraction-correctness` | Plan an intentional multi-file boundary and reject bad target/consumer/package wiring before approval | Reconcile already landed planner fixes first |
-| 4 | `improve-cli-diagnostics` | Understand wrong manifest, command, path, and candidate errors immediately | Coordinate identity and empty-scan behavior with architecture assessment |
-| 5 | `provide-monocarve-agent-guidance` | Install concise skills that select and execute the appropriate workflow | Ship against actual CLI capabilities; update as changes land |
+| Order | Change                             | User outcome                                                                                          | Dependency                                                               |
+| ----- | ---------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| 1     | `streamline-extraction-workflow`   | Move files in the current worktree with useful Monocarve guidance and honest diff review              | Existing graph and consumer analysis                                     |
+| 2     | `improve-extraction-readiness`     | Detect host/setup blockers early and see where transaction time went                                  | Existing transaction diagnostics                                         |
+| 3     | `improve-extraction-correctness`   | Plan an intentional multi-file boundary and reject bad target/consumer/package wiring before approval | Reconcile already landed planner fixes first                             |
+| 4     | `improve-cli-diagnostics`          | Understand wrong manifest, command, path, and candidate errors immediately                            | Coordinate identity and empty-scan behavior with architecture assessment |
+| 5     | `provide-monocarve-agent-guidance` | Install concise skills that select and execute the appropriate workflow                               | Ship against actual CLI capabilities; update as changes land             |
 
 ## Existing parallel scope
 
